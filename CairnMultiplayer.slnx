@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="CairnMultiplayerMod/CairnMultiplayerMod.csproj" />
+  <Project Path="CairnMultiplayerShared/CairnMultiplayerShared.csproj" />
+  <Project Path="CairnMultiplayerShared.Tests/CairnMultiplayerShared.Tests.csproj" />
+</Solution>

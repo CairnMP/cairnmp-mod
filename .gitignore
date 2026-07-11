@@ -1,0 +1,43 @@
+# Reference assemblies (proprietary game / MelonLoader DLLs — provide your own locally)
+game-refs/
+
+# .NET / C#
+**/bin/
+**/obj/
+**/*.user
+*.suo
+.vs/
+
+# Packaging
+dist/
+
+# Reference mod (debug, jetable)
+/episure
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.iml
+.codex/
+.claude/settings.local.json
+
+# Logs
+*.log
+
+# Brainstorming visual companion (maquettes jetables)
+.superpowers/
+
+# Dossier temporaire (outils de debug jetables)
+.tmp/
+
+# Scripts de dev jetables (chemins locaux machine) : emulateur Steam + lancement / sync 2 clients
+scripts/setup-steam-emu.ps1
+scripts/play.ps1
+scripts/sync-instance2.ps1
+scripts/inspect-native.ps1
+scripts/native-dump.txt
+scripts/cecil-dump.ps1

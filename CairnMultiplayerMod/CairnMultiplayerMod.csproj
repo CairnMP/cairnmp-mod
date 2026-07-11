@@ -1,0 +1,197 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>CairnMultiplayerMod</AssemblyName>
+    <RootNamespace>CairnMultiplayerMod</RootNamespace>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- Les mods MelonLoader ne doivent pas embarquer leurs dependances. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+  </PropertyGroup>
+
+  <!-- References MelonLoader -->
+  <ItemGroup>
+    <Reference Include="MelonLoader">
+      <HintPath>$(MelonLoaderNet6Dir)\MelonLoader.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>$(MelonLoaderNet6Dir)\Il2CppInterop.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(MelonLoaderNet6Dir)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Assemblies Unity Il2Cpp generes -->
+  <ItemGroup>
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>$(Il2CppAssembliesDir)\Il2Cppmscorlib.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(Il2CppAssembliesDir)\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(Il2CppAssembliesDir)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(Il2CppAssembliesDir)\UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(Il2CppAssembliesDir)\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(Il2CppAssembliesDir)\UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>$(Il2CppAssembliesDir)\UnityEngine.UIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(Il2CppAssembliesDir)\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIElementsModule">
+      <HintPath>$(Il2CppAssembliesDir)\UnityEngine.UIElementsModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputForUIModule">
+      <HintPath>$(Il2CppAssembliesDir)\UnityEngine.InputForUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(Il2CppAssembliesDir)\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AnimationModule">
+      <HintPath>$(Il2CppAssembliesDir)\UnityEngine.AnimationModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(Il2CppAssembliesDir)\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp-firstpass">
+      <HintPath>$(Il2CppAssembliesDir)\Assembly-CSharp-firstpass.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>$(Il2CppAssembliesDir)\Unity.TextMeshPro.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Unity.InputSystem">
+      <HintPath>$(Il2CppAssembliesDir)\Unity.InputSystem.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Unity.Addressables">
+      <HintPath>$(Il2CppAssembliesDir)\Unity.Addressables.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Unity.ResourceManager">
+      <HintPath>$(Il2CppAssembliesDir)\Unity.ResourceManager.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Assemblies specifiques au jeu -->
+  <ItemGroup>
+    <Reference Include="Il2CppTheGameBakers.Cairn.Global">
+      <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.Cairn.Global.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppTheGameBakers.Cairn.Managers">
+      <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.Cairn.Managers.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppTheGameBakers.Cairn.Input">
+      <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.Cairn.Input.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppTheGameBakers.Cairn.Utilities">
+      <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.Cairn.Utilities.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppTheGameBakers.Cairn.Utilities.SingletonBase">
+      <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.Cairn.Utilities.SingletonBase.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppTheGameBakers.Cairn.Graphics">
+      <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.Cairn.Graphics.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Tweakables natifs (TweakableBase<T>, FreeRoamTweakables) — deblocage FreeRoam. -->
+    <Reference Include="Il2CppTheGameBakers.Cairn.Tweakables">
+      <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.Cairn.Tweakables.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Mode photo natif de Cairn (injection d'une ligne de legende pour le toggle N). -->
+    <Reference Include="Il2CppTheGameBakers.TGBTools.PhotoMode.Runtime">
+      <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.TGBTools.PhotoMode.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Obi Rope (physique de corde native) — sonde belay + corde physique entre joueurs. -->
+    <Reference Include="Il2CppObi">
+      <HintPath>$(Il2CppAssembliesDir)\Il2CppObi.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Binding Steamworks.NET embarque par Cairn (matchmaking + relay SDR + overlay amis). -->
+    <Reference Include="Il2Cppcom.rlabrecque.steamworks.net">
+      <HintPath>$(Il2CppAssembliesDir)\Il2Cppcom.rlabrecque.steamworks.net.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Protocole de paquets partage par le mod et les tests. -->
+  <ItemGroup>
+    <ProjectReference Include="..\CairnMultiplayerShared\CairnMultiplayerShared.csproj" />
+  </ItemGroup>
+
+  <!--
+    Copie automatiquement les DLL dans les dossiers Mods apres le build.
+    Quand l'instance 2 existe (clonee via tools/clone-cairn.ps1), elle est
+    aussi mise a jour pour que les deux processus Cairn chargent le rebuild.
+  -->
+  <ItemGroup>
+    <ModDeployFiles Include="$(OutputPath)$(AssemblyName).dll" />
+    <ModDeployFiles Include="$(OutputPath)CairnMultiplayerShared.dll" />
+  </ItemGroup>
+
+  <Target Name="CopyToMods" AfterTargets="Build">
+    <Copy SourceFiles="@(ModDeployFiles)" DestinationFolder="$(ModsDir)" />
+    <WriteLinesToFile File="$(ModsDir)\.mod_version" Lines="dev" Overwrite="true" />
+    <WriteLinesToFile File="$(ModsDir)\.mod_channel" Lines="stable" Overwrite="true" />
+    <Message Importance="high" Text="Mod deployed to $(ModsDir)" />
+
+    <Copy
+      SourceFiles="@(ModDeployFiles)"
+      DestinationFolder="$(ModsDir2)"
+      Condition="Exists('$(CairnDir2)')" />
+    <WriteLinesToFile
+      File="$(ModsDir2)\.mod_version"
+      Lines="dev"
+      Overwrite="true"
+      Condition="Exists('$(CairnDir2)')" />
+    <WriteLinesToFile
+      File="$(ModsDir2)\.mod_channel"
+      Lines="stable"
+      Overwrite="true"
+      Condition="Exists('$(CairnDir2)')" />
+    <Message
+      Importance="high"
+      Text="Mod deployed to $(ModsDir2) (instance 2)"
+      Condition="Exists('$(CairnDir2)')" />
+  </Target>
+
+</Project>

@@ -1,0 +1,48 @@
+<Project>
+  <!--
+    Configuration de build partagée pour les projets CairnMP.
+    Les chemins peuvent être surchargés via des variables d'environnement ou des propriétés MSBuild.
+
+    Surcharger CairnDir :
+        $env:CAIRN_DIR = "D:\Games\Cairn"
+        dotnet build
+    Ou en ligne de commande :
+        dotnet build /p:CairnDir="D:\Games\Cairn"
+  -->
+  <PropertyGroup>
+    <!-- Racine du monorepo (un niveau au-dessus de mod/) -->
+    <MonoRoot>$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), 'versions.json'))</MonoRoot>
+
+    <!-- DLLs MelonLoader : d'abord game-refs/ (versionné), sinon surcharge via env var -->
+    <MelonLoaderRefsDir>$(MSBuildThisFileDirectory)game-refs\MelonLoader</MelonLoaderRefsDir>
+    <MelonLoaderNet6Dir Condition="'$(MELON_LOADER_NET6_DIR)' != ''">$(MELON_LOADER_NET6_DIR)</MelonLoaderNet6Dir>
+    <MelonLoaderNet6Dir Condition="'$(MelonLoaderNet6Dir)' == '' and Exists('$(MelonLoaderRefsDir)\MelonLoader.dll')">$(MelonLoaderRefsDir)</MelonLoaderNet6Dir>
+
+    <!-- Assemblies Il2Cpp : d'abord game-refs/ (versionné), sinon le dossier du jeu -->
+    <GameRefsDir>$(MSBuildThisFileDirectory)game-refs\Il2CppAssemblies</GameRefsDir>
+    <Il2CppAssembliesDir Condition="Exists('$(GameRefsDir)\UnityEngine.CoreModule.dll')">$(GameRefsDir)</Il2CppAssembliesDir>
+    <Il2CppAssembliesDir Condition="'$(Il2CppAssembliesDir)' == ''">$(LOCALAPPDATA)\CairnMultiplayerData\game\CairnLoader\Il2CppAssemblies</Il2CppAssembliesDir>
+
+    <!-- Répertoire du jeu Cairn (pour le déploiement des mods) -->
+    <CairnDir Condition="'$(CAIRN_DIR)' != ''">$(CAIRN_DIR)</CairnDir>
+    <CairnDir Condition="'$(CairnDir)' == ''">$(LOCALAPPDATA)\CairnMultiplayerData\game</CairnDir>
+    <ModsDir>$(CairnDir)\Mods</ModsDir>
+
+    <!--
+      Deuxième instance Cairn pour les tests multijoueur locaux (clone-cairn.ps1).
+      Surcharger avec $env:CAIRN_DIR_2 ou /p:CairnDir2=...
+    -->
+    <CairnDir2 Condition="'$(CAIRN_DIR_2)' != ''">$(CAIRN_DIR_2)</CairnDir2>
+    <CairnDir2 Condition="'$(CairnDir2)' == ''">D:\CairnMP-Instance2</CairnDir2>
+    <ModsDir2>$(CairnDir2)\Mods</ModsDir2>
+  </PropertyGroup>
+
+  <!-- Style de code appliqué à tous les projets -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningsAsErrors>CS8600;CS8601;CS8602;CS8603;CS8604</WarningsAsErrors>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>NETSDK1138</NoWarn>
+  </PropertyGroup>
+</Project>

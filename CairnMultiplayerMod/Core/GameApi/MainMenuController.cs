@@ -1,0 +1,89 @@
+using System;
+using Il2CppInterop.Runtime;
+using UnityEngine;
+
+namespace CairnMultiplayerMod.Core;
+
+public static unsafe partial class CairnGameApi
+{
+    /// <summary>
+    /// Les valeurs correspondent à `TheGameBakers.Cairn.UI.MainMenu.Step` (vu via Cpp2IL).
+    /// Seules celles qu'on utilise réellement sont listées ; le reste est là pour référence.
+    /// </summary>
+    public enum MainMenuStep
+    {
+        Initialization = 0,
+        PressStart = 1,
+        ModeSelect = 2,
+        StoryModeManageSave = 3,
+        LaunchNewStoryGame = 4,
+        Loading = 12,
+        LaunchSavedGame = 16,
+        Settings = 13,
+        DifficultySelect = 20,
+        DifficultyCustomization = 21,
+        ActivateTutorials = 22,
+    }
+
+    private static IntPtr _mainMenuKlass;
+
+    private static IntPtr _mainMenuKlassPtr
+    {
+        get
+        {
+            if (_mainMenuKlass == IntPtr.Zero)
+                _mainMenuKlass = IL2CPP.GetIl2CppClass(
+                    "TheGameBakers.Cairn.Global.dll",
+                    "TheGameBakers.Cairn.UI", "MainMenu");
+            return _mainMenuKlass;
+        }
+    }
+
+    /// <summary>
+    /// Écrit `MainMenu.ForceStepTransition = step` via le backing field généré par le
+    /// compilateur. La boucle Update du jeu lit cette valeur chaque frame et déclenche
+    /// `TransitionToStep` quand elle n'est pas null, puis la réinitialise à null.
+    /// </summary>
+    public static bool ForceMainMenuStep(MainMenuStep step)
+    {
+        try
+        {
+            var klass = _mainMenuKlassPtr;
+            if (klass == IntPtr.Zero)
+            {
+                Mod.Log.Error("[CairnGameApi] MainMenu class not found");
+                return false;
+            }
+
+            var field = IL2CPP.GetIl2CppField(klass, "<ForceStepTransition>k__BackingField");
+            if (field == IntPtr.Zero)
+            {
+                Mod.Log.Error("[CairnGameApi] ForceStepTransition backing field not found");
+                return false;
+            }
+
+            // Nullable<Step> — le layout managé correspond au runtime .NET :
+            //   struct Nullable<T> { bool hasValue; T value; }
+            // Avec T = enum de taille int, taille totale de 8 octets (1 octet bool,
+            // 3 octets padding, 4 octets valeur).
+            // Essaie les DEUX layouts Nullable — le layout IL2CPP peut différer
+            // du managé .NET selon la version Unity/plateforme.
+            // Layout A : { bool hasValue(1), pad(3), T value(4) } = standard .NET
+            // Layout B : { T value(4), bool hasValue(1), pad(3) } = certains IL2CPP
+            var buf = stackalloc byte[8];
+
+            // Essaie d'abord le layout A (celui qui fonctionnait dans les tests précédents).
+            *(byte*)buf = 1;
+            *(int*)(buf + 4) = (int)step;
+            IL2CPP.il2cpp_field_static_set_value(field, buf);
+
+            Mod.LogDebug($"[CairnGameApi] Forced MainMenu step -> {step} (field=0x{field:X})");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Mod.Log.Error($"[CairnGameApi] ForceMainMenuStep({step}) failed: {ex}");
+            return false;
+        }
+    }
+}
