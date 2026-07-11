@@ -8,9 +8,9 @@ using UnityEngine.UI;
 namespace CairnMultiplayerMod.UI.Inputs;
 
 /// <summary>
-/// Toggle segmenté à N options ; un seul actif à la fois. Utilisé pour la
-/// Visibility (Public / Friends / Private). Le segment actif reçoit un fond
-/// en accent doré, les autres restent neutres.
+/// Segmented toggle with N options; only one active at a time. Used for
+/// Visibility (Public / Friends / Private). The active segment gets a gold
+/// accent background, the others stay neutral.
 /// </summary>
 internal sealed class SegmentedControl
 {

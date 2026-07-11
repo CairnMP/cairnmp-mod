@@ -168,7 +168,7 @@ internal static class CairnUi
         }
         catch
         {
-            // Certaines builds IL2CPP n'exposent pas la police builtin.
+            // Some IL2CPP builds don't expose the builtin font.
         }
 
         try

@@ -13,15 +13,15 @@ public static class ModConfig
     public static MelonPreferences_Entry<string> ApiBaseUrl;
     public static MelonPreferences_Entry<string> PreferredRegion;
 
-    // Joueur
+    // Player
     public static MelonPreferences_Entry<string> PlayerName;
 
-    // Salon
+    // Room
     public static MelonPreferences_Entry<string> RoomCode;
     public static MelonPreferences_Entry<int>    Gamemode;
     public static MelonPreferences_Entry<int>    MaxPlayers;
 
-    // Raccourcis clavier
+    // Keybinds
     public static MelonPreferences_Entry<string> ConnectKey;
     public static MelonPreferences_Entry<string> DisconnectKey;
 
@@ -46,8 +46,8 @@ public static class ModConfig
         MigrateLegacyApiUrl();
     }
 
-    // Migration : l'API a été renommée gateway → api.cairnmultiplayer.com.
-    // Les configs existants pointent encore vers l'ancien domaine — on les réécrit.
+    // Migration: the API was renamed gateway → api.cairnmultiplayer.com.
+    // Existing configs still point to the old domain — we rewrite them.
     private static void MigrateLegacyApiUrl()
     {
         const string LegacyApiUrl  = "https://gateway.cairnmultiplayer.com";

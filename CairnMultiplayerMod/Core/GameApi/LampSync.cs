@@ -7,11 +7,11 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Synchronisation de la lampe (AavaLightStick) entre joueurs.
+/// Syncs the lamp (AavaLightStick) between players.
 ///
-/// L'API vanille n'est PAS un on/off bool mais un enum Mode pilote par
-/// SetMode(Mode, bool instant). On transporte le Mode en int dans le packet
-/// et on applique tel quel sur le ghost distant via SetMode.
+/// The vanilla API is NOT a bool on/off but a Mode enum driven by
+/// SetMode(Mode, bool instant). We carry the Mode as an int in the packet
+/// and apply it as-is on the remote ghost via SetMode.
 /// </summary>
 public static unsafe partial class CairnGameApi
 {
@@ -75,7 +75,7 @@ public static unsafe partial class CairnGameApi
 
         try
         {
-            // Verifie l'etat actuel pour eviter de spammer SetMode.
+            // Check the current state to avoid spamming SetMode.
             if (_lampCurrentModeGetter != null)
             {
                 var current = _lampCurrentModeGetter.Invoke(lamp, null);
@@ -83,7 +83,7 @@ public static unsafe partial class CairnGameApi
                     return true;
             }
 
-            // Construit la valeur d'enum a partir de l'int et appelle SetMode(value, instant: true).
+            // Build the enum value from the int and call SetMode(value, instant: true).
             var enumValue = Enum.ToObject(_lampModeType, mode);
             _lampSetModeMethod.Invoke(lamp, new object[] { enumValue, true });
             return true;
@@ -113,7 +113,7 @@ public static unsafe partial class CairnGameApi
             const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic
                                        | BindingFlags.Instance | BindingFlags.DeclaredOnly;
 
-            // get_CurrentMode() retournant l'enum Mode.
+            // get_CurrentMode() returning the Mode enum.
             foreach (var m in type.GetMethods(flags))
             {
                 if (m.Name == "get_CurrentMode" && m.GetParameters().Length == 0)

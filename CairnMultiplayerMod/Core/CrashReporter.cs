@@ -13,15 +13,15 @@ using MelonLoader;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Remontée des exceptions non gérées du mod vers /v1/crashes de l'API.
+/// Reports the mod's unhandled exceptions to the API's /v1/crashes endpoint.
 ///
-/// Hooks installés au démarrage :
-/// - AppDomain.UnhandledException : exceptions process-wide (peuvent crash)
-/// - TaskScheduler.UnobservedTaskException : exceptions de Task non observées
+/// Hooks installed at startup:
+/// - AppDomain.UnhandledException: process-wide exceptions (can crash)
+/// - TaskScheduler.UnobservedTaskException: unobserved Task exceptions
 ///
-/// Les handlers du mod (NetworkManager, UI, …) peuvent aussi appeler
-/// ReportException explicitement pour les erreurs catchées qui méritent
-/// remontée sans crasher le jeu.
+/// The mod's handlers (NetworkManager, UI, …) can also call ReportException
+/// explicitly for caught errors that are worth reporting without crashing
+/// the game.
 /// </summary>
 public static class CrashReporter
 {
@@ -62,8 +62,8 @@ public static class CrashReporter
     }
 
     /// <summary>
-    /// Remontée explicite — appeler depuis un catch quand l'erreur est
-    /// récupérable mais mérite traçabilité (ex. paquet réseau malformé).
+    /// Explicit report — call from a catch block when the error is
+    /// recoverable but worth tracing (e.g. a malformed network packet).
     /// </summary>
     public static void ReportException(Exception ex, string contextLabel = null)
     {
@@ -86,9 +86,9 @@ public static class CrashReporter
     }
 
     /// <summary>
-    /// Remontée d'une exception captée via le log Unity (logMessageReceived) :
-    /// on ne dispose que de chaînes (condition + stacktrace), pas d'objet
-    /// Exception. Dédupliquée une fois par session par signature.
+    /// Reports an exception captured via the Unity log (logMessageReceived):
+    /// we only have strings (condition + stacktrace), not an Exception object.
+    /// Deduplicated once per session by signature.
     /// </summary>
     public static void ReportLogExceptionOnce(string condition, string stackTrace, string contextLabel)
     {
@@ -106,9 +106,9 @@ public static class CrashReporter
     }
 
     /// <summary>
-    /// Cœur privé : construit le payload de crash et l'envoie best-effort.
-    /// Ne relance jamais d'exception (sinon boucle infinie via le hook
-    /// UnhandledException).
+    /// Private core: builds the crash payload and sends it best-effort.
+    /// Never rethrows (otherwise it would loop infinitely via the
+    /// UnhandledException hook).
     /// </summary>
     private static void Report(string message, string stack, string contextLabel)
     {
@@ -131,14 +131,14 @@ public static class CrashReporter
                     CrashJsonContext.Default.AnonymousContext);
             }
 
-            // Best-effort, fire-and-forget. Pas de await sinon on bloque le
-            // thread qui est en train de mourir.
+            // Best-effort, fire-and-forget. No await, otherwise we'd block the
+            // thread that is currently dying.
             _ = SendAsync(payload);
         }
         catch (Exception sendErr)
         {
             try { Mod.Log.Error($"[CairnMP] crash reporter failed: {sendErr.Message}"); }
-            catch { /* Mod.Log peut ne pas être initialisé */ }
+            catch { /* Mod.Log may not be initialized yet */ }
         }
     }
 
@@ -150,11 +150,11 @@ public static class CrashReporter
             var json = JsonSerializer.Serialize(payload, CrashJsonContext.Default.CrashReport);
             using var content = new StringContent(json, Encoding.UTF8, "application/json");
             using var resp = await Http.PostAsync(url, content);
-            // Pas de throw : un 4xx/5xx n'a aucune valeur ici, on l'ignore.
+            // No throw: a 4xx/5xx has no value here, so we ignore it.
         }
         catch
         {
-            // best-effort : pas de réseau, pas d'API, etc. — on absorbe.
+            // best-effort: no network, no API, etc. — we swallow it.
         }
     }
 
@@ -187,8 +187,8 @@ internal class AnonymousContext
 }
 
 /// <summary>
-/// Identifiant utilisateur dérivé du nom de machine (hashé). Stable pour
-/// dédupliquer un user récurrent sans révéler d'information personnelle.
+/// User identifier derived from the machine name (hashed). Stable enough to
+/// deduplicate a recurring user without revealing any personal information.
 /// </summary>
 internal static class MachineHash
 {
@@ -214,9 +214,9 @@ internal static class MachineHash
 }
 
 /// <summary>
-/// Cache la version du mod lue via reflexion sur l'attribut MelonInfo, pour
-/// éviter de la recalculer à chaque crash et pour ne pas dépendre d'un
-/// const string désynchronisé du MelonInfo.
+/// Caches the mod version read via reflection from the MelonInfo attribute, to
+/// avoid recomputing it on every crash and to avoid depending on a const string
+/// that could drift out of sync with MelonInfo.
 /// </summary>
 internal static class MelonInfoCache
 {

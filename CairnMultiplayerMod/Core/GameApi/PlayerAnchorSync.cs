@@ -5,29 +5,28 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Encordement entre joueurs (assurage coop) — SPIKE physique local (etape 1).
+/// Roping players together (coop belay) — local physics SPIKE (step 1).
 ///
-/// But du spike : valider que poser un piton (Lifeline.AddPiton) a la position
-/// d'un autre joueur et le deplacer chaque frame produit une corde / un blocage
-/// de distance corrects. Aucun reseau ici : on clippe localement une ancre sur
-/// la position (deja synchronisee) d'un fantome et on observe le comportement.
+/// Goal of the spike: verify that placing a piton (Lifeline.AddPiton) at another
+/// player's position and moving it every frame produces a correct rope / distance
+/// lock. No network here: we clip an anchor locally onto a ghost's (already synced)
+/// position and observe the behavior.
 ///
-/// On reutilise la machinerie piton existante (PitonSync) : SpawnRemotePiton
-/// pose un piton SANS le rediffuser (il incremente _remotePitonsAdded pour que
-/// CheckForNewPiton l'ignore), TryGetLastPitonPointer capture son pointeur, et
-/// TryDetachPitonViaLifeline le retire proprement.
+/// We reuse the existing piton machinery (PitonSync): SpawnRemotePiton places a
+/// piton WITHOUT rebroadcasting it (it increments _remotePitonsAdded so
+/// CheckForNewPiton ignores it), TryGetLastPitonPointer captures its pointer, and
+/// TryDetachPitonViaLifeline removes it cleanly.
 ///
-/// Robustesse : tout en try/catch, no-op si Lifeline/piton absent, jamais de crash.
+/// Robustness: everything in try/catch, no-op if Lifeline/piton is absent, never crashes.
 /// </summary>
 public static unsafe partial class CairnGameApi
 {
     private static IntPtr _anchorPitonPtr;
 
-    // Offsets des rigidbodies du Piton (resolus une fois ; -1 = absent). Episure rend
-    // CINEMATIQUES les trois (racine RigidBody + quickdrawBegin/End) et les colle sur
-    // la racine du corps chaque frame. Ne deplacer que le transform du piton laissait
-    // les extremites de corde diverger ET la racine non-cinematique se faisait bousculer
-    // par la physique (jitter/derive).
+    // Piton rigidbody offsets (resolved once; -1 = absent). Episure makes all three
+    // KINEMATIC (root RigidBody + quickdrawBegin/End) and pins them onto the body root
+    // every frame. Moving only the piton's transform let the rope ends diverge AND the
+    // non-kinematic root got shoved around by physics (jitter/drift).
     private static bool _pitonRbFieldsResolved;
     private static int _pitonRootRbOffset = -1;
     private static int _quickdrawBeginOffset = -1;
@@ -35,22 +34,22 @@ public static unsafe partial class CairnGameApi
 
     public static bool IsAnchorActive => _anchorPitonPtr != IntPtr.Zero;
 
-    /// <summary>Pose une ancre (piton local non rediffuse) a la position donnee.</summary>
+    /// <summary>Places an anchor (a non-rebroadcast local piton) at the given position.</summary>
     public static bool ClipAnchorTo(Vector3 position)
     {
         ReleaseAnchor();
 
         try
         {
-            // Reutilise le spawn de piton local "silencieux" (non rediffuse).
+            // Reuse the "silent" (non-rebroadcast) local piton spawn.
             if (!SpawnRemotePiton(position, Quaternion.identity, quality: 5, hp: 100, itemId: 3))
                 return false;
 
             if (TryGetLastPitonPointer(out var ptr) && ptr != IntPtr.Zero)
             {
                 _anchorPitonPtr = ptr;
-                // Rend les rigidbodies du piton cinematiques + les colle sur l'ancre
-                // (comme Episure), pour que la physique ne les laisse pas derriere.
+                // Make the piton's rigidbodies kinematic + pin them onto the anchor
+                // (like Episure), so physics doesn't leave them behind.
                 PinPitonRigidbodies(position);
                 DumpRopeRenderersOnce();
                 Mod.LogDebug($"[RopeCouple] Anchor clipped @ ({position.x:F1},{position.y:F1},{position.z:F1})");
@@ -67,7 +66,7 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    /// <summary>Deplace l'ancre vers la position du partenaire (chaque frame).</summary>
+    /// <summary>Moves the anchor to the partner's position (every frame).</summary>
     public static void UpdateAnchor(Vector3 position)
     {
         if (_anchorPitonPtr == IntPtr.Zero) return;
@@ -77,12 +76,12 @@ public static unsafe partial class CairnGameApi
             var t = new MonoBehaviour(_anchorPitonPtr).transform;
             if (t == null || t.Pointer == IntPtr.Zero)
             {
-                _anchorPitonPtr = IntPtr.Zero; // pointeur stale (piton detruit)
+                _anchorPitonPtr = IntPtr.Zero; // stale pointer (piton destroyed)
                 return;
             }
             t.position = position;
-            // Garde la racine du piton + les extremites de corde coincidentes avec
-            // l'ancre, sinon la corde native s'etire vers leur ancienne position.
+            // Keep the piton root + rope ends coincident with the anchor,
+            // otherwise the native rope stretches toward their old position.
             PinPitonRigidbodies(position);
         }
         catch
@@ -92,10 +91,10 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Rend cinematiques et colle sur <paramref name="position"/> les rigidbodies du
-    /// piton (racine + quickdrawBegin/End), comme Episure. Resout les offsets une fois ;
-    /// no-op par champ absent. isKinematic est reaffirme chaque frame pour couvrir les
-    /// rigidbodies crees par la corde APRES le clip.
+    /// Makes the piton's rigidbodies kinematic and pins them onto
+    /// <paramref name="position"/> (root + quickdrawBegin/End), like Episure. Resolves the
+    /// offsets once; no-op per absent field. isKinematic is reasserted every frame to cover
+    /// the rigidbodies created by the rope AFTER the clip.
     /// </summary>
     private static void PinPitonRigidbodies(Vector3 position)
     {
@@ -130,13 +129,13 @@ public static unsafe partial class CairnGameApi
         IntPtr bodyPtr = *(IntPtr*)((byte*)_anchorPitonPtr + offset);
         if (bodyPtr == IntPtr.Zero) return;
         var body = new Rigidbody(bodyPtr);
-        body.isKinematic = true; // idempotent : couvre les bodies crees apres le clip
+        body.isKinematic = true; // idempotent: covers bodies created after the clip
         body.position = position;
     }
 
-    // Diagnostic (#4 beam vert) : dump une fois le shader/couleur de tous les LineRenderer
-    // de la scene pour identifier la corde rendue en vert vif. A lire dans le log apres
-    // qu'une corde distante a buggue.
+    // Diagnostic (#4 green beam): dump once the shader/color of every LineRenderer in
+    // the scene to identify the rope rendered in bright green. To be read in the log after
+    // a remote rope has bugged out.
     private static bool _ropeRenderersDumped;
 
     private static void DumpRopeRenderersOnce()
@@ -164,7 +163,7 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    /// <summary>Retire l'ancre (detache le piton de la corde).</summary>
+    /// <summary>Removes the anchor (detaches the piton from the rope).</summary>
     public static void ReleaseAnchor()
     {
         if (_anchorPitonPtr == IntPtr.Zero) return;
@@ -182,11 +181,11 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    /// <summary>Reinitialise l'ancre (changement de scene / deconnexion).</summary>
+    /// <summary>Resets the anchor (scene change / disconnect).</summary>
     public static void ResetPlayerAnchorCache()
     {
-        // Le pointeur devient stale au changement de scene : on l'oublie sans
-        // tenter un detach (le Lifeline a ete recree).
+        // The pointer becomes stale on a scene change: we forget it without
+        // attempting a detach (the Lifeline has been recreated).
         _anchorPitonPtr = IntPtr.Zero;
     }
 }

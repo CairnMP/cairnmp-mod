@@ -5,8 +5,8 @@ using System.Text;
 namespace CairnMultiplayer.Shared;
 
 /// <summary>
-/// Interface commune à tous les types de paquets du protocole CairnMP.
-/// La sérialisation utilise BinaryWriter/BinaryReader (stdlib .NET, sans dépendance externe).
+/// Common interface for all packet types of the CairnMP protocol.
+/// Serialization uses BinaryWriter/BinaryReader (.NET stdlib, no external dependency).
 /// </summary>
 public interface IPacket
 {
@@ -15,15 +15,15 @@ public interface IPacket
 }
 
 /// <summary>
-/// Helpers d'encodage pour le protocole binaire CairnMP.
+/// Encoding helpers for the CairnMP binary protocol.
 ///
-/// Encodage identique à LiteNetLib.Utils.NetDataWriter/Reader :
-///   int/uint/float : little-endian (4 octets)
-///   bool           : 1 octet (0 ou 1)
-///   string         : [uint16 LE : nombre d'octets UTF-8] [octets UTF-8]
+/// Encoding identical to LiteNetLib.Utils.NetDataWriter/Reader:
+///   int/uint/float : little-endian (4 bytes)
+///   bool           : 1 byte (0 or 1)
+///   string         : [uint16 LE : number of UTF-8 bytes] [UTF-8 bytes]
 ///
-/// ATTENTION : BinaryWriter.Write(string) utilise un length-prefix 7-bit
-/// et n'est pas compatible. Toujours utiliser WriteString/ReadString ici.
+/// WARNING: BinaryWriter.Write(string) uses a 7-bit length prefix and is not
+/// compatible. Always use WriteString/ReadString here.
 /// </summary>
 public static class PacketCodec
 {
@@ -31,7 +31,7 @@ public static class PacketCodec
     private const int MaxFrameVectorCount = 512;
     private const int MaxUInt16Length = ushort.MaxValue;
 
-    /// <summary>Ecrit une string comme [uint16 LE : nbOctets][octets UTF-8].</summary>
+    /// <summary>Writes a string as [uint16 LE : byteCount][UTF-8 bytes].</summary>
     public static void WriteString(BinaryWriter w, string s)
     {
         var bytes = Utf8.GetBytes(s ?? "");
@@ -42,7 +42,7 @@ public static class PacketCodec
         w.Write(bytes);
     }
 
-    /// <summary>Lit une string encodée [uint16 LE : nbOctets][octets UTF-8].</summary>
+    /// <summary>Reads a string encoded as [uint16 LE : byteCount][UTF-8 bytes].</summary>
     public static string ReadString(BinaryReader r)
     {
         int len = r.ReadUInt16();
@@ -51,12 +51,12 @@ public static class PacketCodec
     }
 
     /// <summary>
-    /// Construit un frame TCP complet :
-    ///   [uint16 LE : longueur payload] [byte : PacketId] [champs du paquet]
+    /// Builds a complete TCP frame:
+    ///   [uint16 LE : payload length] [byte : PacketId] [packet fields]
     /// </summary>
     public static byte[] Frame(PacketId id, IPacket packet)
     {
-        // Encoder le payload (id + champs)
+        // Encode the payload (id + fields)
         using var payload = new MemoryStream();
         using (var pw = new BinaryWriter(payload, Utf8, leaveOpen: true))
         {
@@ -67,7 +67,7 @@ public static class PacketCodec
         if (payloadBytes.Length > MaxUInt16Length)
             throw new InvalidDataException($"Packet payload too large: {payloadBytes.Length} bytes");
 
-        // Construire la frame finale avec préfixe de longueur
+        // Build the final frame with the length prefix
         using var frame = new MemoryStream(payloadBytes.Length + 2);
         using var fw = new BinaryWriter(frame, Utf8, leaveOpen: true);
         fw.Write((ushort)payloadBytes.Length);
@@ -75,7 +75,7 @@ public static class PacketCodec
         return frame.ToArray();
     }
 
-    /// <summary>Ecrit un tableau de Vector3 aplati [x0,y0,z0, ...].</summary>
+    /// <summary>Writes a flattened Vector3 array [x0,y0,z0, ...].</summary>
     public static void WriteVectorArray(BinaryWriter w, float[] values)
     {
         var count = values == null ? 0 : values.Length / 3;
@@ -89,7 +89,7 @@ public static class PacketCodec
             w.Write(values[i]);
     }
 
-    /// <summary>Lit un tableau de Vector3 aplati [x0,y0,z0, ...].</summary>
+    /// <summary>Reads a flattened Vector3 array [x0,y0,z0, ...].</summary>
     public static float[] ReadVectorArray(BinaryReader r)
     {
         var count = r.ReadInt32();
@@ -104,8 +104,8 @@ public static class PacketCodec
 }
 
 /// <summary>
-/// Donnees minimales du NetFrame natif de Cairn, serialisables sans reference Unity.
-/// Les positions/eulers sont des tableaux de Vector3 aplatis.
+/// Minimal data from Cairn's native NetFrame, serializable without a Unity reference.
+/// Positions/eulers are flattened Vector3 arrays.
 /// </summary>
 public struct NetFrameData
 {
@@ -132,9 +132,9 @@ public struct NetFrameData
 }
 
 /// <summary>
-/// Instantane meteo autoritaire capture par l'hote. Les valeurs d'enums viennent
-/// des bindings IL2CPP de Cairn mais restent stockees en int pour garder le paquet
-/// partage sans reference au jeu.
+/// Authoritative weather snapshot captured by the host. The enum values come from
+/// Cairn's IL2CPP bindings but stay stored as int to keep the shared packet free of
+/// any reference to the game.
 /// </summary>
 public struct WeatherSyncData
 {
@@ -197,7 +197,7 @@ public struct WeatherSyncData
     }
 }
 
-// ---- Client -> Serveur ------------------------------------------------------
+// ---- Client -> Server -------------------------------------------------------
 
 public struct ClientHandshake : IPacket
 {
@@ -255,8 +255,8 @@ public struct ClientChat : IPacket
 public struct ClientBoneState : IPacket
 {
     public byte BoneCount;
-    public float[] Positions;  // aplati [x0,y0,z0, ...] espace monde
-    public float[] Rotations;  // aplati [x0,y0,z0,w0, ...] quaternion espace monde
+    public float[] Positions;  // flattened [x0,y0,z0, ...] world space
+    public float[] Rotations;  // flattened [x0,y0,z0,w0, ...] quaternion, world space
 
     public void Serialize(BinaryWriter w)
     {
@@ -282,7 +282,7 @@ public struct ClientPitonPlaced : IPacket
     public float RotX, RotY, RotZ, RotW; // quaternion
     public byte Quality; // PitonExecutionQuality
     public int PitonHp;
-    public int ItemId; // InventoryItemStringId (juste un int)
+    public int ItemId; // InventoryItemStringId (just an int)
 
     public void Serialize(BinaryWriter w)
     {
@@ -338,8 +338,8 @@ public struct ClientWeatherState : IPacket
 }
 
 /// <summary>
-/// Etat de la lampe (AavaLightStick.CurrentMode) du joueur local. Mode est un
-/// enum cote jeu transporte ici en int. Envoye seulement sur changement.
+/// State of the local player's lamp (AavaLightStick.CurrentMode). Mode is a
+/// game-side enum carried here as an int. Sent only on change.
 /// </summary>
 public struct ClientLampState : IPacket
 {
@@ -350,9 +350,9 @@ public struct ClientLampState : IPacket
 }
 
 /// <summary>
-/// Position monde d'un marqueur de ping pose par le joueur local en freecam.
-/// La duree de vie est une constante client (Protocol.PingLifetimeSeconds) et la
-/// couleur est derivee de l'id du joueur, donc rien d'autre n'est transmis.
+/// World position of a ping marker placed by the local player in freecam.
+/// The lifetime is a client-side constant (Protocol.PingLifetimeSeconds) and the
+/// color is derived from the player id, so nothing else is transmitted.
 /// </summary>
 public struct ClientPingPlaced : IPacket
 {
@@ -370,8 +370,8 @@ public struct ClientPingPlaced : IPacket
 }
 
 /// <summary>
-/// Pose des doigts du joueur local : 30 os compresses smallest-three
-/// (Protocol.HandPosePackedSize octets). Envoye seulement sur changement.
+/// Finger pose of the local player: 30 bones compressed smallest-three
+/// (Protocol.HandPosePackedSize bytes). Sent only on change.
 /// </summary>
 public struct ClientHandPose : IPacket
 {
@@ -392,8 +392,8 @@ public struct ClientHandPose : IPacket
 }
 
 /// <summary>
-/// Etat de sommeil du joueur local (BivouacManager.IsAsleep). Envoye sur
-/// changement ; sert a l'hote pour decider si tout le monde dort.
+/// Sleep state of the local player (BivouacManager.IsAsleep). Sent on change;
+/// used by the host to decide whether everyone is asleep.
 /// </summary>
 public struct ClientSleepState : IPacket
 {
@@ -404,8 +404,8 @@ public struct ClientSleepState : IPacket
 }
 
 /// <summary>
-/// Le client demande a s'encorder (Clip=true) ou se decorder (Clip=false) avec un
-/// autre joueur. L'hote relaie en ServerRopeClip a tous.
+/// The client requests to rope up (Clip=true) or unrope (Clip=false) with another
+/// player. The host relays it as ServerRopeClip to everyone.
 /// </summary>
 public struct ClientRopeClip : IPacket
 {
@@ -416,7 +416,7 @@ public struct ClientRopeClip : IPacket
     public void Deserialize(BinaryReader r) { TargetPlayerId = r.ReadInt32(); Clip = r.ReadBoolean(); }
 }
 
-// ---- Serveur -> Client ------------------------------------------------------
+// ---- Server -> Client -------------------------------------------------------
 
 public struct ServerHandshakeAck : IPacket
 {
@@ -498,13 +498,13 @@ public struct ServerPlayerState : IPacket
 }
 
 /// <summary>
-/// Le serveur dit au client de lancer immediatement une nouvelle partie story avec
-/// la difficulte et les flags de gameplay donnes. Envoye juste apres le handshake ACK,
-/// et a nouveau chaque fois que le serveur decide de relancer la session.
+/// The server tells the client to immediately start a new story game with the given
+/// difficulty and gameplay flags. Sent right after the handshake ACK, and again
+/// every time the server decides to restart the session.
 /// </summary>
 public struct ServerStartGame : IPacket
 {
-    public int Difficulty;       // cast depuis GameDifficulty
+    public int Difficulty;       // cast from GameDifficulty
     public bool SkipTutorials;
     public bool SkipPractice;
     public bool AssistEnabled;
@@ -641,7 +641,7 @@ public struct ServerWeatherState : IPacket
     public void Deserialize(BinaryReader r) => State.Deserialize(r);
 }
 
-/// <summary>Relais par l'hote du Mode de lampe d'un joueur a tous les autres.</summary>
+/// <summary>Host relay of a player's lamp Mode to everyone else.</summary>
 public struct ServerLampState : IPacket
 {
     public int PlayerId;
@@ -652,8 +652,8 @@ public struct ServerLampState : IPacket
 }
 
 /// <summary>
-/// Etat cosmetique du joueur local (champ de bits Flags, cf. Protocol.CosmeticFlag*).
-/// Pour l'instant : bit 0 = gants lumineux actifs. Envoye seulement sur changement.
+/// Cosmetic state of the local player (Flags bit field, see Protocol.CosmeticFlag*).
+/// For now: bit 0 = glowing gloves active. Sent only on change.
 /// </summary>
 public struct ClientCosmeticState : IPacket
 {
@@ -663,7 +663,7 @@ public struct ClientCosmeticState : IPacket
     public void Deserialize(BinaryReader r) => Flags = r.ReadByte();
 }
 
-/// <summary>Relais par l'hote de l'etat cosmetique d'un joueur a tous les autres.</summary>
+/// <summary>Host relay of a player's cosmetic state to everyone else.</summary>
 public struct ServerCosmeticState : IPacket
 {
     public int PlayerId;
@@ -674,10 +674,9 @@ public struct ServerCosmeticState : IPacket
 }
 
 /// <summary>
-/// Heure du jour autoritaire diffusee par l'hote. DayTime01 est la valeur
-/// normalisee 0-1 de NightDayCycle.dayTime01 ; AllAsleep indique si tous les
-/// joueurs dorment (le fast-forward est autorise). Les clients calent leur
-/// horloge visuelle dessus.
+/// Authoritative time of day broadcast by the host. DayTime01 is the normalized
+/// 0-1 value of NightDayCycle.dayTime01; AllAsleep indicates whether all players
+/// are asleep (fast-forward is allowed). Clients align their visual clock to it.
 /// </summary>
 public struct ServerTimeState : IPacket
 {
@@ -688,7 +687,7 @@ public struct ServerTimeState : IPacket
     public void Deserialize(BinaryReader r) { DayTime01 = r.ReadSingle(); AllAsleep = r.ReadBoolean(); }
 }
 
-/// <summary>Relais par l'hote de la pose de doigts d'un joueur a tous les autres.</summary>
+/// <summary>Host relay of a player's finger pose to everyone else.</summary>
 public struct ServerHandPose : IPacket
 {
     public int PlayerId;
@@ -711,8 +710,8 @@ public struct ServerHandPose : IPacket
 }
 
 /// <summary>
-/// Relais par l'hote d'un marqueur de ping aux autres joueurs. FromPlayerId sert
-/// a colorer le marqueur (meme palette que les fantomes) cote recepteur.
+/// Host relay of a ping marker to the other players. FromPlayerId is used to color
+/// the marker (same palette as the ghosts) on the receiving side.
 /// </summary>
 public struct ServerPingPlaced : IPacket
 {
@@ -754,9 +753,9 @@ public struct ServerChatBroadcast : IPacket
 }
 
 /// <summary>
-/// Ordre de teleportation envoye par l'hote a UN client cible (commande /bring).
-/// Le client deplace son personnage local vers (X,Y,Z) avec l'orientation Yaw.
-/// Paquet unidirectionnel hote -> client : l'hote ne traite jamais ce paquet recu d'un client.
+/// Teleport order sent by the host to ONE targeted client (the /bring command).
+/// The client moves its local character to (X,Y,Z) with the Yaw orientation.
+/// One-way host -> client packet: the host never processes this packet received from a client.
 /// </summary>
 public struct ServerTeleport : IPacket
 {
@@ -777,9 +776,9 @@ public struct ServerTeleport : IPacket
 }
 
 /// <summary>
-/// Relais par l'hote d'un encordement (Clip=true) ou decordage (Clip=false) entre
-/// deux joueurs. Chaque client maintient l'ensemble des liens actifs et rend une
-/// corde par lien. FromPlayerId/TargetPlayerId identifient les deux extremites.
+/// Host relay of a rope-up (Clip=true) or unrope (Clip=false) between two players.
+/// Each client keeps the set of active links and renders one rope per link.
+/// FromPlayerId/TargetPlayerId identify the two endpoints.
 /// </summary>
 public struct ServerRopeClip : IPacket
 {

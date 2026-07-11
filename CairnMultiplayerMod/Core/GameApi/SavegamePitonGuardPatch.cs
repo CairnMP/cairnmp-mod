@@ -6,24 +6,24 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Filet de securite sauvegarde (feedback Radi3nt, 1.36).
+/// Save safety net (Radi3nt feedback, 1.36).
 ///
-/// Un piton dans un etat incoherent — piton distant spawne par le mod avec un
-/// ClimbingSetting non renseigne, ou piton laisse dans un etat bancal apres un clip-in
-/// puis un recall — fait lever une NullReferenceException dans Piton.WriteToSavegame.
-/// Comme la sauvegarde native serialise les pitons un par un depuis
-/// PawnControllerSwitcher.WriteToSavegame, cette seule NRE fait ECHOUER TOUTE la
-/// sauvegarde (« Save FAILED »), avec perte de progression — meme apres avoir rappele
-/// tous les pitons si une entree fantome subsiste.
+/// A piton in an inconsistent state — a remote piton spawned by the mod with an
+/// unset ClimbingSetting, or a piton left in a wobbly state after a clip-in
+/// then a recall — raises a NullReferenceException in Piton.WriteToSavegame.
+/// Since the native save serializes pitons one by one from
+/// PawnControllerSwitcher.WriteToSavegame, this single NRE makes the ENTIRE
+/// save FAIL ("Save FAILED"), with loss of progress — even after recalling
+/// all pitons if a ghost entry remains.
 ///
-/// Ce finalizer Harmony avale l'exception de Piton.WriteToSavegame : la sauvegarde
-/// saute le piton fautif et CONTINUE au lieu d'avorter. Il est INDEPENDANT de la cause
-/// racine (quel que soit le champ null), donc il couvre aussi le cas « meme apres recall »
-/// que le correctif ClimbingSetting seul ne garantit pas.
+/// This Harmony finalizer swallows the exception from Piton.WriteToSavegame: the save
+/// skips the offending piton and CONTINUES instead of aborting. It is INDEPENDENT of the
+/// root cause (whatever field is null), so it also covers the "even after recall" case
+/// that the ClimbingSetting fix alone doesn't guarantee.
 ///
-/// Compromis assume : le piton fautif peut etre partiellement/pas serialise. Ce sont en
-/// pratique des pitons distants (ghosts d'un autre joueur) qui n'ont rien a faire dans
-/// TA sauvegarde de toute facon. Sauvegarde-qui-aboutit > sauvegarde-qui-echoue.
+/// Accepted trade-off: the offending piton may be partially/not serialized. In
+/// practice these are remote pitons (another player's ghosts) that have no business being in
+/// YOUR save anyway. A save-that-succeeds > a save-that-fails.
 /// </summary>
 public static unsafe partial class CairnGameApi
 {
@@ -53,7 +53,7 @@ public static unsafe partial class CairnGameApi
 
             SaveGuardHarmony.Patch(target, finalizer: new HarmonyMethod(finalizer));
             _saveGuardInstalled = true;
-            // Msg (pas LogDebug) : l'utilisateur doit pouvoir confirmer que la protection est active.
+            // Msg (not LogDebug): the user must be able to confirm the protection is active.
             Mod.Log.Msg("[SaveGuard] Protection sauvegarde active : une NRE sur un piton ne fera plus echouer la sauvegarde.");
         }
         catch (Exception ex)
@@ -64,15 +64,15 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Avale toute exception levee par Piton.WriteToSavegame pour ne pas faire echouer la
-    /// sauvegarde entiere. Retourner null = exception supprimee, la sauvegarde continue.
+    /// Swallows any exception raised by Piton.WriteToSavegame so it doesn't fail the
+    /// entire save. Returning null = exception suppressed, the save continues.
     /// </summary>
     private static Exception PitonWriteToSavegameFinalizer(Exception __exception)
     {
         if (__exception == null) return null;
 
-        // Visible (Warning, pas LogDebug gate par VerboseLogging) : si ca se declenche,
-        // l'utilisateur DOIT le voir dans la console — contrairement au crash silencieux d'avant.
+        // Visible (Warning, not LogDebug gated by VerboseLogging): if this fires,
+        // the user MUST see it in the console — unlike the silent crash before.
         var now = Time.unscaledTime;
         if (now - _lastSaveGuardLogAt >= SaveGuardLogIntervalSeconds)
         {

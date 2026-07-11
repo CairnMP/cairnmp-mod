@@ -7,10 +7,10 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Core.Chat;
 
 /// <summary>
-/// Parse et execute les commandes de chat ("/nom args"). Les commandes de
-/// teleportation sont reservees a l'hote : le controle de role se fait ICI, sur la
-/// machine qui tape la commande. Un non-hote voit un refus local et AUCUN paquet
-/// n'est emis (on ne fait jamais confiance au client cote reseau).
+/// Parses and executes chat commands ("/name args"). The teleport commands are
+/// host-only: the role check is done HERE, on the machine that types the command. A
+/// non-host sees a local refusal and NO packet is sent (we never trust the client on
+/// the network side).
 /// </summary>
 internal sealed class CommandRouter
 {
@@ -26,8 +26,8 @@ internal sealed class CommandRouter
     }
 
     /// <summary>
-    /// Traite une ligne de chat. Retourne true si c'etait une commande (consommee),
-    /// false si c'est un message normal a diffuser.
+    /// Processes a chat line. Returns true if it was a command (consumed), false if
+    /// it's a normal message to broadcast.
     /// </summary>
     public bool TryHandle(string input)
     {
@@ -63,15 +63,15 @@ internal sealed class CommandRouter
         if (CairnGameApi.IsLocalInBivouac()) { _systemLine("Can't teleport while you are in a bivouac."); return; }
         if (!TryResolvePlayer(targetName, out var p)) return;
         if (!IsTeleportTargetReady(p)) return;
-        // On ne se teleporte que vers un joueur qui MARCHE : atterrir sur un grimpeur (paroi)
-        // ferait spawner sur le mur -> chute / bug.
+        // We only teleport to a player who is WALKING: landing on a climber (wall)
+        // would spawn us on the wall -> fall / bug.
         if (!IsRemoteWalking(p))
         {
             _systemLine($"Can't teleport to {p.Name}: they must be walking (not climbing or falling).");
             return;
         }
 
-        // L'hote connait deja la position du joueur : teleportation 100% locale.
+        // The host already knows the player's position: 100% local teleport.
         if (CairnGameApi.TeleportLocalPlayer(new Vector3(p.X, p.Y, p.Z), p.YawDeg))
             _systemLine($"Teleported to {p.Name}.");
         else
@@ -83,8 +83,8 @@ internal sealed class CommandRouter
         if (!RequireHost()) return;
         if (string.IsNullOrWhiteSpace(targetName)) { _systemLine("Usage: /bring <player>"); return; }
         if (CairnGameApi.IsLocalInBivouac()) { _systemLine("Can't bring while you are in a bivouac."); return; }
-        // On ne ramene quelqu'un que si NOUS marchons : la cible atterrit a notre position, donc
-        // celle-ci doit etre un sol sur (pas en pleine paroi) sous peine de chute / bug.
+        // We only bring someone if WE are walking: the target lands at our position, so it
+        // must be solid ground (not mid-wall) or they'll fall / bug out.
         if (!CairnGameApi.IsLocalPlayerWalking())
         {
             _systemLine("You must be walking to bring someone (not climbing or falling).");
@@ -93,8 +93,8 @@ internal sealed class CommandRouter
         if (!TryResolvePlayer(targetName, out var p)) return;
         if (!IsTeleportTargetReady(p)) return;
 
-        // L'hote ne peut pas bouger le perso d'un autre : il demande au client cible
-        // de se teleporter vers la position de l'hote via un ServerTeleport dedie.
+        // The host can't move another player's character: it asks the target client
+        // to teleport to the host's position via a dedicated ServerTeleport.
         if (!CairnGameApi.TryGetLocalPlayerPose(out var pos, out var yaw))
         {
             _systemLine("Can't bring right now (not in game?).");
@@ -107,9 +107,9 @@ internal sealed class CommandRouter
     }
 
     /// <summary>
-    /// Vrai si la cible est teleportable. Un joueur en bivouac (ou en chargement/menu)
-    /// diffuse un etat != InGame et une position figee/perimee : on refuse alors la
-    /// teleportation pour ne pas l'arracher de son bivouac ni viser une position obsolete.
+    /// True if the target can be teleported. A player in a bivouac (or loading/menu)
+    /// broadcasts a state != InGame and a frozen/stale position: we then refuse the
+    /// teleport so as not to yank them out of their bivouac or aim at a stale position.
     /// </summary>
     private bool IsTeleportTargetReady(RemotePlayer p)
     {
@@ -119,8 +119,8 @@ internal sealed class CommandRouter
     }
 
     /// <summary>
-    /// Vrai si le joueur distant MARCHE (PawnState Walking), decode depuis sa derniere NetFrame.
-    /// False si pas de frame, ou s'il grimpe / chute / est mort -> teleportation refusee.
+    /// True if the remote player is WALKING (PawnState Walking), decoded from their last NetFrame.
+    /// False if there's no frame, or if they're climbing / falling / dead -> teleport refused.
     /// </summary>
     private bool IsRemoteWalking(RemotePlayer p)
     {
@@ -136,9 +136,9 @@ internal sealed class CommandRouter
     }
 
     /// <summary>
-    /// Resout un joueur par pseudo (insensible a la casse) parmi les joueurs distants.
-    /// Match exact prioritaire, sinon prefixe unique. Affiche un message d'erreur et
-    /// retourne false si rien (ou plusieurs candidats ambigus).
+    /// Resolves a player by nickname (case-insensitive) among the remote players.
+    /// Exact match takes priority, otherwise a unique prefix. Displays an error message
+    /// and returns false if nothing matches (or several ambiguous candidates).
     /// </summary>
     private bool TryResolvePlayer(string name, out RemotePlayer player)
     {

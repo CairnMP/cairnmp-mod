@@ -6,32 +6,32 @@ using Il2CppSteamworks;
 namespace CairnMultiplayerMod.Networking;
 
 // ============================================================================
-// Phase 3 — etape 2 : adaptateur exposant le relais Steam de l'hote comme
+// Phase 3 — step 2: adapter exposing the host's Steam relay as an
 // IAuthoritativeSink.
 //
-// C'est l'UNIQUE endroit qui traduit playerId <-> CSteamID et NetReliability ->
-// flag Steam. Le futur cœur autoritatif (IAuthoritativeSession) ne parlera qu'en
-// playerId a travers ce sink ; il n'aura jamais connaissance de Steam.
+// This is the SINGLE place that translates playerId <-> CSteamID and NetReliability ->
+// Steam flag. The future authoritative core (IAuthoritativeSession) will speak only in
+// playerId through this sink; it will never be aware of Steam.
 //
-// Non destructif : on ne touche pas au gros switch existant de SteamP2PTransport.
-// L'etape 3 y deplacera la logique un case a la fois, en la faisant router vers
-// le cœur qui, lui, repondra via ce sink.
+// Non-destructive: we don't touch the big existing switch in SteamP2PTransport.
+// Step 3 will move the logic there one case at a time, routing it to
+// the core which, in turn, will respond via this sink.
 // ============================================================================
 public partial class NetworkManager
 {
     private IAuthoritativeSink _steamSink;
 
     /// <summary>
-    /// Sink Steam (cote hote) pour le cœur autoritatif. Cree paresseusement ; reutilise
-    /// les helpers d'envoi existants (BuildPayload / SendSteamPayload / BroadcastSteamServerPacket).
+    /// Steam sink (host side) for the authoritative core. Created lazily; reuses
+    /// the existing send helpers (BuildPayload / SendSteamPayload / BroadcastSteamServerPacket).
     /// </summary>
     public IAuthoritativeSink SteamSink => _steamSink ??= new SteamAuthoritativeSink(this);
 
     private SteamAuthoritativeSession _steamSession;
 
     /// <summary>
-    /// Cœur autoritatif (pitons pour l'instant). Cree paresseusement, cable sur le sink
-    /// Steam et sur les events OnPiton* de ce NetworkManager (ghosts locaux cote hote).
+    /// Authoritative core (pitons for now). Created lazily, wired to the Steam
+    /// sink and to this NetworkManager's OnPiton* events (local ghosts on the host side).
     /// </summary>
     private SteamAuthoritativeSession SteamSession => _steamSession ??= new SteamAuthoritativeSession(
         SteamSink,
@@ -39,8 +39,8 @@ public partial class NetworkManager
         pkt => OnPitonRemoved?.Invoke(pkt),
         ApplyLocalLampState);
 
-    // Applique l'etat lampe d'un invite sur son ghost local (cote hote), comme le
-    // faisait le case ClientLampState inline avant la migration.
+    // Applies a guest's lamp state to their local ghost (host side), as the
+    // inline ClientLampState case did before the migration.
     private void ApplyLocalLampState(int playerId, int mode)
     {
         if (_remotePlayers.TryGetValue(playerId, out var rp))
@@ -56,20 +56,20 @@ public partial class NetworkManager
 
         public SteamAuthoritativeSink(NetworkManager transport) => _t = transport;
 
-        // Les Keys d'un Dictionary<int,ulong> implementent IReadOnlyCollection<int>.
+        // The Keys of a Dictionary<int,ulong> implement IReadOnlyCollection<int>.
         public IReadOnlyCollection<int> ConnectedPlayerIds => _t._steamIdsByPlayerId.Keys;
 
         public void SendTo(int playerId, PacketId id, IPacket packet, NetReliability reliability)
         {
             if (!_t._steamIdsByPlayerId.TryGetValue(playerId, out var steamId)) return;
-            if (steamId == 0 || steamId == _t._steamLocalId) return; // jamais a soi-meme
+            if (steamId == 0 || steamId == _t._steamLocalId) return; // never to oneself
             _t.SendSteamPayload(new CSteamID(steamId), BuildPayload(id, packet),
                 reliability == NetReliability.ReliableOrdered);
         }
 
         public void Broadcast(PacketId id, IPacket packet, int exceptPlayerId, NetReliability reliability)
         {
-            // exceptPlayerId == 0 -> a tout le monde (exceptSteamId 0 = personne d'exclu).
+            // exceptPlayerId == 0 -> to everyone (exceptSteamId 0 = nobody excluded).
             ulong exceptSteamId = 0;
             if (exceptPlayerId != 0)
                 _t._steamIdsByPlayerId.TryGetValue(exceptPlayerId, out exceptSteamId);

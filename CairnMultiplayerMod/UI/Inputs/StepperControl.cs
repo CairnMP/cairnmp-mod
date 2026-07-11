@@ -7,8 +7,8 @@ using UnityEngine.UI;
 namespace CairnMultiplayerMod.UI.Inputs;
 
 /// <summary>
-/// Stepper -/+ avec valeur centrale, clamp [min, max]. Utilisé pour le nombre
-/// de slots du lobby (2-8).
+/// Stepper -/+ with a central value, clamped to [min, max]. Used for the number
+/// of lobby slots (2-8).
 /// </summary>
 internal sealed class StepperControl
 {
@@ -50,7 +50,7 @@ internal sealed class StepperControl
 
     public void SetInteractable(bool value)
     {
-        // Désactive simplement les Buttons enfants ; le visuel reste.
+        // Simply disables the child Buttons; the visuals remain.
         foreach (var btn in Root.GetComponentsInChildren<Button>(true))
             btn.interactable = value;
     }
@@ -77,7 +77,7 @@ internal sealed class StepperControl
         btn.targetGraphic = img;
         btn.onClick.AddListener(onClick);
 
-        // Tint des arrows : muted normal, accent au hover (via Button colors).
+        // Arrow tint: muted normally, accent on hover (via Button colors).
         var colors = btn.colors;
         colors.normalColor      = Color.white;
         colors.highlightedColor = new Color(1f, 1f, 1f, 0.85f);

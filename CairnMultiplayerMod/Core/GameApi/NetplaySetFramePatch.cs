@@ -45,13 +45,13 @@ public static unsafe partial class CairnGameApi
 
     public static bool IsNetplaySetFramePatchInstalled => _netplaySetFramePatchInstalled;
 
-    // Pause LOGIQUE du patch, sans toucher Harmony. Le patch reste detoure ; pour un
-    // ghost gere les prefixes skippent le natif SANS inline write (return false), restant
-    // inertes pendant la fenetre de save. On ne laisse SURTOUT PAS tourner le SetFrame
-    // natif sur nos ghosts (dico non peuple -> KeyNotFoundException('INVALID')). Le but
-    // est d'eviter le churn de detour (UnpatchSelf/Patch) pendant la sauvegarde du bivouac,
-    // qui pouvait perturber le scellage/reouverture du package de save natif (ghost stream)
-    // et laisser le package dispose -> les saves suivantes deviennent des no-op silencieux.
+    // LOGICAL pause of the patch, without touching Harmony. The patch stays hooked; for a
+    // managed ghost the prefixes skip the native call WITHOUT an inline write (return false),
+    // staying inert during the save window. We must NEVER let the native SetFrame
+    // run on our ghosts (unpopulated dict -> KeyNotFoundException('INVALID')). The goal
+    // is to avoid detour churn (UnpatchSelf/Patch) during the bivouac save,
+    // which could disturb the sealing/reopening of the native save package (ghost stream)
+    // and leave the package disposed -> subsequent saves become silent no-ops.
     private static bool _setFramePatchPaused;
     public static void PauseSetFramePatch() => _setFramePatchPaused = true;
     public static void ResumeSetFramePatch() => _setFramePatchPaused = false;
@@ -118,17 +118,17 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    // INVARIANT : pour un ghost GERE, cette methode renvoie TOUJOURS true -> le prefix skippe
-    // le SetFrame natif. Nos ghosts sont pilotes uniquement par l'ecriture inline et ne sont
-    // jamais initialises cote natif ; laisser tourner le SetFrame natif sur eux faisait un
-    // lookup dans un dico non peuple -> KeyNotFoundException('INVALID') et crash. En cas
-    // d'echec inline (layout pas encore resolu, ou write en erreur), on skip le natif et on
-    // reessaie la frame suivante plutot que de risquer ce crash.
+    // INVARIANT: for a MANAGED ghost, this method ALWAYS returns true -> the prefix skips
+    // the native SetFrame. Our ghosts are driven solely by the inline write and are
+    // never initialized on the native side; letting the native SetFrame run on them did a
+    // lookup in an unpopulated dict -> KeyNotFoundException('INVALID') and crash. On an
+    // inline failure (layout not resolved yet, or a write error), we skip the native call and
+    // retry the next frame rather than risk that crash.
     private static bool ApplyRemotePlayerSetFramePatch(NetplayRemotePlayer instance, int id, string playerName, NetFrame frame)
     {
-        if (instance == null || instance.Pointer == IntPtr.Zero) return true; // rien a faire, surtout pas le natif
+        if (instance == null || instance.Pointer == IntPtr.Zero) return true; // nothing to do, definitely not the native call
         if (!IsRenderableNetFrame(frame)) return true;
-        if (!EnsureNetFrameLayout() || !EnsureRemotePlayerLayout(instance)) return true; // pas pret -> skip natif, retry frame suivante
+        if (!EnsureNetFrameLayout() || !EnsureRemotePlayerLayout(instance)) return true; // not ready -> skip native, retry next frame
 
         try
         {
@@ -143,12 +143,12 @@ public static unsafe partial class CairnGameApi
         catch (Exception ex)
         {
             LogPatchedSetFrameFailureOnce("player", ex);
-            return true; // notre write a echoue -> on skip le natif (dangereux), pas de fallback natif
+            return true; // our write failed -> we skip the native call (dangerous), no native fallback
         }
     }
 
-    // Meme invariant que ApplyRemotePlayerSetFramePatch : un climbot gere ne doit jamais
-    // retomber sur le SetFrame natif (crash 'INVALID' sur dico non peuple).
+    // Same invariant as ApplyRemotePlayerSetFramePatch: a managed climbot must never
+    // fall back on the native SetFrame ('INVALID' crash on an unpopulated dict).
     private static bool ApplyRemoteClimbotSetFramePatch(NetplayRemoteClimbot instance, int id, NetFrame frame)
     {
         if (instance == null || instance.Pointer == IntPtr.Zero) return true;
@@ -202,7 +202,7 @@ public static unsafe partial class CairnGameApi
         }
         catch
         {
-            // Le nom est cosmetique ; la frame reste prioritaire.
+            // The name is cosmetic; the frame stays the priority.
         }
 
         try
@@ -213,7 +213,7 @@ public static unsafe partial class CairnGameApi
         }
         catch
         {
-            // Les interactions distantes ne doivent pas bloquer le rendu.
+            // Remote interactions must not block rendering.
         }
     }
 
@@ -359,13 +359,13 @@ public static unsafe partial class CairnGameApi
             string playerName,
             NetFrame frame)
         {
-            // Instance non geree (netplay natif du jeu) -> on laisse tourner le natif.
+            // Unmanaged instance (the game's native netplay) -> let the native call run.
             if (!RemotePlayerManager.IsManagedNetplayPlayer(__instance))
                 return true;
 
-            // Ghost gere : on ne laisse JAMAIS tourner le SetFrame natif (dico non peuple
-            // -> KeyNotFoundException('INVALID')). En pause (fenetre de save bivouac), on
-            // skippe le natif SANS faire l'inline write : inerte mais sans crash.
+            // Managed ghost: we NEVER let the native SetFrame run (unpopulated dict
+            // -> KeyNotFoundException('INVALID')). While paused (bivouac save window), we
+            // skip the native call WITHOUT doing the inline write: inert but crash-free.
             if (_setFramePatchPaused)
                 return false;
 
@@ -377,11 +377,11 @@ public static unsafe partial class CairnGameApi
             int id,
             NetFrame frame)
         {
-            // Instance non geree (netplay natif du jeu) -> on laisse tourner le natif.
+            // Unmanaged instance (the game's native netplay) -> let the native call run.
             if (!RemotePlayerManager.IsManagedNetplayClimbot(__instance))
                 return true;
 
-            // Meme invariant : un climbot gere ne retombe jamais sur le SetFrame natif.
+            // Same invariant: a managed climbot never falls back on the native SetFrame.
             if (_setFramePatchPaused)
                 return false;
 

@@ -9,28 +9,28 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Route les vraies exceptions du moteur/interop IL2CPP vers <see cref="CrashReporter"/>,
-/// pour qu'elles remontent dans la console admin au lieu d'etre simplement loggees.
+/// Routes genuine engine/IL2CPP-interop exceptions to <see cref="CrashReporter"/>,
+/// so they surface in the admin console instead of merely being logged.
 ///
-/// Deux sources :
-/// - 2A : patch Harmony sur Il2CppInterop.HarmonySupport.Il2CppDetourMethodPatcher.ReportException,
-///   qui voit passer les exceptions des trampolines natif->managed (nos patches/callbacks qui throw).
-/// - 2C : abonnement a UnityEngine.Application.logMessageReceived, filtre sur les
-///   LogType.Exception dont la condition/stack mentionne notre namespace (pour ne pas
-///   remonter les exceptions internes du jeu de base).
+/// Two sources:
+/// - 2A: Harmony patch on Il2CppInterop.HarmonySupport.Il2CppDetourMethodPatcher.ReportException,
+///   which sees the exceptions from native->managed trampolines (our patches/callbacks that throw).
+/// - 2C: subscription to UnityEngine.Application.logMessageReceived, filtered to
+///   LogType.Exception whose condition/stack mentions our namespace (so we don't
+///   report base-game internal exceptions).
 ///
-/// Anti-spam : un garde-fou partage plafonne le nombre de signatures distinctes par
-/// session ; la deduplication fine reste faite par CrashReporter.
+/// Anti-spam: a shared guard caps the number of distinct signatures per session;
+/// fine-grained deduplication is still handled by CrashReporter.
 /// </summary>
 public static class Il2CppExceptionCapture
 {
-    // Marqueur de namespace : seules les exceptions Unity dont la condition/stack
-    // mentionne le mod sont remontees (sinon = exception du jeu de base).
+    // Namespace marker: only Unity exceptions whose condition/stack mentions the
+    // mod are reported (otherwise = base-game exception).
     private const string ModNamespaceMarker = "CairnMultiplayer";
 
-    // Garde-fou partage 2A+2C : au-dela de cette limite de signatures distinctes,
-    // on cesse de reporter pour la session (protege d'un flood de signatures variees
-    // que la deduplication par-signature ne couvre pas).
+    // Shared 2A+2C guard: beyond this limit of distinct signatures, we stop
+    // reporting for the session (protects against a flood of varied signatures
+    // that per-signature deduplication wouldn't cover).
     private const int MaxDistinctPerSession = 25;
 
     private static readonly object GateLock = new();
@@ -38,7 +38,7 @@ public static class Il2CppExceptionCapture
     private static bool _capLogged;
     private static int _installed;
 
-    // Conserve la reference du delegue Unity converti pour empecher sa collecte GC.
+    // Keeps a reference to the converted Unity delegate to prevent it from being GC'd.
     private static Application.LogCallback _logCallback;
 
     public static void Install()
@@ -49,7 +49,7 @@ public static class Il2CppExceptionCapture
         InstallUnityLogHook();
     }
 
-    // 2A — patch du reporter d'exception des trampolines Il2CppInterop.
+    // 2A — patch of the Il2CppInterop trampolines' exception reporter.
     private static void InstallTrampolinePatch()
     {
         try
@@ -72,8 +72,8 @@ public static class Il2CppExceptionCapture
             var prefix = typeof(Il2CppExceptionCapture).GetMethod(
                 nameof(OnTrampolineException), BindingFlags.NonPublic | BindingFlags.Static);
 
-            // Instance Harmony dediee. Le prefix est non-bloquant (void) : il coexiste
-            // avec celui de cairnloader (qui, lui, skippe l'original).
+            // Dedicated Harmony instance. The prefix is non-blocking (void): it coexists
+            // with cairnloader's own (which skips the original).
             var harmony = new HarmonyLib.Harmony("CairnMultiplayerMod.Il2CppExceptionCapture");
             harmony.Patch(reportException, prefix: new HarmonyMethod(prefix));
             Mod.Log.Msg("[CairnMP] Il2Cpp exception capture: trampoline hook installed.");
@@ -84,8 +84,8 @@ public static class Il2CppExceptionCapture
         }
     }
 
-    // Prefix non-bloquant : observe l'exception sans modifier le flux du patcher.
-    // __0 = premier parametre de ReportException(Exception).
+    // Non-blocking prefix: observes the exception without altering the patcher's flow.
+    // __0 = first parameter of ReportException(Exception).
     private static void OnTrampolineException(Exception __0)
     {
         if (__0 == null) return;
@@ -95,10 +95,10 @@ public static class Il2CppExceptionCapture
             if (PassesGate(signature))
                 CrashReporter.ReportCaughtExceptionOnce(__0, "Il2CppInterop");
         }
-        catch { /* ne jamais relancer depuis le hook */ }
+        catch { /* never rethrow from the hook */ }
     }
 
-    // 2C — abonnement aux logs Unity (exceptions cote moteur/MonoBehaviour/coroutines).
+    // 2C — subscription to Unity logs (engine/MonoBehaviour/coroutine-side exceptions).
     private static void InstallUnityLogHook()
     {
         try
@@ -118,24 +118,24 @@ public static class Il2CppExceptionCapture
     {
         try
         {
-            // Garde 1 : uniquement les vraies exceptions (Error/Warning trop bruyants).
+            // Guard 1: only genuine exceptions (Error/Warning are too noisy).
             if (type != LogType.Exception) return;
 
-            // Garde 2 : uniquement ce que le mod a cause (filtre namespace).
+            // Guard 2: only what the mod caused (namespace filter).
             if (!ContainsModMarker(condition) && !ContainsModMarker(stackTrace)) return;
 
             var signature = $"UnityException\0{condition}";
             if (PassesGate(signature))
                 CrashReporter.ReportLogExceptionOnce(condition, stackTrace, "UnityException");
         }
-        catch { /* ne jamais relancer depuis le handler de log (risque de boucle) */ }
+        catch { /* never rethrow from the log handler (loop risk) */ }
     }
 
     private static bool ContainsModMarker(string s)
         => !string.IsNullOrEmpty(s) && s.IndexOf(ModNamespaceMarker, StringComparison.Ordinal) >= 0;
 
-    // Garde-fou partage 2A+2C : ignore une signature deja vue (CrashReporter
-    // dedupliquerait de toute facon) et plafonne le nombre de signatures distinctes.
+    // Shared 2A+2C guard: ignores an already-seen signature (CrashReporter
+    // would deduplicate anyway) and caps the number of distinct signatures.
     private static bool PassesGate(string signature)
     {
         lock (GateLock)
@@ -155,8 +155,8 @@ public static class Il2CppExceptionCapture
         }
     }
 
-    // Resout le type interne Il2CppDetourMethodPatcher depuis l'assembly deja chargee
-    // par le loader, sans ajouter de reference csproj a Il2CppInterop.HarmonySupport.
+    // Resolves the internal Il2CppDetourMethodPatcher type from the assembly already
+    // loaded by the loader, without adding a csproj reference to Il2CppInterop.HarmonySupport.
     private static Type ResolveDetourMethodPatcherType()
     {
         const string fullName = "Il2CppInterop.HarmonySupport.Il2CppDetourMethodPatcher";
@@ -170,7 +170,7 @@ public static class Il2CppExceptionCapture
                 t = asm.GetType(fullName);
                 if (t != null) return t;
             }
-            catch { /* certains assemblies refusent GetType — on ignore */ }
+            catch { /* some assemblies refuse GetType — we ignore them */ }
         }
         return null;
     }

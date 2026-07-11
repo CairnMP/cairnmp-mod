@@ -47,7 +47,7 @@ public class PacketCodecTests
             PacketCodec.WriteString(w, "ab"); // 2 bytes UTF-8
         }
         var bytes = ms.ToArray();
-        // 2 octets de longueur en little-endian + payload
+        // 2 little-endian length bytes + payload
         Assert.Equal(4, bytes.Length);
         Assert.Equal(0x02, bytes[0]);
         Assert.Equal(0x00, bytes[1]);
@@ -73,13 +73,13 @@ public class PacketCodecTests
 
 public class ProtocolVersionTests
 {
-    // Garde-fou : si quelqu'un bump la version par mégarde sans changer le format,
-    // ce test rappelle qu'il faut aussi documenter le changement dans le mod et le launcher.
+    // Safeguard: if someone bumps the version by mistake without changing the format,
+    // this test is a reminder that the change must also be documented in the mod and the launcher.
     [Fact]
     public void Version_IsKnownConstant()
     {
-        // Quand tu bumpes Protocol.Version, mets à jour cette valeur ET les
-        // notes de release pour signaler aux clients qu'ils doivent se mettre à jour.
+        // When you bump Protocol.Version, update this value AND the release notes
+        // to signal to clients that they need to update.
         Assert.Equal(6, Protocol.Version);
     }
 
@@ -96,8 +96,8 @@ public class ProtocolVersionTests
     [InlineData(GameDifficulty.FreeRoam, 418187680)]
     public void GameDifficulty_ValuesAreStable(GameDifficulty d, int expected)
     {
-        // Ces valeurs viennent du jeu Cairn — si elles changent, les paquets
-        // existants deviennent illisibles. Garde-fou contre une refacto involontaire.
+        // These values come from the Cairn game — if they change, existing packets
+        // become unreadable. Safeguard against an accidental refactor.
         Assert.Equal(expected, (int)d);
     }
 }
@@ -152,11 +152,11 @@ public class PingPacketTests
     [Fact]
     public void ClientPingPlaced_FramesThroughCodec()
     {
-        // Verifie l'encodage complet (longueur + PacketId + champs) via PacketCodec.Frame.
+        // Verifies the full encoding (length + PacketId + fields) via PacketCodec.Frame.
         var pkt = new ClientPingPlaced { PosX = 1f, PosY = 2f, PosZ = 3f };
         var frame = PacketCodec.Frame(PacketId.ClientPingPlaced, pkt);
 
-        // [uint16 len][byte id][3 floats] => 2 + 1 + 12 = 15 octets, payload = 13.
+        // [uint16 len][byte id][3 floats] => 2 + 1 + 12 = 15 bytes, payload = 13.
         Assert.Equal(15, frame.Length);
         Assert.Equal((byte)PacketId.ClientPingPlaced, frame[2]);
     }
@@ -209,7 +209,7 @@ public class HandPosePacketTests
     [Fact]
     public void HandPosePackedSize_MatchesFingerBoneCount()
     {
-        // 38 os de doigts (squelette Aava, resolution par nom) x 4 octets smallest-three = 152.
+        // 38 finger bones (Aava skeleton, resolved by name) x 4 bytes smallest-three = 152.
         Assert.Equal(38, Protocol.FingerBoneCount);
         Assert.Equal(Protocol.FingerBoneCount * QuaternionCodec.PackedSize, Protocol.HandPosePackedSize);
         Assert.Equal(152, Protocol.HandPosePackedSize);

@@ -7,42 +7,42 @@ using Object = UnityEngine.Object;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Encordement cordee entre joueurs — systeme repris d'Episure (corde NATIVE, pas de corde
-/// cosmetique separee). Principe :
+/// Rope-team belaying between players — system borrowed from Episure (NATIVE rope, no separate
+/// cosmetic rope). Principle:
 ///
-/// 1. On capture un TEMPLATE de piton (premier Piton de la scene). On le CLONE
-///    (Object.Instantiate) pour chaque partenaire encorde — Instantiate ne joue PAS le son de
-///    pose (contrairement a Lifeline.AddPiton, qui spammait des « clac »).
-/// 2. Le piton-ancre est rendu kinematic + non ramassable, puis TELEPORTE sur le baudrier du
-///    partenaire chaque frame (le piton suit le partenaire).
-/// 3. On attache la corde de la lifeline LOCALE a ce piton via Lifeline.AttachToPiton (une
-///    seule fois). La corde native devient donc le visuel ET l'assurage : si le joueur chute,
-///    la lifeline le retient nativement (suspension, pas de mort/drain).
+/// 1. We capture a piton TEMPLATE (first Piton in the scene). We CLONE it
+///    (Object.Instantiate) for each roped partner — Instantiate does NOT play the placement
+///    sound (unlike Lifeline.AddPiton, which spammed "clack" sounds).
+/// 2. The anchor piton is made kinematic + non-pickable, then TELEPORTED onto the partner's
+///    harness every frame (the piton follows the partner).
+/// 3. We attach the LOCAL lifeline's rope to that piton via Lifeline.AttachToPiton (only
+///    once). The native rope thus becomes both the visual AND the belay: if the player falls,
+///    the lifeline catches them natively (suspension, no death/drain).
 ///
-/// Le systeme est SYMETRIQUE : chaque client attache SA propre corde a un piton pose chez le
-/// partenaire. Les deux joueurs voient donc une corde, sans rien partager au reseau (les
-/// positions sont deja synchronisees). Plus besoin de corde cosmetique (RopeLinkRenderer).
+/// The system is SYMMETRIC: each client attaches ITS OWN rope to a piton placed on the
+/// partner. Both players therefore see a rope, without sharing anything over the network (the
+/// positions are already synchronized). No more need for a cosmetic rope (RopeLinkRenderer).
 /// </summary>
 public static unsafe partial class CairnGameApi
 {
-    /// <summary>Template clone pour chaque ancre. Capture par PatchPitonTemplate (Awake) ou scan.</summary>
+    /// <summary>Template cloned for each anchor. Captured by PatchPitonTemplate (Awake) or scan.</summary>
     private static GameObject _pitonTemplate;
     private static int _lastPitonScanFrame;
 
-    /// <summary>Une ancre (piton clone) par partenaire encorde.</summary>
+    /// <summary>One anchor (cloned piton) per roped partner.</summary>
     private static readonly Dictionary<int, GameObject> _ropeAnchors = new();
 
-    /// <summary>Partenaires dont la corde de lifeline locale a deja ete clippee (AttachToPiton fait).</summary>
+    /// <summary>Partners whose local lifeline rope has already been clipped in (AttachToPiton done).</summary>
     private static readonly HashSet<int> _ropeAnchorsAttached = new();
 
-    /// <summary>Vrai tant qu'au moins une ancre de cordee est active (filet RopeTeamFallPatch).</summary>
+    /// <summary>True while at least one rope-team anchor is active (RopeTeamFallPatch safety net).</summary>
     private static bool _belayEngaged;
     public static bool IsNativeBelayEngaged => _belayEngaged;
 
-    /// <summary>Vrai si au moins une ancre de cordee est posee (utilise par TickRopeTeam).</summary>
+    /// <summary>True if at least one rope-team anchor is placed (used by TickRopeTeam).</summary>
     public static bool HasRopeTeamAnchors => _ropeAnchors.Count > 0;
 
-    /// <summary>Capture un template de piton (appele depuis le patch Piton.Awake).</summary>
+    /// <summary>Captures a piton template (called from the Piton.Awake patch).</summary>
     public static void CapturePitonTemplate(Piton candidate)
     {
         if (_pitonTemplate != null || candidate == null) return;
@@ -54,7 +54,7 @@ public static unsafe partial class CairnGameApi
         catch { }
     }
 
-    /// <summary>Template de piton ; scan throttle de la scene en repli si l'Awake n'a rien capture.</summary>
+    /// <summary>Piton template; throttled scene scan as a fallback if Awake captured nothing.</summary>
     private static GameObject ResolvePitonTemplate()
     {
         if (_pitonTemplate != null) return _pitonTemplate;
@@ -74,19 +74,19 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Entretient l'ancre de corde vers <paramref name="partnerId"/> : la cree au besoin (clone du
-    /// template), clippe la corde de la lifeline locale dessus une fois, puis la DEPLACE sur le
-    /// baudrier du partenaire chaque frame. A appeler chaque frame tant que le lien est actif.
+    /// Maintains the rope anchor toward <paramref name="partnerId"/>: creates it if needed (clone of
+    /// the template), clips the local lifeline rope onto it once, then MOVES it onto the
+    /// partner's harness every frame. Call every frame while the link is active.
     /// </summary>
     public static void UpdateRopeTeamAnchor(int partnerId, Vector3 partnerAnchorPos)
     {
         try
         {
-            // Cree l'ancre au premier appel (clone du template -> aucun son de pose).
+            // Create the anchor on the first call (clone of the template -> no placement sound).
             if (!_ropeAnchors.TryGetValue(partnerId, out var anchor) || anchor == null)
             {
                 var template = ResolvePitonTemplate();
-                if (template == null) return;   // pas encore de template -> on reessaie plus tard
+                if (template == null) return;   // no template yet -> we retry later
                 anchor = SpawnAnchorPiton(template, partnerAnchorPos);
                 if (anchor == null) return;
                 _ropeAnchors[partnerId] = anchor;
@@ -94,12 +94,12 @@ public static unsafe partial class CairnGameApi
                 Mod.LogDebug($"[RopeTeam] Rope anchor spawned for partner {partnerId}.");
             }
 
-            // Suit le partenaire : piton + rigidbodies des extremites de quickdraw (la corde Obi
-            // pinnee sur le collider du piton suit -> ancre mobile).
+            // Follow the partner: piton + quickdraw endpoint rigidbodies (the Obi rope
+            // pinned on the piton's collider follows -> mobile anchor).
             MoveAnchorPiton(anchor, partnerAnchorPos);
 
-            // Clippe la corde de la lifeline locale dans l'ancre (une seule fois). Si l'attache
-            // n'a pas encore pris (corde du robot pas dispo, etc.), on retentera la frame suivante.
+            // Clip the local lifeline rope into the anchor (only once). If the attach
+            // hasn't taken yet (robot rope not available, etc.), we retry the next frame.
             if (!_ropeAnchorsAttached.Contains(partnerId) && TryAttachLifelineToAnchor(anchor))
             {
                 _ropeAnchorsAttached.Add(partnerId);
@@ -116,23 +116,23 @@ public static unsafe partial class CairnGameApi
         var piton = go.GetComponent<Piton>();
         if (piton != null)
         {
-            // Ancre non ramassable (cf. Episure : *(sbyte*)(Piton+32)=0 == canBePickedUp=false).
+            // Non-pickable anchor (cf. Episure: *(sbyte*)(Piton+32)=0 == canBePickedUp=false).
             try { piton.canBePickedUp = false; } catch { }
-            // Kinematic : l'ancre suit la position imposee sans tomber ni etre tiree par la tension.
+            // Kinematic: the anchor follows the imposed position without falling or being pulled by tension.
             SetKinematic(piton.RigidBody);
             SetKinematic(piton.quickdrawBeginRigidBody);
             SetKinematic(piton.quickdrawEndRigidBody);
         }
-        // L'ancre n'est qu'un point d'accroche mecanique pour la corde : on cache son visuel
-        // (mesh du piton + degaine) pour ne pas laisser un piton flottant dans le vide chez le
-        // partenaire. Le composant Piton, ses rigidbodies et colliders restent actifs -> la
-        // corde s'y attache et suit toujours. La corde coop (lifeline.securingRope) est un
-        // objet separe, donc reste visible.
+        // The anchor is only a mechanical attach point for the rope: we hide its visual
+        // (piton mesh + quickdraw) so we don't leave a piton floating in the void at the
+        // partner's side. The Piton component, its rigidbodies and colliders stay active -> the
+        // rope attaches to it and keeps following. The coop rope (lifeline.securingRope) is a
+        // separate object, so it stays visible.
         HideAnchorRenderers(go);
         return go;
     }
 
-    /// <summary>Desactive tous les Renderer du clone d'ancre (visuel piton invisible).</summary>
+    /// <summary>Disables all Renderers on the anchor clone (piton visual invisible).</summary>
     private static void HideAnchorRenderers(GameObject go)
     {
         try
@@ -169,10 +169,10 @@ public static unsafe partial class CairnGameApi
         var piton = anchor.GetComponent<Piton>();
         if (piton == null) return false;
 
-        // La corde native (securingRope) doit exister pour qu'AttachToPiton ait quelque chose a
-        // clipper. Au repos elle est null -> on INJECTE la corde du compagnon robot
-        // (Il2CppTheGameBakers.Cairn.RobotPawnController.GetRope()) dans la lifeline, exactement comme Episure. Throttle
-        // interne (ResolveLocalClimbot) -> pas de spam si la corde n'est pas encore dispo.
+        // The native rope (securingRope) must exist for AttachToPiton to have something to
+        // clip. At rest it is null -> we INJECT the robot companion's rope
+        // (Il2CppTheGameBakers.Cairn.RobotPawnController.GetRope()) into the lifeline, exactly like Episure. Internal
+        // throttle (ResolveLocalClimbot) -> no spam if the rope is not available yet.
         if (lifeline.securingRope == null && !TryInjectSecuringRope(lifeline))
             return false;
 
@@ -192,9 +192,9 @@ public static unsafe partial class CairnGameApi
     private static int _lastClimbotSearchFrame;
 
     /// <summary>
-    /// Injecte la corde du compagnon robot (Il2CppTheGameBakers.Cairn.RobotPawnController.GetRope()) comme securingRope de
-    /// la lifeline si celle-ci est vide (repris d'Episure : write du champ securingRope). Renvoie
-    /// true si la lifeline a desormais une corde.
+    /// Injects the robot companion's rope (Il2CppTheGameBakers.Cairn.RobotPawnController.GetRope()) as the lifeline's
+    /// securingRope if it is empty (borrowed from Episure: write to the securingRope field). Returns
+    /// true if the lifeline now has a rope.
     /// </summary>
     private static bool TryInjectSecuringRope(Lifeline lifeline)
     {
@@ -220,8 +220,8 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    /// <summary>Trouve (et cache) le Il2CppTheGameBakers.Cairn.RobotPawnController local. Les robots distants sont des
-    /// NetplayRemoteClimbot (type different) -> FindObjectsOfType ne renvoie que le local.</summary>
+    /// <summary>Finds (and caches) the local Il2CppTheGameBakers.Cairn.RobotPawnController. Remote robots are
+    /// NetplayRemoteClimbot (a different type) -> FindObjectsOfType only returns the local one.</summary>
     private static Il2CppTheGameBakers.Cairn.RobotPawnController ResolveLocalClimbot()
     {
         if (_localClimbotCached != null) return _localClimbotCached;
@@ -238,7 +238,7 @@ public static unsafe partial class CairnGameApi
         return _localClimbotCached;
     }
 
-    /// <summary>Retire l'ancre de corde vers un partenaire (decordage / partenaire parti).</summary>
+    /// <summary>Removes the rope anchor toward a partner (unroping / partner gone).</summary>
     public static void ReleaseRopeTeamAnchor(int partnerId)
     {
         if (_ropeAnchors.TryGetValue(partnerId, out var anchor))
@@ -251,7 +251,7 @@ public static unsafe partial class CairnGameApi
         if (_ropeAnchors.Count == 0) _belayEngaged = false;
     }
 
-    /// <summary>Retire TOUTES les ancres de cordee (deconnexion / changement de scene).</summary>
+    /// <summary>Removes ALL rope-team anchors (disconnect / scene change).</summary>
     public static void ReleaseAllRopeTeamAnchors()
     {
         if (_ropeAnchors.Count == 0) { _belayEngaged = false; _ropeAnchorsAttached.Clear(); return; }
@@ -268,8 +268,8 @@ public static unsafe partial class CairnGameApi
         if (anchor == null) return;
         try
         {
-            // Detache proprement la corde du piton avant destruction (evite de laisser la
-            // securingRope de la lifeline pinnee sur un collider detruit).
+            // Cleanly detach the rope from the piton before destruction (avoids leaving the
+            // lifeline's securingRope pinned on a destroyed collider).
             var piton = anchor.GetComponent<Piton>();
             if (piton != null) { try { piton.Detach(); } catch { } }
         }

@@ -14,20 +14,20 @@ public class QuaternionCodecTests
         return (x / len, y / len, z / len, w / len);
     }
 
-    // |dot| proche de 1 => meme rotation (q et -q sont equivalents).
+    // |dot| close to 1 => same rotation (q and -q are equivalent).
     private static float AbsDot(
         (float x, float y, float z, float w) a,
         (float x, float y, float z, float w) b)
         => Math.Abs(a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w);
 
     [Theory]
-    [InlineData(0f, 0f, 0f, 1f)]   // identite
-    [InlineData(1f, 0f, 0f, 0f)]   // 180° autour de X
+    [InlineData(0f, 0f, 0f, 1f)]   // identity
+    [InlineData(1f, 0f, 0f, 0f)]   // 180° around X
     [InlineData(0f, 1f, 0f, 0f)]
     [InlineData(0f, 0f, 1f, 0f)]
-    [InlineData(0.5f, 0.5f, 0.5f, 0.5f)] // 4 composants egaux
+    [InlineData(0.5f, 0.5f, 0.5f, 0.5f)] // 4 equal components
     [InlineData(-0.5f, 0.5f, -0.5f, 0.5f)]
-    [InlineData(0.7071f, 0.7071f, 0f, 0f)] // deux composants a 1/√2
+    [InlineData(0.7071f, 0.7071f, 0f, 0f)] // two components at 1/√2
     public void Encode_Decode_PreservesRotation(float x, float y, float z, float w)
     {
         var q = Normalize(x, y, z, w);

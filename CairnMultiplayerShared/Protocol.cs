@@ -1,8 +1,8 @@
 namespace CairnMultiplayer.Shared;
 
 /// <summary>
-/// Version du protocole. Incrementee chaque fois que le layout des paquets change
-/// de maniere incompatible. Le handshake rejette les clients qui ne correspondent pas.
+/// Protocol version. Bumped every time the packet layout changes in an incompatible
+/// way. The handshake rejects clients that do not match.
 /// </summary>
 public static class Protocol
 {
@@ -11,83 +11,83 @@ public static class Protocol
     public const int DefaultPort = 14000;
 
     /// <summary>
-    /// Version du client CairnMP transmise à l'API lors de la création d'un lobby.
-    /// Correspond à la version du launcher/mod déployée.
+    /// CairnMP client version sent to the API when creating a lobby.
+    /// Matches the deployed launcher/mod version.
     /// </summary>
     public const string GameVersion = "1.0.0";
 
-    /// <summary>Frequence a laquelle un client diffuse la position et l'etat de son joueur local.</summary>
+    /// <summary>Rate at which a client broadcasts the position and state of its local player.</summary>
     public const float PlayerStateUpdateIntervalSeconds = 1f / 30f; // 30 Hz
 
-    /// <summary>Frequence a laquelle un client diffuse les frames d'animation locales.</summary>
+    /// <summary>Rate at which a client broadcasts local animation frames.</summary>
     public const float BoneStateUpdateIntervalSeconds = 1f / 30f; // 30 Hz
 
-    /// <summary>Frequence a laquelle l'hote diffuse la meteo autoritaire.</summary>
+    /// <summary>Rate at which the host broadcasts the authoritative weather.</summary>
     public const float WeatherStateUpdateIntervalSeconds = 0.5f; // 2 Hz
 
-    /// <summary>Duree de transition courte utilisee quand un client rejoint l'etat meteo de l'hote.</summary>
+    /// <summary>Short transition duration used when a client joins the host's weather state.</summary>
     public const float WeatherStateTransitionSeconds = 0.5f;
 
-    /// <summary>Frequence a laquelle le mod sonde l'etat de la lampe locale pour detecter un changement.</summary>
+    /// <summary>Rate at which the mod polls the local lamp state to detect a change.</summary>
     public const float LampStatePollIntervalSeconds = 0.2f; // 5 Hz
 
-    /// <summary>Frequence a laquelle le mod sonde l'etat cosmetique local (gants lumineux, ...).</summary>
+    /// <summary>Rate at which the mod polls the local cosmetic state (glowing gloves, ...).</summary>
     public const float CosmeticStatePollIntervalSeconds = 0.5f; // 2 Hz
 
-    /// <summary>Bit du champ Flags cosmetique : gants lumineux (GlowingGloves) actifs.</summary>
+    /// <summary>Bit of the cosmetic Flags field: glowing gloves (GlowingGloves) active.</summary>
     public const byte CosmeticFlagGlowingGloves = 1 << 0;
 
-    /// <summary>Duree d'affichage d'un marqueur de ping avant disparition automatique.</summary>
+    /// <summary>How long a ping marker is shown before it automatically disappears.</summary>
     public const float PingLifetimeSeconds = 15f;
 
-    /// <summary>Delai minimal entre deux pings poses par le meme joueur (anti-spam).</summary>
+    /// <summary>Minimum delay between two pings placed by the same player (anti-spam).</summary>
     public const float PingCooldownSeconds = 1f;
 
-    /// <summary>Distance par defaut devant la camera quand le raycast de ping ne touche rien.</summary>
+    /// <summary>Default distance in front of the camera when the ping raycast hits nothing.</summary>
     public const float DefaultPingDistance = 50f;
 
-    /// <summary>Nombre d'os de doigts synchronises. Squelette Aava (resolution par nom) :
-    /// par main, Thumb 00-02 (3) + Index/Middle/Ring/Pinky 00-03 (4 chacun) = 19 ; x2 mains = 38.</summary>
+    /// <summary>Number of synchronized finger bones. Aava skeleton (resolved by name):
+    /// per hand, Thumb 00-02 (3) + Index/Middle/Ring/Pinky 00-03 (4 each) = 19; x2 hands = 38.</summary>
     public const int FingerBoneCount = 38;
 
-    /// <summary>Taille du payload compresse d'une pose de doigts (FingerBoneCount x 4 octets smallest-three).</summary>
+    /// <summary>Size of the compressed finger-pose payload (FingerBoneCount x 4 bytes smallest-three).</summary>
     public const int HandPosePackedSize = FingerBoneCount * QuaternionCodec.PackedSize;
 
-    /// <summary>Frequence a laquelle le mod capture/diffuse la pose des doigts locale.</summary>
+    /// <summary>Rate at which the mod captures/broadcasts the local finger pose.</summary>
     public const float HandPosePollIntervalSeconds = 1f / 12f; // ~12 Hz
 
-    /// <summary>Frequence a laquelle l'hote diffuse l'heure du jour autoritaire.</summary>
+    /// <summary>Rate at which the host broadcasts the authoritative time of day.</summary>
     public const float TimeStateUpdateIntervalSeconds = 0.5f; // 2 Hz
 
-    /// <summary>Cadence rapprochee de diffusion de l'heure pendant le fast-forward (tous dorment).</summary>
+    /// <summary>Tighter time broadcast rate during fast-forward (everyone asleep).</summary>
     public const float TimeStateFastForwardIntervalSeconds = 1f / 15f; // ~15 Hz
 }
 
 /// <summary>
-/// Etat de cycle de vie d'un joueur vu par le serveur. Les fantomes ne sont
-/// rendus que quand le joueur local ET le joueur distant sont tous deux InGame --
-/// cela evite de faire apparaitre des prefabs pendant les transitions de scene (ce qui
-/// plante le pipeline Addressables de Cairn) et masque les fantomes zombies pendant le chargement.
+/// Lifecycle state of a player as seen by the server. Ghosts are only rendered when
+/// the local player AND the remote player are both InGame -- this avoids spawning
+/// prefabs during scene transitions (which crashes Cairn's Addressables pipeline)
+/// and hides zombie ghosts during loading.
 ///
-/// Garder les valeurs stables entre les versions du protocole.
+/// Keep the values stable across protocol versions.
 /// </summary>
 public enum PlayerState : byte
 {
-    Unknown    = 0, // par defaut, aucun etat recu encore
-    Connecting = 1, // socket connecte, handshake pas encore termine
-    InMenu     = 2, // menu principal, pas en partie
-    Loading    = 3, // transitions de scene en cours, cinematique d'intro
-    InGame     = 4, // MC apparu, scenes stables -- ok pour rendre les fantomes
+    Unknown    = 0, // default, no state received yet
+    Connecting = 1, // socket connected, handshake not finished yet
+    InMenu     = 2, // main menu, not in a game
+    Loading    = 3, // scene transitions in progress, intro cinematic
+    InGame     = 4, // MC spawned, scenes stable -- ok to render ghosts
 }
 
 /// <summary>
-/// Identifiants de type de paquet. Envoyes comme premier octet de chaque paquet.
-/// Garder les valeurs stables entre les versions -- les paquets obsoletes vont en bas,
-/// jamais renumerotes.
+/// Packet type identifiers. Sent as the first byte of every packet.
+/// Keep the values stable across versions -- deprecated packets go at the bottom,
+/// never renumbered.
 /// </summary>
 public enum PacketId : byte
 {
-    // Client -> Serveur
+    // Client -> Server
     ClientHandshake = 1,
     ClientDisconnect = 2,
     ClientPlayerState = 3,
@@ -105,7 +105,7 @@ public enum PacketId : byte
     ClientRopeClip = 15,
     ClientCosmeticState = 16,
 
-    // Serveur -> Client
+    // Server -> Client
     ServerHandshakeAck = 64,
     ServerHandshakeReject = 65,
     ServerPlayerJoined = 66,
@@ -129,9 +129,9 @@ public enum PacketId : byte
 }
 
 /// <summary>
-/// Les valeurs de difficulte correspondent a l'enum `DifficultyTweakables.SelectedDifficulty`
-/// de Cairn -- memes noms, memes valeurs int. On controle laquelle est active pour que
-/// le client puisse se brancher directement sur les options de lancement du jeu.
+/// The difficulty values match Cairn's `DifficultyTweakables.SelectedDifficulty`
+/// enum -- same names, same int values. We control which one is active so the client
+/// can hook directly into the game's launch options.
 /// </summary>
 public enum GameDifficulty : int
 {

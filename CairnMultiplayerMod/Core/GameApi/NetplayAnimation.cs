@@ -24,7 +24,7 @@ public static unsafe partial class CairnGameApi
         if (frame - _lastPrefabSearchFrame < 120) return null;
         _lastPrefabSearchFrame = frame;
 
-        // Strategie 0 : lit directement le singleton genere par le jeu.
+        // Strategy 0: read the game-generated singleton directly.
         try
         {
             var manager = MoSingleton<NetplayManager>.Instance;
@@ -41,7 +41,7 @@ public static unsafe partial class CairnGameApi
             Mod.Log.Warning($"[CairnGameApi] NetplayManager singleton read failed: {ex.Message}");
         }
 
-        // Strategie 1 : lit NetplayManager.NetplayClimberPrefab.
+        // Strategy 1: read NetplayManager.NetplayClimberPrefab.
         var nm = FindMonoBehaviourByName("NetplayManager", ref _netplayManagerCached, ref _lastNetplayManagerSearchFrame);
         if (nm != null)
         {
@@ -67,7 +67,7 @@ public static unsafe partial class CairnGameApi
             }
         }
 
-        // Strategie 2 : parcourt tous les GameObjects pour trouver le prefab natif.
+        // Strategy 2: scan all GameObjects to find the native prefab.
         try
         {
             var all = Resources.FindObjectsOfTypeAll(Il2CppType.Of<GameObject>());
@@ -92,7 +92,7 @@ public static unsafe partial class CairnGameApi
             Mod.Log.Warning($"[CairnGameApi] GameObject name scan failed: {ex.Message}");
         }
 
-        // Strategie 3 : charge le prefab via Addressables natif du jeu.
+        // Strategy 3: load the prefab via the game's native Addressables.
         try
         {
             var handle = Addressables.LoadAssetAsync<GameObject>(NetplayManager.ADDRESSABLE_NAME);
@@ -114,8 +114,8 @@ public static unsafe partial class CairnGameApi
     }
 
     // ------------------------------------------------------------------
-    // NetplayRemotePlayer.SetFrame -- appelle le pipeline d'animation et de rendu natif
-    // du jeu. Les shaders TGB ne se mettent a jour qu'avec cette methode.
+    // NetplayRemotePlayer.SetFrame -- calls the game's native animation and render
+    // pipeline. The TGB shaders only update through this method.
     // ------------------------------------------------------------------
 
     private static bool _directPlayerBoneFallbackLogged;
@@ -126,7 +126,7 @@ public static unsafe partial class CairnGameApi
     private static bool _nativeClimbotSetFrameFailureLogged;
 
     /// <summary>
-    /// Applique une frame native recue depuis le reseau sur le joueur distant.
+    /// Applies a native frame received from the network onto the remote player.
     /// </summary>
     public static bool CallNetplaySetFrame(NetplayRemotePlayer player, int id, string playerName, NetFrameData frameData)
     {
@@ -146,9 +146,9 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Affiche ou masque la plaque de nom (champ natif `nameMesh`, un TextMeshPro)
-    /// au-dessus d'un fantome distant. Sert au toggle N (mode photo). Bascule le
-    /// GameObject du mesh — idempotent (ne touche que sur changement reel d'etat).
+    /// Shows or hides the name plate (native `nameMesh` field, a TextMeshPro)
+    /// above a remote ghost. Used by the N toggle (photo mode). Toggles the mesh
+    /// GameObject — idempotent (only acts on an actual state change).
     /// </summary>
     public static void SetGhostNameVisible(NetplayRemotePlayer player, bool visible)
     {
@@ -163,12 +163,12 @@ public static unsafe partial class CairnGameApi
         }
         catch
         {
-            // Plaque de nom indisponible (fantome pas encore initialise) -> ignore.
+            // Name plate unavailable (ghost not yet initialized) -> ignore.
         }
     }
 
     /// <summary>
-    /// Applique une frame native recue depuis le reseau sur le climbot distant.
+    /// Applies a native frame received from the network onto the remote climbot.
     /// </summary>
     public static bool CallNetplayClimbotSetFrame(NetplayRemotePlayer player, int id, NetFrameData frameData)
     {
@@ -201,7 +201,7 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Lit LiveGhostAnchors.relatives depuis un composant NetplayRemotePlayer.
+    /// Reads LiveGhostAnchors.relatives from a NetplayRemotePlayer component.
     /// </summary>
     public static bool TryReadGhostBoneArray(MonoBehaviour nrpComponent, out IntPtr relativesArrayPtr, out int boneCount)
     {
@@ -245,13 +245,13 @@ public static unsafe partial class CairnGameApi
             int positionCount = frameData.Positions.Length / 3;
             int eulerCount = frameData.Eulers == null ? 0 : frameData.Eulers.Length / 3;
 
-            // Invariant attendu : la frame native = [racine monde] + [os relatifs locaux],
-            // donc positionCount == boneCount + 1. On ne DEVINE plus l'offset : l'ancienne
-            // heuristique (offset 0 sur mismatch) ecrivait la racine MONDE dans un slot d'os
-            // LOCAL et decalait tous les os d'un cran -> membres qui clippent. En cas de
-            // mismatch (rig different, cap a 128 os...), on saute la frame plutot que corrompre.
-            // La capture plafonne les os relatifs a 128 ; on aligne le cote apply pour
-            // qu'un rig hypothetique >128 os degrade aux 128 premiers au lieu de figer.
+            // Expected invariant: the native frame = [world root] + [local relative bones],
+            // so positionCount == boneCount + 1. We no longer GUESS the offset: the old
+            // heuristic (offset 0 on mismatch) wrote the WORLD root into a LOCAL bone slot
+            // and shifted every bone by one -> clipping limbs. On a mismatch (different rig,
+            // cap at 128 bones...), we skip the frame rather than corrupt it.
+            // Capture caps the relative bones at 128; we align the apply side so a
+            // hypothetical rig >128 bones degrades to the first 128 instead of freezing.
             int applyCount = Math.Min(boneCount, 128);
             if (positionCount != applyCount + 1)
             {
@@ -264,7 +264,7 @@ public static unsafe partial class CairnGameApi
             }
 
             const int frameOffset = 1;
-            // Racine monde (slot 0) appliquee comme position/eulerAngles monde.
+            // World root (slot 0) applied as world position/eulerAngles.
             ApplyNetFrameRoot(component.transform, frameData, eulerCount);
 
             int headerSize = 4 * IntPtr.Size;
@@ -280,7 +280,7 @@ public static unsafe partial class CairnGameApi
                     frameData.Positions[pi],
                     frameData.Positions[pi + 1],
                     frameData.Positions[pi + 2]);
-                if (!IsFiniteVector(localPos)) continue; // rejette NaN/Inf -> pas de membre projete a l'infini
+                if (!IsFiniteVector(localPos)) continue; // reject NaN/Inf -> no limb flung to infinity
 
                 var t = new Transform(transformPtr);
                 t.localPosition = localPos;

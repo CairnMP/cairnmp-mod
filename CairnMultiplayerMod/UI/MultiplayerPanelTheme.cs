@@ -5,9 +5,9 @@ using UnityEngine.UI;
 namespace CairnMultiplayerMod.UI;
 
 /// <summary>
-/// Palette de couleurs et helpers de construction d'objets UI pour le panel multijoueur.
-/// Direction visuelle "Minimal warm" : sombre avec accent doré (couleur d'un piton)
-/// réservé aux états actifs et boutons primaires.
+/// Color palette and UI object construction helpers for the multiplayer panel.
+/// Visual direction "Minimal warm": dark with a gold accent (piton color)
+/// reserved for active states and primary buttons.
 /// </summary>
 internal static class MultiplayerPanelTheme
 {
@@ -34,7 +34,7 @@ internal static class MultiplayerPanelTheme
 
     public static readonly Color DangerText   = new(0.820f, 0.380f, 0.330f, 0.85f);
 
-    // ── Helpers GameObject ────────────────────────────────────────────────────
+    // ── GameObject helpers ────────────────────────────────────────────────────
 
     public static GameObject MakeGo(string name, Transform parent)
     {
@@ -63,7 +63,7 @@ internal static class MultiplayerPanelTheme
         rt.offsetMin = rt.offsetMax = Vector2.zero;
     }
 
-    /// <summary>Crée un TextMeshProUGUI configuré. Anchors couvrent tout le parent par défaut.</summary>
+    /// <summary>Creates a configured TextMeshProUGUI. Anchors cover the whole parent by default.</summary>
     public static TextMeshProUGUI Tmp(Transform parent, string name, string text,
         TMP_FontAsset font, float size, Color color, TextAlignmentOptions align,
         FontStyles style = FontStyles.Normal)
@@ -81,7 +81,7 @@ internal static class MultiplayerPanelTheme
         return tmp;
     }
 
-    /// <summary>Crée un Image plein dans son parent.</summary>
+    /// <summary>Creates a solid Image filling its parent.</summary>
     public static Image Fill(GameObject go, Color color, bool raycast = false)
     {
         var img = go.AddComponent<Image>();
@@ -90,7 +90,7 @@ internal static class MultiplayerPanelTheme
         return img;
     }
 
-    /// <summary>Bordure rectangulaire simulée avec 4 lignes fines.</summary>
+    /// <summary>Rectangular border simulated with 4 thin lines.</summary>
     public static void DrawBorder(Transform parent, Color color, float thickness = 1f)
     {
         Edge(parent, color, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -thickness), Vector2.zero);

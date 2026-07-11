@@ -9,9 +9,9 @@ using CairnMultiplayerMod.UI.Inputs;
 namespace CairnMultiplayerMod.UI.Screens;
 
 /// <summary>
-/// Écran d'accueil du panel multijoueur. Affiche un champ Player name suivi
-/// de 3 cards empilées (Host, Join, Browse). HOST et JOIN s'expand inline ;
-/// BROWSE remonte un event pour naviguer vers le BrowserScreen.
+/// Home screen of the multiplayer panel. Shows a Player name field followed
+/// by 3 stacked cards (Host, Join, Browse). HOST and JOIN expand inline;
+/// BROWSE raises an event to navigate to the BrowserScreen.
 /// </summary>
 internal sealed class HomeScreen
 {
@@ -33,7 +33,7 @@ internal sealed class HomeScreen
     private GameObject _hostStripe, _joinStripe;
     private TextMeshProUGUI _hostGlyphCollapsed, _joinGlyphCollapsed;
 
-    // Action button labels (mutables pendant Connecting)
+    // Action button labels (mutable during Connecting)
     private TextMeshProUGUI _createBtnLabel;
     private TextMeshProUGUI _joinBtnLabel;
     private Button _createBtn;
@@ -49,7 +49,7 @@ internal sealed class HomeScreen
     public event Action<HostConfig>           HostRequested;
     public event Action<string,string>        JoinByCodeRequested;
     public event Action                       BrowseRequested;
-    /// <summary>Émis quand le player name perd le focus (persister dans ModConfig).</summary>
+    /// <summary>Raised when the player name loses focus (persist to ModConfig).</summary>
     public event Action<string>               PlayerNameChanged;
 
     public HomeScreen(Transform parent, TMP_FontAsset font, string initialPlayerName, int initialMaxPlayers)
@@ -116,29 +116,29 @@ internal sealed class HomeScreen
     {
         _hostCard = MultiplayerPanelTheme.MakeGo("HostCard", Root.transform);
         MultiplayerPanelTheme.Anchor(_hostCard, new Vector2(0f, 0.55f), new Vector2(1f, 0.76f));
-        // Border neutre par défaut ; passe en gold uniquement quand expand.
+        // Neutral border by default; turns gold only when expanded.
         _hostBorder = MultiplayerPanelTheme.Fill(_hostCard, MultiplayerPanelTheme.Border);
 
-        // Inner OPAQUE — sinon la couleur du border (gold) traverse l'alpha et le card
-        // s'affiche en bloc doré entier. La couleur active est portée par le _hostBorder.
+        // OPAQUE Inner — otherwise the border color (gold) bleeds through the alpha and the
+        // card shows as one solid gold block. The active color is carried by _hostBorder.
         var hostInner = MultiplayerPanelTheme.MakeGo("Inner", _hostCard.transform);
         MultiplayerPanelTheme.Anchor(hostInner, Vector2.zero, Vector2.one, new Vector2(1f, 1f), new Vector2(-1f, -1f));
         MultiplayerPanelTheme.Fill(hostInner, MultiplayerPanelTheme.CardBg, raycast: true);
 
-        // Liseré accent en haut du card, visible uniquement quand le card est expand.
+        // Accent strip at the top of the card, visible only when the card is expanded.
         _hostStripe = MultiplayerPanelTheme.MakeGo("AccentStripe", hostInner.transform);
         MultiplayerPanelTheme.Anchor(_hostStripe, new Vector2(0f, 1f), new Vector2(1f, 1f),
             new Vector2(0f, -2f), Vector2.zero);
         MultiplayerPanelTheme.Fill(_hostStripe, MultiplayerPanelTheme.Accent);
         _hostStripe.SetActive(false);
 
-        // État collapsed (neutre comme les autres cards)
+        // Collapsed state (neutral like the other cards)
         _hostCollapsed = BuildCardHeader(hostInner.transform, "▲", "Host a climb",
             "Create a lobby and invite friends", false,
             (UnityAction)(() => Toggle(Expanded.Host)));
         _hostGlyphCollapsed = _hostCollapsed.transform.Find("Glyph")?.GetComponent<TextMeshProUGUI>();
 
-        // État expanded — masqué initialement, contient les inputs
+        // Expanded state — hidden initially, holds the inputs
         _hostExpanded = BuildHostExpanded(hostInner.transform, initialPlayerName, initialMaxPlayers);
         _hostExpanded.SetActive(false);
     }
@@ -148,18 +148,18 @@ internal sealed class HomeScreen
         var go = MultiplayerPanelTheme.MakeGo("Expanded", parent);
         MultiplayerPanelTheme.FullStretch(go);
 
-        // Layout vertical avec zones disjointes (de haut en bas) :
-        //   Header (chevron + titre)
-        //   LOBBY NAME : label + input
-        //   SLOTS / VISIBILITY : labels + controls (row)
+        // Vertical layout with disjoint zones (top to bottom):
+        //   Header (chevron + title)
+        //   LOBBY NAME: label + input
+        //   SLOTS / VISIBILITY: labels + controls (row)
         //   CREATE LOBBY (primary)
 
-        // Header (titre + chevron)
+        // Header (title + chevron)
         var header = BuildCardHeader(go.transform, "▴", "Host a climb", null, true,
             (UnityAction)(() => Toggle(Expanded.None)));
         MultiplayerPanelTheme.Anchor(header, new Vector2(0f, 0.88f), new Vector2(1f, 1f));
 
-        // LOBBY NAME (label puis input, pas de chevauchement)
+        // LOBBY NAME (label then input, no overlap)
         var lblName = MultiplayerPanelTheme.Tmp(go.transform, "LbName", "LOBBY NAME", _font, 10,
             MultiplayerPanelTheme.TextMuted, TextAlignmentOptions.BottomLeft, FontStyles.Normal);
         MultiplayerPanelTheme.Anchor(lblName.gameObject, new Vector2(0.06f, 0.78f), new Vector2(0.94f, 0.83f));
@@ -188,14 +188,14 @@ internal sealed class HomeScreen
             new[] { "Public", "Friends", "Private" }, 0);
         MultiplayerPanelTheme.Anchor(_visibilitySegment.Root, new Vector2(0.52f, 0.46f), new Vector2(0.94f, 0.55f));
 
-        // Note de save : chaque joueur arrive dans le menu de save natif du jeu au
-        // demarrage et choisit nouvelle/existante lui-meme, comme en solo.
+        // Save note: each player lands in the game's native save menu on start
+        // and picks new/existing themselves, just like in solo.
         var saveNote = MultiplayerPanelTheme.Tmp(go.transform, "SaveNote",
             "Everyone picks new or existing save in Cairn's menu when the host starts.",
             _font, 11, MultiplayerPanelTheme.TextMuted, TextAlignmentOptions.MidlineLeft, FontStyles.Italic);
         MultiplayerPanelTheme.Anchor(saveNote.gameObject, new Vector2(0.06f, 0.20f), new Vector2(0.94f, 0.40f));
 
-        // Bouton CREATE LOBBY (primary)
+        // CREATE LOBBY button (primary)
         var (btnGo, label, btn) = BuildPrimaryButton(go.transform, "CREATE LOBBY",
             (UnityAction)OnCreateClicked);
         MultiplayerPanelTheme.Anchor(btnGo, new Vector2(0.06f, 0.06f), new Vector2(0.94f, 0.16f));
@@ -215,7 +215,7 @@ internal sealed class HomeScreen
         MultiplayerPanelTheme.Anchor(inner, Vector2.zero, Vector2.one, new Vector2(1f, 1f), new Vector2(-1f, -1f));
         MultiplayerPanelTheme.Fill(inner, MultiplayerPanelTheme.CardBg, raycast: true);
 
-        // Liseré accent — visible uniquement quand expand.
+        // Accent strip — visible only when expanded.
         _joinStripe = MultiplayerPanelTheme.MakeGo("AccentStripe", inner.transform);
         MultiplayerPanelTheme.Anchor(_joinStripe, new Vector2(0f, 1f), new Vector2(1f, 1f),
             new Vector2(0f, -2f), Vector2.zero);
@@ -279,7 +279,7 @@ internal sealed class HomeScreen
         var header = MultiplayerPanelTheme.MakeGo("Header", parent);
         MultiplayerPanelTheme.FullStretch(header);
 
-        // Si onClick fourni, on attache un Button. Sinon le clic est géré par le parent (browse card).
+        // If onClick is provided, attach a Button. Otherwise the click is handled by the parent (browse card).
         if (onClick != null)
         {
             var btnImg = header.AddComponent<Image>();
@@ -337,7 +337,7 @@ internal sealed class HomeScreen
         return (go, label, btn);
     }
 
-    // ── Logique ──────────────────────────────────────────────────────────────
+    // ── Logic ──────────────────────────────────────────────────────────────────
 
     private void Toggle(Expanded target)
     {
@@ -351,24 +351,24 @@ internal sealed class HomeScreen
         bool joinExpanded = _expanded == Expanded.Join;
         bool anyExpanded  = hostExpanded || joinExpanded;
 
-        // Toggle visibilité headers/expanded
+        // Toggle header/expanded visibility
         if (_hostCollapsed != null) _hostCollapsed.SetActive(!hostExpanded);
         if (_hostExpanded  != null) _hostExpanded.SetActive(hostExpanded);
         if (_joinCollapsed != null) _joinCollapsed.SetActive(!joinExpanded);
         if (_joinExpanded  != null) _joinExpanded.SetActive(joinExpanded);
 
-        // Stripes accent : visibles uniquement sur la card expand.
+        // Accent stripes: visible only on the expanded card.
         if (_hostStripe != null) _hostStripe.SetActive(hostExpanded);
         if (_joinStripe != null) _joinStripe.SetActive(joinExpanded);
 
-        // Glyphs : accent gold uniquement quand le card est expand, neutre sinon.
+        // Glyphs: gold accent only when the card is expanded, neutral otherwise.
         if (_hostGlyphCollapsed != null)
             _hostGlyphCollapsed.color = MultiplayerPanelTheme.TextMuted;
         if (_joinGlyphCollapsed != null)
             _joinGlyphCollapsed.color = MultiplayerPanelTheme.TextMuted;
 
-        // Hauteur dynamique des cards : on ajuste les anchors verticaux
-        // Layout avec un seul card expanded prend ~58% de hauteur, les autres se compactent
+        // Dynamic card heights: we adjust the vertical anchors
+        // Layout with a single expanded card takes ~58% of the height, the others compact down
         if (hostExpanded)
         {
             MultiplayerPanelTheme.Anchor(_hostCard,   new Vector2(0f, 0.13f), new Vector2(1f, 0.76f));
@@ -388,7 +388,7 @@ internal sealed class HomeScreen
             MultiplayerPanelTheme.Anchor(_browseCard, new Vector2(0f, 0.31f), new Vector2(1f, 0.41f));
         }
 
-        // Borders : neutre par défaut, gold uniquement sur la card expand.
+        // Borders: neutral by default, gold only on the expanded card.
         if (anyExpanded)
         {
             _hostBorder.color   = hostExpanded ? MultiplayerPanelTheme.BorderFocus : MultiplayerPanelTheme.BorderSubtle;

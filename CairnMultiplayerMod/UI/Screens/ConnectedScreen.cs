@@ -11,11 +11,11 @@ using CairnMultiplayerMod.UI.Inputs;
 namespace CairnMultiplayerMod.UI.Screens;
 
 /// <summary>
-/// Vue affichée quand le joueur est connecté à un lobby. Direction "alpine refinée" :
-/// le room code est le héros (typo monumentale + accent or), la liste joueurs est
-/// typée en rich-text TMP, et le bouton leave est volontairement discret en bas.
-/// L'invite Steam Friends a été retirée — l'overlay Steam n'est pas injectable
-/// quand Cairn n'est pas lancé via Steam, donc le partage se fait via le room code.
+/// View shown when the player is connected to a lobby. "Refined alpine" direction:
+/// the room code is the hero (monumental type + gold accent), the player list is
+/// laid out in TMP rich-text, and the leave button is deliberately discreet at the bottom.
+/// The Steam Friends invite was removed — the Steam overlay isn't injectable
+/// when Cairn isn't launched through Steam, so sharing happens via the room code.
 /// </summary>
 internal sealed class ConnectedScreen
 {
@@ -68,7 +68,7 @@ internal sealed class ConnectedScreen
         MultiplayerPanelTheme.Anchor(codeInner, Vector2.zero, Vector2.one, new Vector2(1f, 1f), new Vector2(-1f, -1f));
         MultiplayerPanelTheme.Fill(codeInner, MultiplayerPanelTheme.SubBg);
 
-        // Liseré accent à gauche pour souligner que c'est l'élément hero
+        // Accent strip on the left to emphasize this is the hero element
         var codeAccentBar = MultiplayerPanelTheme.MakeGo("AccentBar", codeInner.transform);
         MultiplayerPanelTheme.Anchor(codeAccentBar, new Vector2(0f, 0.18f), new Vector2(0f, 0.82f),
             new Vector2(0f, 0f), new Vector2(2f, 0f));
@@ -79,12 +79,12 @@ internal sealed class ConnectedScreen
         _codeTmp.characterSpacing = 12f;
         MultiplayerPanelTheme.Anchor(_codeTmp.gameObject, new Vector2(0.04f, 0f), new Vector2(0.78f, 1f));
 
-        // Bouton Copy (texte simple à droite, raycast actif)
+        // Copy button (plain text on the right, raycast active)
         _copyBtnLabel = BuildIconButton(codeInner.transform, "CopyBtn", "Copy",
             new Vector2(0.78f, 0f), new Vector2(0.985f, 1f),
             (UnityAction)(() => CopyCodeRequested?.Invoke()));
 
-        // ── PLAYERS : header + rule + count ───────────────────────────────────
+        // ── PLAYERS: header + rule + count ────────────────────────────────────
         var playersLbl = MultiplayerPanelTheme.Tmp(Root.transform, "PlayersLbl", "PLAYERS",
             _font, 10, MultiplayerPanelTheme.TextMuted, TextAlignmentOptions.MidlineLeft, FontStyles.Normal);
         playersLbl.characterSpacing = 6f;
@@ -99,7 +99,7 @@ internal sealed class ConnectedScreen
         _playersCountTmp.characterSpacing = 2f;
         MultiplayerPanelTheme.Anchor(_playersCountTmp.gameObject, new Vector2(0.86f, 0.62f), new Vector2(1f, 0.66f));
 
-        // ── Players list (rich-text TMP par ligne) ────────────────────────────
+        // ── Players list (TMP rich-text per line) ─────────────────────────────
         var listBg = MultiplayerPanelTheme.MakeGo("ListBg", Root.transform);
         MultiplayerPanelTheme.Anchor(listBg, new Vector2(0f, 0.31f), new Vector2(1f, 0.61f));
         MultiplayerPanelTheme.Fill(listBg, MultiplayerPanelTheme.SubBg);
@@ -119,11 +119,11 @@ internal sealed class ConnectedScreen
 
         BuildStartArea();
 
-        // ── Leave : texte simple, discret ─────────────────────────────────────
+        // ── Leave: plain text, discreet ───────────────────────────────────────
         BuildLeaveButton();
     }
 
-    /// <summary>Met à jour code, titre et liste des joueurs depuis le SteamLobbyManager.</summary>
+    /// <summary>Updates code, title and player list from the SteamLobbyManager.</summary>
     public void Refresh(string lobbyName, SteamLobbyManager lobby, string localPlayerName)
     {
         if (lobby == null) return;
@@ -162,7 +162,7 @@ internal sealed class ConnectedScreen
 
         if (count == 0)
         {
-            // Fallback : pas encore de membres remontés (window pendant connect).
+            // Fallback: no members reported yet (window during connect).
             sb.Append($"<color=#{bullet}>●</color>  ").Append(localPlayerName ?? "you");
             count = 1;
         }
@@ -212,8 +212,8 @@ internal sealed class ConnectedScreen
     }
 
     /// <summary>
-    /// Zone de lancement : bouton primaire visible pour le host, message passif
-    /// pour les clients qui attendent le signal Steam lobby.
+    /// Launch area: primary button visible to the host, passive message
+    /// for clients waiting for the Steam lobby signal.
     /// </summary>
     private void BuildStartArea()
     {
@@ -246,8 +246,8 @@ internal sealed class ConnectedScreen
     }
 
     /// <summary>
-    /// Bouton leave volontairement discret — bordure fine danger, texte rouge en
-    /// caps, fond transparent. Pas de poids visuel pour ne pas dominer le panneau.
+    /// Deliberately discreet leave button — thin danger border, red caps text,
+    /// transparent background. No visual weight so it doesn't dominate the panel.
     /// </summary>
     private void BuildLeaveButton()
     {

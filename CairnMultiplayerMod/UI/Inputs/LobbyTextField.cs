@@ -7,9 +7,9 @@ using UnityEngine.UI;
 namespace CairnMultiplayerMod.UI.Inputs;
 
 /// <summary>
-/// Wrapper léger autour de TMP_InputField. Construit un champ texte stylé
-/// (border + fond) avec gestion native du focus, du curseur, du paste et de
-/// la sélection. Remplace l'ancienne saisie IMGUI custom.
+/// Lightweight wrapper around TMP_InputField. Builds a styled text field
+/// (border + background) with native handling of focus, caret, paste and
+/// selection. Replaces the old custom IMGUI input.
 /// </summary>
 internal sealed class LobbyTextField
 {
@@ -25,10 +25,10 @@ internal sealed class LobbyTextField
         set => _input.text = value ?? string.Empty;
     }
 
-    /// <summary>Notifié à chaque frappe ; reçoit la valeur courante.</summary>
+    /// <summary>Fires on every keystroke; receives the current value.</summary>
     public event Action<string> Changed;
 
-    /// <summary>Notifié à la perte de focus (utile pour persister une valeur).</summary>
+    /// <summary>Fires on focus loss (useful for persisting a value).</summary>
     public event Action<string> Blurred;
 
     public LobbyTextField(Transform parent, TMP_FontAsset font, string placeholder, int characterLimit)
@@ -41,7 +41,7 @@ internal sealed class LobbyTextField
         MultiplayerPanelTheme.Anchor(inner, Vector2.zero, Vector2.one, new Vector2(1f, 1f), new Vector2(-1f, -1f));
         MultiplayerPanelTheme.Fill(inner, MultiplayerPanelTheme.SubBg, raycast: true);
 
-        // Viewport interne — TMP_InputField exige un viewport pour clipper le texte.
+        // Inner viewport — TMP_InputField requires a viewport to clip the text.
         var viewport = MultiplayerPanelTheme.MakeGo("Viewport", inner.transform);
         MultiplayerPanelTheme.Anchor(viewport, Vector2.zero, Vector2.one, new Vector2(10f, 4f), new Vector2(-10f, -4f));
         var vpImg = viewport.AddComponent<Image>();
@@ -49,7 +49,7 @@ internal sealed class LobbyTextField
         vpImg.raycastTarget = false;
         viewport.AddComponent<RectMask2D>();
 
-        // Texte affiché.
+        // Displayed text.
         var text = MultiplayerPanelTheme.MakeGo("Text", viewport.transform);
         MultiplayerPanelTheme.FullStretch(text);
         var textTmp = text.AddComponent<TextMeshProUGUI>();
@@ -73,7 +73,7 @@ internal sealed class LobbyTextField
         phTmp.raycastTarget = false;
         phTmp.fontStyle     = FontStyles.Italic;
 
-        // Le component InputField doit être sur l'Inner pour recevoir les clics.
+        // The InputField component must be on the Inner to receive clicks.
         _input = inner.AddComponent<TMP_InputField>();
         _input.textViewport      = viewport.GetComponent<RectTransform>();
         _input.textComponent     = textTmp;

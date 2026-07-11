@@ -11,37 +11,37 @@ public partial class Mod
     private float _pendingStartRetryTimer;
     private int _pendingStartRetries;
 
-    // Options de nouvelle partie a RE-APPLIQUER chaque frame tant qu'on est au menu : le flux natif
-    // de creation de save reecrit newGameOptions (skip=false par defaut) au moment du clic "nouvelle
-    // partie", APRES notre pre-reglage. On le force donc en continu pour qu'il soit bon au moment ou
-    // le jeu le lit. Efface des qu'on quitte le menu (chargement).
+    // New-game options to RE-APPLY every frame while at the menu: the native save-creation flow
+    // rewrites newGameOptions (skip=false by default) when "new game" is clicked, AFTER our
+    // pre-setting. So we force it continuously so it's correct at the moment the game reads it.
+    // Cleared as soon as we leave the menu (loading).
     private ServerStartGame? _forceNewGameOpts;
 
     /// <summary>
-    /// Pilote le MainMenu vers le menu de sauvegarde natif du jeu lors d'un lancement
-    /// autoritaire par l'hote. Appele chaque frame depuis OnUpdate().
+    /// Drives the MainMenu toward the game's native save menu during an authoritative
+    /// launch by the host. Called every frame from OnUpdate().
     /// <para>
-    /// Le mod ne charge plus aucune sauvegarde : il amene simplement chaque joueur dans
-    /// le menu de save natif (StoryModeManageSave), exactement comme en solo. Chaque joueur
-    /// y cree une nouvelle partie ou choisit une save existante lui-meme.
-    ///   Phase 1 (tentatives 1-3, espacees de 0.5s) : force ModeSelect pour que le menu
-    ///       soit dans le bon etat.
-    ///   Phase 2 (tentative 4) : pre-regle la difficulte de la prochaine nouvelle partie
-    ///       puis ouvre le menu de save natif, et s'arrete.
+    /// The mod no longer loads any save: it simply brings each player to the native save
+    /// menu (StoryModeManageSave), exactly like in solo. Each player creates a new game
+    /// or picks an existing save there themselves.
+    ///   Phase 1 (attempts 1-3, spaced 0.5s apart): force ModeSelect so the menu is in
+    ///       the right state.
+    ///   Phase 2 (attempt 4): pre-set the next new game's difficulty, then open the native
+    ///       save menu, and stop.
     /// </para>
     /// </summary>
     private void TickStartGameFlow()
     {
-        // Ré-applique les options de nouvelle partie en continu tant qu'on est au menu (le flux
-        // natif les réécrit au clic "nouvelle partie"). Stop dès qu'on quitte le menu.
+        // Continuously re-apply the new-game options while at the menu (the native flow
+        // rewrites them on the "new game" click). Stop as soon as we leave the menu.
         if (_forceNewGameOpts.HasValue)
         {
             if (_currentScene != null && _currentScene.StartsWith("MainMenu"))
             {
                 var s = _forceNewGameOpts.Value;
-                // On respecte la difficulte choisie par le joueur dans l'ecran natif
-                // (FreeRoam inclus) : on ne force QUE les flags skip/assist, jamais la
-                // difficulte. Sinon ce re-forçage par frame ecraserait le choix natif.
+                // We respect the difficulty chosen by the player in the native screen
+                // (FreeRoam included): we force ONLY the skip/assist flags, never the
+                // difficulty. Otherwise this per-frame re-forcing would overwrite the native choice.
                 CairnGameApi.SetNextGameSkipOptions(
                     s.SkipTutorials, s.SkipPractice, s.AssistEnabled, verbose: false);
             }
@@ -53,16 +53,16 @@ public partial class Mod
 
         if (_pendingStart.HasValue && _currentScene != null && _currentScene.StartsWith("MainMenu"))
         {
-            // CRUCIAL : a l'ouverture du panneau MP, le composant `MainMenu` a ete DESACTIVE
-            // (MainMenuMultiplayerButton.SuspendMainMenuInput -> behaviour.enabled=false). Or
-            // c'est SA boucle Update() qui lit `ForceStepTransition` et execute TransitionToStep.
-            // Tant qu'il est desactive, nos ForceMainMenuStep n'ont AUCUN effet -> menu de save
-            // vide et joueur bloque. On le reactive donc avant de piloter les etapes (idempotent).
+            // CRUCIAL: when the MP panel opens, the `MainMenu` component was DISABLED
+            // (MainMenuMultiplayerButton.SuspendMainMenuInput -> behaviour.enabled=false). But
+            // it's ITS Update() loop that reads `ForceStepTransition` and runs TransitionToStep.
+            // While it's disabled, our ForceMainMenuStep calls have NO effect -> empty save menu
+            // and stuck player. So we re-enable it before driving the steps (idempotent).
             MainMenuMultiplayerButton.RestoreMainMenuInput();
 
             _pendingStartRetryTimer += Time.unscaledDeltaTime;
 
-            // Phase 1 : amener le menu a ModeSelect
+            // Phase 1: bring the menu to ModeSelect
             if (_pendingStartRetries < 3 && _pendingStartRetryTimer >= 0.5f)
             {
                 _pendingStartRetryTimer = 0f;
@@ -70,16 +70,16 @@ public partial class Mod
                 CairnGameApi.ForceMainMenuStep(CairnGameApi.MainMenuStep.ModeSelect);
                 LoggerInstance.Msg($"[StartGame] Force ModeSelect (retry #{_pendingStartRetries})");
             }
-            // Phase 2 : pre-regler la difficulte puis ouvrir le menu de save natif
+            // Phase 2: pre-set the difficulty then open the native save menu
             else if (_pendingStartRetries == 3 && _pendingStartRetryTimer >= 0.5f)
             {
                 var start = _pendingStart.Value;
-                // Respect du choix natif : on ne pre-regle PAS la difficulte, on force
-                // seulement les flags skip/assist (le joueur choisit sa difficulte dans
-                // l'ecran natif, FreeRoam compris).
+                // Respect the native choice: we do NOT pre-set the difficulty, we only
+                // force the skip/assist flags (the player chooses their difficulty in the
+                // native screen, FreeRoam included).
                 CairnGameApi.SetNextGameSkipOptions(start.SkipTutorials, start.SkipPractice, start.AssistEnabled);
 
-                // Continue de forcer ces options chaque frame jusqu'au depart du menu (cf. champ).
+                // Keep forcing these options every frame until we leave the menu (cf. field).
                 _forceNewGameOpts = start;
 
                 CairnGameApi.ForceMainMenuStep(CairnGameApi.MainMenuStep.StoryModeManageSave);

@@ -3,9 +3,9 @@ namespace CairnMultiplayerMod.Core;
 public static unsafe partial class CairnGameApi
 {
     /// <summary>
-    /// Oublie les references IL2CPP liees a la scene courante. Pendant un reload
-    /// apres mort, Cairn detruit puis recree ces objets ; garder les anciens
-    /// pointeurs peut provoquer un crash natif au premier CaptureFrame.
+    /// Forgets the IL2CPP references bound to the current scene. During a reload
+    /// after death, Cairn destroys then recreates these objects; keeping the old
+    /// pointers can cause a native crash on the first CaptureFrame.
     /// </summary>
     public static void ResetSceneCaches()
     {

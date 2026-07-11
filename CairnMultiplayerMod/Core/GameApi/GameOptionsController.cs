@@ -8,12 +8,12 @@ namespace CairnMultiplayerMod.Core;
 public static unsafe partial class CairnGameApi
 {
     /// <summary>
-    /// Pré-règle les options de la prochaine nouvelle partie (difficulté, skip tutoriel/practice,
-    /// assist) sur le MainMenu natif, via l'API TYPÉE Il2CppInterop (pas d'arithmétique de pointeurs).
+    /// Pre-sets the options for the next new game (difficulty, skip tutorials/practice,
+    /// assist) on the native MainMenu, via the TYPED Il2CppInterop API (no pointer arithmetic).
     ///
-    /// nextGameStartOptions.newGameOptions est une STRUCT (NewGameLaunchOptions) : on en lit une
-    /// copie, on modifie les champs, puis on la réécrit via le setter. GameDifficulty (Shared) a
-    /// déjà les mêmes valeurs hashées que SelectedDifficulty natif -> cast direct.
+    /// nextGameStartOptions.newGameOptions is a STRUCT (NewGameLaunchOptions): we read a
+    /// copy, modify the fields, then write it back via the setter. GameDifficulty (Shared) already
+    /// has the same hashed values as the native SelectedDifficulty -> direct cast.
     /// </summary>
     public static bool SetNextGameDifficulty(GameDifficulty difficulty,
         bool skipTutorials, bool skipPractice, bool assistEnabled, bool verbose = true)
@@ -34,15 +34,15 @@ public static unsafe partial class CairnGameApi
                 return false;
             }
 
-            // Struct -> copie locale, modif, réécriture via le setter.
+            // Struct -> local copy, modify, write back via the setter.
             var ng = opts.newGameOptions;
             var targetDifficulty = (DifficultyTweakables.SelectedDifficulty)(int)difficulty;
 
-            // Idempotence CRUCIALE : ce setter est appele CHAQUE frame tant que le menu de
-            // save natif est ouvert (StartGameFlow). Reecrire la meme valeur fait emettre au
-            // jeu une notification "difficulte changee" en boucle. On ne reecrit donc que si
-            // au moins un champ differe reellement (typiquement apres que le flux natif a
-            // remis newGameOptions a ses defauts au clic "nouvelle partie").
+            // CRUCIAL idempotence: this setter is called EVERY frame while the native
+            // save menu is open (StartGameFlow). Rewriting the same value makes the
+            // game emit a "difficulty changed" notification in a loop. So we only rewrite if
+            // at least one field actually differs (typically after the native flow has
+            // reset newGameOptions to its defaults on the "new game" click).
             if (ng.currentSelectedDifficulty == targetDifficulty
                 && ng.skipTutorials == skipTutorials
                 && ng.skipPractice == skipPractice
@@ -59,7 +59,7 @@ public static unsafe partial class CairnGameApi
 
             if (verbose)
             {
-                // Relit pour confirmer (les struct Il2Cpp peuvent surprendre).
+                // Read back to confirm (Il2Cpp structs can surprise you).
                 var check = opts.newGameOptions;
                 Mod.LogDebug($"[CairnGameApi] NewGameOptions set (typed): difficulty={difficulty} " +
                     $"skipTut={check.skipTutorials} skipPra={check.skipPractice} assist={check.assistEnabled}");
@@ -74,12 +74,12 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Variante de <see cref="SetNextGameDifficulty"/> qui force UNIQUEMENT les flags
-    /// skip tutoriel/practice + assist, en PRESERVANT la difficulte choisie par le joueur
-    /// dans l'ecran natif. Sert au flux de lancement quand on veut respecter le choix de
-    /// difficulte natif (ex. FreeRoam) au lieu de le forcer : le flux natif reinitialise les
-    /// flags skip a chaque "nouvelle partie", donc on les ré-applique en continu, mais sans
-    /// jamais reecrire currentSelectedDifficulty.
+    /// Variant of <see cref="SetNextGameDifficulty"/> that forces ONLY the
+    /// skip tutorials/practice + assist flags, while PRESERVING the difficulty chosen by the player
+    /// in the native screen. Used by the launch flow when we want to respect the native
+    /// difficulty choice (e.g. FreeRoam) instead of forcing it: the native flow resets the
+    /// skip flags on every "new game", so we re-apply them continuously, but without
+    /// ever rewriting currentSelectedDifficulty.
     /// </summary>
     public static bool SetNextGameSkipOptions(bool skipTutorials, bool skipPractice,
         bool assistEnabled, bool verbose = true)
@@ -94,8 +94,8 @@ public static unsafe partial class CairnGameApi
 
             var ng = opts.newGameOptions;
 
-            // Idempotence : ne réécrire que si un flag skip/assist diffère (la difficulté
-            // n'est jamais comparée ni touchée — elle reste celle du joueur).
+            // Idempotence: only rewrite if a skip/assist flag differs (the difficulty
+            // is never compared or touched — it stays the player's choice).
             if (ng.skipTutorials == skipTutorials
                 && ng.skipPractice == skipPractice
                 && ng.assistEnabled == assistEnabled)
@@ -123,7 +123,7 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    /// <summary>Trouve le composant MainMenu (UI) actif dans la scène.</summary>
+    /// <summary>Finds the active MainMenu (UI) component in the scene.</summary>
     private static Il2CppTheGameBakers.Cairn.UI.MainMenu FindMainMenuComponent()
     {
         var menuGo = GameObject.Find("MainMenu");
@@ -132,7 +132,7 @@ public static unsafe partial class CairnGameApi
         var menu = menuGo.GetComponent<Il2CppTheGameBakers.Cairn.UI.MainMenu>();
         if (menu != null) return menu;
 
-        // Repli : parcours des composants avec TryCast (selon l'enregistrement du type Il2Cpp).
+        // Fallback: iterate the components with TryCast (depending on the Il2Cpp type registration).
         var components = menuGo.GetComponents<MonoBehaviour>();
         for (int i = 0; i < components.Count; i++)
         {

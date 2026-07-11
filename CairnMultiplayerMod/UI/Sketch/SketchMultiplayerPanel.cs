@@ -11,9 +11,9 @@ using Object = UnityEngine.Object;
 namespace CairnMultiplayerMod.UI.Sketch;
 
 /// <summary>
-/// Panneau multijoueur en style « croquis » natif (sprites du photo-mode via GameUiAssetLibrary).
-/// Implemente IMultiplayerPanel : 4 ecrans (Host / Join / Browse / Connecte) dans un cadre commun
-/// (onglets a icones + titre). Le reseau passe par les memes evenements que l'ancien panneau.
+/// Multiplayer panel in the native "sketch" style (photo-mode sprites via GameUiAssetLibrary).
+/// Implements IMultiplayerPanel: 4 screens (Host / Join / Browse / Connected) inside a shared frame
+/// (icon tabs + title). Networking goes through the same events as the old panel.
 /// </summary>
 internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
 {
@@ -24,16 +24,16 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     private static readonly LobbyVisibility[] VisValues =
         { LobbyVisibility.Public, LobbyVisibility.FriendsOnly, LobbyVisibility.Private };
 
-    // ── Etat ────────────────────────────────────────────────────────────────────────
+    // ── State ────────────────────────────────────────────────────────────────────────
     private GameObject _canvasGo;
-    private GameObject _contentGo;       // conteneur dont les enfants (titre + corps) sont reconstruits par ecran
+    private GameObject _contentGo;       // container whose children (title + body) are rebuilt per screen
     private Screen _current = Screen.Host;
     private bool _visible, _isConnected, _isConnecting;
     private string _statusText = "Disconnected";
     private string _lobbyName = "";
     private IReadOnlyList<LobbyEntry> _lobbies;
 
-    // Refs dynamiques (rebatis a chaque changement d'ecran ; remis a null sinon).
+    // Dynamic refs (rebuilt on every screen change; reset to null otherwise).
     private TextMeshProUGUI _statusLabel;
     private TMP_InputField _codeInput;
     private string _autoLobbyName = "";
@@ -45,7 +45,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     private TextMeshProUGUI _connCodeLabel, _connPlayersLabel, _connCountLabel, _connCopyLabel;
     private GameObject _connStart, _connStartHint;
 
-    // ── Evenements IMultiplayerPanel ─────────────────────────────────────────────────
+    // ── IMultiplayerPanel events ─────────────────────────────────────────────────
     public event Action<HostConfig> OnHostRequested;
     public event Action<string, string> OnJoinByCodeRequested;
     public event Action OnBrowseRequested;
@@ -56,7 +56,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
 
     public bool IsVisible => _visible;
 
-    // ── Cycle de vie ─────────────────────────────────────────────────────────────────
+    // ── Lifecycle ─────────────────────────────────────────────────────────────────
     public void Show()
     {
         _visible = true;
@@ -83,7 +83,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
 
         var canvas = _canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 210;                       // au-dessus du MainMenu (200)
+        canvas.sortingOrder = 210;                       // above the MainMenu (200)
 
         var scaler = _canvasGo.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
@@ -91,12 +91,12 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         scaler.matchWidthOrHeight = 0.5f;
         _canvasGo.AddComponent<GraphicRaycaster>();
 
-        // Voile sombre (bloque les clics derriere).
+        // Dark scrim (blocks clicks behind it).
         var dim = SketchUiKit.Make("Dim", _canvasGo.transform);
         MultiplayerPanelTheme.FullStretch(dim);
         SketchUiKit.FillColor(dim, new Color(0f, 0f, 0f, 0.55f), raycast: true);
 
-        // Panneau centre + cadre + zone de contenu (valeurs : SketchLayout).
+        // Centered panel + frame + content area (values: SketchLayout).
         var panel = SketchUiKit.Make("Panel", _canvasGo.transform);
         SketchUiKit.Box(panel, Vector2.zero, new Vector2(720f, 600f));
 
@@ -111,7 +111,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
             new Vector2(SketchLayout.ContentL, SketchLayout.ContentB),
             new Vector2(-SketchLayout.ContentR, -SketchLayout.ContentT));
 
-        // Bouton fermer (coin haut-droit du panneau).
+        // Close button (panel's top-right corner).
         var close = SketchUiKit.Make("Close", panel.transform);
         SketchUiKit.Box(close, new Vector2(300f, 246f), new Vector2(38f, 38f));
         SketchUiKit.LabelBox(close.transform, "X", Vector2.zero, new Vector2(40f, 40f),
@@ -158,7 +158,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
 
         if (screen == Screen.Connected)
         {
-            // Pas d'onglets en connecte : le titre affiche le nom du lobby.
+            // No tabs when connected: the title shows the lobby name.
             var name = string.IsNullOrEmpty(_lobbyName) ? "LOBBY" : _lobbyName;
             SketchUiKit.LabelBox(title.transform, "Title", new Vector2(0f, 0f), new Vector2(520f, 60f),
                 name, 32f, SketchUiKit.TextCream, TextAlignmentOptions.Center, logo: true);
@@ -167,11 +167,11 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
 
         int active = (int)screen;
         SketchUiKit.Tab(title.transform, GameUiAssetLibrary.IconMountain, new Vector2(-104f, 38f), 54f,
-            active == 0, (UnityAction)(() => SwitchTo(Screen.Host)));     // Host = montagne
+            active == 0, (UnityAction)(() => SwitchTo(Screen.Host)));     // Host = mountain
         SketchUiKit.Tab(title.transform, GameUiAssetLibrary.IconFriend, new Vector2(0f, 38f), 54f,
-            active == 1, (UnityAction)(() => SwitchTo(Screen.Join)));     // Join = ami
+            active == 1, (UnityAction)(() => SwitchTo(Screen.Join)));     // Join = friend
         SketchUiKit.Tab(title.transform, GameUiAssetLibrary.IconPlayer, new Vector2(104f, 38f), 54f,
-            active == 2, (UnityAction)(() => SwitchTo(Screen.Browse)));   // Browse = joueurs
+            active == 2, (UnityAction)(() => SwitchTo(Screen.Browse)));   // Browse = players
 
         string label = screen == Screen.Host ? "HOST" : screen == Screen.Join ? "JOIN" : "BROWSE";
         SketchUiKit.LabelBox(title.transform, "Title", new Vector2(0f, -38f), new Vector2(320f, 50f),
@@ -190,10 +190,10 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         return body;
     }
 
-    // ── Ecran Host ───────────────────────────────────────────────────────────────────
+    // ── Host screen ───────────────────────────────────────────────────────────────────
     private void BuildHost(GameObject body)
     {
-        // Nom de lobby automatique (nom Steam) : affichage lecture seule, plus aucune saisie.
+        // Automatic lobby name (Steam name): read-only display, no input anymore.
         _autoLobbyName = $"{GetLocalPlayerName()}'s climb";
         var nameCell = SketchUiKit.RowStrip(body.transform, "Lobby name", 128f, 300f);
         SketchUiKit.Label(nameCell, "Value", _autoLobbyName, 16f, SketchUiKit.TextCream, TextAlignmentOptions.Right);
@@ -216,7 +216,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         UpdateInteractable();
     }
 
-    // ── Ecran Join ───────────────────────────────────────────────────────────────────
+    // ── Join screen ───────────────────────────────────────────────────────────────────
     private void BuildJoin(GameObject body)
     {
         var codeCell = SketchUiKit.RowStrip(body.transform, "Lobby code", 118f, 250f);
@@ -234,7 +234,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         UpdateInteractable();
     }
 
-    // ── Ecran Browse ─────────────────────────────────────────────────────────────────
+    // ── Browse screen ─────────────────────────────────────────────────────────────────
     private void BuildBrowse(GameObject body)
     {
         SketchUiKit.LabelBox(body.transform, "BrowseTitle", new Vector2(-150f, 152f), new Vector2(280f, 28f),
@@ -242,7 +242,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         PrimaryButton(body.transform, new Vector2(200f, 152f), new Vector2(150f, 44f),
             "REFRESH", out _refreshLabel, (UnityAction)(() => OnBrowseRequested?.Invoke()));
 
-        _browseList = body.transform;   // les rangees sont posees directement, positions fixes
+        _browseList = body.transform;   // rows are placed directly, at fixed positions
         _browseEmpty = SketchUiKit.Make("Empty", body.transform);
         SketchUiKit.Box(_browseEmpty, new Vector2(0f, 0f), new Vector2(540f, 80f));
         SketchUiKit.Label(_browseEmpty.transform, "T", "No public lobbies right now.\nRefresh or host one.",
@@ -257,7 +257,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     private void RenderBrowseRows()
     {
         if (_browseList == null) return;
-        // Nettoie les anciennes rangees.
+        // Clean up the old rows.
         var toKill = new List<GameObject>();
         for (int i = 0; i < _browseList.childCount; i++)
         {
@@ -293,10 +293,10 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         }
 
         if (count > MaxBrowseRows)
-            Mod.LogDebug($"[Sketch] browse: {count} lobbies, affiche {MaxBrowseRows} (pas de scroll en v1).");
+            Mod.LogDebug($"[Sketch] browse: {count} lobbies, showing {MaxBrowseRows} (no scroll in v1).");
     }
 
-    // ── Ecran Connecte ───────────────────────────────────────────────────────────────
+    // ── Connected screen ───────────────────────────────────────────────────────────────
     private void BuildConnected(GameObject body)
     {
         _connCodeLabel = SketchUiKit.LabelBox(body.transform, "Code", new Vector2(-40f, 132f), new Vector2(340f, 60f),
@@ -404,7 +404,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         if (_visLabel != null) _visLabel.text = VisLabels[_visIndex];
     }
 
-    // ── IMultiplayerPanel : etat pousse par Mod.cs ────────────────────────────────────
+    // ── IMultiplayerPanel: state pushed by Mod.cs ────────────────────────────────────
     public void SetStatus(string status, bool connected)
     {
         _statusText = status ?? "";
@@ -444,7 +444,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         if (_current == Screen.Connected) RefreshConnected();
     }
 
-    public void OnGUI() { }   // saisie geree par TMP_InputField
+    public void OnGUI() { }   // input handled by TMP_InputField
 
     public void DestroyResources()
     {

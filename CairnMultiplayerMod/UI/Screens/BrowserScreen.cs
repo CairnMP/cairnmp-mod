@@ -9,8 +9,8 @@ using CairnMultiplayerMod.Core;
 namespace CairnMultiplayerMod.UI.Screens;
 
 /// <summary>
-/// Liste des lobbies publics. Tant que la couche Steam Relay n'est pas branchée,
-/// la liste reste vide ; on affiche un état "no public lobbies" dimmed.
+/// List of public lobbies. Until the Steam Relay layer is wired up, the list
+/// stays empty; we show a dimmed "no public lobbies" state.
 /// </summary>
 internal sealed class BrowserScreen
 {
@@ -32,7 +32,7 @@ internal sealed class BrowserScreen
         Root  = MultiplayerPanelTheme.MakeGo("BrowserScreen", parent);
         MultiplayerPanelTheme.FullStretch(Root);
 
-        // Header : Back + titre + refresh
+        // Header: Back + title + refresh
         BuildBackButton();
         var title = MultiplayerPanelTheme.Tmp(Root.transform, "Title", "Browse public lobbies",
             _font, 18, MultiplayerPanelTheme.TextPrimary, TextAlignmentOptions.Top, FontStyles.Normal);
@@ -40,14 +40,14 @@ internal sealed class BrowserScreen
 
         _refreshLabel = BuildRefreshButton();
 
-        // Liste container
+        // List container
         var listBg = MultiplayerPanelTheme.MakeGo("ListBg", Root.transform);
         MultiplayerPanelTheme.Anchor(listBg, new Vector2(0f, 0.08f), new Vector2(1f, 0.85f));
         MultiplayerPanelTheme.Fill(listBg, MultiplayerPanelTheme.SubBg);
 
         _listContainer = listBg.transform;
 
-        // Empty state (centré)
+        // Empty state (centered)
         _emptyState = MultiplayerPanelTheme.Tmp(listBg.transform, "Empty",
             "No public lobbies right now.\nTry refreshing or host one yourself.",
             _font, 13, MultiplayerPanelTheme.TextDim, TextAlignmentOptions.Center, FontStyles.Italic);
@@ -56,7 +56,7 @@ internal sealed class BrowserScreen
 
     public void SetLobbies(IReadOnlyList<LobbyEntry> lobbies)
     {
-        // Clear anciennes rows
+        // Clear old rows
         foreach (var go in _rows)
         {
             if (go != null) UnityEngine.Object.Destroy(go);
@@ -71,7 +71,7 @@ internal sealed class BrowserScreen
 
         _emptyState.gameObject.SetActive(false);
 
-        // Layout vertical simple : 56px par row depuis le haut.
+        // Simple vertical layout: 56px per row from the top.
         const float rowHeightPx = 56f;
         for (int i = 0; i < lobbies.Count; i++)
         {
@@ -145,13 +145,13 @@ internal sealed class BrowserScreen
         colors.highlightedColor = new Color(1f, 1f, 1f, 0.9f);
         btn.colors = colors;
 
-        // Nom du lobby
+        // Lobby name
         var name = MultiplayerPanelTheme.Tmp(row.transform, "Name", entry.Name, _font, 14,
             MultiplayerPanelTheme.TextPrimary, TextAlignmentOptions.MidlineLeft, FontStyles.Normal);
         MultiplayerPanelTheme.Anchor(name.gameObject, new Vector2(0f, 0.50f), new Vector2(0.65f, 1f),
             new Vector2(14f, 0f), Vector2.zero);
 
-        // Hôte
+        // Host
         var host = MultiplayerPanelTheme.Tmp(row.transform, "Host",
             $"hosted by {entry.HostName}", _font, 11,
             MultiplayerPanelTheme.TextMuted, TextAlignmentOptions.MidlineLeft, FontStyles.Normal);

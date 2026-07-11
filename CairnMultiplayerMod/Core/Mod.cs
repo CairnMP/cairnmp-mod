@@ -18,11 +18,11 @@ public partial class Mod : MelonMod
     public static Mod Instance { get; private set; }
     public static MelonLogger.Instance Log => Instance.LoggerInstance;
 
-    /// <summary>Logs de diagnostic verbeux (scenes, resolution d'objets natifs, etc.). OFF par
-    /// defaut pour garder la console propre ; passer a true pour deboguer.</summary>
+    /// <summary>Verbose diagnostic logs (scenes, native object resolution, etc.). OFF by
+    /// default to keep the console clean; set to true to debug.</summary>
     public static bool VerboseLogging;
 
-    /// <summary>Log de diagnostic : n'ecrit QUE si VerboseLogging est actif.</summary>
+    /// <summary>Diagnostic log: writes ONLY if VerboseLogging is enabled.</summary>
     public static void LogDebug(string message)
     {
         if (VerboseLogging) Log.Msg(message);
@@ -41,42 +41,42 @@ public partial class Mod : MelonMod
     private float _boneTickTimer;
     private bool _gameplaySyncSuspended;
     private bool _netplaySetFramePatchPausedForBivouac;
-    // Reprise DIFFEREE du patch SetFrame apres la sortie de bivouac : le scellage /
-    // l'ecriture disque du package de save natif peut se terminer quelques instants
-    // APRES que le flag bivouac retombe. Reactiver l'injection SetFrame pile dans
-    // cette fenetre laissait le package dispose -> 1 save OK puis plus rien. On garde
-    // donc le patch en pause encore quelques secondes (0 = aucune reprise programmee).
+    // DEFERRED resume of the SetFrame patch after leaving a bivouac: the sealing /
+    // disk write of the native save package can finish a few moments AFTER the bivouac
+    // flag drops. Re-enabling SetFrame injection right in that window left the package
+    // disposed -> 1 save OK then nothing. So we keep the patch paused for a few more
+    // seconds (0 = no resume scheduled).
     private float _setFramePatchResumeAt;
     private const float SetFramePatchResumeGraceSeconds = 3f;
     private float _nextBivouacDebugLogAt;
     private float _bivouacSuspendedSince;
     private const float BivouacDebugLogIntervalSeconds = 3f;
-    // Diagnostic : fenetre de surveillance apres la sortie de bivouac pour
-    // verifier si les fantomes reapparaissent (cas du deadlock a double-gate).
+    // Diagnostic: watch window after leaving a bivouac to check whether the
+    // ghosts reappear (the double-gate deadlock case).
     private float _bivouacRecoveryWatchUntil;
     private float _nextBivouacRecoveryLogAt;
     private const float BivouacRecoveryWatchSeconds = 30f;
     private const float BivouacRecoveryLogIntervalSeconds = 3f;
-    // Garde-fou anti-blocage du bivouac : si le flag natif reste coince a la
-    // sortie, on force la reprise de synchro pour eviter un desync permanent.
+    // Anti-lockup guard for the bivouac: if the native flag stays stuck on exit,
+    // we force the sync to resume to avoid a permanent desync.
     private UnityEngine.Vector3 _bivouacSuspendPawnPos;
     private bool _hasBivouacSuspendPawnPos;
     private float _bivouacStuckSince;
     private const float BivouacStuckResumeSeconds = 8f;
-    private const float BivouacStuckMoveThresholdSqr = 2.25f; // ~1.5 m de deplacement
+    private const float BivouacStuckMoveThresholdSqr = 2.25f; // ~1.5 m of movement
 
-    // Suivi de la progression de la création/join de lobby pour afficher un
-    // statut qui évolue pendant l'attente (auto-provision Hetzner = 1-3 min).
+    // Tracks the progress of lobby creation/join to display a status that
+    // evolves during the wait (Hetzner auto-provisioning = 1-3 min).
     private DateTime? _connectingStart;
     private string    _connectingVerb = "Creating lobby"; // "Creating lobby" | "Joining lobby"
     private string    _lastLobbyError;
 
-    // Queue d'actions à exécuter sur le thread Unity — les callbacks async
-    // (ContinueWith) tournent sur ThreadPool et ne peuvent PAS toucher
-    // directement les objets Unity (TMP, Image, ...) en IL2CPP.
+    // Queue of actions to run on the Unity thread — async callbacks (ContinueWith)
+    // run on the ThreadPool and CANNOT touch Unity objects (TMP, Image, ...)
+    // directly under IL2CPP.
     private readonly ConcurrentQueue<Action> _mainThreadActions = new();
 
-    /// <summary>Schedule une action à exécuter au prochain tick d'Update sur le thread Unity.</summary>
+    /// <summary>Schedules an action to run on the next Update tick on the Unity thread.</summary>
     private void RunOnMainThread(Action action) => _mainThreadActions.Enqueue(action);
 
     public NetworkManager Network => _network;
@@ -102,19 +102,19 @@ public partial class Mod : MelonMod
         _lobby   = new SteamLobbyManager();
         _panel = MultiplayerPanelFactory.Create();
 
-        // Chat in-game + commandes admin. Le router contrôle le rôle hôte au dispatch ;
-        // les feedbacks de commande s'affichent comme lignes système locales.
+        // In-game chat + admin commands. The router checks the host role at dispatch;
+        // command feedback is displayed as local system lines.
         var commandRouter = new Chat.CommandRouter(_network, () => _lobby?.IsHost == true,
             line => _chat?.AddSystemLine(line));
-        // canChat exige aussi que le jeu ne soit PAS en pause (Cairn met en pause via
-        // timeScale=0). Sinon, ouvrir le chat puis pauser laisserait l'overlay ouvert a
-        // forcer le gel d'input -> joueur bloque apres dé-pause. Ici, en pause le chat
-        // s'auto-ferme (ChatController.Update) et restaure l'input.
+        // canChat also requires the game to NOT be paused (Cairn pauses via timeScale=0).
+        // Otherwise, opening the chat then pausing would leave the overlay open forcing the
+        // input freeze -> player stuck after unpausing. Here, when paused the chat
+        // auto-closes (ChatController.Update) and restores input.
         _chat = new Chat.ChatController(_network, commandRouter,
             () => LocalState == PlayerState.InGame && Time.timeScale > 0f);
 
-        // Câblage Steam Matchmaking → UI. Les callbacks Steam sont pompés par
-        // Cairn lui-même sur le thread Unity, donc pas de marshalling à faire.
+        // Steam Matchmaking → UI wiring. The Steam callbacks are pumped by Cairn
+        // itself on the Unity thread, so there's no marshalling to do.
         _lobby.OnLobbyEntered += id =>
         {
             _connectingStart = null;
@@ -143,15 +143,15 @@ public partial class Mod : MelonMod
         };
         _lobby.OnMembersChanged += () =>
         {
-            // Le ConnectedScreen rebuild sa liste à chaque Tick depuis _lobby.Members,
-            // mais on push aussi un statut court pour que le footer reflète l'event.
+            // The ConnectedScreen rebuilds its list on every Tick from _lobby.Members,
+            // but we also push a short status so the footer reflects the event.
             if (!_lobby.IsInLobby) return;
             _network.RefreshSteamLobbyMembers(_lobby);
             _panel.SetStatus($"{_lobby.Members.Count} player(s) in lobby", true);
         };
         _lobby.OnStartRequested += BeginStartGame;
 
-        // Bouton du menu : le clic Multiplayer cache le menu Cairn et ouvre le panel.
+        // Menu button: the Multiplayer click hides the Cairn menu and opens the panel.
         MainMenuMultiplayerButton.Bind(_panel);
 
         _panel.OnHostRequested            += OnHostRequested;
@@ -185,10 +185,10 @@ public partial class Mod : MelonMod
             RemotePlayerManager.OnPlayerLeft(id);
             RopeLinkState.RemovePlayer(id);
         };
-        // Encordement : applique chaque clip/decordage autoritaire a l'etat global des liens.
+        // Roping: apply each authoritative clip/unclip to the global link state.
         _network.OnRopeClip += (from, target, clip) => RopeLinkState.Apply(from, target, clip);
 
-        // Synchronisation des pitons : fait apparaître les pitons placés par les autres joueurs via Lifeline.AddPiton.
+        // Piton sync: spawn the pitons placed by other players via Lifeline.AddPiton.
         _network.OnPitonPlaced += pkt =>
         {
             if (IsGameplaySyncSuspended())
@@ -216,19 +216,19 @@ public partial class Mod : MelonMod
             CairnGameApi.ApplyRemoteWeather(pkt.State);
         };
 
-        // Marqueur de ping pose par un autre joueur : affiche un waypoint HUD colore.
+        // Ping marker placed by another player: display a colored HUD waypoint.
         _network.OnPingPlaced += pkt =>
             PingMarkerManager.Spawn(pkt.FromPlayerId, new UnityEngine.Vector3(pkt.PosX, pkt.PosY, pkt.PosZ));
 
-        // Heure du jour autoritaire recue de l'hote : appliquee chaque frame cote client.
+        // Authoritative day time received from the host: applied every frame client-side.
         _network.OnTimeState += pkt =>
         {
             _remoteTimeState = pkt;
             _hasRemoteTimeState = true;
         };
 
-        // Lancement de partie autoritaire par le serveur : met le paquet en file d'attente,
-        // l'applique dans Update quand la scène MainMenu est active.
+        // Authoritative game launch by the server: queues the packet, applies it in
+        // Update when the MainMenu scene is active.
         _network.OnStartGameReceived += pkt =>
         {
             BeginStartGame(pkt);
@@ -250,8 +250,8 @@ public partial class Mod : MelonMod
         _timeSinceLastSceneLoad = 0f;
         LogDebug($"Scene loaded: [{buildIndex}] {sceneName}");
 
-        // Deblocage FreeRoam : actif UNIQUEMENT au MainMenu (forcer le flag pendant le boot
-        // ou en jeu envoie le jeu sur un chemin d'init FreeRoam pas pret -> ecran noir).
+        // FreeRoam unlock: active ONLY at the MainMenu (forcing the flag during boot
+        // or in game sends the game onto an unready FreeRoam init path -> black screen).
         CairnGameApi.SetFreeRoamUnlockActive(sceneName == "MainMenu");
 
         if (sceneName != "MainMenu")
@@ -265,15 +265,15 @@ public partial class Mod : MelonMod
         if (IsSceneBoundCacheResetPoint(sceneName))
         {
             ResetSceneBoundSyncState();
-            // Note : on ne vide PAS les pings ici — ils sont positionnes dans le
-            // monde et expirent seuls (15 s). Les effacer a chaque streaming de
-            // scene les ferait disparaitre alors qu'on est toujours dans la zone.
+            // Note: we do NOT clear the pings here — they're positioned in the world
+            // and expire on their own (15 s). Clearing them on every scene stream would
+            // make them disappear while we're still in the area.
             if (ShouldClearRemotePlayersOnSceneLoad(sceneName))
                 RemotePlayerManager.ClearAll();
         }
         MainMenuMultiplayerButton.OnSceneLoaded(sceneName);
-        // Déconnexion automatique lors du retour au MainMenu depuis le gameplay.
-        // Nettoie les fantômes et permet au joueur de se reconnecter proprement.
+        // Auto-disconnect when returning to the MainMenu from gameplay.
+        // Cleans up the ghosts and lets the player reconnect cleanly.
         if (sceneName == "MainMenu" && _network.IsConnected && (_lobby == null || !_lobby.IsInLobby))
         {
             LoggerInstance.Msg("[State] Returned to MainMenu — auto-disconnecting");
@@ -362,14 +362,14 @@ public partial class Mod : MelonMod
             ResetGameplaySyncTimers();
             CairnGameApi.ResetRemoteWeatherSyncState();
             RemotePlayerManager.ClearAll();
-            // Relache les ancres natives de cordee : ClearAll detruit les fantomes, donc
-            // une corde restee pinnee sur leur baudrier pointerait dans le vide. On GARDE le
-            // lien logique (RopeLinkState) — il sera re-ancre a la sortie quand le fantome du
-            // partenaire revient. TickRopeCouple ne tourne pas en bivouac, d'ou ce relachement ici.
+            // Release the native rope-team anchors: ClearAll destroys the ghosts, so a rope
+            // left pinned to their harness would point into the void. We KEEP the logical link
+            // (RopeLinkState) — it'll be re-anchored on exit when the partner's ghost returns.
+            // TickRopeCouple doesn't run during a bivouac, hence this release here.
             CairnGameApi.ReleaseAllRopeTeamAnchors();
             SetLocalState(PlayerState.Loading);
-            // Memorise la position du pawn a l'entree : sert au garde-fou
-            // anti-blocage (un pawn qui s'est deplace = on grimpe a nouveau).
+            // Remember the pawn's position on entry: used by the anti-lockup guard
+            // (a pawn that has moved = we're climbing again).
             _hasBivouacSuspendPawnPos = CairnGameApi.TryGetLocalPlayerPose(out _bivouacSuspendPawnPos, out _);
             _bivouacStuckSince = 0f;
             LogBivouacDebug("enter");
@@ -377,9 +377,9 @@ public partial class Mod : MelonMod
         }
 
         LogBivouacDebug("exit");
-        // Arme la surveillance de recuperation : on veut voir, sur chaque client,
-        // si les fantomes distants reviennent apres la sortie de bivouac ou si on
-        // reste bloque (un cote jamais InGame, ou deadlock mutuel a Loading).
+        // Arm the recovery watch: we want to see, on each client, whether the remote
+        // ghosts come back after leaving the bivouac or whether we stay stuck (one side
+        // never InGame, or a mutual deadlock at Loading).
         _bivouacRecoveryWatchUntil = Time.unscaledTime + BivouacRecoveryWatchSeconds;
         _nextBivouacRecoveryLogAt = 0f;
         _hasBivouacSuspendPawnPos = false;
@@ -409,12 +409,12 @@ public partial class Mod : MelonMod
             return false;
         }
 
-        // lifecycle == Bivouac, deduit du flag BivouacManager. Garde-fou contre
-        // un flag reste coince a la sortie (cause du desync permanent rapporte) :
-        // si GlobalGameManager se declare deja InGame, qu'on est sur une scene de
-        // gameplay et que le pawn s'est deplace depuis l'entree (on regrimpe), le
-        // flag est perime. On exige ~8 s de persistance pour ne pas confondre avec
-        // une vraie transition d'entree/sortie de bivouac.
+        // lifecycle == Bivouac, deduced from the BivouacManager flag. Guard against
+        // a flag stuck on exit (the cause of the reported permanent desync): if
+        // GlobalGameManager already reports InGame, we're on a gameplay scene, and the
+        // pawn has moved since entry (we're climbing again), the flag is stale. We
+        // require ~8 s of persistence to avoid confusing it with a real bivouac
+        // entry/exit transition.
         if (IsBivouacFlagLikelyStuck())
         {
             if (_bivouacStuckSince <= 0f)
@@ -436,10 +436,10 @@ public partial class Mod : MelonMod
     }
 
     /// <summary>
-    /// Heuristique : le flag bivouac est probablement coince si le jeu lui-meme
-    /// rapporte InGame, qu'on est sur une scene de gameplay, et que le pawn s'est
-    /// deplace de facon significative depuis l'entree en bivouac. Conservateur par
-    /// construction : si l'un des signaux manque, on suppose un vrai bivouac.
+    /// Heuristic: the bivouac flag is probably stuck if the game itself reports
+    /// InGame, we're on a gameplay scene, and the pawn has moved significantly since
+    /// entering the bivouac. Conservative by design: if any of the signals is
+    /// missing, we assume a real bivouac.
     /// </summary>
     private bool IsBivouacFlagLikelyStuck()
     {
@@ -491,9 +491,8 @@ public partial class Mod : MelonMod
     {
         _timeSinceLastSceneLoad += Time.unscaledDeltaTime;
 
-        // Drain la queue d'actions provenant de callbacks async — doit tourner
-        // en premier pour que les mises à jour d'UI post-réseau soient visibles
-        // dès le frame suivant.
+        // Drain the queue of actions coming from async callbacks — must run first so
+        // that post-network UI updates are visible on the very next frame.
         while (_mainThreadActions.TryDequeue(out var action))
         {
             try { action(); }
@@ -504,9 +503,9 @@ public partial class Mod : MelonMod
             }
         }
 
-        // Failsafe PANIQUE (F10) : force le deblocage des inputs + ferme le chat, quel que
-        // soit l'etat. Lu sur le device clavier brut (jamais affecte par le blocage) et place
-        // AVANT tout return anticipe d'OnUpdate (bivouac, etc.) pour etre toujours joignable.
+        // PANIC failsafe (F10): force-unblock inputs + close the chat, whatever the state.
+        // Read from the raw keyboard device (never affected by the block) and placed BEFORE
+        // any early return in OnUpdate (bivouac, etc.) so it's always reachable.
         var panicKeyboard = Keyboard.current;
         if (panicKeyboard != null && panicKeyboard.f10Key.wasPressedThisFrame)
         {
@@ -515,57 +514,58 @@ public partial class Mod : MelonMod
             LoggerInstance.Msg("[CairnMP] Panic: input force-cleared + chat closed (F10)");
         }
 
-        // Maintient le gel des inputs pendant la saisie du chat + ferme si on quitte le jeu.
+        // Keeps inputs frozen while typing in the chat + closes if we leave the game.
         _chat?.Update();
 
-        // Pendant la saisie du chat, on bloque AUSSI les raccourcis du mod (E corde, F7/F8,
-        // connect, ping...) — sinon taper du texte declenche des actions. Le jeu, lui, est
-        // bloque cote InputManager via ReconcileGameplayInput. Ensemble = blocage total.
+        // While typing in the chat, we ALSO block the mod's shortcuts (E rope, F7/F8,
+        // connect, ping...) — otherwise typing text would trigger actions. The game
+        // itself is blocked at the InputManager level via ReconcileGameplayInput.
+        // Together = total block.
         bool chatTyping = _chat?.IsTyping == true;
 
-        // Mise à jour de l'injection du bouton dans le menu principal
+        // Update the button injection in the main menu
         if (_currentScene == "MainMenu")
         {
             MainMenuMultiplayerButton.OnUpdate();
-            // Debloque FreeRoam : force le champ du tweakable des qu'il est charge (no-op
-            // une fois reussi). Complete le postfix Harmony sur la propriete publique.
+            // Unlock FreeRoam: force the tweakable field as soon as it's loaded (no-op
+            // once it succeeds). Complements the Harmony postfix on the public property.
             CairnGameApi.TryForceFreeRoamTweakableField();
-            // Demasque le mode FreeRoam dans la liste des difficultes (isHidden=false).
+            // Unhide the FreeRoam mode in the difficulty list (isHidden=false).
             CairnGameApi.TryUnhideFreeRoamDifficulty();
         }
 
-        // Pompe la file de callbacks Steam managés (gère aussi l'init différée).
+        // Pump the managed Steam callback queue (also handles deferred init).
         _lobby?.Pump(Time.unscaledDeltaTime);
 
-        // Verrouille la couche gameplay avant de traiter les paquets reseau.
+        // Lock the gameplay layer before processing network packets.
         UpdateGameplaySyncSuspension();
-        // Reprise differee du patch SetFrame (fenetre de grace post-bivouac) — doit
-        // tourner chaque frame, y compris pendant la suspension (s'auto-annule alors).
+        // Deferred resume of the SetFrame patch (post-bivouac grace window) — must run
+        // every frame, including during suspension (it self-cancels then).
         UpdateDeferredSetFramePatchResume();
 
-        // Traitement des événements réseau
+        // Process network events
         _network.Update();
 
-        // Expiration des marqueurs de ping (tourne toujours, meme en bivouac).
+        // Expire the ping markers (always runs, even during a bivouac).
         PingMarkerManager.Update();
 
-        // Placement de ping en camera libre — tourne avant la suspension gameplay
-        // car la freecam/photo mode peut etre traitee comme non-gameplay.
+        // Ping placement in free camera — runs before the gameplay suspension because
+        // freecam/photo mode can be treated as non-gameplay.
         if (!chatTyping) TickPingInput();
 
-        // Toggle des noms (N) — place AVANT le return de suspension bivouac/photo
-        // pour rester joignable en mode photo (ou le gameplay est suspendu).
+        // Name toggle (N) — placed BEFORE the bivouac/photo suspension return so it stays
+        // reachable in photo mode (where gameplay is suspended).
         if (!chatTyping) TickNameToggleInput();
 
-        // Injection de la ligne "N" dans la legende native du mode photo. Le clone est
-        // instancie sous un parent inactif puis depouille de ses composants non-visuels
-        // (sinon les handlers d'input dupliques bloquent le jeu) ; injecte seulement
-        // quand le mode photo est reellement ouvert.
+        // Injection of the "N" row into the native photo-mode legend. The clone is
+        // instantiated under an inactive parent then stripped of its non-visual components
+        // (otherwise the duplicated input handlers block the game); injected only when photo
+        // mode is actually open.
         try { PhotoModeNamesRow.Tick(); }
         catch (Exception ex) { LoggerInstance.Error($"[PhotoNames] tick failed: {ex.Message}"); }
 
-        // Synchro de l'heure + sommeil — doit tourner AVANT la suspension bivouac
-        // (c'est justement au bivouac qu'on dort et qu'on accelere le temps).
+        // Time + sleep sync — must run BEFORE the bivouac suspension (the bivouac is
+        // exactly when we sleep and accelerate time).
         try
         {
             TickTimeSync();
@@ -575,8 +575,8 @@ public partial class Mod : MelonMod
             LoggerInstance.Error($"[TimeSync] tick failed: {ex.Message}");
         }
 
-        // Pendant le bivouac, Cairn pilote lui-meme le pawn, la camera et les
-        // mains du taping. Le mod garde uniquement une presence reseau minimale.
+        // During a bivouac, Cairn itself drives the pawn, the camera and the taping
+        // hands. The mod only keeps a minimal network presence.
         if (_gameplaySyncSuspended)
         {
             TickBivouacDebug();
@@ -585,20 +585,20 @@ public partial class Mod : MelonMod
             return;
         }
 
-        // Gère le clignotement du curseur + le rafraîchissement du lobby pour le panneau de connexion Canvas.
+        // Handles the cursor blink + lobby refresh for the Canvas connection panel.
         _panel.Tick(Time.unscaledDeltaTime);
 
-        // Recalcule l'état de cycle de vie local à partir de la scène + handshake + MC.
+        // Recompute the local lifecycle state from the scene + handshake + MC.
         var newState = ComputeLocalState();
         SetLocalState(newState);
 
-        // Diagnostic : surveille le retablissement de la synchro apres un bivouac.
+        // Diagnostic: watch for the sync recovering after a bivouac.
         TickBivouacRecoveryDebug();
 
-        // Flux de lancement de partie
+        // Game launch flow
         TickStartGameFlow();
 
-        // Diffusion périodique de l'état du joueur local + synchronisation des fantômes distants.
+        // Periodic broadcast of the local player state + sync of remote ghosts.
         try
         {
             TickPlayerSync();
@@ -609,27 +609,27 @@ public partial class Mod : MelonMod
             CrashReporter.ReportCaughtExceptionOnce(ex, "Mod.TickPlayerSync");
         }
 
-        // Statut d'attente progressif pendant la création/join de lobby (provisioning).
+        // Progressive waiting status during lobby creation/join (provisioning).
         TickConnectingStatus();
 
-        // Maintien post-teleport longue distance (empeche la chute dans le vide + corrige le
-        // repositionnement du chargement de zone). No-op si aucun teleport en attente.
+        // Long-distance post-teleport settle (prevents falling into the void + fixes the
+        // zone-load repositioning). No-op if no teleport is pending.
         CairnGameApi.TickTeleportSettle(LocalState == PlayerState.InGame);
 
-        // Encordement entre joueurs : detection clip (E) + entretien de la cordee NATIVE.
-        // Plus de corde cosmetique : la corde native de la lifeline (clippee sur un piton
-        // mobile pose chez le partenaire, systeme Episure) est le visuel ET l'assurage.
+        // Inter-player roping: clip detection (E) + maintenance of the NATIVE rope team.
+        // No more cosmetic rope: the lifeline's native rope (clipped to a mobile piton
+        // placed on the partner, Episure system) is both the visual AND the belay.
         try
         {
-            if (!chatTyping) TickRopeCouple();   // le E ne doit pas clipper pendant la frappe
+            if (!chatTyping) TickRopeCouple();   // E must not clip while typing
         }
         catch (Exception ex) { LoggerInstance.Error($"[RopeCouple] tick failed: {ex.Message}"); }
 
-        // Raccourcis clavier via le nouveau Input System
+        // Keyboard shortcuts via the new Input System
         var keyboard = Keyboard.current;
         if (keyboard == null) return;
 
-        // Chat ouvert -> aucun raccourci mod ne passe (blocage total).
+        // Chat open -> no mod shortcut passes through (total block).
         if (chatTyping) return;
 
         if (keyboard[_connectKey].wasPressedThisFrame)
@@ -659,8 +659,8 @@ public partial class Mod : MelonMod
             }
         }
 
-        // Tant que le panneau multijoueur est ouvert, re-affirme le blocage des action maps du menu
-        // pour empecher toute navigation en arriere-plan (Suppr, fleches, retour).
+        // While the multiplayer panel is open, reassert the blocking of the menu's action maps
+        // to prevent any background navigation (Delete, arrows, back).
         if (_panel != null && _panel.IsVisible)
             CairnGameApi.BlockMainMenuActionMaps();
     }
@@ -675,8 +675,8 @@ public partial class Mod : MelonMod
     private float _pingCooldownUntil;
 
     /// <summary>
-    /// En camera libre, un clic gauche (ou R1 PS5 / RB Xbox = rightShoulder) pose
-    /// un ping a l'endroit vise. Affichage local immediat + envoi reseau.
+    /// In free camera, a left click (or R1 PS5 / RB Xbox = rightShoulder) places a
+    /// ping at the aimed spot. Immediate local display + network send.
     /// </summary>
     private void TickPingInput()
     {
@@ -694,15 +694,15 @@ public partial class Mod : MelonMod
         if (!pressed)
             return;
 
-        // On vise toujours dans la direction de la camera (centre ecran) — simple
-        // et coherent clavier/souris comme manette.
+        // We always aim in the camera's direction (screen center) — simple and
+        // consistent for keyboard/mouse as well as gamepad.
         if (!CairnGameApi.TryComputePingPoint(out var point))
             return;
 
         _pingCooldownUntil = Time.unscaledTime + Protocol.PingCooldownSeconds;
 
-        // Affichage local immediat (visible meme en solo). L'emetteur ignore l'echo
-        // serveur de son propre id. L'envoi reseau ne se fait que si on est connecte.
+        // Immediate local display (visible even in solo). The sender ignores the server
+        // echo of its own id. The network send only happens if we're connected.
         PingMarkerManager.Spawn(_network.LocalPlayerId, point);
         if (_network.IsHandshakeComplete)
             _network.SendPingPlaced(point);
@@ -710,9 +710,9 @@ public partial class Mod : MelonMod
     }
 
     /// <summary>
-    /// Touche N : bascule l'affichage des plaques de nom des joueurs distants.
-    /// Fonctionne en jeu comme en mode photo (l'indication apparait alors en bas
-    /// a gauche via PhotoModeHud). Lu sur le device clavier brut.
+    /// N key: toggles the display of remote players' name plates. Works both in game
+    /// and in photo mode (the hint then appears at the bottom left via PhotoModeHud).
+    /// Read from the raw keyboard device.
     /// </summary>
     private void TickNameToggleInput()
     {
@@ -763,9 +763,9 @@ public partial class Mod : MelonMod
     }
 
     /// <summary>
-    /// Resume l'etat de cycle de vie de chaque joueur distant connu. Sert a
-    /// diagnostiquer le desync de bivouac : si un cote reste a Loading apres la
-    /// sortie, les fantomes ne reapparaissent jamais.
+    /// Summarizes the lifecycle state of each known remote player. Used to diagnose
+    /// the bivouac desync: if one side stays at Loading after exiting, the ghosts
+    /// never reappear.
     /// </summary>
     private string DescribeRemoteStates()
     {
@@ -786,9 +786,9 @@ public partial class Mod : MelonMod
     }
 
     /// <summary>
-    /// Apres la sortie d'un bivouac, logge periodiquement l'etat local + distant +
-    /// le nombre de fantomes pour verifier que la synchro se retablit. Capture le
-    /// cas ou les deux cotes sortent mais aucun fantome ne respawn (deadlock).
+    /// After leaving a bivouac, periodically logs the local + remote state + the ghost
+    /// count to verify the sync recovers. Captures the case where both sides exit but
+    /// no ghost respawns (deadlock).
     /// </summary>
     private void TickBivouacRecoveryDebug()
     {
@@ -810,14 +810,14 @@ public partial class Mod : MelonMod
         LogBivouacDebug("recovery");
     }
 
-    // Pause/reprise du patch SetFrame au bivouac via un simple flag (le patch reste
-    // installe). Avant on faisait Uninstall/Install (UnpatchSelf/Patch) ici, mais ce
-    // churn Harmony tombait dans la fenetre de sauvegarde native du bivouac et pouvait
-    // casser le scellage/reouverture du package de save -> 1 save OK puis plus rien.
+    // Pause/resume of the SetFrame patch during a bivouac via a simple flag (the patch
+    // stays installed). We used to Uninstall/Install (UnpatchSelf/Patch) here, but that
+    // Harmony churn fell within the bivouac's native save window and could break the
+    // sealing/reopening of the save package -> 1 save OK then nothing.
     private void PauseNetplaySetFramePatchForBivouac()
     {
-        // Annule une reprise differee en cours (on re-rentre en bivouac avant la fin
-        // de la fenetre de grace) -> le patch doit rester en pause.
+        // Cancel any deferred resume in progress (we re-enter a bivouac before the end
+        // of the grace window) -> the patch must stay paused.
         _setFramePatchResumeAt = 0f;
 
         if (_netplaySetFramePatchPausedForBivouac)
@@ -829,10 +829,10 @@ public partial class Mod : MelonMod
     }
 
     /// <summary>
-    /// Reprend le patch SetFrame. <paramref name="immediate"/> = true pour les
-    /// teardown (deconnexion, leave) ou aucune sauvegarde n'est en cours ; false a la
-    /// sortie de bivouac, ou l'on differe la reprise (cf. <see cref="SetFramePatchResumeGraceSeconds"/>)
-    /// pour laisser le package de save natif se sceller avant de reactiver l'injection.
+    /// Resumes the SetFrame patch. <paramref name="immediate"/> = true for teardowns
+    /// (disconnect, leave) where no save is in progress; false when leaving a bivouac,
+    /// where we defer the resume (cf. <see cref="SetFramePatchResumeGraceSeconds"/>) to
+    /// let the native save package seal before re-enabling injection.
     /// </summary>
     private void ResumeNetplaySetFramePatchAfterBivouac(bool immediate = true)
     {
@@ -856,14 +856,14 @@ public partial class Mod : MelonMod
             $"[State] Netplay SetFrame patch resume scheduled in {SetFramePatchResumeGraceSeconds:F0}s (save-seal grace)");
     }
 
-    /// <summary>Applique la reprise differee du patch SetFrame programmee a la sortie de bivouac.</summary>
+    /// <summary>Applies the deferred SetFrame patch resume scheduled when leaving a bivouac.</summary>
     private void UpdateDeferredSetFramePatchResume()
     {
         if (_setFramePatchResumeAt <= 0f)
             return;
 
-        // Toujours en bivouac / hors gameplay -> on annule la reprise (on restera en
-        // pause tant qu'on n'est pas revenu en jeu de facon stable).
+        // Still in a bivouac / outside gameplay -> cancel the resume (we'll stay paused
+        // until we're back in game in a stable way).
         if (_gameplaySyncSuspended || ShouldSuspendGameplaySync())
         {
             _setFramePatchResumeAt = 0f;
@@ -975,7 +975,7 @@ public partial class Mod : MelonMod
         }
     }
 
-    /// <summary>Browser : appelle SteamMatchmaking.RequestLobbyList et pousse le résultat à l'UI.</summary>
+    /// <summary>Browser: calls SteamMatchmaking.RequestLobbyList and pushes the result to the UI.</summary>
     private async void OnBrowseRequested()
     {
         LoggerInstance.Msg("[Browse] Requesting Steam lobby list...");
@@ -991,7 +991,7 @@ public partial class Mod : MelonMod
         }
     }
 
-    /// <summary>Join via SteamID64 (browser ou Steam invite).</summary>
+    /// <summary>Join via SteamID64 (browser or Steam invite).</summary>
     private async void OnJoinByLobbyIdRequested(ulong lobbyId)
     {
         LoggerInstance.Msg($"[Browse] Joining lobby {lobbyId}...");
@@ -1040,7 +1040,7 @@ public partial class Mod : MelonMod
         }
     }
 
-    /// <summary>Démarre le tracking de progression et pose le premier statut.</summary>
+    /// <summary>Starts progress tracking and sets the first status.</summary>
     private void BeginConnecting(string verb)
     {
         _connectingVerb  = verb;
@@ -1073,13 +1073,13 @@ public partial class Mod : MelonMod
             : ModConfig.PlayerName.Value.Trim();
     }
 
-    /// <summary>Adapte le statut affiché pendant qu'on attend l'aller-retour Steam
-    /// pour la création / le join du lobby. Pas de provisioning serveur ici — le
-    /// callback est typiquement &lt; 1 s — donc messages courts seulement.</summary>
+    /// <summary>Adapts the displayed status while we wait for the Steam round-trip for
+    /// lobby creation / join. No server provisioning here — the callback is typically
+    /// &lt; 1 s — so short messages only.</summary>
     private void TickConnectingStatus()
     {
         if (!_connectingStart.HasValue) return;
-        // L'event OnLobbyEntered effacera _connectingStart et écrira "Connected".
+        // The OnLobbyEntered event will clear _connectingStart and write "Connected".
         if (_lobby != null && _lobby.IsInLobby) { _connectingStart = null; return; }
 
         var elapsed = (DateTime.UtcNow - _connectingStart.Value).TotalSeconds;

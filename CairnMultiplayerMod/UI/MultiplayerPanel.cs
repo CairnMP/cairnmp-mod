@@ -11,12 +11,12 @@ using Object = UnityEngine.Object;
 namespace CairnMultiplayerMod.UI;
 
 /// <summary>
-/// Panel multijoueur : orchestre les écrans Home / Browser / Connected,
-/// route les events vers Mod.cs et reçoit les pushs d'état (status, lobbies).
+/// Multiplayer panel: orchestrates the Home / Browser / Connected screens,
+/// routes events to Mod.cs and receives state pushes (status, lobbies).
 ///
-/// Le panel n'écrit jamais directement dans NetworkManager — tout passe par
-/// les events publics, consommés côté Mod.cs. Cela permet de switcher la couche
-/// réseau (Steam Relay) sans toucher à l'UI.
+/// The panel never writes to NetworkManager directly — everything goes through
+/// the public events, consumed on the Mod.cs side. This lets us swap the network
+/// layer (Steam Relay) without touching the UI.
 /// </summary>
 public sealed class MultiplayerPanel : IMultiplayerPanel
 {
@@ -38,12 +38,12 @@ public sealed class MultiplayerPanel : IMultiplayerPanel
     private string _statusText = "";
     private string _lobbyName  = "";
 
-    // ── Configuration courante ────────────────────────────────────────────────
+    // ── Current configuration ─────────────────────────────────────────────────
 
     private const float CW = 720f;
     private const float CH = 820f;
 
-    // ── Events publics ────────────────────────────────────────────────────────
+    // ── Public events ─────────────────────────────────────────────────────────
 
     public event Action<HostConfig>           OnHostRequested;
     public event Action<string,string>        OnJoinByCodeRequested;   // (playerName, code)
@@ -55,7 +55,7 @@ public sealed class MultiplayerPanel : IMultiplayerPanel
 
     public bool IsVisible => _visible;
 
-    // ── API publique ──────────────────────────────────────────────────────────
+    // ── Public API ────────────────────────────────────────────────────────────
 
     public void Show()
     {
@@ -96,7 +96,7 @@ public sealed class MultiplayerPanel : IMultiplayerPanel
         UpdateInteractable();
     }
 
-    /// <summary>Pousse une nouvelle liste de lobbies dans le browser. Appelé par Mod.cs.</summary>
+    /// <summary>Pushes a new list of lobbies into the browser. Called by Mod.cs.</summary>
     public void SetBrowserLobbies(IReadOnlyList<LobbyEntry> lobbies)
     {
         if (_browserScreen == null) return;
@@ -104,13 +104,13 @@ public sealed class MultiplayerPanel : IMultiplayerPanel
         _browserScreen.SetRefreshing(false);
     }
 
-    /// <summary>Mémorise le nom du lobby couramment connecté pour l'afficher en titre.</summary>
+    /// <summary>Stores the name of the currently connected lobby to show it as the title.</summary>
     public void SetCurrentLobbyName(string name)
     {
         _lobbyName = name ?? "";
     }
 
-    /// <summary>Tick par frame depuis Mod.OnUpdate — refresh la liste joueurs en mode connecté.</summary>
+    /// <summary>Per-frame tick from Mod.OnUpdate — refreshes the player list while connected.</summary>
     public void Tick(float dt)
     {
         if (!_visible) return;
@@ -121,7 +121,7 @@ public sealed class MultiplayerPanel : IMultiplayerPanel
         }
     }
 
-    /// <summary>No-op : la saisie clavier est gérée par TMP_InputField, plus besoin d'IMGUI.</summary>
+    /// <summary>No-op: keyboard input is handled by TMP_InputField, IMGUI is no longer needed.</summary>
     public void OnGUI() { }
 
     public void DestroyResources()
@@ -165,12 +165,12 @@ public sealed class MultiplayerPanel : IMultiplayerPanel
         _panelRoot = MultiplayerPanelTheme.MakeGo("PanelRoot", canvasGo.transform);
         MultiplayerPanelTheme.FullStretch(_panelRoot);
 
-        // Overlay sombre cliquable (ne ferme pas — clic sur close uniquement).
+        // Clickable dark overlay (does not close — only the close button does).
         var overlay = MultiplayerPanelTheme.MakeGo("Overlay", _panelRoot.transform);
         MultiplayerPanelTheme.FullStretch(overlay);
         MultiplayerPanelTheme.Fill(overlay, MultiplayerPanelTheme.Overlay, raycast: true);
 
-        // Card centrée
+        // Centered card
         _card = MultiplayerPanelTheme.MakeGo("Card", _panelRoot.transform);
         var cardRT = _card.AddComponent<RectTransform>();
         cardRT.anchorMin = cardRT.anchorMax = cardRT.pivot = new Vector2(0.5f, 0.5f);
@@ -179,7 +179,7 @@ public sealed class MultiplayerPanel : IMultiplayerPanel
         MultiplayerPanelTheme.Fill(_card, MultiplayerPanelTheme.CardBg, raycast: true);
         MultiplayerPanelTheme.DrawBorder(_card.transform, MultiplayerPanelTheme.Border);
 
-        // Header : titre + bouton fermer
+        // Header: title + close button
         var titleEyebrow = MultiplayerPanelTheme.Tmp(_card.transform, "Eyebrow", "CAIRN MULTIPLAYER",
             font, 10, MultiplayerPanelTheme.TextMuted, TextAlignmentOptions.TopLeft, FontStyles.Normal);
         MultiplayerPanelTheme.Anchor(titleEyebrow.gameObject, new Vector2(0.06f, 0.94f), new Vector2(0.94f, 0.99f));
@@ -187,11 +187,11 @@ public sealed class MultiplayerPanel : IMultiplayerPanel
 
         BuildCloseButton(font);
 
-        // Conteneur des écrans (zone interne sous le header, au-dessus du status footer)
+        // Screens container (inner area below the header, above the status footer)
         var screensRoot = MultiplayerPanelTheme.MakeGo("Screens", _card.transform);
         MultiplayerPanelTheme.Anchor(screensRoot, new Vector2(0.06f, 0.10f), new Vector2(0.94f, 0.93f));
 
-        // Construire les 3 écrans (un seul actif à la fois)
+        // Build the 3 screens (only one active at a time)
         _homeScreen      = new HomeScreen(screensRoot.transform, font,
             ModConfig.PlayerName.Value, Mathf.Clamp(ModConfig.MaxPlayers.Value, 2, 8));
         _browserScreen   = new BrowserScreen(screensRoot.transform, font);
@@ -202,7 +202,7 @@ public sealed class MultiplayerPanel : IMultiplayerPanel
         _browserScreen.Root.SetActive(false);
         _connectedScreen.Root.SetActive(false);
 
-        // Footer : status
+        // Footer: status
         var sep = MultiplayerPanelTheme.MakeGo("Sep", _card.transform);
         MultiplayerPanelTheme.Anchor(sep, new Vector2(0.06f, 0.085f), new Vector2(0.94f, 0.087f));
         MultiplayerPanelTheme.Fill(sep, MultiplayerPanelTheme.BorderSubtle);
@@ -271,7 +271,7 @@ public sealed class MultiplayerPanel : IMultiplayerPanel
         };
     }
 
-    // ── Mises à jour d'état ──────────────────────────────────────────────────
+    // ── State updates ─────────────────────────────────────────────────────────
 
     private void UpdateScreenVisibility()
     {

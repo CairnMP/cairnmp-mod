@@ -4,9 +4,9 @@ using System.Collections.Generic;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Etat global des liens d'encordement actifs (paires de playerId), partage entre le
-/// reseau (mis a jour depuis ServerRopeClip) et le rendu (RopeLinkRenderer). Chaque
-/// lien est stocke une fois, sous forme normalisee (min/max) pour que (a,b) == (b,a).
+/// Global state of active rope links (playerId pairs), shared between the network
+/// (updated from ServerRopeClip) and rendering (RopeLinkRenderer). Each link is
+/// stored once, in normalized form (min/max) so that (a,b) == (b,a).
 /// </summary>
 public static class RopeLinkState
 {
@@ -24,7 +24,7 @@ public static class RopeLinkState
 
     public static int Count => _links.Count;
 
-    /// <summary>Ajoute (clip=true) ou retire (clip=false) le lien entre a et b.</summary>
+    /// <summary>Adds (clip=true) or removes (clip=false) the link between a and b.</summary>
     public static void Apply(int a, int b, bool clip)
     {
         if (a == b) return;
@@ -33,17 +33,17 @@ public static class RopeLinkState
         else _links.Remove(k);
     }
 
-    /// <summary>Enumere les liens actifs en (a, b).</summary>
+    /// <summary>Enumerates the active links as (a, b).</summary>
     public static IEnumerable<(int a, int b)> Links()
     {
         foreach (var k in _links)
             yield return (High(k), Low(k));
     }
 
-    /// <summary>Vrai si a et b sont encordes ensemble.</summary>
+    /// <summary>True if a and b are roped together.</summary>
     public static bool IsLinked(int a, int b) => a != b && _links.Contains(Key(a, b));
 
-    /// <summary>Premier partenaire encorde de <paramref name="playerId"/>, ou -1.</summary>
+    /// <summary>First rope partner of <paramref name="playerId"/>, or -1.</summary>
     public static int PartnerOf(int playerId)
     {
         foreach (var k in _links)
@@ -55,7 +55,7 @@ public static class RopeLinkState
         return -1;
     }
 
-    /// <summary>Retire tous les liens impliquant <paramref name="playerId"/> (depart d'un joueur).</summary>
+    /// <summary>Removes all links involving <paramref name="playerId"/> (a player leaving).</summary>
     public static void RemovePlayer(int playerId)
     {
         _links.RemoveWhere(k => High(k) == playerId || Low(k) == playerId);

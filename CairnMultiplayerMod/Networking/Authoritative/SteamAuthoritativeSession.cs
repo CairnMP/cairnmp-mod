@@ -7,17 +7,17 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Networking.Authoritative;
 
 // ============================================================================
-// Phase 3 — etape 3 : cœur autoritatif de la synchro PITONS.
+// Phase 3 — step 3: authoritative core for PITON sync.
 //
-// Toute la logique piton de l'hote (validation, etat officiel, snapshot de rejoin,
-// rediffusion) vit ici, agnostique du transport : elle ne parle qu'en playerId et
-// n'ecrit que par l'IAuthoritativeSink. Le transport (NetworkManager cote Steam) ne
-// fait plus que lui passer les packets Client* et convoyer les octets.
+// All of the host's piton logic (validation, official state, rejoin snapshot,
+// rebroadcast) lives here, transport-agnostic: it speaks only in playerId and
+// writes only through the IAuthoritativeSink. The transport (NetworkManager on the Steam
+// side) now only passes it the Client* packets and carries the bytes.
 //
-// Correctif de fond apporte par la migration : l'HOTE attribue un id AUTORITAIRE a
-// chaque piton (compteur monotone + map (poseur, idLocal) -> idAuto). Avant, chaque
-// client numerotait ses pitons depuis 1 dans son coin -> deux poseurs differents
-// produisaient le meme id et se marchaient dessus (collision de snapshot et de ghost).
+// Underlying fix brought by the migration: the HOST assigns an AUTHORITATIVE id to
+// each piton (monotonic counter + map (placer, localId) -> authId). Before, each
+// client numbered its pitons from 1 on its own -> two different placers
+// produced the same id and stepped on each other (snapshot and ghost collision).
 // ============================================================================
 public sealed class SteamAuthoritativeSession : IAuthoritativeSession
 {
@@ -26,18 +26,18 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
     private readonly Action<ServerPitonRemoved> _onLocalPitonDespawn;
     private readonly Action<int, int> _onLocalLampApply;
 
-    // Etat officiel des pitons, indexe par id AUTORITAIRE.
+    // Official piton state, indexed by AUTHORITATIVE id.
     private readonly Dictionary<uint, ServerPitonPlaced> _pitons = new();
-    // (playerId poseur, id LOCAL du poseur) -> id autoritaire. Rend l'attribution
-    // idempotente et le retrait traduisible sans dependre de l'id local du client.
+    // (placer playerId, placer's LOCAL id) -> authoritative id. Makes assignment
+    // idempotent and removal translatable without depending on the client's local id.
     private readonly Dictionary<(int playerId, uint clientId), uint> _authIdByClient = new();
     private uint _nextAuthId = 1;
 
-    // Etat lampe par joueur (playerId -> mode empaquete). La cle EST le playerId,
-    // pas besoin d'id autoritaire : une seule lampe par joueur.
+    // Per-player lamp state (playerId -> packed mode). The key IS the playerId,
+    // no authoritative id needed: one lamp per player.
     private readonly Dictionary<int, int> _lampByPlayer = new();
 
-    // Meteo : autoritaire cote hote (les invites ne la publient jamais).
+    // Weather: authoritative on the host side (guests never publish it).
     private ServerWeatherState _weather;
     private bool _hasWeather;
 
@@ -54,11 +54,11 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
 
     // -- IAuthoritativeSession -------------------------------------------------
 
-    // Les pitons persistent en jeu quand un joueur rejoint/part : rien a faire ici.
+    // Pitons persist in-game when a player joins/leaves: nothing to do here.
     public void OnPlayerJoined(int playerId, string playerName) { }
     public void OnPlayerLeft(int playerId) { }
 
-    /// <summary>Packet Client* recu d'un INVITE (relaye par le transport hote).</summary>
+    /// <summary>Client* packet received from a GUEST (relayed by the host transport).</summary>
     public void OnClientPacket(int playerId, PacketId id, BinaryReader payload)
     {
         switch (id)
@@ -70,7 +70,7 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
                 if (!NetworkManager.IsValidPitonPayload(pkt.PosX, pkt.PosY, pkt.PosZ,
                         pkt.RotX, pkt.RotY, pkt.RotZ, pkt.RotW, pkt.Quality, pkt.PitonHp, pkt.ItemId))
                     return;
-                // Ghost local chez l'hote + rediffusion a tous SAUF l'invite poseur.
+                // Local ghost on the host + rebroadcast to everyone EXCEPT the placing guest.
                 Place(playerId, pkt.PitonId, ToServerPlaced(playerId, pkt), spawnLocalGhost: true, exceptPlayerId: playerId);
                 break;
             }
@@ -85,14 +85,14 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
             {
                 var pkt = new ClientLampState();
                 pkt.Deserialize(payload);
-                // Applique au ghost de l'invite chez l'hote + rediffuse sauf emetteur.
+                // Applies to the guest's ghost on the host + rebroadcasts except sender.
                 ApplyLamp(playerId, pkt.Mode, applyLocalGhost: true, exceptPlayerId: playerId);
                 break;
             }
         }
     }
 
-    /// <summary>Rejoin : pousse tout l'etat officiel (meteo, pitons, lampes) au joueur cible.</summary>
+    /// <summary>Rejoin: pushes all the official state (weather, pitons, lamps) to the target player.</summary>
     public void SendSnapshotTo(int playerId)
     {
         if (_hasWeather)
@@ -106,7 +106,7 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
                 new ServerLampState { PlayerId = kv.Key, Mode = kv.Value }, NetReliability.ReliableOrdered);
     }
 
-    // -- Placements de l'HOTE lui-meme (il a pose/retire un VRAI piton) --------
+    // -- Placements by the HOST itself (it placed/removed a REAL piton) --------
 
     public void HandleHostPitonPlaced(int hostPlayerId, uint clientPitonId,
         Vector3 pos, Quaternion rot, byte quality, int hp, int itemId)
@@ -120,20 +120,20 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
             RotX = rot.x, RotY = rot.y, RotZ = rot.z, RotW = rot.w,
             Quality = quality, PitonHp = hp, ItemId = itemId,
         };
-        // Pas de ghost local (l'hote a le vrai piton) ; broadcast a TOUS (exceptPlayerId 0).
+        // No local ghost (the host has the real piton); broadcast to EVERYONE (exceptPlayerId 0).
         Place(hostPlayerId, clientPitonId, ToServerPlaced(hostPlayerId, pkt), spawnLocalGhost: false, exceptPlayerId: 0);
     }
 
     public void HandleHostPitonRemoved(int hostPlayerId, uint clientPitonId)
         => Remove(hostPlayerId, clientPitonId, despawnLocalGhost: false, exceptPlayerId: 0);
 
-    /// <summary>Lampe de l'HOTE lui-meme : pas de ghost local, broadcast a tous.</summary>
+    /// <summary>Lamp of the HOST itself: no local ghost, broadcast to everyone.</summary>
     public void HandleHostLampState(int hostPlayerId, int mode)
         => ApplyLamp(hostPlayerId, mode, applyLocalGhost: false, exceptPlayerId: 0);
 
     /// <summary>
-    /// Meteo publiee par l'HOTE (source autoritaire). Valide, memorise pour le rejoin,
-    /// diffuse a tous. <paramref name="reliable"/> suit l'appelant (rafale vs etat stable).
+    /// Weather published by the HOST (authoritative source). Validates, stores for rejoin,
+    /// broadcasts to everyone. <paramref name="reliable"/> follows the caller (burst vs stable state).
     /// </summary>
     public void HandleHostWeather(WeatherSyncData state, bool reliable)
     {
@@ -145,7 +145,7 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
             reliable ? NetReliability.ReliableOrdered : NetReliability.UnreliableSequenced);
     }
 
-    /// <summary>Reset complet (changement de scene / deconnexion).</summary>
+    /// <summary>Full reset (scene change / disconnection).</summary>
     public void Reset()
     {
         _pitons.Clear();
@@ -164,11 +164,11 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
             exceptPlayerId, NetReliability.ReliableOrdered);
     }
 
-    // -- interne ---------------------------------------------------------------
+    // -- internal --------------------------------------------------------------
 
     private void Place(int playerId, uint clientId, ServerPitonPlaced fields, bool spawnLocalGhost, int exceptPlayerId)
     {
-        fields.PitonId = ResolveAuthId(playerId, clientId); // id local -> id autoritaire
+        fields.PitonId = ResolveAuthId(playerId, clientId); // local id -> authoritative id
         _pitons[fields.PitonId] = fields;
         if (spawnLocalGhost) _onLocalPitonSpawn?.Invoke(fields);
         _sink.Broadcast(PacketId.ServerPitonPlaced, fields, exceptPlayerId, NetReliability.ReliableOrdered);
@@ -177,7 +177,7 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
     private void Remove(int playerId, uint clientId, bool despawnLocalGhost, int exceptPlayerId)
     {
         if (!_authIdByClient.TryGetValue((playerId, clientId), out var authId))
-            return; // rien de connu a retirer
+            return; // nothing known to remove
         _authIdByClient.Remove((playerId, clientId));
         _pitons.Remove(authId);
         var outPkt = new ServerPitonRemoved { FromPlayerId = playerId, PitonId = authId };
@@ -188,7 +188,7 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
     private uint ResolveAuthId(int playerId, uint clientId)
     {
         if (_authIdByClient.TryGetValue((playerId, clientId), out var existing))
-            return existing; // idempotent : re-placement du meme piton -> meme id
+            return existing; // idempotent: re-placing the same piton -> same id
         var authId = _nextAuthId++;
         _authIdByClient[(playerId, clientId)] = authId;
         return authId;
@@ -198,7 +198,7 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
         => new ServerPitonPlaced
         {
             FromPlayerId = playerId,
-            // PitonId est fixe a l'id autoritaire dans Place().
+            // PitonId is set to the authoritative id in Place().
             PosX = pkt.PosX, PosY = pkt.PosY, PosZ = pkt.PosZ,
             RotX = pkt.RotX, RotY = pkt.RotY, RotZ = pkt.RotZ, RotW = pkt.RotW,
             Quality = pkt.Quality, PitonHp = pkt.PitonHp, ItemId = pkt.ItemId,

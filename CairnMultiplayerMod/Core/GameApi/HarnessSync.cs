@@ -5,10 +5,10 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Acces au point d'attache de la corde sur le baudrier (Harness). Le jeu expose
-/// `Harness.GetAttachPosition()` : la position monde exacte ou la corde se noue au
-/// baudrier. On l'utilise pour ancrer la corde entre joueurs comme le fait Cairn,
-/// au lieu d'un offset vertical approximatif sur la racine du corps.
+/// Access to the rope's attach point on the harness (Harness). The game exposes
+/// `Harness.GetAttachPosition()`: the exact world position where the rope ties to
+/// the harness. We use it to anchor the rope between players as Cairn does, instead
+/// of an approximate vertical offset on the body root.
 /// </summary>
 public static unsafe partial class CairnGameApi
 {
@@ -16,8 +16,8 @@ public static unsafe partial class CairnGameApi
     private static int _lastLocalHarnessSearchFrame;
 
     /// <summary>
-    /// Position monde du point d'attache du baudrier du joueur local, ou false si le
-    /// baudrier n'est pas (encore) disponible.
+    /// World position of the local player's harness attach point, or false if the
+    /// harness isn't (yet) available.
     /// </summary>
     public static bool TryGetLocalHarnessAttachPosition(out Vector3 pos)
     {
@@ -26,7 +26,7 @@ public static unsafe partial class CairnGameApi
         return harness != null && TryGetHarnessAttachPosition(harness, out pos);
     }
 
-    /// <summary>Renvoie le composant Harness du joueur local (pour la sonde belay / corde physique).</summary>
+    /// <summary>Returns the local player's Harness component (for the belay probe / physical rope).</summary>
     public static bool TryGetLocalHarness(out Harness harness)
     {
         harness = ResolveLocalHarness();
@@ -34,9 +34,9 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Position monde du point d'attache d'un baudrier quelconque (local ou fantome).
-    /// Replie sur `skeletonAttachPointRoot` si GetAttachPosition renvoie l'origine
-    /// (baudrier pas encore initialise / physique inactive cote fantome).
+    /// World position of any harness's attach point (local or ghost). Falls back to
+    /// `skeletonAttachPointRoot` if GetAttachPosition returns the origin (harness not
+    /// yet initialized / physics inactive on the ghost side).
     /// </summary>
     public static bool TryGetHarnessAttachPosition(Harness harness, out Vector3 pos)
     {
@@ -47,7 +47,7 @@ public static unsafe partial class CairnGameApi
             pos = harness.GetAttachPosition();
             if (pos != Vector3.zero) return true;
 
-            // Repli : la racine de l'attache squelette suit la pose meme sans physique.
+            // Fallback: the skeleton attach root follows the pose even without physics.
             var root = harness.skeletonAttachPointRoot;
             if (root != null)
             {
@@ -66,7 +66,7 @@ public static unsafe partial class CairnGameApi
     {
         if (_localHarnessCached != null) return _localHarnessCached;
 
-        // Recherche throttlee tant qu'on n'a rien trouve (le MC peut apparaitre tard).
+        // Throttled search while nothing is found (the MC may appear late).
         if (_lastLocalHarnessSearchFrame != 0 && Time.frameCount - _lastLocalHarnessSearchFrame < 30)
             return null;
         _lastLocalHarnessSearchFrame = Time.frameCount;
@@ -74,8 +74,8 @@ public static unsafe partial class CairnGameApi
         var mc = TryGetLocalMCGameObject();
         if (mc == null) return null;
 
-        // Le baudrier local est un Harness de la hierarchie du MC — mais PAS un
-        // NetplayRemoteHarness (ceux-la appartiennent aux fantomes).
+        // The local harness is a Harness in the MC's hierarchy — but NOT a
+        // NetplayRemoteHarness (those belong to the ghosts).
         var harnesses = mc.GetComponentsInChildren<Harness>(true);
         if (harnesses == null) return null;
         for (int i = 0; i < harnesses.Length; i++)

@@ -1,7 +1,7 @@
-// Polyfills des attributs de nullabilité requis par le générateur de source
-// System.Text.Json sur net6.0. Nécessaire car les références Il2Cpp masquent
-// les types runtime standard : le compilateur ne trouve plus le constructeur
-// de NullableAttribute lors de la génération des contextes JSON.
+// Polyfills for the nullability attributes required by the System.Text.Json
+// source generator on net6.0. Needed because the Il2Cpp references shadow the
+// standard runtime types: the compiler can no longer find the NullableAttribute
+// constructor when generating the JSON contexts.
 
 namespace System.Runtime.CompilerServices
 {

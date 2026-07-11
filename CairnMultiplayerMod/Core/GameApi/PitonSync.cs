@@ -12,19 +12,19 @@ public static unsafe partial class CairnGameApi
     private static int _lastLifelineSearchFrame;
     private static int _lastKnownPitonCount;
     private static uint _nextPitonNetId = 1;
-    private static int _remotePitonsAdded; // combien de pitons on a fait apparaitre via AddPiton (a ignorer lors de la detection)
+    private static int _remotePitonsAdded; // how many pitons we spawned via AddPiton (to ignore during detection)
     private static readonly Dictionary<IntPtr, uint> _localPitonIdsByPointer = new();
     private static readonly Dictionary<uint, GameObject> _remotePitonsByNetId = new();
-    // Pointeur IL2CPP du composant Piton — sert a appeler Lifeline.DetachPiton
-    // qui retire proprement le piton de la corde et destroy le visuel (vs juste
-    // Object.Destroy sur la GameObject qui peut laisser une ref pendante).
+    // IL2CPP pointer of the Piton component — used to call Lifeline.DetachPiton
+    // which cleanly removes the piton from the rope and destroys the visual (vs. just
+    // Object.Destroy on the GameObject, which can leave a dangling ref).
     private static readonly Dictionary<uint, IntPtr> _remotePitonPointersByNetId = new();
     private static IntPtr _lifelineDetachPitonMethod;
     private static bool _lifelineDetachPitonResolved;
     private static float _lastPitonCheckErrorLogAt;
     private const float PitonCheckErrorLogIntervalSeconds = 5f;
-    // ClimbingV2PawnController LOCAL — sert a renseigner le ClimbingSetting des pitons
-    // distants (spawnes avec ClimbingSetting=null) via UpdatePlacedPitonClimbingSetting.
+    // LOCAL ClimbingV2PawnController — used to fill in the ClimbingSetting of remote
+    // pitons (spawned with ClimbingSetting=null) via UpdatePlacedPitonClimbingSetting.
     private static Il2Cpp.ClimbingV2PawnController _localClimbControllerCached;
     private static int _lastClimbControllerSearchFrame;
     private static IntPtr _lifelineUpdateSettingMethod;
@@ -34,8 +34,8 @@ public static unsafe partial class CairnGameApi
         => FindMonoBehaviourByName("Lifeline", ref _lifelineCached, ref _lastLifelineSearchFrame);
 
     /// <summary>
-    /// Verifie si de nouveaux pitons ont ete places depuis le dernier appel. Retourne
-    /// la position monde, la rotation et la qualite du nouveau piton via les parametres out.
+    /// Checks whether new pitons have been placed since the last call. Returns
+    /// the new piton's world position, rotation and quality via the out parameters.
     /// </summary>
     public static bool CheckForNewPiton(out uint netId, out Vector3 position,
         out Quaternion rotation, out byte quality, out int hp, out int itemId)
@@ -62,9 +62,9 @@ public static unsafe partial class CairnGameApi
             IntPtr listPtr = *(IntPtr*)((byte*)lifeline.Pointer + offset);
             if (listPtr == IntPtr.Zero) return false;
 
-            // List<T> Il2Cpp a _size a un offset connu. On le lit.
-            // Layout de List<T> : [klass, monitor, _items (ptr tableau), _size (int), _version (int)]
-            // _items est a l'offset 2*IntPtr.Size, _size a 2*IntPtr.Size + IntPtr.Size
+            // Il2Cpp List<T> has _size at a known offset. We read it.
+            // List<T> layout: [klass, monitor, _items (array ptr), _size (int), _version (int)]
+            // _items is at offset 2*IntPtr.Size, _size at 2*IntPtr.Size + IntPtr.Size
             int sizeOffset = 3 * IntPtr.Size;
             int currentCount = *(int*)((byte*)listPtr + sizeOffset);
 
@@ -74,8 +74,8 @@ public static unsafe partial class CairnGameApi
                 return false;
             }
 
-            // Verifie si cette augmentation est causee par un spawn distant qu'on a
-            // fait nous-memes. Si oui, on met juste a jour le compteur et on passe.
+            // Check whether this increase is caused by a remote spawn we did
+            // ourselves. If so, we just update the counter and move on.
             int newPitons = currentCount - _lastKnownPitonCount;
             if (_remotePitonsAdded >= newPitons)
             {
@@ -85,17 +85,17 @@ public static unsafe partial class CairnGameApi
             }
             _remotePitonsAdded = 0;
 
-            // Nouveau(x) piton(s) LOCAL(aux) ajoute(s). Lit le dernier depuis le tableau _items.
+            // New LOCAL piton(s) added. Read the last one from the _items array.
             _lastKnownPitonCount = currentCount;
             IntPtr itemsArrayPtr = *(IntPtr*)((byte*)listPtr + 2 * IntPtr.Size);
             if (itemsArrayPtr == IntPtr.Zero) return false;
 
-            // Le tableau items est un Il2CppArray de references PlacedPitonData.
+            // The items array is an Il2CppArray of PlacedPitonData references.
             int headerSize = 4 * IntPtr.Size;
             IntPtr lastItemPtr = *(IntPtr*)((byte*)itemsArrayPtr + headerSize + (currentCount - 1) * IntPtr.Size);
             if (lastItemPtr == IntPtr.Zero) return false;
 
-            // PlacedPitonData a un champ Piton (premier backing field).
+            // PlacedPitonData has a Piton field (first backing field).
             var pdKlass = IL2CPP.il2cpp_object_get_class(lastItemPtr);
             var pitonField = IL2CPP.GetIl2CppField(pdKlass, "<Piton>k__BackingField");
             if (pitonField == IntPtr.Zero)
@@ -106,10 +106,10 @@ public static unsafe partial class CairnGameApi
             IntPtr pitonPtr = *(IntPtr*)((byte*)lastItemPtr + pitonOffset);
             if (pitonPtr == IntPtr.Zero) return false;
 
-            // Lit le transform du MonoBehaviour Piton pour la position/rotation.
-            // Le pointeur peut etre stale (entrée detruite encore dans la liste apres
-            // une suppression / reload de save). On valide avant de toucher transform
-            // pour eviter de spammer des NRE IL2CPP qui plombent le frame.
+            // Read the Piton MonoBehaviour's transform for the position/rotation.
+            // The pointer can be stale (destroyed entry still in the list after
+            // a removal / save reload). We validate before touching transform
+            // to avoid spamming IL2CPP NREs that tank the frame.
             var pitonMono = new MonoBehaviour(pitonPtr);
             Transform t;
             try
@@ -122,11 +122,11 @@ public static unsafe partial class CairnGameApi
             }
             catch
             {
-                // Piton fantome : on absorbe sans logger pour pas spammer.
+                // Ghost piton: we swallow it without logging to avoid spam.
                 return false;
             }
 
-            // Lit le champ pitonHp.
+            // Read the pitonHp field.
             var pitonKlass = IL2CPP.il2cpp_object_get_class(pitonPtr);
             var hpField = IL2CPP.GetIl2CppField(pitonKlass, "pitonHp");
             if (hpField != IntPtr.Zero)
@@ -135,7 +135,7 @@ public static unsafe partial class CairnGameApi
                 hp = *(int*)((byte*)pitonPtr + hpOff);
             }
 
-            // Lit executionQuality (enum, taille int).
+            // Read executionQuality (enum, int-sized).
             var qualField = IL2CPP.GetIl2CppField(pitonKlass, "executionQuality");
             if (qualField != IntPtr.Zero)
             {
@@ -143,7 +143,7 @@ public static unsafe partial class CairnGameApi
                 quality = (byte)(*(int*)((byte*)pitonPtr + qualOff));
             }
 
-            // Lit ItemId (InventoryItemStringId -- struct enveloppant un seul int).
+            // Read ItemId (InventoryItemStringId -- a struct wrapping a single int).
             var itemField = IL2CPP.GetIl2CppField(pitonKlass, "<ItemId>k__BackingField");
             int readItemId = 0;
             if (itemField != IntPtr.Zero)
@@ -160,8 +160,8 @@ public static unsafe partial class CairnGameApi
         }
         catch (Exception ex)
         {
-            // Rate-limite : la liste peut etre transitoirement incoherente (reload, pickup),
-            // pas la peine de noyer le log + alourdir le frame avec des stacktraces IL2CPP.
+            // Rate-limited: the list can be transiently inconsistent (reload, pickup),
+            // no point drowning the log + weighing down the frame with IL2CPP stack traces.
             var now = Time.unscaledTime;
             if (now - _lastPitonCheckErrorLogAt >= PitonCheckErrorLogIntervalSeconds)
             {
@@ -173,7 +173,7 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Detecte la suppression d'un piton local deja annonce au reseau.
+    /// Detects the removal of a local piton already announced to the network.
     /// </summary>
     public static bool CheckForRemovedPiton(out uint netId)
     {
@@ -206,9 +206,9 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Fait apparaitre un piton sur le client distant en appelant Lifeline.AddPiton()
-    /// via invocation IL2CPP runtime. Enregistre correctement le piton dans le systeme
-    /// de corde pour que les degaines et l'accroche de corde fonctionnent correctement.
+    /// Spawns a piton on the remote client by calling Lifeline.AddPiton()
+    /// via IL2CPP runtime invocation. Registers the piton properly in the rope
+    /// system so quickdraws and rope clipping work correctly.
     /// </summary>
     public static bool SpawnRemotePiton(Vector3 position, Quaternion rotation,
         int quality, int hp, int itemId)
@@ -224,9 +224,9 @@ public static unsafe partial class CairnGameApi
 
             var klass = IL2CPP.il2cpp_object_get_class(lifeline.Pointer);
 
-            // Trouve la methode AddPiton avec 6 parametres. On veut la surcharge :
+            // Find the AddPiton method with 6 parameters. We want the overload:
             // AddPiton(Vector3, Quaternion, PitonExecutionQuality, int, InventoryItemStringId, ClimbingSetting)
-            // ou ClimbingSetting est un type reference qu'on peut passer a null.
+            // where ClimbingSetting is a reference type we can pass as null.
             IntPtr method = IntPtr.Zero;
             IntPtr iter = IntPtr.Zero;
             while (true)
@@ -237,12 +237,12 @@ public static unsafe partial class CairnGameApi
                 var name = Marshal.PtrToStringAnsi(namePtr);
                 if (name == "AddPiton" && IL2CPP.il2cpp_method_get_param_count(m) == 6)
                 {
-                    // Verifie que le dernier parametre est un type reference (classe ClimbingSetting,
-                    // pas ClimbingV2PawnController). Les deux sont des types reference, mais on prend
-                    // le SECOND match (la surcharge ClimbingSetting est declaree apres celle du
-                    // Controller dans la decompilation).
+                    // Verify the last parameter is a reference type (the ClimbingSetting class,
+                    // not ClimbingV2PawnController). Both are reference types, but we take
+                    // the SECOND match (the ClimbingSetting overload is declared after the
+                    // Controller one in the decompilation).
                     method = m;
-                    // Continue d'iterer pour obtenir la DERNIERE surcharge a 6 parametres.
+                    // Keep iterating to get the LAST 6-parameter overload.
                 }
             }
 
@@ -252,8 +252,8 @@ public static unsafe partial class CairnGameApi
                 return false;
             }
 
-            // Prepare les arguments pour il2cpp_runtime_invoke.
-            // Les types valeur sont passes comme pointeurs vers leurs donnees.
+            // Prepare the arguments for il2cpp_runtime_invoke.
+            // Value types are passed as pointers to their data.
             var pos = position;
             var rot = rotation;
             int qual = quality;
@@ -268,8 +268,8 @@ public static unsafe partial class CairnGameApi
             args[4] = (IntPtr)(&pitonItemId);        // InventoryItemStringId (struct = int)
             args[5] = IntPtr.Zero;                   // ClimbingSetting = null
 
-            // Marque qu'on est sur le point d'ajouter un piton nous-memes pour que
-            // CheckForNewPiton ignore l'augmentation de compteur resultante.
+            // Mark that we're about to add a piton ourselves so that
+            // CheckForNewPiton ignores the resulting counter increase.
             _remotePitonsAdded++;
 
             IntPtr exception = IntPtr.Zero;
@@ -281,10 +281,10 @@ public static unsafe partial class CairnGameApi
                 return false;
             }
 
-            // Le piton natif vient d'etre ajoute avec ClimbingSetting=null (6e arg d'AddPiton).
-            // Un piton au ClimbingSetting null fait planter Lifeline.Update() et
-            // Piton.WriteToSavegame (NRE natif) des qu'une corde s'y attache -> sauvegarde
-            // avortee. On backfill le setting avec le controller de grimpe LOCAL.
+            // The native piton was just added with ClimbingSetting=null (6th arg of AddPiton).
+            // A piton with a null ClimbingSetting crashes Lifeline.Update() and
+            // Piton.WriteToSavegame (native NRE) as soon as a rope attaches to it -> aborted
+            // save. We backfill the setting with the LOCAL climbing controller.
             TryAssignLocalClimbingSetting(lifeline);
 
             Mod.LogDebug($"[Piton] Spawned remote piton via Lifeline.AddPiton @ ({position.x:F1},{position.y:F1},{position.z:F1}) quality={quality} hp={hp}");
@@ -324,8 +324,8 @@ public static unsafe partial class CairnGameApi
 
     public static bool RemoveRemotePiton(uint netId)
     {
-        // 1) Voie privilegiee : Lifeline.DetachPiton(piton) — retire de la corde,
-        //    detache des lifelines et destroy la GameObject vanille.
+        // 1) Preferred path: Lifeline.DetachPiton(piton) — removes it from the rope,
+        //    detaches it from the lifelines and destroys the GameObject the vanilla way.
         if (_remotePitonPointersByNetId.TryGetValue(netId, out var pitonPtr) && pitonPtr != IntPtr.Zero)
         {
             _remotePitonPointersByNetId.Remove(netId);
@@ -337,7 +337,7 @@ public static unsafe partial class CairnGameApi
                 return true;
             }
 
-            // Fallback : destroy direct sur la GameObject capturee.
+            // Fallback: direct destroy on the captured GameObject.
             try
             {
                 var go = new MonoBehaviour(pitonPtr).gameObject;
@@ -354,7 +354,7 @@ public static unsafe partial class CairnGameApi
             }
         }
 
-        // 2) Fallback historique : on n'avait stocke que la GameObject.
+        // 2) Legacy fallback: we had only stored the GameObject.
         if (_remotePitonsByNetId.TryGetValue(netId, out var pitonGo))
         {
             _remotePitonsByNetId.Remove(netId);
@@ -408,7 +408,7 @@ public static unsafe partial class CairnGameApi
         try
         {
             var klass = IL2CPP.il2cpp_object_get_class(lifeline.Pointer);
-            // On cherche la surcharge instance (non statique) avec 1 parametre :
+            // We look for the instance (non-static) overload with 1 parameter:
             // public void DetachPiton(Piton piton).
             IntPtr iter = IntPtr.Zero;
             while (true)
@@ -437,11 +437,11 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Renseigne le ClimbingSetting du dernier piton place (spawn distant) avec le
-    /// ClimbingV2PawnController LOCAL, via Lifeline.UpdatePlacedPitonClimbingSetting.
-    /// Sans ca le ClimbingSetting reste null -> NRE natif dans Lifeline.Update() et
-    /// Piton.WriteToSavegame quand on mousquetonne le piton -> sauvegarde cassee.
-    /// Best-effort : si le controller local est introuvable on laisse le piton tel quel.
+    /// Fills in the ClimbingSetting of the last placed piton (remote spawn) with the
+    /// LOCAL ClimbingV2PawnController, via Lifeline.UpdatePlacedPitonClimbingSetting.
+    /// Without this the ClimbingSetting stays null -> native NRE in Lifeline.Update() and
+    /// Piton.WriteToSavegame when the piton is clipped -> broken save.
+    /// Best-effort: if the local controller can't be found, we leave the piton as-is.
     /// </summary>
     private static void TryAssignLocalClimbingSetting(MonoBehaviour lifeline)
     {
@@ -479,8 +479,8 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    /// <summary>Trouve (et cache) le ClimbingV2PawnController LOCAL. Les joueurs distants
-    /// sont des NetplayRemotePlayer (type different) -> FindObjectsOfType ne renvoie que le local.</summary>
+    /// <summary>Finds (and caches) the LOCAL ClimbingV2PawnController. Remote players
+    /// are NetplayRemotePlayer (a different type) -> FindObjectsOfType only returns the local one.</summary>
     private static Il2Cpp.ClimbingV2PawnController ResolveLocalClimbController()
     {
         if (_localClimbControllerCached != null) return _localClimbControllerCached;
@@ -505,7 +505,7 @@ public static unsafe partial class CairnGameApi
         try
         {
             var klass = IL2CPP.il2cpp_object_get_class(lifeline.Pointer);
-            // Instance, 2 parametres : public void UpdatePlacedPitonClimbingSetting(Piton, ClimbingV2PawnController).
+            // Instance, 2 parameters: public void UpdatePlacedPitonClimbingSetting(Piton, ClimbingV2PawnController).
             IntPtr iter = IntPtr.Zero;
             while (true)
             {

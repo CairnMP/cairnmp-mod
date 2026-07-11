@@ -8,8 +8,8 @@ public partial class Mod
     private float _weatherTickTimer = Protocol.WeatherStateUpdateIntervalSeconds;
 
     /// <summary>
-    /// Synchronise la meteo globale. En Steam, seul l'hote publie l'etat ; les
-    /// clients appliquent le dernier instantane recu et retentent apres chargement.
+    /// Synchronizes global weather. On Steam, only the host publishes the state;
+    /// clients apply the last snapshot received and retry after loading.
     /// </summary>
     private void TickWeatherSync()
     {

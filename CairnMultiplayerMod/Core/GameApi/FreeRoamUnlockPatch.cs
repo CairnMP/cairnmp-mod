@@ -16,18 +16,18 @@ public static unsafe partial class CairnGameApi
     private static bool _freeRoamFieldForced;
     private static bool _freeRoamDifficultyUnhidden;
 
-    // GATE CRUCIAL : on ne force le flag QUE pendant le MainMenu. Forcer
-    // EnableFreeRoamFeature=true des le boot envoie le jeu sur un chemin d'init FreeRoam
-    // pas pret (scene intro/logo) -> ecran noir. Pendant le boot ce flag reste false, donc
-    // le getter natif renvoie sa vraie valeur et le demarrage est normal.
+    // CRUCIAL GATE: we only force the flag WHILE in the MainMenu. Forcing
+    // EnableFreeRoamFeature=true from boot sends the game down a FreeRoam init path
+    // that isn't ready (intro/logo scene) -> black screen. During boot this flag stays false, so
+    // the native getter returns its real value and startup is normal.
     private static bool _freeRoamUnlockActive;
 
     public static bool IsFreeRoamUnlockInstalled => _freeRoamUnlockInstalled;
 
     /// <summary>
-    /// Active/desactive le deblocage FreeRoam. Appele sur transition de scene : true au
-    /// MainMenu, false partout ailleurs. En desactivant, on remet le champ du tweakable a
-    /// false pour ne pas contaminer le boot d'une partie reellement lancee.
+    /// Enables/disables the FreeRoam unlock. Called on scene transitions: true at the
+    /// MainMenu, false everywhere else. When disabling, we reset the tweakable field to
+    /// false so we don't contaminate the boot of an actually launched game.
     /// </summary>
     public static void SetFreeRoamUnlockActive(bool active)
     {
@@ -37,23 +37,23 @@ public static unsafe partial class CairnGameApi
         if (!active)
         {
             TrySetFreeRoamTweakableField(false);
-            _freeRoamFieldForced = false;        // pourra re-forcer au prochain passage menu
-            _freeRoamDifficultyUnhidden = false; // idem pour le demasquage du mode
+            _freeRoamFieldForced = false;        // can re-force on the next menu pass
+            _freeRoamDifficultyUnhidden = false; // same for unhiding the mode
         }
     }
 
     /// <summary>
-    /// Reactive la feature FreeRoam coupee du jeu. En build retail, le getter natif
-    /// <c>FreeRoamTweakables.EnableFreeRoamFeature</c> renvoie false, ce qui masque la
-    /// difficulte <c>SelectedDifficulty.FreeRoam</c> (= 418187680) du menu principal alors
-    /// que tout le contenu (FreeRoamManager, warp points, UI Eagle Eye) est present.
+    /// Re-enables the FreeRoam feature that the game cut off. In a retail build, the native getter
+    /// <c>FreeRoamTweakables.EnableFreeRoamFeature</c> returns false, which hides the
+    /// <c>SelectedDifficulty.FreeRoam</c> difficulty (= 418187680) from the main menu even
+    /// though all the content (FreeRoamManager, warp points, Eagle Eye UI) is present.
     ///
-    /// Deux leviers complementaires car on ignore lequel le menu interroge :
-    ///   1. postfix Harmony sur la PROPRIETE publique <c>EnableFreeRoamFeature</c> (vraie
-    ///      methode native, patchable) -> renvoie toujours true.
-    ///   2. ecriture directe du champ <c>enableFreeRoamFeature</c> sur l'instance du tweakable
-    ///      (cf. <see cref="TryForceFreeRoamTweakableField"/>), car le field accessor
-    ///      <c>get_enableFreeRoamFeature</c> n'est PAS patchable par Il2CppInterop.
+    /// Two complementary levers because we don't know which one the menu queries:
+    ///   1. Harmony postfix on the public PROPERTY <c>EnableFreeRoamFeature</c> (a real
+    ///      native method, patchable) -> always returns true.
+    ///   2. direct write of the <c>enableFreeRoamFeature</c> field on the tweakable instance
+    ///      (cf. <see cref="TryForceFreeRoamTweakableField"/>), because the field accessor
+    ///      <c>get_enableFreeRoamFeature</c> is NOT patchable by Il2CppInterop.
     /// </summary>
     public static void InstallFreeRoamUnlockPatch()
     {
@@ -72,9 +72,9 @@ public static unsafe partial class CairnGameApi
                 return;
             }
 
-            // Seule la propriete publique est patchable ; le field accessor lance une erreur
-            // "field accessor can't be patched" cote Il2CppInterop -> on ne le tente pas, le
-            // levier #2 (ecriture du champ) couvre les lecteurs directs du champ.
+            // Only the public property is patchable; the field accessor throws a
+            // "field accessor can't be patched" error on the Il2CppInterop side -> we don't attempt it, and
+            // lever #2 (writing the field) covers direct readers of the field.
             var getter = AccessTools.PropertyGetter(typeof(FreeRoamTweakables),
                 nameof(FreeRoamTweakables.EnableFreeRoamFeature));
             if (getter == null)
@@ -86,10 +86,10 @@ public static unsafe partial class CairnGameApi
 
             FreeRoamUnlockHarmony.Patch(getter, postfix: postfix);
 
-            // Levier #3 : prefix sur InitializeButtons -> garantit que la donnee (flag +
-            // isHidden du mode FreeRoam) est correcte JUSTE AVANT que le natif (re)construise
-            // les boutons de difficulte. Sans ca, les boutons sont batis une fois avant notre
-            // demasquage et FreeRoam reste absent de l'UI meme si la donnee est bonne.
+            // Lever #3: prefix on InitializeButtons -> guarantees the data (flag +
+            // FreeRoam mode's isHidden) is correct JUST BEFORE the native code (re)builds
+            // the difficulty buttons. Without this, the buttons are built once before our
+            // unhiding and FreeRoam stays absent from the UI even if the data is correct.
             var initButtons = AccessTools.Method(
                 typeof(MainMenuDifficultySelectElement),
                 nameof(MainMenuDifficultySelectElement.InitializeButtons));
@@ -116,10 +116,10 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Levier #2 : force le champ <c>enableFreeRoamFeature</c> a true sur l'instance du
-    /// tweakable des qu'elle est chargee (depuis l'addressable). Idempotent et best-effort :
-    /// a appeler chaque frame tant qu'on est au menu jusqu'a ce que ca reussisse. Couvre le
-    /// cas ou le menu lit le champ directement (field accessor impatchable).
+    /// Lever #2: forces the <c>enableFreeRoamFeature</c> field to true on the tweakable
+    /// instance as soon as it's loaded (from the addressable). Idempotent and best-effort:
+    /// call every frame while in the menu until it succeeds. Covers the
+    /// case where the menu reads the field directly (unpatchable field accessor).
     /// </summary>
     public static void TryForceFreeRoamTweakableField()
     {
@@ -133,12 +133,12 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Demasque la difficulte FreeRoam dans le menu : le mode est present dans la liste
-    /// <c>DifficultyTweakables.modes</c> mais avec <c>isHidden = true</c>, donc le predicat de
-    /// <c>MainMenuDifficultySelectElement.InitializeButtons()</c> l'exclut. On met son
-    /// <c>isHidden</c> a false (Mode est un type reference -> l'edition persiste dans le tableau).
-    /// A appeler chaque frame au menu jusqu'a succes. Log diagnostic : indique si le mode existe
-    /// dans la liste et combien de modes au total.
+    /// Unhides the FreeRoam difficulty in the menu: the mode is present in the
+    /// <c>DifficultyTweakables.modes</c> list but with <c>isHidden = true</c>, so the predicate of
+    /// <c>MainMenuDifficultySelectElement.InitializeButtons()</c> excludes it. We set its
+    /// <c>isHidden</c> to false (Mode is a reference type -> the edit persists in the array).
+    /// Call every frame in the menu until it succeeds. Diagnostic log: indicates whether the mode exists
+    /// in the list and how many modes there are in total.
     /// </summary>
     public static void TryUnhideFreeRoamDifficulty()
     {
@@ -152,14 +152,14 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Coeur du demasquage : met <c>isHidden=false</c> sur le(s) Mode(s) FreeRoam de
-    /// <c>DifficultyTweakables.modes</c>. Non garde (re-appliquable a chaque appel) pour le
-    /// prefix de InitializeButtons. Renvoie false si l'instance n'est pas encore prete.
+    /// Core of the unhiding: sets <c>isHidden=false</c> on the FreeRoam Mode(s) in
+    /// <c>DifficultyTweakables.modes</c>. Ungated (re-appliable on each call) for the
+    /// InitializeButtons prefix. Returns false if the instance isn't ready yet.
     ///
-    /// IMPORTANT : <c>Mode</c> est un TYPE VALEUR (<c>sealed class Mode : Il2CppSystem.ValueType</c>).
-    /// L'indexeur <c>modes[i]</c> renvoie une COPIE boxee -> editer <c>m.isHidden</c> ne touche pas
-    /// l'element du tableau. Il FAUT reaffecter <c>modes[i] = m</c> pour que l'edition persiste.
-    /// <paramref name="stillHidden"/> = relecture de verification apres reaffectation.
+    /// IMPORTANT: <c>Mode</c> is a VALUE TYPE (<c>sealed class Mode : Il2CppSystem.ValueType</c>).
+    /// The indexer <c>modes[i]</c> returns a boxed COPY -> editing <c>m.isHidden</c> doesn't touch
+    /// the array element. You MUST reassign <c>modes[i] = m</c> for the edit to persist.
+    /// <paramref name="stillHidden"/> = verification read-back after reassignment.
     /// </summary>
     private static bool ApplyFreeRoamModeVisible(out bool found, out int changed, out int total, out bool stillHidden)
     {
@@ -183,10 +183,10 @@ public static unsafe partial class CairnGameApi
                 if (m.isHidden)
                 {
                     m.isHidden = false;
-                    modes[i] = m;             // reaffectation OBLIGATOIRE (type valeur)
+                    modes[i] = m;             // MANDATORY reassignment (value type)
                     changed++;
                 }
-                // Relecture depuis le tableau (nouvelle copie) pour verifier la persistance.
+                // Read back from the array (new copy) to verify persistence.
                 stillHidden = modes[i].isHidden;
             }
             return true;
@@ -194,12 +194,12 @@ public static unsafe partial class CairnGameApi
         catch (Exception ex)
         {
             Mod.Log.Warning($"[CairnGameApi] FreeRoam difficulty unhide failed: {ex.Message}");
-            return true; // ne pas boucler indefiniment sur erreur
+            return true; // don't loop indefinitely on error
         }
     }
 
-    /// <summary>Ecrit <c>enableFreeRoamFeature = value</c> sur l'instance du tweakable si
-    /// elle est chargee. Renvoie true si l'ecriture a eu lieu.</summary>
+    /// <summary>Writes <c>enableFreeRoamFeature = value</c> on the tweakable instance if
+    /// it is loaded. Returns true if the write took place.</summary>
     private static bool TrySetFreeRoamTweakableField(bool value)
     {
         try
@@ -223,18 +223,18 @@ public static unsafe partial class CairnGameApi
 
     private static class FreeRoamUnlockPatches
     {
-        // Force la feature FreeRoam active UNIQUEMENT quand le gate menu est arme (cf.
-        // _freeRoamUnlockActive). Hors menu (boot, gameplay), on laisse la vraie valeur.
+        // Forces the FreeRoam feature active ONLY when the menu gate is armed (cf.
+        // _freeRoamUnlockActive). Outside the menu (boot, gameplay), we leave the real value.
         internal static void ForceEnabledPostfix(ref bool __result)
         {
             if (_freeRoamUnlockActive) __result = true;
         }
 
-        // Avant CHAQUE construction des boutons de difficulte : on s'assure que TOUTE la
-        // donnee lue par le predicat de filtrage est correcte AVANT que le natif tourne :
-        //   1. le CHAMP enableFreeRoamFeature = true (le predicat lit le champ directement,
-        //      PAS la propriete patchee -> il faut le forcer ici, pas une frame plus tard) ;
-        //   2. le mode FreeRoam demasque (isHidden = false).
+        // Before EACH build of the difficulty buttons: we make sure ALL the
+        // data read by the filtering predicate is correct BEFORE the native code runs:
+        //   1. the enableFreeRoamFeature FIELD = true (the predicate reads the field directly,
+        //      NOT the patched property -> it must be forced here, not a frame later);
+        //   2. the FreeRoam mode unhidden (isHidden = false).
         internal static void InitializeButtonsPrefix()
         {
             bool fieldSet = TrySetFreeRoamTweakableField(true);

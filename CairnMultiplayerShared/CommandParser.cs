@@ -3,10 +3,10 @@ using System;
 namespace CairnMultiplayer.Shared;
 
 /// <summary>
-/// Resultat du parsing d'une ligne de chat. <see cref="IsCommand"/> est vrai quand
-/// la ligne commence par '/'. Le nom est normalise en minuscules pour un matching
-/// insensible a la casse. <see cref="ArgsText"/> conserve tout le texte apres le nom
-/// (utile pour cibler un joueur dont le pseudo contient des espaces).
+/// Result of parsing a chat line. <see cref="IsCommand"/> is true when the line
+/// starts with '/'. The name is normalized to lowercase for case-insensitive
+/// matching. <see cref="ArgsText"/> keeps all the text after the name (useful for
+/// targeting a player whose nickname contains spaces).
 /// </summary>
 public readonly struct ParsedCommand
 {
@@ -25,18 +25,18 @@ public readonly struct ParsedCommand
 }
 
 /// <summary>
-/// Parseur pur (sans dependance Unity/jeu, donc testable en xUnit) des lignes de chat
-/// en commandes "/nom args".
+/// Pure parser (no Unity/game dependency, so testable with xUnit) that turns chat
+/// lines into "/name args" commands.
 /// </summary>
 public static class CommandParser
 {
     private static readonly char[] Whitespace = { ' ', '\t' };
 
     /// <summary>
-    /// Parse une ligne de chat. Si elle ne commence pas par '/', retourne
-    /// <c>IsCommand=false</c> (message normal). Sinon, decoupe "/nom arg1 arg2 ..." :
-    /// le nom (minuscules, sans le '/'), les args separes par espaces, et le texte brut
-    /// apres le nom.
+    /// Parses a chat line. If it does not start with '/', returns
+    /// <c>IsCommand=false</c> (a normal message). Otherwise, splits "/name arg1 arg2 ...":
+    /// the name (lowercase, without the '/'), the args separated by spaces, and the raw
+    /// text after the name.
     /// </summary>
     public static ParsedCommand Parse(string input)
     {
@@ -44,7 +44,7 @@ public static class CommandParser
         if (line.Length == 0 || line[0] != '/')
             return new ParsedCommand(false, "", Array.Empty<string>(), "");
 
-        // Retire le '/' initial.
+        // Strip the leading '/'.
         var body = line.Substring(1).Trim();
         if (body.Length == 0)
             return new ParsedCommand(true, "", Array.Empty<string>(), "");
@@ -56,8 +56,8 @@ public static class CommandParser
         for (int i = 1; i < parts.Length; i++)
             args[i - 1] = parts[i];
 
-        // Texte apres le nom de commande, espaces de bord retires mais espaces
-        // internes conserves (pseudos multi-mots).
+        // Text after the command name, with edge whitespace trimmed but internal
+        // spaces preserved (multi-word nicknames).
         var nameLen = parts[0].Length;
         var argsText = body.Length > nameLen ? body.Substring(nameLen).Trim() : "";
 

@@ -5,14 +5,15 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Gere les marqueurs de ping poses par les joueurs et les dessine en HUD 2D.
+/// Manages the ping markers placed by players and draws them as a 2D HUD.
 ///
-/// Choix de rendu : un marqueur ecran projete (WorldToScreenPoint) plutot qu'un
-/// objet 3D, ce qui garantit la visibilite "a travers tout" (waypoint) sans
-/// dependre d'un shader custom fragile en IL2CPP. Quand le point sort du champ,
-/// le marqueur est clampe au bord de l'ecran avec une fleche directionnelle.
+/// Rendering choice: a projected screen marker (WorldToScreenPoint) rather than a
+/// 3D object, which guarantees "see-through-everything" visibility (waypoint)
+/// without relying on a custom shader that's fragile under IL2CPP. When the point
+/// goes off-screen, the marker is clamped to the screen edge with a directional
+/// arrow.
 ///
-/// Un seul ping actif par joueur : poser un nouveau ping ecrase l'ancien.
+/// One active ping per player: placing a new ping overwrites the old one.
 /// </summary>
 public static class PingMarkerManager
 {
@@ -23,7 +24,7 @@ public static class PingMarkerManager
         public Color Color;
     }
 
-    // Indexe par id de joueur -> 1 seul ping actif par joueur.
+    // Indexed by player id -> one active ping per player.
     private static readonly Dictionary<int, PingEntry> _pings = new();
 
     private const float MarkerSizePx = 22f;
@@ -35,8 +36,8 @@ public static class PingMarkerManager
     private static GUIStyle _labelStyle;
 
     /// <summary>
-    /// Cree ou remplace le ping du joueur donne. La couleur reprend la palette des
-    /// fantomes pour identifier l'auteur. SpawnTime sert a l'expiration auto.
+    /// Creates or replaces the given player's ping. The color reuses the ghost
+    /// palette to identify the author. SpawnTime drives auto-expiration.
     /// </summary>
     public static void Spawn(int ownerId, Vector3 worldPos)
     {
@@ -48,7 +49,7 @@ public static class PingMarkerManager
         };
     }
 
-    /// <summary>Purge les pings expires. Appele chaque frame depuis OnUpdate.</summary>
+    /// <summary>Purges expired pings. Called every frame from OnUpdate.</summary>
     public static void Update()
     {
         if (_pings.Count == 0) return;
@@ -68,7 +69,7 @@ public static class PingMarkerManager
 
     public static void ClearAll() => _pings.Clear();
 
-    /// <summary>Dessine tous les marqueurs actifs. Appele depuis Mod.OnGUI.</summary>
+    /// <summary>Draws all active markers. Called from Mod.OnGUI.</summary>
     public static void OnGUI()
     {
         if (_pings.Count == 0) return;
@@ -96,15 +97,15 @@ public static class PingMarkerManager
         var screen = cam.WorldToScreenPoint(ping.WorldPos);
         var behind = screen.z < 0f;
 
-        // Derriere la camera : WorldToScreenPoint renvoie des coordonnees
-        // inversees, on les retourne pour obtenir une direction coherente.
+        // Behind the camera: WorldToScreenPoint returns inverted coordinates, so we
+        // flip them back to get a consistent direction.
         if (behind)
         {
             screen.x = Screen.width - screen.x;
             screen.y = Screen.height - screen.y;
         }
 
-        // Passage en coordonnees GUI (origine en haut a gauche, y vers le bas).
+        // Convert to GUI coordinates (origin top-left, y going down).
         var guiPos = new Vector2(screen.x, Screen.height - screen.y);
 
         var distance = Mathf.RoundToInt(Vector3.Distance(camPos, ping.WorldPos));
@@ -127,7 +128,7 @@ public static class PingMarkerManager
         }
     }
 
-    /// <summary>Clampe le marqueur au bord de l'ecran avec une fleche vers la cible.</summary>
+    /// <summary>Clamps the marker to the screen edge with an arrow pointing at the target.</summary>
     private static void DrawEdgeArrow(Vector2 guiPos, int distance, Color color)
     {
         var center = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
@@ -139,13 +140,13 @@ public static class PingMarkerManager
         var halfW = Screen.width * 0.5f - EdgeMarginPx;
         var halfH = Screen.height * 0.5f - EdgeMarginPx;
 
-        // Intersection de la direction avec le rectangle ecran (clamp aux bords).
+        // Intersection of the direction with the screen rectangle (clamped to the edges).
         var scaleX = Mathf.Abs(dir.x) > 0.0001f ? halfW / Mathf.Abs(dir.x) : float.MaxValue;
         var scaleY = Mathf.Abs(dir.y) > 0.0001f ? halfH / Mathf.Abs(dir.y) : float.MaxValue;
         var scale = Mathf.Min(scaleX, scaleY);
         var edgePos = center + dir * scale;
 
-        // Rotation de la fleche (texture pointant vers le haut en espace GUI).
+        // Arrow rotation (texture points up in GUI space).
         var angle = Mathf.Atan2(dir.x, -dir.y) * Mathf.Rad2Deg;
         var rect = new Rect(edgePos.x - ArrowSizePx * 0.5f, edgePos.y - ArrowSizePx * 0.5f, ArrowSizePx, ArrowSizePx);
 
@@ -184,7 +185,7 @@ public static class PingMarkerManager
         }
     }
 
-    /// <summary>Genere une pastille ronde blanche (teintee via GUI.color a l'affichage).</summary>
+    /// <summary>Generates a white round dot (tinted via GUI.color when drawn).</summary>
     private static Texture2D BuildCircleTexture(int size)
     {
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
@@ -202,11 +203,11 @@ public static class PingMarkerManager
 
                 Color c;
                 if (d <= ringInner)
-                    c = Color.white;                       // coeur plein
+                    c = Color.white;                       // solid core
                 else if (d <= radius)
-                    c = new Color(1f, 1f, 1f, 1f);         // anneau plein
+                    c = new Color(1f, 1f, 1f, 1f);         // solid ring
                 else if (d <= radius + 1.5f)
-                    c = new Color(1f, 1f, 1f, Mathf.Clamp01(radius + 1.5f - d)); // bord adouci
+                    c = new Color(1f, 1f, 1f, Mathf.Clamp01(radius + 1.5f - d)); // softened edge
                 else
                     c = new Color(1f, 1f, 1f, 0f);         // transparent
 
@@ -219,7 +220,7 @@ public static class PingMarkerManager
         return tex;
     }
 
-    /// <summary>Genere une fleche triangulaire blanche pointant vers le haut.</summary>
+    /// <summary>Generates a white triangular arrow pointing up.</summary>
     private static Texture2D BuildArrowTexture(int size)
     {
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
@@ -227,8 +228,8 @@ public static class PingMarkerManager
         {
             for (int x = 0; x < size; x++)
             {
-                // Triangle : large en bas, pointe en haut (y croit vers le haut en espace texture).
-                var t = y / (float)(size - 1);              // 0 en bas, 1 en haut
+                // Triangle: wide at the bottom, pointed at the top (y increases upward in texture space).
+                var t = y / (float)(size - 1);              // 0 at bottom, 1 at top
                 var halfWidth = (1f - t) * 0.5f * size;
                 var dxFromCenter = Mathf.Abs(x - (size - 1) * 0.5f);
                 var inside = dxFromCenter <= halfWidth && t >= 0.15f;

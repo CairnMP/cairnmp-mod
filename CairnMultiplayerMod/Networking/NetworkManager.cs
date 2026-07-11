@@ -11,9 +11,9 @@ using CairnMultiplayerMod.Core;
 namespace CairnMultiplayerMod.Networking;
 
 /// <summary>
-/// Representation cote client d'un autre joueur connecte au meme serveur.
-/// Mis a jour depuis les paquets ServerPlayerState. L'UI / le spawner de
-/// fantomes lit ces donnees.
+/// Client-side representation of another player connected to the same server.
+/// Updated from ServerPlayerState packets. The UI / ghost spawner reads this
+/// data.
 /// </summary>
 public class RemotePlayer
 {
@@ -25,46 +25,46 @@ public class RemotePlayer
     public PlayerState State;
     public double LastUpdateTime;
 
-    // Donnees d'os depuis les paquets ServerBoneState (espace monde).
+    // Bone data from ServerBoneState packets (world space).
     public byte BoneCount;
     public float[] BonePositions;
-    public float[] BoneRotations; // quaternion xyzw
+    public float[] BoneRotations; // xyzw quaternion
 
-    // Dernieres frames natives Cairn recues pour le joueur et son climbot.
+    // Latest native Cairn frames received for the player and their climbot.
     public bool HasPlayerFrame;
     public NetFrameData PlayerFrame;
     public double LastPlayerFrameTime;
     public bool HasClimbotFrame;
     public NetFrameData ClimbotFrame;
 
-    // Mode de la lampe (AavaLightStick.CurrentMode) — synchronise quand un autre joueur change de mode.
+    // Lamp mode (AavaLightStick.CurrentMode) — synchronized when another player changes mode.
     public int LampMode;
     public bool HasLampState;
 
-    // Etat cosmetique (champ de bits, cf. Protocol.CosmeticFlag*) — bit 0 = gants lumineux.
+    // Cosmetic state (bitfield, cf. Protocol.CosmeticFlag*) — bit 0 = glowing gloves.
     public byte CosmeticFlags;
     public bool HasCosmeticState;
 
-    // Pose des doigts compressee (Protocol.HandPosePackedSize octets) — synchronisee
-    // pour animer les mains du fantome en escalade.
+    // Compressed finger pose (Protocol.HandPosePackedSize bytes) — synchronized
+    // to animate the ghost's hands while climbing.
     public byte[] HandPosePacked;
     public bool HasHandPose;
 
-    // Etat de sommeil au bivouac (BivouacManager.IsAsleep) — l'hote l'agrege pour
-    // decider si tout le monde dort (autorise le fast-forward du temps).
+    // Sleep state at the bivouac (BivouacManager.IsAsleep) — the host aggregates it to
+    // decide whether everyone is asleep (allows fast-forwarding time).
     public bool IsAsleep;
     public bool HasSleepState;
 }
 
 /// <summary>
-/// Gère la connexion TCP au serveur de jeu.
+/// Manages the TCP connection to the game server.
 ///
-/// Architecture threading :
-///   - ReadLoop() s'exécute dans un thread dédié ; lit les frames TCP et les
-///     place dans _pending (thread-safe).
-///   - Update() est appelé chaque frame depuis le thread Unity ; vide _pending
-///     et dispatche les paquets — les handlers modifient l'état Unity de manière sûre.
-///   - Les méthodes Send* verrouillent _streamLock pour être thread-safe.
+/// Threading architecture:
+///   - ReadLoop() runs on a dedicated thread; reads TCP frames and
+///     enqueues them into _pending (thread-safe).
+///   - Update() is called every frame from the Unity thread; drains _pending
+///     and dispatches the packets — the handlers modify Unity state safely.
+///   - The Send* methods lock _streamLock to be thread-safe.
 /// </summary>
 public partial class NetworkManager : IDisposable
 {
@@ -73,10 +73,10 @@ public partial class NetworkManager : IDisposable
     private Thread _readThread;
     private volatile bool _running;
 
-    // File de frames reçues à traiter sur le thread Unity.
+    // Queue of received frames to process on the Unity thread.
     private readonly ConcurrentQueue<byte[]> _pending = new();
 
-    // Verrou pour les écritures sur le stream (plusieurs goroutines peuvent envoyer).
+    // Lock for stream writes (several threads may send).
     private readonly object _streamLock = new();
 
     public bool IsConnected => IsSteamTransportActive || (_tcp?.Connected == true && _running);
@@ -85,11 +85,11 @@ public partial class NetworkManager : IDisposable
     public string ServerName { get; private set; }
     public string LastError { get; private set; }
 
-    // Identifiant du lobby courant, défini après création via l'API.
-    // Utilisé pour persister l'association lobby → slot de sauvegarde.
+    // Identifier of the current lobby, set after creation via the API.
+    // Used to persist the lobby → save-slot association.
     public string CurrentLobbyId { get; private set; }
 
-    // Code court partageable du lobby courant (format "XXXX-XXXX"), peut être vide.
+    // Shareable short code of the current lobby (format "XXXX-XXXX"), may be empty.
     public string CurrentRoomCode { get; private set; }
 
     private readonly Dictionary<int, RemotePlayer> _remotePlayers = new();
@@ -115,13 +115,13 @@ public partial class NetworkManager : IDisposable
     public event Action<ServerHandPose> OnHandPose;
     public event Action<ServerTimeState> OnTimeState;
 
-    // Evénement de déconnexion pour l'UI.
+    // Disconnection event for the UI.
     public event Action<string> OnDisconnected;
 
     /// <summary>
-    /// Se connecte directement à une adresse TCP ip:port.
-    /// Conservé pour compatibilité avec l'ancien contrat public ; le flux de
-    /// jeu actuel utilise le transport P2P Steam.
+    /// Connects directly to an ip:port TCP address.
+    /// Kept for compatibility with the old public contract; the current game
+    /// flow uses the Steam P2P transport.
     /// </summary>
     public void ConnectToAddress(string ip, int port)
     {
@@ -142,7 +142,7 @@ public partial class NetworkManager : IDisposable
 
             Mod.Log.Msg($"[CairnMP] Connected to {ip}:{port}. Sending handshake...");
 
-            // Envoyer le handshake immédiatement
+            // Send the handshake immediately
             var hs = new ClientHandshake
             {
                 ProtocolVersion = Protocol.Version,
@@ -151,7 +151,7 @@ public partial class NetworkManager : IDisposable
             };
             SendFrame(PacketCodec.Frame(PacketId.ClientHandshake, hs));
 
-            // Démarrer le thread de lecture
+            // Start the read thread
             _readThread = new Thread(ReadLoop) { IsBackground = true, Name = "CairnMP-Read" };
             _readThread.Start();
         }
@@ -172,10 +172,10 @@ public partial class NetworkManager : IDisposable
         {
             try
             {
-                // Signaler la déconnexion propre au serveur
+                // Signal a clean disconnect to the server
                 SendFrame(PacketCodec.Frame(PacketId.ClientDisconnect, new ClientChat { Message = "" }));
             }
-            catch { /* ignore les erreurs d'envoi lors du disconnect */ }
+            catch { /* ignore send errors during disconnect */ }
         }
 
         var wasConnected = _running;
@@ -186,7 +186,7 @@ public partial class NetworkManager : IDisposable
     }
 
     /// <summary>
-    /// Doit être appelé chaque frame Unity. Vide la file de paquets reçus et les traite.
+    /// Must be called every Unity frame. Drains the queue of received packets and processes them.
     /// </summary>
     public void Update()
     {
@@ -205,7 +205,7 @@ public partial class NetworkManager : IDisposable
         }
     }
 
-    // -- Envoi ----------------------------------------------------------------
+    // -- Sending --------------------------------------------------------------
 
     public void SendPlayerState(float x, float y, float z, float yaw, string sceneName, PlayerState state)
     {
@@ -437,7 +437,7 @@ public partial class NetworkManager : IDisposable
         SendFrame(PacketCodec.Frame(PacketId.ClientChat, pkt));
     }
 
-    /// <summary>Demande d'encordement (clip=true) ou decordage (clip=false) avec un joueur.</summary>
+    /// <summary>Requests roping up (clip=true) or unroping (clip=false) with a player.</summary>
     public void SendRopeClip(int targetPlayerId, bool clip)
     {
         if (IsSteamTransportActive)
@@ -446,7 +446,7 @@ public partial class NetworkManager : IDisposable
 
     // -- Internals ------------------------------------------------------------
 
-    /// <summary>Ecrit une frame TCP de manière thread-safe (bloquant).</summary>
+    /// <summary>Writes a TCP frame in a thread-safe way (blocking).</summary>
     private void SendFrame(byte[] frame)
     {
         if (!_running || _stream == null) return;
@@ -465,8 +465,8 @@ public partial class NetworkManager : IDisposable
     }
 
     /// <summary>
-    /// Envoi non-bloquant : abandonne sans exception si le verrou n'est pas disponible.
-    /// Utilisé pour les paquets à haute fréquence (position/bones).
+    /// Non-blocking send: gives up without an exception if the lock isn't available.
+    /// Used for high-frequency packets (position/bones).
     /// </summary>
     private void SendFrameNonBlocking(byte[] frame)
     {
@@ -477,7 +477,7 @@ public partial class NetworkManager : IDisposable
             lockAcquired = Monitor.TryEnter(_streamLock);
             if (lockAcquired)
                 _stream.Write(frame, 0, frame.Length);
-            // Sinon : on abandonne silencieusement (paquet sequenced)
+            // Otherwise: drop it silently (sequenced packet)
         }
         catch (Exception ex)
         {
@@ -492,8 +492,8 @@ public partial class NetworkManager : IDisposable
     }
 
     /// <summary>
-    /// Thread de lecture TCP. Lit les frames en continu et les place dans _pending.
-    /// S'arrête quand _running devient false ou en cas d'erreur réseau.
+    /// TCP read thread. Continuously reads frames and enqueues them into _pending.
+    /// Stops when _running becomes false or on a network error.
     /// </summary>
     private void ReadLoop()
     {
@@ -502,11 +502,11 @@ public partial class NetworkManager : IDisposable
         {
             while (_running)
             {
-                // Lire le préfixe de longueur (2 octets)
+                // Read the length prefix (2 bytes)
                 if (!ReadExact(_stream, lenBuf, 2)) break;
                 int len = lenBuf[0] | (lenBuf[1] << 8); // uint16 LE
 
-                // Lire le payload
+                // Read the payload
                 var payload = new byte[len];
                 if (!ReadExact(_stream, payload, len)) break;
 
@@ -522,25 +522,25 @@ public partial class NetworkManager : IDisposable
             HandleReadError();
     }
 
-    /// <summary>Lit exactement count octets depuis le stream.</summary>
+    /// <summary>Reads exactly count bytes from the stream.</summary>
     private static bool ReadExact(Stream stream, byte[] buf, int count)
     {
         int offset = 0;
         while (offset < count)
         {
             int n = stream.Read(buf, offset, count - offset);
-            if (n == 0) return false; // connexion fermée
+            if (n == 0) return false; // connection closed
             offset += n;
         }
         return true;
     }
 
-    /// <summary>Appelé depuis le thread de lecture en cas d'erreur ou de déconnexion.</summary>
+    /// <summary>Called from the read thread on an error or disconnection.</summary>
     private void HandleReadError()
     {
         if (!_running) return;
         Mod.Log.Msg("[CairnMP] Connection lost.");
-        // Enqueue un marqueur de déconnexion pour le thread Unity (payload vide = déconnexion)
+        // Enqueue a disconnection marker for the Unity thread (empty payload = disconnect)
         _pending.Enqueue(Array.Empty<byte>());
         Reset();
     }

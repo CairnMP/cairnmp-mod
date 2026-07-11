@@ -6,37 +6,37 @@ namespace CairnMultiplayerMod.Core;
 
 public static unsafe partial class CairnGameApi
 {
-    // Valeur de InputManager.disableInputs sauvegardee avant le gel, restauree au degel.
+    // Value of InputManager.disableInputs saved before the freeze, restored on unfreeze.
     private static bool _savedDisableInputs;
-    // Etat NATIF reellement applique (pas l'intention) : ne bascule qu'apres un appel
-    // reussi avec un InputManager non-null. Une frame ou le manager est introuvable laisse
-    // l'etat inchange -> reessai la frame suivante.
+    // ACTUAL native state applied (not the intent): flips only after a successful call
+    // with a non-null InputManager. A frame where the manager can't be found leaves the
+    // state unchanged -> retried the next frame.
     private static bool _blockApplied;
     private static bool _mapDiagLogged;
 
     /// <summary>
-    /// Reconcilie le blocage des inputs gameplay avec <paramref name="wantBlocked"/> (= chat
-    /// ouvert). Appele CHAQUE frame depuis ChatController.Update : idempotent (n'agit que sur
-    /// transition), donc "chat ferme" converge TOUJOURS vers "input rendu" — meme si une frame
-    /// echoue a resoudre l'InputManager, la suivante reessaie. Plus de restauration one-shot.
+    /// Reconciles the gameplay input block with <paramref name="wantBlocked"/> (= chat
+    /// open). Called EVERY frame from ChatController.Update: idempotent (acts only on
+    /// transitions), so "chat closed" ALWAYS converges to "input restored" — even if one frame
+    /// fails to resolve the InputManager, the next one retries. No more one-shot restore.
     ///
-    /// Blocage : <c>disableInputs=true</c> + <c>SetIgnoreInputEvents(true)</c> (le grimpeur ne
-    /// bouge pas pendant la frappe). Deblocage SYMETRIQUE : baisser ces deux flags ne suffit PAS
-    /// a reactiver les action maps (il n'existe pas d'EnableAllMaps cote jeu) ; il faut
-    /// <c>EnableInputs()</c> + <c>UpdateInputContext()</c> pour que le jeu reconstruise l'etat
-    /// des maps du contexte courant. C'etait LA cause du blocage apres fermeture du chat.
+    /// Block: <c>disableInputs=true</c> + <c>SetIgnoreInputEvents(true)</c> (the climber doesn't
+    /// move while typing). SYMMETRIC unblock: lowering those two flags is NOT enough
+    /// to re-enable the action maps (there is no EnableAllMaps on the game side); you need
+    /// <c>EnableInputs()</c> + <c>UpdateInputContext()</c> so the game rebuilds the state
+    /// of the current context's maps. That was THE cause of the freeze after closing chat.
     ///
-    /// L'overlay IMGUI du chat continue de recevoir les frappes : il lit l'event system legacy
-    /// d'Unity, et le jeu ne desactive jamais les devices clavier — donc le chat reste fermable.
+    /// The chat's IMGUI overlay keeps receiving keystrokes: it reads Unity's legacy event
+    /// system, and the game never disables keyboard devices — so the chat stays closeable.
     /// </summary>
     public static void ReconcileGameplayInput(bool wantBlocked)
     {
-        if (wantBlocked == _blockApplied) return; // deja dans l'etat voulu
+        if (wantBlocked == _blockApplied) return; // already in the desired state
 
         try
         {
             var mgr = FindInputManager();
-            if (mgr == null) return; // etat inchange, on reessaie la frame suivante
+            if (mgr == null) return; // state unchanged, we retry the next frame
 
             if (wantBlocked)
             {
@@ -49,8 +49,8 @@ public static unsafe partial class CairnGameApi
             {
                 mgr.SetIgnoreInputEvents(false);
                 mgr.disableInputs = _savedDisableInputs;
-                mgr.EnableInputs();        // reactive les action maps...
-                mgr.UpdateInputContext();  // ...recalculees pour le contexte courant
+                mgr.EnableInputs();        // re-enables the action maps...
+                mgr.UpdateInputContext();  // ...recomputed for the current context
                 _blockApplied = false;
                 LogMapStatusOnce(mgr);
             }
@@ -61,28 +61,28 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    // Etat du blocage des maps du menu principal (panneau multijoueur ouvert).
+    // Block state of the main menu maps (multiplayer panel open).
     private static bool _menuMapsBlocked;
     private static bool _menuBlockDiagLogged;
 
     /// <summary>
-    /// Desactive les action maps du MENU PRINCIPAL (mainMenuUIMap + gameplayUIActionMap) tant que le
-    /// panneau multijoueur est ouvert : sinon les touches (Suppr, fleches, retour) naviguent en
-    /// arriere-plan. Idempotent, a appeler chaque frame tant que le menu est visible (re-affirme le
-    /// blocage si le jeu reactive les maps via un changement de contexte). Notre menu (souris +
-    /// saisie TMP) passe par l'EventSystem (module UI), independant de ces maps -> reste interactif.
+    /// Disables the MAIN MENU action maps (mainMenuUIMap + gameplayUIActionMap) while the
+    /// multiplayer panel is open: otherwise the keys (Delete, arrows, back) navigate in the
+    /// background. Idempotent, call every frame while the menu is visible (re-asserts the
+    /// block if the game re-enables the maps via a context change). Our menu (mouse +
+    /// TMP input) goes through the EventSystem (UI module), independent of these maps -> stays interactive.
     /// </summary>
     public static void BlockMainMenuActionMaps()
     {
         try
         {
-            // 1) Coupe la navigation clavier/manette de l'EventSystem (move/submit/cancel) : c'est
-            //    par la que le menu reagit en arriere-plan. La souris (pointer) + la saisie TMP de
-            //    notre panneau ne sont PAS des evenements de navigation -> restent actives.
+            // 1) Cut the EventSystem's keyboard/gamepad navigation (move/submit/cancel): that's
+            //    how the menu reacts in the background. The mouse (pointer) + the TMP input of
+            //    our panel are NOT navigation events -> they stay active.
             var es = EventSystem.current;
             if (es != null) es.sendNavigationEvents = false;
 
-            // 2) Desactive aussi les action maps natives du menu (ceinture + bretelles).
+            // 2) Also disable the menu's native action maps (belt and braces).
             var mgr = FindInputManager();
             if (mgr != null)
             {
@@ -118,7 +118,7 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    /// <summary>Restaure la navigation + les maps du menu a la fermeture du panneau.</summary>
+    /// <summary>Restores navigation + the menu maps when the panel closes.</summary>
     public static void RestoreMainMenuActionMaps()
     {
         if (!_menuMapsBlocked) return;
@@ -143,9 +143,9 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Failsafe panique (touche F10) : force le deblocage total quel que soit l'etat interne.
-    /// Independant du chat. A appeler depuis un raccourci lu sur le device clavier brut (jamais
-    /// affecte par le blocage), place avant tout return anticipe d'OnUpdate.
+    /// Panic failsafe (F10 key): forces a full unblock regardless of the internal state.
+    /// Independent of the chat. Call it from a shortcut read on the raw keyboard device (never
+    /// affected by the block), placed before any early return in OnUpdate.
     /// </summary>
     public static void ForceClearInputBlock()
     {
@@ -167,9 +167,9 @@ public static unsafe partial class CairnGameApi
         _blockApplied = false;
     }
 
-    // Diagnostic une seule fois par session : apres un deblocage, confirme que les action maps
-    // gameplay sont bien reactivees. Si elles restent OFF, le restore est insuffisant (a
-    // escalader vers PushInputContext). Defensif : si l'iteration du dict il2cpp echoue, on skip.
+    // Diagnostic once per session: after an unblock, confirms that the gameplay action maps
+    // are indeed re-enabled. If they stay OFF, the restore is insufficient (to be
+    // escalated to PushInputContext). Defensive: if iterating the il2cpp dict fails, we skip.
     private static void LogMapStatusOnce(Il2Cpp.InputManager mgr)
     {
         if (_mapDiagLogged) return;

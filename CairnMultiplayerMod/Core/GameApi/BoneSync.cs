@@ -20,16 +20,16 @@ public static unsafe partial class CairnGameApi
     private static float _lastPlayerCaptureFailureLogAt;
     private static float _lastClimbotCaptureFailureLogAt;
     private static bool _localPlayerFallbackCaptureLogged;
-    // Les Il2CppException sont lourdes (stacktraces marshalles depuis le natif).
-    // Si la capture native echoue, on espace les retentatives pour ne pas plomber
-    // le frame quand la pathologie persiste (joueur pres d'un piton, bivouac, etc.).
+    // Il2CppExceptions are heavy (stack traces marshalled from native).
+    // If the native capture fails, we space out the retries so we don't tank
+    // the frame when the pathology persists (player near a piton, bivouac, etc.).
     private const float CaptureRetryDelaySeconds = 2f;
     private const float CaptureFailureLogIntervalSeconds = 10f;
 
     /// <summary>
-    /// Trouve le composant NetplayPawnCapture sur le MC local (MC_Aava),
-    /// PAS sur le Climbot. Le MC a sa capture sous un enfant nommé
-    /// "Netplay", tandis que celle du Climbot est directement sur "Climbot(Clone)".
+    /// Finds the NetplayPawnCapture component on the local MC (MC_Aava),
+    /// NOT on the Climbot. The MC has its capture under a child named
+    /// "Netplay", while the Climbot's is directly on "Climbot(Clone)".
     /// </summary>
     public static MonoBehaviour TryGetNetplayPawnCapture()
     {
@@ -50,9 +50,9 @@ public static unsafe partial class CairnGameApi
                 if (comp == null) continue;
                 if (comp.GetIl2CppType().Name != "NetplayPawnCapture") continue;
 
-                // On veut celui sur MC_Aava(Clone), pas Climbot(Clone).
-                // Celui du MC a pour parent "MC_Aava(Clone)" tandis que celui
-                // du Climbot a pour parent "<root>" ou "Climbot(Clone)".
+                // We want the one on MC_Aava(Clone), not Climbot(Clone).
+                // The MC's has "MC_Aava(Clone)" as parent, while the
+                // Climbot's has "<root>" or "Climbot(Clone)" as parent.
                 var parentName = comp.transform.parent != null
                     ? comp.transform.parent.gameObject.name : "";
                 if (parentName.StartsWith("MC_Aava"))
@@ -71,7 +71,7 @@ public static unsafe partial class CairnGameApi
         return null;
     }
 
-    /// <summary>Capture la frame native du joueur local via le pipeline Netplay du jeu.</summary>
+    /// <summary>Captures the local player's native frame via the game's Netplay pipeline.</summary>
     public static bool TryCaptureLocalPlayerFrame(out NetFrameData frameData)
     {
         frameData = default;
@@ -111,9 +111,9 @@ public static unsafe partial class CairnGameApi
     private static NetFrame.PawnStateType _lastPawnState = NetFrame.PawnStateType.Invalid;
 
     /// <summary>
-    /// Etat courant du pawn local (Climbing / Walking / Falling / Dead...), lu via la
-    /// capture Netplay avec throttle (~10 Hz) car la reconciliation belay l'appelle
-    /// chaque frame. Invalid si indisponible.
+    /// Current state of the local pawn (Climbing / Walking / Falling / Dead...), read via the
+    /// Netplay capture with throttling (~10 Hz) because belay reconciliation calls it
+    /// every frame. Invalid if unavailable.
     /// </summary>
     public static NetFrame.PawnStateType GetLocalPawnState()
     {
@@ -138,21 +138,21 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Vrai si le pawn local est en escalade sur paroi (Climbing). N'inclut PAS Falling :
-    /// engager l'assurage en pleine chute posait un piton + forçait ToOffBelay (anim
-    /// parasite / belay-off subi). L'assurage doit etre engage AVANT la chute, pendant
-    /// l'escalade, puis rester engage pour la rattraper (cf. ReconcileNativeBelay).
+    /// True if the local pawn is climbing on a wall (Climbing). Does NOT include Falling:
+    /// engaging the belay mid-fall placed a piton + forced ToOffBelay (spurious
+    /// anim / involuntary belay-off). The belay must be engaged BEFORE the fall, during
+    /// the climb, then stay engaged to catch it (cf. ReconcileNativeBelay).
     /// </summary>
     public static bool IsLocalPlayerClimbing() => GetLocalPawnState() == NetFrame.PawnStateType.Climbing;
 
-    /// <summary>Vrai si le pawn local marche au sol (Walking) — base sure pour autoriser une teleportation.</summary>
+    /// <summary>True if the local pawn is walking on the ground (Walking) — a safe basis for allowing a teleport.</summary>
     public static bool IsLocalPlayerWalking() => GetLocalPawnState() == NetFrame.PawnStateType.Walking;
 
     /// <summary>
-    /// Decode le PawnState (Walking / Climbing / Falling / Dead) encode dans l'octet `flags`
-    /// d'une NetFrameData distante : on reconstruit une NetFrame native et on lit son getter
-    /// PawnState (qui derive des bits de flags). Invalid si la frame est absente/illisible.
-    /// Sert au gating de teleportation (on ne se teleporte que vers un joueur qui MARCHE).
+    /// Decodes the PawnState (Walking / Climbing / Falling / Dead) encoded in the `flags` byte
+    /// of a remote NetFrameData: we rebuild a native NetFrame and read its PawnState
+    /// getter (which derives from the flags bits). Invalid if the frame is absent/unreadable.
+    /// Used for teleport gating (we only teleport to a player who is WALKING).
     /// </summary>
     public static NetFrame.PawnStateType GetPawnStateFromFrame(NetFrameData data)
     {
@@ -168,7 +168,7 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    /// <summary>Capture la frame native du climbot local via le pipeline Netplay du jeu.</summary>
+    /// <summary>Captures the local climbot's native frame via the game's Netplay pipeline.</summary>
     public static bool TryCaptureLocalClimbotFrame(out NetFrameData frameData)
     {
         frameData = default;
@@ -418,11 +418,11 @@ public static unsafe partial class CairnGameApi
 
     public static NetFrame ToNativePlayerNetFrame(NetFrameData data)
     {
-        // Episure-style : on ecrit la frame VERBATIM. L'octet `flags` est un bitfield
-        // qui encode PawnState/PawnFlags/PawnTarget ; l'IK native le lit pour choisir
-        // la pose-cible (grimpe vs marche, secured...). Reecrire ces sous-champs (forcer
-        // Climbing, retirer NonPlayer) faisait resoudre le rig vers la mauvaise cible
-        // -> membres qui clippent le mur. On force seulement la cible Player (routage du pawn).
+        // Episure-style: we write the frame VERBATIM. The `flags` byte is a bitfield
+        // encoding PawnState/PawnFlags/PawnTarget; the native IK reads it to pick
+        // the target pose (climb vs walk, secured...). Rewriting these sub-fields (forcing
+        // Climbing, clearing NonPlayer) made the rig resolve to the wrong target
+        // -> limbs clipping the wall. We only force the Player target (pawn routing).
         var frame = ToNativeNetFrame(data);
         frame.PawnTarget = NetFrame.PawnTargetType.Player;
         return frame;
@@ -430,7 +430,7 @@ public static unsafe partial class CairnGameApi
 
     public static NetFrame ToNativeClimbotNetFrame(NetFrameData data)
     {
-        // Idem : flags verbatim, on force seulement la cible Climbot.
+        // Same: flags verbatim, we only force the Climbot target.
         var frame = ToNativeNetFrame(data);
         frame.PawnTarget = NetFrame.PawnTargetType.Climbot;
         return frame;

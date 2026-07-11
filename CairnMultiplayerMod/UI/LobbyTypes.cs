@@ -1,7 +1,7 @@
 namespace CairnMultiplayerMod.UI;
 
-/// <summary>Visibilite d'un lobby cree. Public : visible dans le browser
-/// et fiable pour le join-by-code ; FriendsOnly/Private : privilegient l'invite Steam.</summary>
+/// <summary>Visibility of a created lobby. Public: visible in the browser
+/// and reliable for join-by-code; FriendsOnly/Private: favor the Steam invite.</summary>
 public enum LobbyVisibility
 {
     Public,
@@ -9,7 +9,7 @@ public enum LobbyVisibility
     Private,
 }
 
-/// <summary>Configuration soumise par l'utilisateur lors de la creation d'un lobby.</summary>
+/// <summary>Configuration submitted by the user when creating a lobby.</summary>
 public sealed class HostConfig
 {
     public string PlayerName { get; init; } = "";
@@ -18,10 +18,10 @@ public sealed class HostConfig
     public LobbyVisibility Visibility { get; init; } = LobbyVisibility.Public;
 }
 
-/// <summary>Entree affichee dans le browser de lobbies publics.</summary>
+/// <summary>Entry shown in the public lobby browser.</summary>
 public sealed class LobbyEntry
 {
-    public ulong  LobbyId     { get; init; }   // Steam lobby SteamID64 ; 0 si non Steam
+    public ulong  LobbyId     { get; init; }   // Steam lobby SteamID64; 0 if not Steam
     public string Name        { get; init; } = "";
     public string HostName    { get; init; } = "";
     public int    PlayerCount { get; init; }

@@ -9,28 +9,28 @@ using CairnMultiplayerMod.Core;
 namespace CairnMultiplayerMod.UI;
 
 /// <summary>
-/// Intercepte le bouton Story dans le ModeSelect du MainMenu :
-///   - Change son texte en "Multiplayer"
-///   - Remplace son onClick par l'ouverture directe du panneau multijoueur
-///   - Cache le Container (1) entier (Story/Settings/Credits/Quit) pendant l'affichage du panel
+/// Intercepts the Story button in the MainMenu's ModeSelect:
+///   - Changes its text to "Multiplayer"
+///   - Replaces its onClick with directly opening the multiplayer panel
+///   - Hides the entire Container (1) (Story/Settings/Credits/Quit) while the panel is shown
 /// </summary>
 public static class MainMenuMultiplayerButton
 {
     private static bool _intercepted;
     private static int _frameCounter;
 
-    // Parent commun des 4 boutons Cairn ; masqué pendant l'ouverture du panel.
+    // Common parent of the 4 Cairn buttons; hidden while the panel is open.
     private static GameObject _modeSelectContainer;
     private static readonly List<MonoBehaviour> _suspendedMenuBehaviours = new();
     private static readonly List<bool> _suspendedMenuStates = new();
 
-    // Panneau à ouvrir au clic.
+    // Panel to open on click.
     private static IMultiplayerPanel _panel;
 
-    /// <summary>Police du jeu capturée depuis le TMP du bouton Story.</summary>
+    /// <summary>Game font captured from the Story button's TMP.</summary>
     public static TMP_FontAsset CapturedFont { get; private set; }
 
-    /// <summary>Enregistre le panneau à ouvrir au clic. Appelé une fois depuis Mod.OnInitializeMelon.</summary>
+    /// <summary>Registers the panel to open on click. Called once from Mod.OnInitializeMelon.</summary>
     public static void Bind(IMultiplayerPanel panel)
     {
         _panel = panel;
@@ -59,15 +59,15 @@ public static class MainMenuMultiplayerButton
         _intercepted = true;
     }
 
-    /// <summary>Cache les 4 boutons du menu Cairn (Story/Settings/Credits/Quit).</summary>
+    /// <summary>Hides the 4 Cairn menu buttons (Story/Settings/Credits/Quit).</summary>
     public static void HideModeSelect()
     {
         if (_modeSelectContainer != null) _modeSelectContainer.SetActive(false);
         SuspendMainMenuInput();
-        CairnGameApi.BlockMainMenuActionMaps();   // bloque Suppr/fleches/retour en arriere-plan
+        CairnGameApi.BlockMainMenuActionMaps();   // blocks Delete/arrows/back in the background
     }
 
-    /// <summary>Réaffiche les 4 boutons du menu Cairn après fermeture du panel.</summary>
+    /// <summary>Re-shows the 4 Cairn menu buttons after the panel is closed.</summary>
     public static void RestoreModeSelect()
     {
         CairnGameApi.RestoreMainMenuActionMaps();
@@ -75,7 +75,7 @@ public static class MainMenuMultiplayerButton
         if (_modeSelectContainer != null) _modeSelectContainer.SetActive(true);
     }
 
-    /// <summary>Réactive uniquement le contrôleur menu, sans réafficher les boutons du menu.</summary>
+    /// <summary>Re-enables only the menu controller, without re-showing the menu buttons.</summary>
     public static void RestoreMainMenuInput()
     {
         for (int i = 0; i < _suspendedMenuBehaviours.Count; i++)
@@ -107,16 +107,16 @@ public static class MainMenuMultiplayerButton
         }
         if (storyTransform == null) { Mod.Log.Warning("[MainMenuBtn] Story button not found"); return; }
 
-        // Capture la police du jeu une seule fois pour utilisation par le panel.
+        // Capture the game font once for use by the panel.
         var storyTMP = storyTransform.GetComponentInChildren<TextMeshProUGUI>(true);
         if (storyTMP != null && CapturedFont == null)
             CapturedFont = storyTMP.font;
 
-        // Renomme le bouton
+        // Rename the button
         if (storyTMP != null)
             storyTMP.text = "Multiplayer";
 
-        // Remplace le handler de clic
+        // Replace the click handler
         var btn = storyTransform.GetComponent<Button>();
         if (btn != null)
         {

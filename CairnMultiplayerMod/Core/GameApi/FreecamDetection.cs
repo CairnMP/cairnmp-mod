@@ -6,20 +6,20 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Detection de la camera libre native de Cairn (bouton "Display Route" = vue
-/// aerienne du trace / Eagle Eye).
+/// Detection of Cairn's native free camera (the "Display Route" button = aerial
+/// route view / Eagle Eye).
 ///
-/// L'etat est diffuse par les events statiques de `GameEventManager` :
-///   OnEagleEye(bool)                       -> vue eagle eye generique
-///   OnEagleEyePath(bool, RequestContext)   -> vue trace (Display Route)
-/// Le bool indique l'entree (true) ou la sortie (false). On s'abonne aux deux
-/// (plus les variantes "Request" pour diagnostic) et on maintient l'etat actif.
+/// The state is broadcast by `GameEventManager`'s static events:
+///   OnEagleEye(bool)                       -> generic eagle eye view
+///   OnEagleEyePath(bool, RequestContext)   -> route view (Display Route)
+/// The bool indicates entry (true) or exit (false). We subscribe to both
+/// (plus the "Request" variants for diagnostics) and keep the active state.
 ///
-/// On garde aussi l'abonnement a `FreeCam.OnFreeCamActivate/Deactivate` pour la
-/// free-cam de debug. "Freecam actif" = union de tous ces signaux.
+/// We also keep the subscription to `FreeCam.OnFreeCamActivate/Deactivate` for the
+/// debug free-cam. "Freecam active" = union of all these signals.
 ///
-/// Robustesse : si un abonnement echoue, on log une fois et on continue ; le ping
-/// reste juste inactif, aucune exception ne remonte.
+/// Robustness: if a subscription fails, we log once and carry on; the ping just
+/// stays inactive, no exception propagates.
 /// </summary>
 public static unsafe partial class CairnGameApi
 {
@@ -33,7 +33,7 @@ public static unsafe partial class CairnGameApi
     private static bool _hasLastReportedFreecam;
     private static bool _lastReportedFreecam;
 
-    // Conserve les delegues IL2CPP pour empecher le GC de les collecter.
+    // Keep the IL2CPP delegates to prevent the GC from collecting them.
     private static Il2CppSystem.Action _freecamActivateDelegate;
     private static Il2CppSystem.Action _freecamDeactivateDelegate;
     private static Il2CppSystem.Action<bool> _eagleEyeDelegate;
@@ -42,8 +42,8 @@ public static unsafe partial class CairnGameApi
     private static Il2CppSystem.Action<bool, Il2Cpp.CameraManager.EagleEyeRequestContext> _eagleEyePathRequestDelegate;
 
     /// <summary>
-    /// Indique si une camera libre (Display Route / Eagle Eye, ou free-cam debug)
-    /// est active. Etat pilote par les events natifs.
+    /// Indicates whether a free camera (Display Route / Eagle Eye, or debug free-cam)
+    /// is active. State driven by the native events.
     /// </summary>
     public static bool TryIsFreecamActive(out bool active)
     {
@@ -121,8 +121,8 @@ public static unsafe partial class CairnGameApi
         => Mod.LogDebug($"[Freecam] OnRequestEagleEyePath({on}, {ctx})");
 
     /// <summary>
-    /// Camera utilisee pour le raycast de ping. En vue libre, Camera.main est la
-    /// camera active.
+    /// Camera used for the ping raycast. In free view, Camera.main is the active
+    /// camera.
     /// </summary>
     public static bool TryGetFreecamCamera(out Camera cam)
     {
@@ -131,11 +131,11 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Calcule le point monde a pinguer dans la direction de la camera (centre
-    /// ecran) : raycast depuis la position camera vers l'avant. On ignore les
-    /// colliders "trigger" pour viser la roche solide et pas les volumes de
-    /// gameplay invisibles. Sans hit, on place a distance fixe
-    /// (Protocol.DefaultPingDistance) devant la camera.
+    /// Computes the world point to ping in the camera's direction (screen center):
+    /// a raycast from the camera position forward. We ignore "trigger" colliders to
+    /// aim at solid rock and not the invisible gameplay volumes. With no hit, we
+    /// place it at a fixed distance (Protocol.DefaultPingDistance) in front of the
+    /// camera.
     /// </summary>
     public static bool TryComputePingPoint(out Vector3 point)
     {

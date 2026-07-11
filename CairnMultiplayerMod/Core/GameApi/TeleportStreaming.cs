@@ -5,31 +5,31 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Téléportation longue distance entre zones. Cairn streame le monde par ZONES. Un simple
-/// `transform.position` lointain dépose le perso dans une zone non chargée -> chute dans le vide,
-/// puis le streaming charge sauvagement TOUTES les zones traversées (origine + intermédiaires +
-/// cible restent chargées) -> chute de FPS + repositionnement -> on n'arrive pas chez le joueur.
+/// Long-distance teleport across zones. Cairn streams the world by ZONES. A plain far-away
+/// `transform.position` drops the character into an unloaded zone -> fall into the void,
+/// then streaming wildly loads ALL the zones crossed (origin + intermediate + target all stay
+/// loaded) -> FPS drop + repositioning -> we never actually reach the player.
 ///
-/// Solution « comme le jeu » :
-/// - Même zone (cible dans la zone courante) -> téléport direct INSTANTANÉ (aucun chargement).
-/// - Zone différente -> TRAVEL géré (CairnSceneManager.TravelToZone) : charge la zone cible ET
-///   décharge proprement l'origine (écran de chargement), puis on RÉ-APPLIQUE la position exacte
-///   une fois le monde idle (settle), pour atterrir pile chez le joueur.
+/// "Like the game does it" solution:
+/// - Same zone (target in the current zone) -> direct INSTANT teleport (no loading).
+/// - Different zone -> managed TRAVEL (CairnSceneManager.TravelToZone): loads the target zone AND
+///   cleanly unloads the origin (loading screen), then we RE-APPLY the exact position
+///   once the world is idle (settle), to land right on the player.
 ///
-/// L'« idle » est détecté via CairnSceneManager.IsLoadingOrUnloadingScenes + StreamingManager
-/// .PreloadingZone (PAS IsZoneLoaded, qui passe true trop tôt).
+/// "idle" is detected via CairnSceneManager.IsLoadingOrUnloadingScenes + StreamingManager
+/// .PreloadingZone (NOT IsZoneLoaded, which turns true too early).
 /// </summary>
 public static unsafe partial class CairnGameApi
 {
-    private const float TeleportSettleTimeoutSeconds = 40f;   // failsafe global
-    private const float TeleportStableDistance = 3f;          // tolérance "sur la cible"
-    private const float TeleportStableSeconds = 1.5f;         // durée idle+stable avant de lâcher
+    private const float TeleportSettleTimeoutSeconds = 40f;   // global failsafe
+    private const float TeleportStableDistance = 3f;          // "on target" tolerance
+    private const float TeleportStableSeconds = 1.5f;         // idle+stable duration before releasing
 
     private static bool _teleportPending;
     private static Vector3 _teleportTarget;
     private static float _teleportYaw;
     private static float _teleportDeadline;
-    private static float _teleportStableSince;   // -1 = pas (encore) stable
+    private static float _teleportStableSince;   // -1 = not (yet) stable
 
     private static StreamingManager _streamingManagerCached;
     private static int _lastStreamingManagerSearchFrame;
@@ -57,9 +57,9 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Si la cible est dans une AUTRE zone que la zone courante, lance un travel géré + arme le
-    /// settle pour poser la position exacte ensuite, et renvoie true. Renvoie false si la cible
-    /// est dans la zone courante (ou info indispo) -> l'appelant fait un téléport direct instantané.
+    /// If the target is in a DIFFERENT zone than the current one, starts a managed travel + arms the
+    /// settle to apply the exact position afterwards, and returns true. Returns false if the target
+    /// is in the current zone (or the info is unavailable) -> the caller does a direct instant teleport.
     /// </summary>
     private static bool TryTeleportAcrossZones(Vector3 pos, float yawDeg)
     {
@@ -74,7 +74,7 @@ public static unsafe partial class CairnGameApi
             try { currentZone = sm.CurrentZone; } catch { }
             if (targetZone == null || currentZone == null) return false;
 
-            // Même zone -> pas de chargement, l'appelant fera un téléport direct.
+            // Same zone -> no loading, the caller will do a direct teleport.
             if (targetZone.Pointer == currentZone.Pointer) return false;
 
             var world = sm.World;
@@ -83,7 +83,7 @@ public static unsafe partial class CairnGameApi
             Mod.LogDebug("[Teleport] Target in another zone -> travelling (loading)...");
             cm.TravelToZone(targetZone, world);
 
-            // Pose la position exacte une fois le monde idle (le travel place d'abord au spawn de zone).
+            // Apply the exact position once the world is idle (travel first places at the zone spawn).
             ArmTeleportSettle(pos, yawDeg);
             return true;
         }
@@ -94,7 +94,7 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    /// <summary>Arme le settle : ré-applique la position cible jusqu'à ce que le monde soit idle.</summary>
+    /// <summary>Arms the settle: re-applies the target position until the world is idle.</summary>
     private static void ArmTeleportSettle(Vector3 pos, float yawDeg)
     {
         _teleportTarget = pos;
@@ -105,7 +105,7 @@ public static unsafe partial class CairnGameApi
         Mod.LogDebug("[Teleport] Settling to exact target after zone load...");
     }
 
-    /// <summary>Vrai si le monde est en train de (dé)charger des scènes / préparer une zone.</summary>
+    /// <summary>True if the world is currently (un)loading scenes / preparing a zone.</summary>
     private static bool IsWorldStreamingBusy()
     {
         try
@@ -127,9 +127,9 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// À appeler chaque frame depuis Mod.OnUpdate. Pour un travel inter-zones : une fois le monde
-    /// idle, pose la position exacte (le travel place d'abord au spawn de zone) et maintient jusqu'à
-    /// stabilité. No-op si rien en attente.
+    /// Call every frame from Mod.OnUpdate. For a cross-zone travel: once the world is idle,
+    /// apply the exact position (travel first places at the zone spawn) and hold until stable.
+    /// No-op if nothing is pending.
     /// </summary>
     public static void TickTeleportSettle(bool inGame)
     {
@@ -143,7 +143,7 @@ public static unsafe partial class CairnGameApi
                 return;
             }
 
-            // Tant que le monde charge (ou pas en jeu), on attend — pas de jeu avec la position.
+            // While the world is loading (or not in game), we wait — no messing with the position.
             if (!inGame || IsWorldStreamingBusy()) { _teleportStableSince = -1f; return; }
 
             var go = TryGetLocalMCGameObject();
@@ -152,7 +152,7 @@ public static unsafe partial class CairnGameApi
             var t = go.transform;
             float dist = Vector3.Distance(t.position, _teleportTarget);
 
-            // Monde idle + en jeu : on pose la position exacte si le travel nous a mis ailleurs.
+            // World idle + in game: apply the exact position if travel put us somewhere else.
             if (dist > TeleportStableDistance)
             {
                 t.position = _teleportTarget;
@@ -162,7 +162,7 @@ public static unsafe partial class CairnGameApi
                 return;
             }
 
-            // Sur la cible, monde idle, en jeu -> on confirme la stabilité avant de lâcher.
+            // On target, world idle, in game -> confirm stability before releasing.
             if (_teleportStableSince < 0f) _teleportStableSince = Time.time;
             else if (Time.time - _teleportStableSince >= TeleportStableSeconds)
             {

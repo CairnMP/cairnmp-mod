@@ -3,8 +3,8 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Construit un humanoïde primitif (capsule pour le corps + sphère pour la tête + bras/jambes)
-/// comme visuel de secours pour les fantômes quand le vrai modèle Cairn n'est pas disponible.
+/// Builds a primitive humanoid (capsule for the body + sphere for the head + arms/legs)
+/// as a fallback visual for ghosts when the real Cairn model isn't available.
 /// </summary>
 public static class PrimitiveHumanoidFactory
 {

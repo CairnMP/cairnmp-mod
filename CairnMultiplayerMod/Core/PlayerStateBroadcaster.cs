@@ -21,12 +21,12 @@ public partial class Mod
     private float _debugLastMissingClimbotFrameLogAt;
 
     /// <summary>
-    /// Gère la diffusion périodique de l'état, les vérifications de pitons
-    /// et le cycle de vie des fantômes. Appelé chaque frame depuis OnUpdate().
+    /// Handles periodic state broadcasting, piton checks, and the ghost lifecycle.
+    /// Called every frame from OnUpdate().
     /// </summary>
     private void TickPlayerSync()
     {
-        // Diffusion périodique de l'état du joueur local + synchronisation des fantômes distants.
+        // Periodic broadcast of the local player state + sync of remote ghosts.
         if (_network.IsHandshakeComplete)
         {
             if (IsGameplaySyncSuspended())
@@ -54,7 +54,7 @@ public partial class Mod
             TickCosmeticSync();
             TickHandPoseSync();
 
-            // Vérifie les nouveaux placements de pitons (une fréquence plus basse suffit).
+            // Check for newly placed pitons (a lower frequency is enough).
             if (LocalState == PlayerState.InGame)
             {
                 if (CairnGameApi.CheckForNewPiton(out var pitonId, out var pitonPos,
@@ -69,22 +69,22 @@ public partial class Mod
                 }
             }
 
-            // Cycle de vie des fantomes : spawn tot, conservation pendant les
-            // transitions, puis pilotage des transforms par les derniers paquets.
+            // Ghost lifecycle: spawn early, keep them alive across transitions,
+            // then drive the transforms from the latest packets.
             RemotePlayerManager.Reconcile(_network, LocalState);
             RemotePlayerManager.UpdateAll(_network, LocalState);
         }
         else
         {
-            // Déconnecté — supprime les fantômes résiduels.
+            // Disconnected — remove any leftover ghosts.
             if (LocalState == PlayerState.Unknown)
                 RemotePlayerManager.ClearAll();
         }
     }
 
     /// <summary>
-    /// Garde une presence reseau minimale pendant le bivouac sans toucher au
-    /// graphe gameplay original (pas de MC, NetFrame, meteo, pitons, fantomes).
+    /// Keeps a minimal network presence during the bivouac without touching the
+    /// original gameplay graph (no MC, NetFrame, weather, pitons, ghosts).
     /// </summary>
     private void TickSuspendedNetworkPresence()
     {
@@ -100,9 +100,9 @@ public partial class Mod
     }
 
     /// <summary>
-    /// Envoie la position du corps du joueur local + l'état de cycle de vie actuel.
-    /// Préfère le vrai transform du MC via PawnManager.MCGameObject ; se rabat
-    /// sur Camera.main tant que le MC n'a pas encore été instancié.
+    /// Sends the local player's body position + the current lifecycle state.
+    /// Prefers the real MC transform via PawnManager.MCGameObject; falls back to
+    /// Camera.main until the MC has been instantiated.
     /// </summary>
     private void SendLocalPlayerState()
     {
@@ -125,15 +125,14 @@ public partial class Mod
     }
 
     /// <summary>
-    /// Détermine l'état de cycle de vie actuel à partir des signaux
-    /// (connexion, handshake, scène, apparition du MC, stabilité de scène).
+    /// Determines the current lifecycle state from the available signals
+    /// (connection, handshake, scene, MC appearance, scene stability).
     /// </summary>
     /// <remarks>
-    /// L'état `InGame` est conditionné par ~1 seconde de stabilité de scène après
-    /// la résolution du MC. C'est la règle critique : on ne fait jamais apparaître ni
-    /// disparaître de fantômes pendant les transitions de scène, car c'est là que le
-    /// pipeline Addressables de Cairn plante quand on touche aux instances de
-    /// NetplayClimberPrefab.
+    /// The `InGame` state is gated on ~1 second of scene stability after the MC is
+    /// resolved. This is the critical rule: we never spawn or despawn ghosts during
+    /// scene transitions, because that's when Cairn's Addressables pipeline crashes
+    /// when we touch NetplayClimberPrefab instances.
     /// </remarks>
     private PlayerState ComputeLocalState()
     {
@@ -144,7 +143,7 @@ public partial class Mod
         if (_currentScene == null)
             return PlayerState.Connecting;
 
-        // Catégorie menu principal — couvre "MainMenu" et "MainMenuBackgroundsBase".
+        // Main-menu category — covers "MainMenu" and "MainMenuBackgroundsBase".
         if (_currentScene.StartsWith("MainMenu"))
             return PlayerState.InMenu;
 
@@ -164,10 +163,10 @@ public partial class Mod
             return PlayerState.Loading;
         }
 
-        // Dans une scene de gameplay, on attend que le graphe soit stable avant
-        // d'autoriser les captures natives et les fantomes. Apres une mort, une
-        // camera peut etre active avant que le nouveau MC existe ; utiliser cette
-        // camera comme signal InGame declenche des captures sur des objets detruits.
+        // In a gameplay scene, wait for the graph to be stable before allowing
+        // native captures and ghosts. After a death, a camera can be active before
+        // the new MC exists; using that camera as an InGame signal would trigger
+        // captures on destroyed objects.
         if (_timeSinceLastSceneLoad < 1.0f)
             return PlayerState.Loading;
 
@@ -178,7 +177,7 @@ public partial class Mod
     }
 
     /// <summary>
-    /// Capture et envoie les frames Netplay natives locales au rythme animation.
+    /// Captures and sends the local native Netplay frames at animation rate.
     /// </summary>
     private void SendLocalNetFrames()
     {
@@ -244,20 +243,19 @@ public partial class Mod
         _handPosePollTimer = 0f;
         _lastSentHandPosePacked = null;
         CairnGameApi.ResetLocalLampStateCache();
-        // Pas de reset de la detection freecam ici : l'etat eagle-eye/Display Route
-        // est pilote par les events natifs et persiste a travers le streaming de
-        // scene. Le reinitialiser ferait croire au mod qu'on est sorti du Display
-        // Route (alors qu'on y est toujours) -> impossible de poser un ping tant
-        // qu'on n'a pas re-toggle.
+        // No reset of freecam detection here: the eagle-eye/Display Route state is
+        // driven by native events and persists across scene streaming. Resetting it
+        // would make the mod believe we left Display Route (while we're still in it)
+        // -> can't place a ping until we re-toggle.
         CairnGameApi.ResetFingerSyncCache();
         ResetTimeSyncState();
         ResetRopeCoupleState();
     }
 
     /// <summary>
-    /// Sonde l'etat de la lampe locale et broadcast aux autres joueurs des qu'il
-    /// change. Pas de message tant qu'on n'a pas pu lire au moins une fois pour
-    /// eviter d'envoyer un "off" trompeur pendant les chargements.
+    /// Polls the local lamp state and broadcasts to the other players whenever it
+    /// changes. No message until we've been able to read it at least once, to avoid
+    /// sending a misleading "off" during loads.
     /// </summary>
     private void TickLampSync()
     {
@@ -271,9 +269,9 @@ public partial class Mod
         if (!CairnGameApi.TryGetLocalLampState(out var lightMode))
             return;
 
-        // L'int lampe transporte aussi (bits hauts, sans nouveau paquet) :
-        //  - bits 8-15  : mode de l'anchor du baton (Locator/Default) -> ApplyGhostStickByAnchorMode
-        //  - bits 16-24 : bitfield d'outfit (meshes actifs) -> ApplyGhostOutfitBits
+        // The lamp int also carries (high bits, no new packet):
+        //  - bits 8-15  : stick anchor mode (Locator/Default) -> ApplyGhostStickByAnchorMode
+        //  - bits 16-24 : outfit bitfield (active meshes) -> ApplyGhostOutfitBits
         int anchorMode = 0;
         CairnGameApi.TryGetLocalStickAnchorMode(out anchorMode);
         int outfitBits = CairnGameApi.GetLocalOutfitBits();
@@ -289,9 +287,9 @@ public partial class Mod
     }
 
     /// <summary>
-    /// Sonde l'etat cosmetique local (gants lumineux pour l'instant) et le broadcast
-    /// des qu'il change. Meme logique que la lampe : pas d'envoi tant qu'on n'a pas pu
-    /// lire au moins une fois, et uniquement sur changement (cosmetiques quasi statiques).
+    /// Polls the local cosmetic state (glowing gloves for now) and broadcasts it
+    /// whenever it changes. Same logic as the lamp: no send until we've read it at
+    /// least once, and only on change (cosmetics are nearly static).
     /// </summary>
     private void TickCosmeticSync()
     {
@@ -314,8 +312,8 @@ public partial class Mod
     }
 
     /// <summary>
-    /// Capture la pose des doigts locale et la diffuse a ~12 Hz, uniquement quand
-    /// elle change (les doigts immobiles ne generent aucun trafic).
+    /// Captures the local finger pose and broadcasts it at ~12 Hz, only when it
+    /// changes (motionless fingers generate no traffic).
     /// </summary>
     private void TickHandPoseSync()
     {

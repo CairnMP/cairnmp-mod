@@ -13,8 +13,8 @@ public static unsafe partial class CairnGameApi
     private static int _nullReadCount;
 
     /// <summary>
-    /// Retourne la position monde + yaw du GameObject MC du joueur local,
-    /// ou `false` si le MC n'a pas encore été instancié (on est encore dans un menu/cinématique).
+    /// Returns the world position + yaw of the local player's MC GameObject,
+    /// or `false` if the MC hasn't been instantiated yet (still in a menu/cutscene).
     /// </summary>
     public static bool TryGetLocalPlayerPose(out Vector3 position, out float yaw)
     {
@@ -24,9 +24,9 @@ public static unsafe partial class CairnGameApi
         var pm = FindPawnManager();
         if (pm == null) return false;
 
-        // Résout l'offset du backing field de MCGameObject une seule fois. Il2CppInterop
-        // n'expose que les vrais champs (pas les propriétés C#), donc on accède directement
-        // au backing field généré par le compilateur.
+        // Resolve the MCGameObject backing-field offset once. Il2CppInterop only
+        // exposes the real fields (not the C# properties), so we access the
+        // compiler-generated backing field directly.
         if (_mcGameObjectOffset < 0)
         {
             var klass = IL2CPP.il2cpp_object_get_class(pm.Pointer);
@@ -43,8 +43,8 @@ public static unsafe partial class CairnGameApi
         IntPtr goPtr = *(IntPtr*)((byte*)pm.Pointer + _mcGameObjectOffset);
         if (goPtr == IntPtr.Zero)
         {
-            // MC pas encore apparu — toujours en cinématique/chargement. Journalise un
-            // battement de coeur toutes les ~3 secondes pour savoir qu'on interroge.
+            // MC not yet present — still in a cutscene/loading. Log a heartbeat
+            // every ~3 seconds so we know we're still polling.
             _nullReadCount++;
             if (_nullReadCount == 1 || _nullReadCount % 30 == 0)
                 Mod.LogDebug($"[CairnGameApi] MC still null (try #{_nullReadCount})");
@@ -58,7 +58,7 @@ public static unsafe partial class CairnGameApi
         position = t.position;
         yaw = t.eulerAngles.y;
 
-        // Journalise la première résolution réussie — moment important, on veut le voir.
+        // Log the first successful resolution — an important moment, we want to see it.
         if (!_mcResolvedOnce)
         {
             _mcResolvedOnce = true;
@@ -70,11 +70,11 @@ public static unsafe partial class CairnGameApi
     private static MonoBehaviour FindPawnManager() => FindMonoBehaviourByName("PawnManager", ref _pawnManagerCached, ref _lastPawnManagerSearchFrame);
 
     /// <summary>
-    /// Retourne le GameObject MC du joueur local lui-même (pas un clone).
-    /// Les appelants peuvent utiliser `Object.Instantiate` pour obtenir un clone rendu
-    /// qui utilise exactement la même configuration de pipeline de rendu que le vrai
-    /// MC — contourne tous les problèmes de SkinnedMeshRenderer / shader custom /
-    /// passe de rendu rencontrés lors de l'instanciation de NetplayClimberPrefab.
+    /// Returns the local player's MC GameObject itself (not a clone).
+    /// Callers can use `Object.Instantiate` to get a rendered clone that uses exactly
+    /// the same render-pipeline setup as the real MC — sidesteps all the
+    /// SkinnedMeshRenderer / custom shader / render-pass issues hit when
+    /// instantiating NetplayClimberPrefab.
     /// </summary>
     public static GameObject TryGetLocalMCGameObject()
     {
@@ -96,20 +96,20 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Deplace le personnage local (MC) vers <paramref name="position"/> et oriente
-    /// son yaw. Sert aux commandes admin : /tp (l'hote se deplace localement vers un
-    /// joueur) et /bring (un client recoit un ServerTeleport et s'y deplace).
-    /// Retourne false si le MC n'est pas encore instancie (menu/cinematique).
+    /// Moves the local character (MC) to <paramref name="position"/> and orients its
+    /// yaw. Used by the admin commands: /tp (the host moves locally toward a player)
+    /// and /bring (a client receives a ServerTeleport and moves there).
+    /// Returns false if the MC isn't instantiated yet (menu/cutscene).
     /// </summary>
     public static bool TeleportLocalPlayer(Vector3 position, float yawDeg)
     {
         var go = TryGetLocalMCGameObject();
         if (go == null) return false;
 
-        // Zone cible differente de la zone courante ? -> on fait comme le jeu : un TRAVEL gere
-        // (chargement de la zone cible + dechargement propre de l'origine), puis on pose la
-        // position exacte une fois le monde idle. Sinon (meme zone), teleport direct instantane.
-        // Voir TeleportStreaming.cs.
+        // Target zone different from the current zone? -> we do as the game does: a managed TRAVEL
+        // (load the target zone + clean unload of the origin), then set the exact position once
+        // the world is idle. Otherwise (same zone), direct instant teleport.
+        // See TeleportStreaming.cs.
         if (TryTeleportAcrossZones(position, yawDeg))
             return true;
 

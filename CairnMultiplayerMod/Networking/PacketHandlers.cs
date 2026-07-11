@@ -8,14 +8,14 @@ namespace CairnMultiplayerMod.Networking;
 public partial class NetworkManager
 {
     /// <summary>
-    /// Dispatche un payload reçu du serveur vers le handler approprié.
-    /// payload[0] = PacketId ; payload[1..] = corps du paquet.
-    /// Appelé depuis Update() sur le thread Unity.
-    /// Un payload vide signale une déconnexion interne.
+    /// Dispatches a payload received from the server to the appropriate handler.
+    /// payload[0] = PacketId; payload[1..] = packet body.
+    /// Called from Update() on the Unity thread.
+    /// An empty payload signals an internal disconnection.
     /// </summary>
     private void ProcessPacket(byte[] payload)
     {
-        // Payload vide = marqueur de déconnexion depuis ReadLoop
+        // Empty payload = disconnection marker from ReadLoop
         if (payload.Length == 0)
         {
             OnDisconnected?.Invoke(LastError ?? "Connection lost");
@@ -139,14 +139,14 @@ public partial class NetworkManager
             }
             case PacketId.ServerTeleport:
             {
-                // Ordre de teleportation cible de l'hote (commande /bring). On valide
-                // la position avant d'appliquer pour ne pas envoyer le MC dans le vide.
+                // Targeted teleport order from the host (/bring command). We validate
+                // the position before applying so we don't send the MC into the void.
                 var pkt = new ServerTeleport();
                 pkt.Deserialize(r);
                 if (!IsValidPose(pkt.X, pkt.Y, pkt.Z, pkt.Yaw))
                     break;
-                // Filet de securite : on a pu entrer en bivouac entre le check de l'hote et
-                // l'arrivee du paquet. On ne s'arrache pas du bivouac pour une teleportation.
+                // Safety net: we may have entered a bivouac between the host's check and
+                // the packet's arrival. We don't yank the player out of a bivouac for a teleport.
                 if (CairnGameApi.IsLocalInBivouac())
                 {
                     Mod.LogDebug("[CairnMP] ServerTeleport ignored (local player is in a bivouac)");
@@ -215,7 +215,7 @@ public partial class NetworkManager
 
         if (!_remotePlayers.TryGetValue(pkt.PlayerId, out var p))
         {
-            // Joueur inconnu -- crée un stub pour quand même suivre l'état
+            // Unknown player -- create a stub to still track the state
             p = new RemotePlayer { Id = pkt.PlayerId, Name = $"Player{pkt.PlayerId}" };
             _remotePlayers[pkt.PlayerId] = p;
         }
@@ -311,9 +311,9 @@ public partial class NetworkManager
     }
 
     /// <summary>
-    /// DEBUG (test solo) : injecte une frame de joueur distant comme si elle venait du
-    /// reseau, pour le faux fantome miroir. Cree le RemotePlayer + spawn le fantome via
-    /// le vrai pipeline. Appeler dans l'ordre player puis climbot.
+    /// DEBUG (solo test): injects a remote player frame as if it came from the
+    /// network, for the fake mirror ghost. Creates the RemotePlayer + spawns the ghost via
+    /// the real pipeline. Call in order: player then climbot.
     /// </summary>
     public void DebugInjectRemotePlayer(int id, string name, NetFrameData playerFrame,
         bool hasClimbot, NetFrameData climbotFrame)
@@ -322,7 +322,7 @@ public partial class NetworkManager
         if (hasClimbot) ApplyRemoteClimbotFrame(id, climbotFrame);
     }
 
-    /// <summary>DEBUG : retire le faux joueur miroir (despawn du fantome).</summary>
+    /// <summary>DEBUG: removes the fake mirror player (despawns the ghost).</summary>
     public void DebugRemoveRemotePlayer(int id)
     {
         if (_remotePlayers.Remove(id))

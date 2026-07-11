@@ -6,11 +6,11 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Core.Chat;
 
 /// <summary>
-/// Chat in-game en IMGUI (OnGUI) : overlay des messages recents en bas a gauche +
-/// ligne de saisie. Entree ouvre/envoie, Echap annule. Pendant la saisie, les inputs
-/// gameplay du jeu sont geles (<see cref="CairnGameApi.SetGameplayInputDisabled"/>)
-/// pour que taper ne pilote pas le grimpeur. Reutilise la plomberie chat existante
-/// (NetworkManager.SendChat / OnChatReceived) ; les commandes passent par le router.
+/// In-game IMGUI (OnGUI) chat: an overlay of recent messages at the bottom left + an
+/// input line. Enter opens/sends, Escape cancels. While typing, the game's gameplay
+/// inputs are frozen (<see cref="CairnGameApi.SetGameplayInputDisabled"/>) so that
+/// typing doesn't drive the climber. Reuses the existing chat plumbing
+/// (NetworkManager.SendChat / OnChatReceived); commands go through the router.
 /// </summary>
 internal sealed class ChatController
 {
@@ -29,18 +29,18 @@ internal sealed class ChatController
     private static readonly Color TextColor = Color.white;
     private static readonly Color SystemColor = new Color(1f, 0.85f, 0.4f, 1f);
 
-    // Taille de police de base (a l'echelle 1, ~1080p). Montee depuis le defaut IMGUI
-    // (~13) pour une meilleure lisibilite. Scalee ensuite par UiScale.
+    // Base font size (at scale 1, ~1080p). Raised from the IMGUI default (~13) for
+    // better readability. Then scaled by UiScale.
     private const int BaseFontSize = 18;
 
-    // Echelle UI proportionnelle a la resolution (ref 1080p) : le chat IMGUI raisonne en
-    // pixels bruts, donc sans ca il parait minuscule en 4K et trop gros en 720p. Plancher
-    // a la proportion 720p (~0.667) pour ne pas devenir illisible sur les petits ecrans,
-    // plafond a 2.5 pour rester raisonnable sur les tres grands.
+    // UI scale proportional to the resolution (ref 1080p): the IMGUI chat reasons in
+    // raw pixels, so without this it looks tiny at 4K and too big at 720p. Floored at
+    // the 720p ratio (~0.667) so it doesn't become unreadable on small screens, capped
+    // at 2.5 to stay reasonable on very large ones.
     private static float UiScale => Mathf.Clamp(Screen.height / 1080f, 720f / 1080f, 2.5f);
     private static int ScaledFontSize => Mathf.RoundToInt(BaseFontSize * UiScale);
 
-    // Style de label cache, fontSize rafraichie chaque frame (resolution peut changer).
+    // Cached label style, fontSize refreshed every frame (resolution can change).
     private GUIStyle _labelStyle;
 
     private readonly NetworkManager _network;
@@ -48,15 +48,15 @@ internal sealed class ChatController
     private readonly Func<bool> _canChat;
 
     private readonly List<ChatLine> _lines = new();
-    // Derniers pseudos connus par id, pour nommer le joueur dans le message "X left"
-    // (OnPlayerLeft ne donne que l'id, le RemotePlayer est deja retire a ce moment).
+    // Last known nicknames by id, to name the player in the "X left" message
+    // (OnPlayerLeft only gives the id, the RemotePlayer is already removed by then).
     private readonly Dictionary<int, string> _knownNames = new();
     private bool _isOpen;
     private string _input = "";
 
-    // Historique des messages envoyes (rappel via fleches haut/bas, comme un terminal).
-    // _historyIndex == -1 : on edite le brouillon courant (_draft sauvegarde sa valeur quand
-    // on remonte dans l'historique pour pouvoir y revenir avec Bas).
+    // History of sent messages (recall via up/down arrows, like a terminal).
+    // _historyIndex == -1: we're editing the current draft (_draft saves its value when
+    // we go back up through the history so we can return to it with Down).
     private const int MaxHistory = 50;
     private readonly List<string> _history = new();
     private int _historyIndex = -1;
@@ -76,20 +76,20 @@ internal sealed class ChatController
 
     private void OnChatReceived(int fromId, string fromName, string message)
     {
-        // Notre propre message est deja affiche localement par Submit (echo optimiste) :
-        // on ignore l'echo reseau renvoye par l'hote pour ne pas l'afficher deux fois.
+        // Our own message is already displayed locally by Submit (optimistic echo):
+        // we ignore the network echo sent back by the host so we don't show it twice.
         if (fromId == _network.LocalPlayerId) return;
         AddLine($"{fromName}: {message}", system: false);
     }
 
     private void OnPlayerJoined(int id, string name)
     {
-        // Ignore soi-meme et les faux joueurs (debug mirror = id negatif).
+        // Ignore ourselves and fake players (debug mirror = negative id).
         if (id < 0 || id == _network.LocalPlayerId) return;
         var display = string.IsNullOrWhiteSpace(name) ? $"Player{id}" : name;
         bool isNew = !_knownNames.ContainsKey(id);
         _knownNames[id] = display;
-        // OnPlayerJoined peut re-emettre sur maj de presence : on n'annonce qu'une fois.
+        // OnPlayerJoined can re-fire on a presence update: we announce only once.
         if (isNew) AddSystemLine($"{display} joined the session.");
     }
 
@@ -101,7 +101,7 @@ internal sealed class ChatController
         AddSystemLine($"{display} left the session.");
     }
 
-    /// <summary>Ajoute une ligne systeme locale (feedback de commande) — non diffusee.</summary>
+    /// <summary>Adds a local system line (command feedback) — not broadcast.</summary>
     public void AddSystemLine(string text) => AddLine(text, system: true);
 
     private void AddLine(string text, bool system)
@@ -110,7 +110,7 @@ internal sealed class ChatController
         if (_lines.Count > MaxLines) _lines.RemoveAt(0);
     }
 
-    /// <summary>Appele chaque frame depuis Mod.OnUpdate (thread Unity).</summary>
+    /// <summary>Called every frame from Mod.OnUpdate (Unity thread).</summary>
     public void Update()
     {
         if (_isOpen && !_canChat())
@@ -118,21 +118,21 @@ internal sealed class ChatController
             Close();
             return;
         }
-        // Reconcile CHAQUE frame : input bloque SSI le chat est ouvert. _isOpen est l'unique
-        // source de verite. Si une frame echoue a resoudre l'InputManager, la suivante
-        // reessaie -> un chat ferme rend TOUJOURS l'input (plus de blocage permanent).
+        // Reconcile EVERY frame: input blocked IFF the chat is open. _isOpen is the single
+        // source of truth. If one frame fails to resolve the InputManager, the next one
+        // retries -> a closed chat ALWAYS returns input (no more permanent block).
         CairnGameApi.ReconcileGameplayInput(_isOpen);
     }
 
-    /// <summary>Fermeture forcee (failsafe panique) : ne touche pas au reseau, juste l'etat UI.
-    /// Le deblocage des inputs est fait par l'appelant via CairnGameApi.ForceClearInputBlock.</summary>
+    /// <summary>Forced close (panic failsafe): doesn't touch the network, just the UI state.
+    /// Unblocking inputs is done by the caller via CairnGameApi.ForceClearInputBlock.</summary>
     public void ForceClose()
     {
         _isOpen = false;
         _input = "";
     }
 
-    /// <summary>Appele depuis Mod.OnGUI.</summary>
+    /// <summary>Called from Mod.OnGUI.</summary>
     public void OnGUI()
     {
         var e = Event.current;
@@ -155,9 +155,9 @@ internal sealed class ChatController
     }
 
     /// <summary>
-    /// Saisie de texte manuelle depuis les events clavier IMGUI. On NE peut PAS utiliser
-    /// GUI.TextField : DoTextField est strippe du build IL2CPP (Method unstripping failed).
-    /// On construit donc la string nous-memes (Entree/Echap/Backspace + caracteres).
+    /// Manual text entry from the IMGUI keyboard events. We CANNOT use GUI.TextField:
+    /// DoTextField is stripped from the IL2CPP build (Method unstripping failed). So we
+    /// build the string ourselves (Enter/Escape/Backspace + characters).
     /// </summary>
     private void HandleTypingKey(Event e)
     {
@@ -187,7 +187,7 @@ internal sealed class ChatController
                 return;
         }
 
-        // Caractere imprimable (e.character porte le caractere tape, accents inclus).
+        // Printable character (e.character carries the typed character, accents included).
         char c = e.character;
         if (c != '\0' && !char.IsControl(c) && _input.Length < MaxInputLength)
         {
@@ -196,13 +196,13 @@ internal sealed class ChatController
         }
     }
 
-    /// <summary>Fleche haut : rappelle un message plus ancien de l'historique.</summary>
+    /// <summary>Up arrow: recalls an older message from the history.</summary>
     private void RecallOlder()
     {
         if (_history.Count == 0) return;
         if (_historyIndex == -1)
         {
-            _draft = _input;                  // sauvegarde le brouillon en cours
+            _draft = _input;                  // save the current draft
             _historyIndex = _history.Count - 1;
         }
         else if (_historyIndex > 0)
@@ -212,10 +212,10 @@ internal sealed class ChatController
         _input = _history[_historyIndex];
     }
 
-    /// <summary>Fleche bas : revient vers les messages plus recents, puis le brouillon courant.</summary>
+    /// <summary>Down arrow: moves back toward more recent messages, then the current draft.</summary>
     private void RecallNewer()
     {
-        if (_historyIndex == -1) return;      // deja sur le brouillon courant
+        if (_historyIndex == -1) return;      // already on the current draft
         if (_historyIndex < _history.Count - 1)
         {
             _historyIndex++;
@@ -224,11 +224,11 @@ internal sealed class ChatController
         else
         {
             _historyIndex = -1;
-            _input = _draft;                  // retour au brouillon
+            _input = _draft;                  // back to the draft
         }
     }
 
-    /// <summary>Empile un message envoye dans l'historique (sans doublon consecutif).</summary>
+    /// <summary>Pushes a sent message onto the history (no consecutive duplicate).</summary>
     private void PushHistory(string text)
     {
         if (_history.Count == 0 || _history[_history.Count - 1] != text)
@@ -246,32 +246,32 @@ internal sealed class ChatController
         _input = "";
         _historyIndex = -1;
         _draft = "";
-        CairnGameApi.ReconcileGameplayInput(true);   // immediat (le reconcile/frame suit)
+        CairnGameApi.ReconcileGameplayInput(true);   // immediate (the per-frame reconcile follows)
     }
 
     private void Close()
     {
         _isOpen = false;
         _input = "";
-        CairnGameApi.ReconcileGameplayInput(false);  // immediat ; reconcile/frame = filet
+        CairnGameApi.ReconcileGameplayInput(false);  // immediate; per-frame reconcile = safety net
     }
 
     private void Submit()
     {
         var text = (_input ?? "").Trim();
-        // try/finally CRUCIAL : si une commande leve une exception, Close() DOIT quand meme
-        // s'executer, sinon le chat reste ouvert et le gel d'input ne se restaure jamais
-        // (joueur bloque). On ferme toujours, advienne que pourra.
+        // try/finally is CRUCIAL: if a command throws, Close() MUST still run, otherwise
+        // the chat stays open and the input freeze is never restored (player stuck). We
+        // always close, come what may.
         try
         {
             if (text.Length > 0)
             {
-                // Historise tout ce qui est envoye (messages ET commandes) pour le rappel fleches.
+                // Record everything sent (messages AND commands) into the history for arrow recall.
                 PushHistory(text);
 
-                // Commande ? le router la consomme. Sinon, message normal : echo local
-                // immediat (on se voit toujours, meme solo ou avant qu'un pair arrive) +
-                // diffusion reseau.
+                // A command? the router consumes it. Otherwise, a normal message: immediate
+                // local echo (we always see ourselves, even solo or before a peer arrives) +
+                // network broadcast.
                 if (!_router.TryHandle(text))
                 {
                     var name = string.IsNullOrWhiteSpace(ModConfig.PlayerName.Value)
@@ -292,7 +292,7 @@ internal sealed class ChatController
         }
     }
 
-    /// <summary>Style de label a l'echelle courante (fontSize rafraichie chaque frame).</summary>
+    /// <summary>Label style at the current scale (fontSize refreshed every frame).</summary>
     private GUIStyle EnsureLabelStyle()
     {
         _labelStyle ??= new GUIStyle(GUI.skin.label);
@@ -307,14 +307,14 @@ internal sealed class ChatController
         var style = EnsureLabelStyle();
         float lineHeight = 22f * scale;
         float width = 520f * scale;
-        float x = Screen.width - width - 16f * scale;   // ancre en bas a DROITE
+        float x = Screen.width - width - 16f * scale;   // anchored at the bottom RIGHT
         float bottom = Screen.height - (_isOpen ? 84f : 60f) * scale;
 
         int shown = 0;
         for (int i = _lines.Count - 1; i >= 0 && shown < MaxVisibleLines; i--)
         {
             var line = _lines[i];
-            // Quand le chat est ferme, on masque les messages plus vieux que le fondu.
+            // When the chat is closed, we hide messages older than the fade.
             if (!_isOpen && now - line.ShownAt > FadeAfterSeconds) continue;
 
             float y = bottom - (shown + 1) * lineHeight;
@@ -329,7 +329,7 @@ internal sealed class ChatController
         float scale = UiScale;
         var style = EnsureLabelStyle();
         float width = 520f * scale;
-        float x = Screen.width - width - 16f * scale;   // ancre en bas a DROITE
+        float x = Screen.width - width - 16f * scale;   // anchored at the bottom RIGHT
         float height = (BaseFontSize + 10) * scale;
         float y = Screen.height - height - 28f * scale;
 
@@ -338,8 +338,8 @@ internal sealed class ChatController
         GUI.Box(new Rect(x - 2f * scale, y - 2f * scale, width + 4f * scale, height + 4f * scale), GUIContent.none);
         GUI.color = Color.white;
 
-        // Rendu manuel via GUI.Label (GUI.TextField est strippe en IL2CPP). Le caret
-        // clignote ~2 Hz pour signaler la saisie active.
+        // Manual rendering via GUI.Label (GUI.TextField is stripped under IL2CPP). The caret
+        // blinks at ~2 Hz to signal active input.
         bool caretOn = ((int)(Time.unscaledTime * 2f) & 1) == 0;
         GUI.Label(new Rect(x + 4f * scale, y + 2f * scale, width - 8f * scale, height),
             "> " + (_input ?? "") + (caretOn ? "_" : ""), style);

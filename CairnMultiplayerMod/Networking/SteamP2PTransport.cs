@@ -26,7 +26,7 @@ public partial class NetworkManager
     private readonly Dictionary<int, ulong> _steamIdsByPlayerId = new();
     private readonly Dictionary<ulong, string> _steamPlayerNames = new();
     private readonly Dictionary<ulong, double> _steamReliableForwardTimes = new();
-    // Etat pitons + lampes + meteo deplace dans SteamAuthoritativeSession (Phase 3 etapes 3-4).
+    // Piton + lamp + weather state moved into SteamAuthoritativeSession (Phase 3 steps 3-4).
     private readonly Dictionary<int, byte> _steamCosmeticSnapshot = new();
     private readonly Dictionary<int, byte[]> _steamHandPoseSnapshot = new();
     private bool _hasSteamTimeSnapshot;
@@ -38,7 +38,7 @@ public partial class NetworkManager
 
     public bool IsSteamTransportActive => _steamTransportActive;
 
-    /// <summary>Active le transport P2P Steam pour le lobby courant.</summary>
+    /// <summary>Activates the Steam P2P transport for the current lobby.</summary>
     public void StartSteamTransport(SteamLobbyManager lobby)
     {
         if (lobby == null || !lobby.IsInLobby) return;
@@ -63,7 +63,7 @@ public partial class NetworkManager
         Mod.LogDebug($"[SteamP2P] Transport active. local={_steamLocalId} host={_steamHostId} playerId={LocalPlayerId}");
     }
 
-    /// <summary>Synchronise la liste des membres Steam avec les stubs de joueurs distants.</summary>
+    /// <summary>Synchronizes the Steam member list with the remote-player stubs.</summary>
     public void RefreshSteamLobbyMembers(SteamLobbyManager lobby)
     {
         if (!_steamTransportActive || lobby == null || !lobby.IsInLobby) return;
@@ -310,21 +310,21 @@ public partial class NetworkManager
                 var fromId = EnsureSteamRemotePlayer(remoteSteamId);
                 var outPkt = new ServerRopeClip { FromPlayerId = fromId, TargetPlayerId = pkt.TargetPlayerId, Clip = pkt.Clip };
                 OnRopeClip?.Invoke(fromId, pkt.TargetPlayerId, pkt.Clip);
-                // exceptSteamId:0 -> tous, l'emetteur inclus (confirmation autoritaire).
+                // exceptSteamId:0 -> everyone, sender included (authoritative confirmation).
                 BroadcastSteamServerPacket(PacketId.ServerRopeClip, outPkt, exceptSteamId: 0, reliable: true);
                 break;
             }
             case PacketId.ClientPitonPlaced:
             case PacketId.ClientPitonRemoved:
-                // Delegue au cœur autoritatif : validation, id autoritaire, snapshot,
-                // ghost local et rediffusion sauf emetteur (Phase 3 etape 3).
+                // Delegate to the authoritative core: validation, authoritative id, snapshot,
+                // local ghost and rebroadcast except sender (Phase 3 step 3).
                 SteamSession.OnClientPacket(EnsureSteamRemotePlayer(remoteSteamId), id, r);
                 break;
             case PacketId.ClientWeatherState:
-                // La meteo Steam est autoritaire cote hote : les clients ne publient pas cet etat.
+                // Steam weather is authoritative on the host side: clients don't publish this state.
                 break;
             case PacketId.ClientLampState:
-                // Delegue au cœur autoritatif (snapshot lampe + ghost local + rediffusion).
+                // Delegate to the authoritative core (lamp snapshot + local ghost + rebroadcast).
                 SteamSession.OnClientPacket(EnsureSteamRemotePlayer(remoteSteamId), id, r);
                 break;
             case PacketId.ClientCosmeticState:
@@ -352,8 +352,8 @@ public partial class NetworkManager
                     rp.IsAsleep = pkt.Asleep;
                     rp.HasSleepState = true;
                 }
-                // Pas de rebroadcast : seul l'hote a besoin des etats de sommeil
-                // (pour decider du fast-forward). Le temps resultant est diffuse
+                // No rebroadcast: only the host needs the sleep states
+                // (to decide on fast-forward). The resulting time is broadcast
                 // via ServerTimeState.
                 break;
             }
@@ -372,8 +372,8 @@ public partial class NetworkManager
                 }
                 var outPkt = new ServerHandPose { PlayerId = playerId, Packed = pkt.Packed };
                 OnHandPose?.Invoke(outPkt);
-                // Reliable : la pose n'est envoyee que sur changement, on ne veut pas
-                // qu'un drop laisse les doigts du fantome figes sur l'ancienne pose.
+                // Reliable: the pose is only sent on change, so we don't want
+                // a drop to leave the ghost's fingers frozen on the old pose.
                 BroadcastSteamServerPacket(PacketId.ServerHandPose, outPkt, exceptSteamId: remoteSteamId, reliable: true);
                 break;
             }
@@ -391,7 +391,7 @@ public partial class NetworkManager
                     PosY = pkt.PosY,
                     PosZ = pkt.PosZ,
                 };
-                // Les pings sont ephemeres : pas de snapshot pour les late-joiners.
+                // Pings are ephemeral: no snapshot for late-joiners.
                 OnPingPlaced?.Invoke(outPkt);
                 BroadcastSteamServerPacket(PacketId.ServerPingPlaced, outPkt, exceptSteamId: remoteSteamId, reliable: true);
                 break;
@@ -503,8 +503,8 @@ public partial class NetworkManager
 
         if (_steamLobby != null && _steamLobby.IsHost)
         {
-            // Piton pose par l'hote lui-meme : le cœur autoritatif l'enregistre et le
-            // diffuse a tous (pas de ghost local, l'hote a le vrai piton).
+            // Piton placed by the host itself: the authoritative core records it and
+            // broadcasts it to everyone (no local ghost, the host has the real piton).
             SteamSession.HandleHostPitonPlaced(LocalPlayerId, pitonId, pos, rot, quality, hp, itemId);
             return;
         }
@@ -579,7 +579,7 @@ public partial class NetworkManager
     private void SendSteamSleepState(bool asleep)
     {
         if (!IsHandshakeComplete) return;
-        // L'hote lit son propre etat de sommeil localement — pas de paquet a soi-meme.
+        // The host reads its own sleep state locally — no packet to itself.
         if (_steamLobby != null && _steamLobby.IsHost) return;
 
         SendSteamPacketToHost(PacketId.ClientSleepState, new ClientSleepState { Asleep = asleep }, reliable: true);
@@ -618,8 +618,8 @@ public partial class NetworkManager
         if (!IsHandshakeComplete) return;
         if (!IsValidPose(pos.x, pos.y, pos.z, 0f)) return;
 
-        // L'hote diffuse directement aux autres ; l'emetteur affiche deja son
-        // propre ping localement (pas d'echo a soi-meme via BroadcastSteamServerPacket).
+        // The host broadcasts directly to the others; the sender already shows its
+        // own ping locally (no echo to itself via BroadcastSteamServerPacket).
         if (_steamLobby != null && _steamLobby.IsHost)
         {
             BroadcastSteamServerPacket(PacketId.ServerPingPlaced, new ServerPingPlaced
@@ -671,7 +671,7 @@ public partial class NetworkManager
         {
             var pkt = new ServerRopeClip { FromPlayerId = LocalPlayerId, TargetPlayerId = targetPlayerId, Clip = clip };
             OnRopeClip?.Invoke(LocalPlayerId, targetPlayerId, clip);
-            // exceptSteamId:0 -> diffuse a tous (l'emetteur inclus rend aussi le lien).
+            // exceptSteamId:0 -> broadcast to everyone (including the sender, who also renders the link).
             BroadcastSteamServerPacket(PacketId.ServerRopeClip, pkt, exceptSteamId: 0, reliable: true);
             return;
         }
@@ -687,9 +687,9 @@ public partial class NetworkManager
     }
 
     /// <summary>
-    /// Hote uniquement : envoie un ordre de teleportation a UN joueur cible (commande
-    /// /bring). Mappe playerId -> steamId puis envoie un ServerTeleport fiable.
-    /// Retourne false si on n'est pas l'hote ou si le joueur cible est introuvable.
+    /// Host only: sends a teleport order to ONE target player (/bring
+    /// command). Maps playerId -> steamId then sends a reliable ServerTeleport.
+    /// Returns false if we're not the host or if the target player can't be found.
     /// </summary>
     public bool SendTeleportToPlayer(int targetPlayerId, float x, float y, float z, float yaw)
     {
@@ -713,7 +713,7 @@ public partial class NetworkManager
         if (_hasSteamTimeSnapshot)
             SendSteamPayload(target, BuildPayload(PacketId.ServerTimeState, _steamTimeSnapshot), reliable: true);
 
-        // Meteo + pitons + lampes : etat officiel detenu par le cœur autoritatif.
+        // Weather + pitons + lamps: official state held by the authoritative core.
         SteamSession.SendSnapshotTo(EnsureSteamRemotePlayer(steamId));
 
         foreach (var kv in _steamCosmeticSnapshot)
@@ -728,7 +728,7 @@ public partial class NetworkManager
             SendSteamPayload(target, BuildPayload(PacketId.ServerHandPose, handPkt), reliable: true);
         }
 
-        // Liens d'encordement actifs (late-joiner).
+        // Active rope links (late-joiner).
         foreach (var (a, b) in RopeLinkState.Links())
             SendSteamPayload(target, BuildPayload(PacketId.ServerRopeClip,
                 new ServerRopeClip { FromPlayerId = a, TargetPlayerId = b, Clip = true }), reliable: true);
@@ -920,7 +920,7 @@ public partial class NetworkManager
         if (steamId == _steamLocalId) return true;
         if (_steamLobby == null || !_steamLobby.IsInLobby) return false;
 
-        // Lit Steam directement pour couvrir le court delai avant OnMembersChanged.
+        // Reads Steam directly to cover the short delay before OnMembersChanged.
         try
         {
             var count = SteamMatchmaking.GetNumLobbyMembers(_steamLobby.CurrentLobbyId);
@@ -967,7 +967,7 @@ public partial class NetworkManager
         _steamIdsByPlayerId.Clear();
         _steamPlayerNames.Clear();
         _steamReliableForwardTimes.Clear();
-        _steamSession?.Reset(); // pitons + lampes + meteo
+        _steamSession?.Reset(); // pitons + lamps + weather
         _steamCosmeticSnapshot.Clear();
         _steamHandPoseSnapshot.Clear();
         _hasSteamTimeSnapshot = false;

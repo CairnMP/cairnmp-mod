@@ -8,16 +8,16 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Pause « amicale en multijoueur » : en solo, ouvrir le menu pause (ESC) gele tout
-/// (Time.timeScale = 0). En multi, ce gel local ferait decrocher le joueur du monde
-/// partage — l'horloge jour/nuit (host-autoritaire) se fige pour tous, les avatars
-/// distants ne sont plus mis a jour, etc. On neutralise donc UNIQUEMENT le gel du menu
-/// pause pendant une session multijoueur : le monde continue de tourner pour tout le
-/// monde, tandis que le grimpeur local reste fige sur place (le contexte d'input du menu
-/// coupe deja le gameplay -> aucune action ne lui parvient).
+/// "Multiplayer-friendly" pause: in solo, opening the pause menu (ESC) freezes everything
+/// (Time.timeScale = 0). In multiplayer, that local freeze would disconnect the player from the
+/// shared world — the day/night clock (host-authoritative) freezes for everyone, remote
+/// avatars stop updating, etc. So we neutralize ONLY the pause menu's freeze
+/// during a multiplayer session: the world keeps running for everyone,
+/// while the local climber stays frozen in place (the menu's input context
+/// already cuts gameplay -> no action reaches it).
 ///
-/// On cible precisement <see cref="PauseMenu"/> (ESC), distinct des autres pauses
-/// legitimes (cutscene, dialogue, chargement) qui, elles, doivent continuer a geler.
+/// We target precisely <see cref="PauseMenu"/> (ESC), distinct from the other legitimate
+/// pauses (cutscene, dialogue, loading) which must keep freezing.
 /// </summary>
 public static unsafe partial class CairnGameApi
 {
@@ -25,19 +25,19 @@ public static unsafe partial class CairnGameApi
     private static bool _mpPausePatchInstalled;
     private static bool _mpPausePatchFailed;
 
-    // Vrai tant que le menu pause natif (ESC) est ouvert. Mis a jour par les postfixes
-    // PauseMenu.OnOpened / OnClosed.
+    // True while the native pause menu (ESC) is open. Updated by the PauseMenu.OnOpened /
+    // OnClosed postfixes.
     private static bool _pauseMenuOpen;
 
-    // Trace one-shot : confirme la 1re fois que l'override de timeScale s'applique reellement.
+    // One-shot trace: confirms the first time the timeScale override actually applies.
     private static bool _pauseOverrideLoggedOnce;
 
     /// <summary>
-    /// Faut-il maintenir le monde en marche malgre la pause ? Vrai si le menu pause ESC est
-    /// ouvert ET qu'on est connecte en multijoueur. NB : on ne teste PAS LocalState==InGame,
-    /// car a l'ouverture du menu pause GlobalGameManager passe en Menu -> LocalState devient
-    /// InMenu. Le flag _pauseMenuOpen (mis par PauseMenu.OnOpened) garantit deja qu'il s'agit
-    /// du menu pause en jeu, pas du menu titre. Hors-ligne, on ne touche a rien.
+    /// Should we keep the world running despite the pause? True if the ESC pause menu is
+    /// open AND we're connected in multiplayer. NB: we do NOT test LocalState==InGame,
+    /// because when the pause menu opens GlobalGameManager switches to Menu -> LocalState becomes
+    /// InMenu. The _pauseMenuOpen flag (set by PauseMenu.OnOpened) already guarantees this is
+    /// the in-game pause menu, not the title menu. Offline, we touch nothing.
     /// </summary>
     private static bool ShouldKeepWorldRunningWhilePaused()
     {
@@ -87,7 +87,7 @@ public static unsafe partial class CairnGameApi
 
     private static class MultiplayerPausePatches
     {
-        // Le menu pause vient de s'ouvrir.
+        // The pause menu has just opened.
         internal static void PauseMenuOnOpenedPostfix()
         {
             _pauseMenuOpen = true;
@@ -96,17 +96,17 @@ public static unsafe partial class CairnGameApi
                 (ShouldKeepWorldRunningWhilePaused() ? " — keeping shared world running (MP session)" : " (solo: normal pause)"));
         }
 
-        // Le menu pause vient de se fermer : le jeu reprend son timeScale normal tout seul
-        // (plus aucune requete de pause), rien a restaurer de notre cote.
+        // The pause menu has just closed: the game restores its normal timeScale on its own
+        // (no more pause requests), nothing for us to restore.
         internal static void PauseMenuOnClosedPostfix()
         {
             _pauseMenuOpen = false;
             Mod.Log.Msg("[Pause] Pause menu closed");
         }
 
-        // Postfix sur TimeManager.Update : apres que le jeu a applique son timeScale (0 a
-        // cause de la pause-menu), on le force a 1 tant qu'on est en session MP. Idempotent
-        // et borne au seul cas pause-menu + MP -> aucun effet en solo ni sur les cutscenes.
+        // Postfix on TimeManager.Update: after the game applies its timeScale (0 because
+        // of the pause menu), we force it back to 1 while in an MP session. Idempotent
+        // and scoped to the pause-menu + MP case only -> no effect in solo or on cutscenes.
         internal static void TimeManagerUpdatePostfix()
         {
             if (!ShouldKeepWorldRunningWhilePaused()) return;

@@ -7,19 +7,19 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Synchronisation des cosmetiques du personnage entre joueurs.
+/// Syncs the character's cosmetics between players.
 ///
-/// Le netplay vanille ne transmet ni les gants lumineux (GlowingGloves) ni l'outfit :
-/// le fantome est un clone du NetplayClimberPrefab par defaut, donc apparence de base.
-/// On lit ici l'etat cosmetique local (pour l'instant : gants lumineux actifs) sous
-/// forme de champ de bits, et on le reapplique sur le fantome.
+/// Vanilla netplay transmits neither the glowing gloves (GlowingGloves) nor the outfit:
+/// the ghost is a clone of NetplayClimberPrefab by default, so it shows the base look.
+/// Here we read the local cosmetic state (for now: glowing gloves active) as a bit
+/// field, and reapply it on the ghost.
 ///
-/// Gants lumineux : le composant Cairn `GlowingGloves` (sur le MC) porte deux
-/// GameObjects `leftLight`/`rightLight` (la lueur reelle) + un `mainRenderer` (le mesh),
-/// auto-geres depuis l'inventaire. Le fantome n'a PAS ce composant -> on attache deux
-/// Light de secours aux os de mains du fantome (LeftHand/RightHand via l'Animator
-/// humanoide, avec repli par nom d'os comme FingerSync). On ne reproduit pas le mesh
-/// (rebind de skeleton trop fragile) : la lueur sur les mains suffit a regler le bug.
+/// Glowing gloves: the Cairn `GlowingGloves` component (on the MC) carries two
+/// GameObjects `leftLight`/`rightLight` (the actual glow) + a `mainRenderer` (the mesh),
+/// managed automatically from the inventory. The ghost does NOT have this component -> we
+/// attach two fallback Lights to the ghost's hand bones (LeftHand/RightHand via the
+/// humanoid Animator, with a bone-name fallback like FingerSync). We don't reproduce the
+/// mesh (skeleton rebind is too fragile): the glow on the hands is enough to fix the bug.
 /// </summary>
 public static unsafe partial class CairnGameApi
 {
@@ -30,16 +30,16 @@ public static unsafe partial class CairnGameApi
     private static bool _cosmeticWarningLogged;
     private static bool _ghostHandDumpDone;
 
-    // Template de la lueur des gants, lu une fois depuis le GlowingGloves local
-    // (sinon valeurs par defaut cyan). Sert a faire matcher la lueur du fantome.
+    // Glove glow template, read once from the local GlowingGloves (otherwise
+    // default cyan values). Used to make the ghost's glow match.
     private static bool _glowTemplateRead;
     private static Color _glowColor = new(0.45f, 0.85f, 1f);
     private static float _glowIntensity = 2.5f;
     private static float _glowRange = 1.6f;
 
     /// <summary>
-    /// Lit l'etat cosmetique local sous forme de champ de bits (cf. Protocol.CosmeticFlag*).
-    /// Retourne false si le MC local est indisponible.
+    /// Reads the local cosmetic state as a bit field (see Protocol.CosmeticFlag*).
+    /// Returns false if the local MC is unavailable.
     /// </summary>
     public static bool TryGetLocalCosmetics(out byte flags)
     {
@@ -73,8 +73,8 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Active/desactive la lueur de gants sur un fantome en attachant (ou retirant)
-    /// deux Light de secours aux os de mains. Idempotent. Retourne false si echec.
+    /// Enables/disables the glove glow on a ghost by attaching (or removing) two
+    /// fallback Lights to the hand bones. Idempotent. Returns false on failure.
     /// </summary>
     public static bool SetGhostGlowingGloves(NetplayRemotePlayer ghost, bool on)
     {
@@ -112,7 +112,7 @@ public static unsafe partial class CairnGameApi
         var existing = hand.Find(GhostGloveLightName);
         if (on)
         {
-            if (existing != null) return true; // deja en place
+            if (existing != null) return true; // already in place
 
             var lightGo = new GameObject(GhostGloveLightName);
             lightGo.transform.SetParent(hand, worldPositionStays: false);
@@ -147,10 +147,10 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Vrai si les gants sont reellement affiches sur le joueur local. On lit l'etat APPLIQUE par
-    /// le jeu : le GameObject du mesh des gants (mainRenderer) est actif uniquement quand ils sont
-    /// equipes/sortis. (ShouldBeVisible() ne convient pas : il renvoie true pour la simple
-    /// possession en inventaire, donc tous les joueurs partageant la save paraissaient gantes.)
+    /// True if the gloves are actually shown on the local player. We read the state APPLIED by
+    /// the game: the glove mesh GameObject (mainRenderer) is active only when they are
+    /// equipped/out. (ShouldBeVisible() doesn't work: it returns true for merely owning them
+    /// in the inventory, so every player sharing the save appeared to be wearing gloves.)
     /// </summary>
     private static bool AreGlovesVisible(GlowingGloves gloves)
     {
@@ -182,8 +182,8 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Resout les os de mains du fantome : Animator humanoide d'abord, repli par nom
-    /// si le rig est generique (cf. FingerSync, le rig de Cairn n'est pas toujours humanoide).
+    /// Resolves the ghost's hand bones: humanoid Animator first, name-based fallback
+    /// if the rig is generic (see FingerSync, Cairn's rig isn't always humanoid).
     /// </summary>
     private static bool TryGetGhostHandBones(GameObject go, out Transform left, out Transform right)
     {
@@ -216,14 +216,14 @@ public static unsafe partial class CairnGameApi
                 if (t == null) continue;
                 var low = t.name.ToLowerInvariant();
                 if (!low.Contains("hand")) continue;
-                // Exclut doigts, cibles IK, attaches.
+                // Exclude fingers, IK targets, attach points.
                 if (low.Contains("finger") || low.Contains("thumb") || low.Contains("index")
                     || low.Contains("middle") || low.Contains("ring") || low.Contains("pinky")
                     || low.Contains("little") || low.Contains("ik") || low.Contains("target")
                     || low.Contains("pole") || low.Contains("attach"))
                     continue;
 
-                // Inclut l'infixe _l_ / _r_ (ex. loc_l_ContactHand, loc_r_ContactHand du squelette Cairn).
+                // Include the _l_ / _r_ infix (e.g. loc_l_ContactHand, loc_r_ContactHand of the Cairn skeleton).
                 if (left == null && (low.Contains("left") || low.Contains("_l_") || low.EndsWith("_l") || low.EndsWith(".l") || low.EndsWith(" l") || low.Contains("hand_l") || low.Contains("handl")))
                     left = t;
                 else if (right == null && (low.Contains("right") || low.Contains("_r_") || low.EndsWith("_r") || low.EndsWith(".r") || low.EndsWith(" r") || low.Contains("hand_r") || low.Contains("handr")))
@@ -235,8 +235,8 @@ public static unsafe partial class CairnGameApi
         catch { }
     }
 
-    /// <summary>Logue une fois les transforms ressemblant a une main sous le fantome,
-    /// pour diagnostiquer si la resolution echoue en jeu.</summary>
+    /// <summary>Logs once the hand-like transforms under the ghost, to diagnose
+    /// when resolution fails in-game.</summary>
     private static void DumpGhostHandCandidates(GameObject go)
     {
         if (_ghostHandDumpDone) return;
@@ -281,23 +281,23 @@ public static unsafe partial class CairnGameApi
         return null;
     }
 
-    // ---- Gants : clone du rig natif + pilotage depuis le corps du fantome -------------------
-    // Les gants ont leur PROPRE squelette (rootBoneGloves='Armature', 165 os nommes comme le corps)
-    // et le composant natif GlowingGloves.LateUpdate recopie le corps -> cet armature chaque frame.
-    // Le prefab du fantome n'a rien de tout ca. On clone donc le sous-arbre des gants (mesh + son
-    // armature, auto-suffisant) sur le fantome, puis on pilote l'armature des gants depuis les os du
-    // CORPS du fantome chaque frame (memes noms) — exactement comme le natif. Aucun rebind fragile.
+    // ---- Gloves: clone the native rig + drive it from the ghost's body -------------------
+    // The gloves have their OWN skeleton (rootBoneGloves='Armature', 165 bones named like the body)
+    // and the native GlowingGloves.LateUpdate component copies the body -> this armature every frame.
+    // The ghost prefab has none of that. So we clone the glove sub-tree (mesh + its armature,
+    // self-contained) onto the ghost, then drive the glove armature from the ghost's BODY bones
+    // every frame (same names) — exactly like the native code. No fragile rebind.
     private const string GhostGloveMeshName = "MP_GhostGloveRig";
 
     private sealed class GhostGloveRig
     {
         public GameObject Clone;
-        public Transform[] GloveBones;   // os de l'armature de gants clonee
-        public Transform[] BodyBones;    // os du corps du fantome correspondants (meme index)
+        public Transform[] GloveBones;   // bones of the cloned glove armature
+        public Transform[] BodyBones;    // matching ghost body bones (same index)
     }
     private static readonly System.Collections.Generic.Dictionary<IntPtr, GhostGloveRig> _ghostGloveRigs = new();
 
-    /// <summary>Cree (au besoin) puis affiche/masque le rig de gants sur le fantome.</summary>
+    /// <summary>Creates (if needed) then shows/hides the glove rig on the ghost.</summary>
     public static bool SetGhostGloveMesh(NetplayRemotePlayer ghost, bool on)
     {
         if (ghost == null || ghost.Pointer == IntPtr.Zero) return false;
@@ -316,7 +316,7 @@ public static unsafe partial class CairnGameApi
             }
             if (!on) return true;
 
-            // Template : le sous-arbre des gants du joueur local (mesh GlowingGloves00.002 + Armature).
+            // Template: the local player's glove sub-tree (mesh GlowingGloves00.002 + Armature).
             var mc = TryGetLocalMCGameObject();
             var localGloves = mc != null ? TryGetLocalGlowingGloves(mc) : null;
             var srcRenderer = localGloves != null ? localGloves.mainRenderer : null;
@@ -325,8 +325,8 @@ public static unsafe partial class CairnGameApi
                 ? srcRenderer.transform.parent.gameObject : srcRenderer.gameObject;
             if (innerGo == null) return false;
 
-            // Carte des os du CORPS du fantome — construite AVANT de parenter le clone (sinon les
-            // os clones, nommes a l'identique, pollueraient la carte).
+            // Map of the ghost's BODY bones — built BEFORE parenting the clone (otherwise the
+            // cloned bones, named identically, would pollute the map).
             var map = new System.Collections.Generic.Dictionary<string, Transform>();
             var ghostTs = go.GetComponentsInChildren<Transform>(true);
             for (int i = 0; i < ghostTs.Length; i++)
@@ -335,18 +335,18 @@ public static unsafe partial class CairnGameApi
                 if (t != null && !map.ContainsKey(t.name)) map[t.name] = t;
             }
 
-            // Clone le sous-arbre (mesh skinne sur sa propre armature -> auto-suffisant).
+            // Clone the sub-tree (mesh skinned on its own armature -> self-contained).
             var clone = UnityEngine.Object.Instantiate(innerGo);
             clone.name = GhostGloveMeshName;
             clone.transform.SetParent(go.transform, worldPositionStays: false);
             clone.transform.localPosition = Vector3.zero;
             clone.transform.localRotation = Quaternion.identity;
 
-            // Retire un eventuel composant GlowingGloves clone (on pilote l'armature nous-memes).
+            // Remove any cloned GlowingGloves component (we drive the armature ourselves).
             foreach (var ggc in clone.GetComponentsInChildren<GlowingGloves>(true))
                 if (ggc != null) UnityEngine.Object.Destroy(ggc);
 
-            // Appaire les os de l'armature de gants clonee aux os du corps du fantome (par nom).
+            // Pair the cloned glove armature bones with the ghost's body bones (by name).
             var gloveBones = new System.Collections.Generic.List<Transform>();
             var bodyBones = new System.Collections.Generic.List<Transform>();
             var cloneTs = clone.GetComponentsInChildren<Transform>(true);
@@ -386,7 +386,7 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    /// <summary>Recopie la pose des os du corps du fantome sur l'armature des gants (bonesPairs natif).</summary>
+    /// <summary>Copies the pose of the ghost's body bones onto the glove armature (native bonesPairs).</summary>
     private static void PoseGloveRig(GhostGloveRig rig)
     {
         if (rig == null || rig.GloveBones == null) return;
@@ -399,7 +399,7 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    /// <summary>A appeler chaque frame : repose les rigs de gants actifs sur le corps des fantomes.</summary>
+    /// <summary>Call every frame: re-poses the active glove rigs onto the ghosts' bodies.</summary>
     public static void TickGhostGloveRigs()
     {
         if (_ghostGloveRigs.Count == 0) return;
@@ -408,24 +408,24 @@ public static unsafe partial class CairnGameApi
                 PoseGloveRig(rig);
     }
 
-    // ---- Baton : sync de la position via le mode natif de l'AavaLightStickAnchor ---------
-    // Le mode de l'anchor (LightStickMode) decide la position du baton cote LOCAL :
-    //   Locator (=1) = en main, Default (=0) = range sur le sac.
-    // Le fantome (prefab netplay allege) n'a PAS d'AavaLightStickAnchor -> impossible de lui poser
-    // un mode. On reparente donc le mesh du baton du fantome : sur loc_Stick (sous bn_r_Wrist, deja
-    // synchronise par le NetFrame -> suit le poignet) quand en main, ou sur son os de sac d'origine
-    // (bn_Bag_Up, position native rangee) sinon. Le mode est transporte PACKE dans l'int de la
-    // lampe (LampSync) -> aucun nouveau paquet reseau.
+    // ---- Stick: sync the position via the AavaLightStickAnchor's native mode ---------
+    // The anchor's mode (LightStickMode) decides the stick's position on the LOCAL side:
+    //   Locator (=1) = in hand, Default (=0) = stowed on the bag.
+    // The ghost (stripped-down netplay prefab) does NOT have an AavaLightStickAnchor -> we can't
+    // set a mode on it. So we reparent the ghost's stick mesh: onto loc_Stick (under bn_r_Wrist,
+    // already synced by the NetFrame -> follows the wrist) when in hand, or onto its original bag
+    // bone (bn_Bag_Up, native stowed position) otherwise. The mode is carried PACKED in the lamp's
+    // int (LampSync) -> no new network packet.
 
-    private const int LightStickModeLocator = 1;   // LightStickMode.Locator = en main
+    private const int LightStickModeLocator = 1;   // LightStickMode.Locator = in hand
 
-    // Offset du baton (bn_Stick) relatif a loc_Stick quand en main : mesure en jeu (mode=Locator)
-    // -> pos=(0, 0.62, 0), rotation identite. C'est exactement ce que fait l'anchor natif en mode
-    // Locator (baton a 0.62 m le long de loc_Stick, sans rotation).
+    // Stick (bn_Stick) offset relative to loc_Stick when in hand: measured in-game (mode=Locator)
+    // -> pos=(0, 0.62, 0), identity rotation. This is exactly what the native anchor does in
+    // Locator mode (stick 0.62 m along loc_Stick, no rotation).
     private static readonly Vector3 StickHandLocalPos = new(0f, 0.62f, 0f);
     private static readonly Quaternion StickHandLocalRot = Quaternion.identity;
 
-    /// <summary>Lit le mode de l'AavaLightStickAnchor local (LightStickMode en int), ou false.</summary>
+    /// <summary>Reads the local AavaLightStickAnchor's mode (LightStickMode as int), or false.</summary>
     public static bool TryGetLocalStickAnchorMode(out int mode)
     {
         mode = 0;
@@ -441,15 +441,16 @@ public static unsafe partial class CairnGameApi
         catch { return false; }
     }
 
-    // Etat repos (sac) de l'os bn_Stick de chaque fantome, capture avant tout deplacement.
+    // Rest (bag) state of each ghost's bn_Stick bone, captured before any move.
     private struct StickBoneRest { public Transform Parent; public Vector3 Pos; public Quaternion Rot; }
     private static readonly System.Collections.Generic.Dictionary<IntPtr, StickBoneRest> _ghostStickRest = new();
 
     /// <summary>
-    /// Place le baton du fantome selon le mode anchor recu. On deplace l'OS bn_Stick (qui porte le
-    /// MESH du baton — la lumiere AavaStickLight n'est que la lueur) : main = bn_Stick sur loc_Stick
-    /// + offset mesure, range = bn_Stick a sa pose native. La lumiere est parentee a bn_Stick (comme
-    /// le joueur local) pour suivre le mesh. bn_Stick n'est pas anime sur le fantome -> reparent sur.
+    /// Places the ghost's stick according to the received anchor mode. We move the bn_Stick BONE
+    /// (which carries the stick MESH — the AavaStickLight light is only the glow): hand = bn_Stick
+    /// on loc_Stick + measured offset, stowed = bn_Stick at its native pose. The light is parented
+    /// to bn_Stick (like the local player) to follow the mesh. bn_Stick isn't animated on the
+    /// ghost -> safe to reparent.
     /// </summary>
     public static bool ApplyGhostStickByAnchorMode(NetplayRemotePlayer ghost, int anchorMode)
     {
@@ -464,8 +465,8 @@ public static unsafe partial class CairnGameApi
             if (bnStick == null) return false;
             var key = go.Pointer;
 
-            // Une fois : snapshot de la pose native de bn_Stick + parente la lumiere sur bn_Stick
-            // (comme le local : AavaStickLight enfant de bn_Stick) pour qu'elle suive le mesh.
+            // Once: snapshot bn_Stick's native pose + parent the light onto bn_Stick
+            // (like the local player: AavaStickLight child of bn_Stick) so it follows the mesh.
             if (!_ghostStickRest.ContainsKey(key))
             {
                 _ghostStickRest[key] = new StickBoneRest { Parent = bnStick.parent, Pos = bnStick.localPosition, Rot = bnStick.localRotation };
@@ -504,12 +505,12 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    // ---- Outfit : mirror de l'etat actif des meshes du joueur local vers le fantome --------
-    // Le fantome (prefab netplay) a TOUS ses meshes d'outfit actifs a la fois (capuche + no-hood +
-    // no-harness + 2 sacs + robot) -> superposition visuelle. Le local n'active que le bon
-    // sous-ensemble (via PawnSkinHandler). On mirror donc l'etat visible de chaque mesh present sur
-    // le fantome. L'etat est transporte en bitfield packe dans l'int de la lampe (bits 16+), un bit
-    // par mesh dans l'ordre ci-dessous -> aucun nouveau paquet reseau.
+    // ---- Outfit: mirror the local player's active meshes onto the ghost --------
+    // The ghost (netplay prefab) has ALL its outfit meshes active at once (hood + no-hood +
+    // no-harness + 2 bags + robot) -> visual overlap. The local player only enables the right
+    // subset (via PawnSkinHandler). So we mirror the visible state of each mesh present on the
+    // ghost. The state is carried as a bitfield packed in the lamp's int (bits 16+), one bit per
+    // mesh in the order below -> no new network packet.
     private static readonly string[] OutfitMeshes =
     {
         "NPC_Bot", "MC_Bag", "OBJ_Piolet", "MC_Body", "MC_Outfit",
@@ -517,7 +518,7 @@ public static unsafe partial class CairnGameApi
     };
     public const int OutfitBitsMask = (1 << 9) - 1;   // 9 meshes
 
-    /// <summary>Bitfield de visibilite (active && renderer enabled) des meshes d'outfit locaux.</summary>
+    /// <summary>Visibility bitfield (active && renderer enabled) of the local outfit meshes.</summary>
     public static int GetLocalOutfitBits()
     {
         var mc = TryGetLocalMCGameObject();
@@ -542,7 +543,7 @@ public static unsafe partial class CairnGameApi
         return bits;
     }
 
-    /// <summary>Applique le bitfield d'outfit sur le fantome : chaque mesh actif/inactif comme le local.</summary>
+    /// <summary>Applies the outfit bitfield on the ghost: each mesh active/inactive like the local player.</summary>
     public static bool ApplyGhostOutfitBits(NetplayRemotePlayer ghost, int bits)
     {
         if (ghost == null || ghost.Pointer == IntPtr.Zero) return false;

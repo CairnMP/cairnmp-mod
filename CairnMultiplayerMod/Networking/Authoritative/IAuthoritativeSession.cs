@@ -5,80 +5,80 @@ using CairnMultiplayer.Shared;
 namespace CairnMultiplayerMod.Networking.Authoritative;
 
 // ============================================================================
-// Phase 3 — Host autoritatif : couture agnostique du transport.
+// Phase 3 — Authoritative host: transport-agnostic seam.
 //
-// Constat (2026-07) : l'hote fait DEJA autorite, mais la logique (validation,
-// roster, snapshots, rediffusion "Server*" a tous-sauf-l'emetteur) est noyee inline
-// dans SteamP2PTransport — melangee au "comment les octets voyagent". Impossible a
-// tester hors-jeu, et chaque nouvelle synchro doit re-cabler la meme plomberie.
+// Observation (2026-07): the host is ALREADY authoritative, but the logic (validation,
+// roster, snapshots, rebroadcasting "Server*" to everyone-except-the-sender) is buried inline
+// in SteamP2PTransport — mixed together with "how the bytes travel". Impossible to
+// test out-of-game, and every new sync has to re-wire the same plumbing.
 //
-// Objectif : extraire cette logique dans un SEUL cœur autoritatif
-// (IAuthoritativeSession) ou vivent l'autorite, la validation, l'etat officiel et les
-// snapshots. Le transport n'est plus qu'un IAuthoritativeSink : il convoie les octets,
-// il ne decide rien. On reste tout-Steam ; ce decouplage garde le cœur testable et
-// pret pour la migration du transport vers SteamNetworkingSockets.
+// Goal: extract this logic into a SINGLE authoritative core
+// (IAuthoritativeSession) where authority, validation, official state and
+// snapshots live. The transport becomes just an IAuthoritativeSink: it carries the bytes,
+// it decides nothing. We stay all-Steam; this decoupling keeps the core testable and
+// ready for the transport migration to SteamNetworkingSockets.
 //
-// Ces types ne dependent QUE du protocole partage (PacketId / IPacket) — aucun type
-// Il2Cpp, aucun SteamId. C'est ce qui les rend testables hors-jeu.
+// These types depend ONLY on the shared protocol (PacketId / IPacket) — no Il2Cpp
+// type, no SteamId. That's what makes them testable out-of-game.
 // ============================================================================
 
 /// <summary>
-/// Fiabilite d'envoi, agnostique du transport. Chaque sink la traduit vers son monde :
-/// LiteNetLib <see cref="!:DeliveryMethod"/>, ou les flags SteamNetworking.
+/// Send reliability, transport-agnostic. Each sink translates it to its own world:
+/// LiteNetLib <see cref="!:DeliveryMethod"/>, or the SteamNetworking flags.
 /// </summary>
 public enum NetReliability
 {
-    /// <summary>Position / bones / netframes : perte toleree, la derniere valeur gagne.</summary>
+    /// <summary>Position / bones / netframes: loss tolerated, last value wins.</summary>
     UnreliableSequenced,
-    /// <summary>Pitons / chat / handshake / snapshots : livraison garantie et ordonnee.</summary>
+    /// <summary>Pitons / chat / handshake / snapshots: guaranteed, ordered delivery.</summary>
     ReliableOrdered,
 }
 
 /// <summary>
-/// Canal de SORTIE du cœur autoritatif vers le transport. Le cœur raisonne uniquement
-/// en <c>playerId</c> (int) ; c'est le sink qui sait a quel NetPeer / SteamId cela
-/// correspond et comment acheminer les octets.
+/// OUTBOUND channel from the authoritative core to the transport. The core reasons only
+/// in terms of <c>playerId</c> (int); it's the sink that knows which NetPeer / SteamId that
+/// maps to and how to route the bytes.
 /// </summary>
 public interface IAuthoritativeSink
 {
-    /// <summary>Les playerId actuellement connectes (pour iterer / snapshots).</summary>
+    /// <summary>The currently connected playerIds (for iterating / snapshots).</summary>
     IReadOnlyCollection<int> ConnectedPlayerIds { get; }
 
-    /// <summary>Envoie un packet a un joueur precis.</summary>
+    /// <summary>Sends a packet to a specific player.</summary>
     void SendTo(int playerId, PacketId id, IPacket packet, NetReliability reliability);
 
     /// <summary>
-    /// Diffuse un packet a tous les joueurs, en excluant eventuellement l'emetteur.
-    /// <paramref name="exceptPlayerId"/> = 0 signifie "a tout le monde, emetteur inclus"
-    /// (utile pour une confirmation autoritaire, cf. ServerRopeClip).
+    /// Broadcasts a packet to all players, optionally excluding the sender.
+    /// <paramref name="exceptPlayerId"/> = 0 means "to everyone, sender included"
+    /// (useful for an authoritative confirmation, cf. ServerRopeClip).
     /// </summary>
     void Broadcast(PacketId id, IPacket packet, int exceptPlayerId, NetReliability reliability);
 }
 
 /// <summary>
-/// Cœur autoritatif agnostique du transport : detient l'etat officiel de la session
-/// (roster, pitons, meteo, lampes, cosmetiques...) et applique les regles. Unique
-/// endroit ou vivent l'autorite et la validation. Alimente par un transport via
-/// <see cref="OnClientPacket"/>, il repond en diffusant les "Server*" par le sink.
+/// Transport-agnostic authoritative core: holds the session's official state
+/// (roster, pitons, weather, lamps, cosmetics...) and enforces the rules. The single
+/// place where authority and validation live. Fed by a transport via
+/// <see cref="OnClientPacket"/>, it responds by broadcasting the "Server*" packets through the sink.
 /// </summary>
 public interface IAuthoritativeSession
 {
-    /// <summary>Nouveau joueur admis apres handshake (playerId attribue par le transport).</summary>
+    /// <summary>New player admitted after handshake (playerId assigned by the transport).</summary>
     void OnPlayerJoined(int playerId, string playerName);
 
-    /// <summary>Joueur parti (deconnexion / timeout) : purge son etat, notifie les autres.</summary>
+    /// <summary>Player gone (disconnect / timeout): purges its state, notifies the others.</summary>
     void OnPlayerLeft(int playerId);
 
     /// <summary>
-    /// Un packet <c>Client*</c> recu d'un joueur. Le cœur deserialise, valide, met a jour
-    /// l'etat officiel, puis rediffuse le <c>Server*</c> correspondant via le sink.
+    /// A <c>Client*</c> packet received from a player. The core deserializes, validates, updates
+    /// the official state, then rebroadcasts the corresponding <c>Server*</c> via the sink.
     /// </summary>
     void OnClientPacket(int playerId, PacketId id, BinaryReader payload);
 
     /// <summary>
-    /// (Re)connexion : pousse l'etat officiel complet (pitons places, meteo courante,
-    /// etats de lampe...) au seul joueur cible, pour eliminer les desyncs
-    /// "je me suis connecte apres l'evenement".
+    /// (Re)connection: pushes the full official state (placed pitons, current weather,
+    /// lamp states...) to the single target player, to eliminate the
+    /// "I connected after the event" desyncs.
     /// </summary>
     void SendSnapshotTo(int playerId);
 }

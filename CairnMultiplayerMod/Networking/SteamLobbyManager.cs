@@ -13,7 +13,7 @@ using Il2CppSteamworks;
 namespace CairnMultiplayerMod.Networking;
 
 /// <summary>
-/// Représente un membre courant du lobby Steam (autre joueur ou self).
+/// Represents a current member of the Steam lobby (another player or self).
 /// </summary>
 public sealed class LobbyMember
 {
@@ -24,29 +24,29 @@ public sealed class LobbyMember
 }
 
 /// <summary>
-/// Encapsule toute la couche Steam Matchmaking : création / join (par code ou
-/// SteamID64) / browser / invites / leave. Le transport P2P Steam est démarré
-/// par NetworkManager une fois le lobby rejoint.
+/// Encapsulates the entire Steam Matchmaking layer: create / join (by code or
+/// SteamID64) / browser / invites / leave. The Steam P2P transport is started
+/// by NetworkManager once the lobby is joined.
 ///
-/// Tous les callbacks Steam sont pompés par Cairn lui-même via
-/// <c>SteamAPI.RunCallbacks()</c> dans son boucle principal — le mod n'a rien
-/// à pomper de son côté.
+/// All Steam callbacks are pumped by Cairn itself via
+/// <c>SteamAPI.RunCallbacks()</c> in its main loop — the mod has nothing
+/// to pump on its side.
 ///
-/// Threading : les callbacks Steam tirent sur le thread Unity (parce que Cairn
-/// fait le pump là), donc pas de marshalling à faire pour toucher des objets
-/// Unity.
+/// Threading: Steam callbacks fire on the Unity thread (because Cairn does the
+/// pump there), so there is no marshalling to do when touching Unity
+/// objects.
 /// </summary>
 public sealed class SteamLobbyManager : IDisposable
 {
-    // Clés SetLobbyData utilisées pour filtrer les lobbies CairnMP côté browser
-    // et pour stocker le code partageable.
+    // SetLobbyData keys used to filter CairnMP lobbies on the browser side
+    // and to store the shareable code.
     private const string KeyCairnApp   = "cairnmp_app";
     private const string KeyCode       = "code";
     private const string KeyName       = "name";
     private const string KeyHostName   = "host_name";
     private const string KeyModVersion = "mod_version";
     private const string KeyProtocolVersion = "protocol_version";
-    private const string KeyVisibility = "visibility"; // pour le browser display
+    private const string KeyVisibility = "visibility"; // for the browser display
     private const string KeyStartNonce = "start_nonce";
     private const string KeyStartDifficulty = "start_difficulty";
     private const string KeyStartSkipTutorials = "start_skip_tutorials";
@@ -56,12 +56,12 @@ public sealed class SteamLobbyManager : IDisposable
     private const int MaxJoinCodeResults = 10;
     private const float LobbyOperationTimeoutSeconds = 20f;
 
-    // Caractères du code court (sans 0/O, 1/I/l ambigus).
+    // Short-code characters (excluding ambiguous 0/O, 1/I/l).
     private const string CodeAlphabet  = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
     private const int    CodeBlockLen  = 4;
     private static readonly Random CodeRng = new();
 
-    // ── État courant ──────────────────────────────────────────────────────────
+    // ── Current state ─────────────────────────────────────────────────────────
 
     public CSteamID CurrentLobbyId    { get; private set; }
     public string   CurrentRoomCode   { get; private set; } = "";
@@ -83,7 +83,7 @@ public sealed class SteamLobbyManager : IDisposable
             }
             catch
             {
-                // Steam peut ne pas etre initialise pendant les toutes premieres frames.
+                // Steam may not be initialized during the very first frames.
             }
 
             return string.IsNullOrWhiteSpace(ModConfig.PlayerName?.Value)
@@ -92,7 +92,7 @@ public sealed class SteamLobbyManager : IDisposable
         }
     }
 
-    /// <summary>Capacité du lobby courant (0 si pas connecté).</summary>
+    /// <summary>Capacity of the current lobby (0 if not connected).</summary>
     public int MaxMembers
     {
         get
@@ -106,18 +106,18 @@ public sealed class SteamLobbyManager : IDisposable
 
     private readonly List<LobbyMember> _members = new();
 
-    // Configuration en attente pour finaliser l'écriture des SetLobbyData une
-    // fois LobbyCreated_t reçu.
+    // Pending configuration used to finalize the SetLobbyData writes once
+    // LobbyCreated_t is received.
     private HostConfig _pendingHostConfig;
 
     // ── TaskCompletionSources ─────────────────────────────────────────────────
-    // Une seule opération à la fois (UI bloque le bouton pendant Connecting).
+    // Only one operation at a time (the UI disables the button while Connecting).
 
     private TaskCompletionSource<bool>             _createTcs;
     private TaskCompletionSource<bool>             _joinTcs;
     private TaskCompletionSource<List<LobbyEntry>> _listTcs;
-    // Pour JoinByCode : on attend d'abord le LobbyMatchList_t, puis on chaîne
-    // un JoinLobby qui résout via LobbyEnter_t.
+    // For JoinByCode: we first wait for the LobbyMatchList_t, then chain
+    // a JoinLobby that resolves via LobbyEnter_t.
     private string _pendingJoinCode;
     private bool _pendingJoinCodeFallbackScan;
     private CSteamID _pendingJoinLobbyId;
@@ -125,7 +125,7 @@ public sealed class SteamLobbyManager : IDisposable
     private float _pendingOperationElapsed;
     private string _pendingOperationName = "";
 
-    // ── Callbacks Steam (gardés en référence pour éviter le GC) ───────────────
+    // ── Steam callbacks (kept referenced to avoid GC) ─────────────────────────
 
     private Callback<LobbyCreated_t>            _cbLobbyCreated;
     private Callback<LobbyEnter_t>              _cbLobbyEnter;
@@ -134,7 +134,7 @@ public sealed class SteamLobbyManager : IDisposable
     private Callback<GameLobbyJoinRequested_t>  _cbGameLobbyJoinRequested;
     private Callback<LobbyDataUpdate_t>         _cbLobbyDataUpdate;
 
-    // ── Events publics ────────────────────────────────────────────────────────
+    // ── Public events ─────────────────────────────────────────────────────────
 
     public event Action<CSteamID>           OnLobbyEntered;
     public event Action<string>             OnLobbyError;
@@ -145,16 +145,16 @@ public sealed class SteamLobbyManager : IDisposable
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     private bool _isInitialized;
-    // Init différée : on ne tente pas Steam dans le ctor (trop tôt dans le
-    // cycle MelonLoader — Cairn n'a pas encore eu le temps d'appeler SteamAPI_Init
-    // côté natif). On réessaie dans les premières frames de Pump().
+    // Deferred init: we don't attempt Steam in the ctor (too early in the
+    // MelonLoader cycle — Cairn hasn't yet had time to call SteamAPI_Init
+    // on the native side). We retry during the first frames of Pump().
     private float _initRetryTimer;
-    private const float InitRetryInterval = 2f;  // secondes entre les tentatives
-    private const int   InitMaxAttempts   = 5;   // abandonne après 10 secondes
+    private const float InitRetryInterval = 2f;  // seconds between attempts
+    private const int   InitMaxAttempts   = 5;   // give up after 10 seconds
     private int         _initAttempts;
 
-    // P/Invoke direct sur steam_api64.dll — contourne le wrapper Il2Cpp dont le
-    // marshaling du bool de retour peut être défaillant en IL2CPP .NET 6.
+    // Direct P/Invoke into steam_api64.dll — bypasses the Il2Cpp wrapper whose
+    // marshaling of the returned bool can be faulty under IL2CPP .NET 6.
     [DllImport("kernel32",    SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern IntPtr LoadLibraryW(string lpFileName);
 
@@ -172,24 +172,24 @@ public sealed class SteamLobbyManager : IDisposable
     [DllImport("steam_api64", EntryPoint = "SteamAPI_GetHSteamUser",  CallingConvention = CallingConvention.Cdecl)]
     private static extern int NativeSteamAPI_GetHSteamUser();
 
-    // API disponible depuis SDK 1.55 — retourne un code d'erreur et un message
-    // lisible, contrairement au bool opaque de SteamAPI_Init.
+    // API available since SDK 1.55 — returns an error code and a readable
+    // message, unlike the opaque bool of SteamAPI_Init.
     [DllImport("steam_api64", EntryPoint = "SteamInternal_SteamAPI_Init", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     private static extern int NativeSteamInternal_SteamAPI_Init(string pszVersions, byte[] pOutErrMsg);
 
-    // Racine du jeu (Cairn.exe directory) — calculé une seule fois au preload.
+    // Game root (Cairn.exe directory) — computed once at preload.
     private static string _gameRoot = "";
 
-    /// <summary>steam_api64.dll est livré par Cairn dans Cairn_Data/Plugins/x86_64/
-    /// — pas à côté de Cairn.exe. Sans pre-load explicite, le P/Invoke échoue à le
-    /// résoudre. Aussi tente de créer steam_appid.txt si absent (nécessaire pour
-    /// que SteamAPI.Init() fonctionne en dehors d'un lancement Steam).</summary>
+    /// <summary>steam_api64.dll ships with Cairn in Cairn_Data/Plugins/x86_64/
+    /// — not next to Cairn.exe. Without an explicit pre-load, the P/Invoke fails to
+    /// resolve it. Also tries to create steam_appid.txt if missing (required for
+    /// SteamAPI.Init() to work outside of a Steam launch).</summary>
     private static bool PreloadSteamApiDll()
     {
         try
         {
-            // Chemin du module principal (Cairn.exe) — plus fiable que
-            // AppDomain.BaseDirectory sous MelonLoader.
+            // Path of the main module (Cairn.exe) — more reliable than
+            // AppDomain.BaseDirectory under MelonLoader.
             string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "";
             _gameRoot = string.IsNullOrEmpty(exePath)
                 ? (AppDomain.CurrentDomain.BaseDirectory ?? "")
@@ -221,11 +221,11 @@ public sealed class SteamLobbyManager : IDisposable
         }
     }
 
-    // AppID Cairn uniquement : le matchmaking doit rester dans l'espace du jeu.
+    // Cairn AppID only: matchmaking must stay within the game's space.
     private const string CairnSteamAppId = "1588550";
     private static string _activeAppId = CairnSteamAppId;
 
-    /// <summary>Écrit steam_appid.txt avec l'appId donné dans la racine du jeu.</summary>
+    /// <summary>Writes steam_appid.txt with the given appId to the game root.</summary>
     private static void WriteAppId(string appId)
     {
         try
@@ -241,8 +241,8 @@ public sealed class SteamLobbyManager : IDisposable
 
     public SteamLobbyManager()
     {
-        // Chargement DLL + steam_appid.txt ici ; l'init Steam est différée dans
-        // TryInitializeSteam() via Pump() pour laisser le jeu finir son démarrage.
+        // DLL load + steam_appid.txt here; the Steam init is deferred to
+        // TryInitializeSteam() via Pump() to let the game finish starting up.
         if (PreloadSteamApiDll())
         {
             WriteAppId(CairnSteamAppId);
@@ -251,17 +251,17 @@ public sealed class SteamLobbyManager : IDisposable
     }
 
     /// <summary>
-    /// Tente d'initialiser Steamworks via P/Invoke direct (contourne le wrapper
-    /// Il2Cpp dont le marshaling peut être défaillant). Retourne vrai si réussi.
+    /// Attempts to initialize Steamworks via direct P/Invoke (bypasses the
+    /// Il2Cpp wrapper whose marshaling can be faulty). Returns true on success.
     /// </summary>
     private bool TryInitializeSteam()
     {
-        // Vérification 1 : Steam en cours d'exécution ?
+        // Check 1: is Steam running?
         bool steamRunning = false;
         try { steamRunning = NativeSteamAPI_IsSteamRunning(); }
         catch (Exception ex) { Mod.Log.Warning($"[SteamLobby] IsSteamRunning threw: {ex.Message}"); }
 
-        // Vérification 2 : contexte natif déjà établi (pipe non-nul = init OK) ?
+        // Check 2: native context already established (non-zero pipe = init OK)?
         int nativePipe = 0;
         int nativeUser = 0;
         try
@@ -273,8 +273,8 @@ public sealed class SteamLobbyManager : IDisposable
 
         bool alreadyInited = nativePipe != 0 && nativeUser != 0;
 
-        // Vérification 3 : SteamAPI_Init cherche steam_appid.txt dans le CWD —
-        // si le launcher a changé le CWD, le fichier est invisible pour le SDK.
+        // Check 3: SteamAPI_Init looks for steam_appid.txt in the CWD —
+        // if the launcher changed the CWD, the file is invisible to the SDK.
         string cwd = Environment.CurrentDirectory;
         Mod.LogDebug($"[SteamLobby] TryInit: steamRunning={steamRunning} pipe={nativePipe} user={nativeUser} alreadyInited={alreadyInited}");
         Mod.LogDebug($"[SteamLobby] CWD='{cwd}'  gameRoot='{_gameRoot}'  match={string.Equals(cwd, _gameRoot, StringComparison.OrdinalIgnoreCase)}");
@@ -292,9 +292,9 @@ public sealed class SteamLobbyManager : IDisposable
         {
             Environment.CurrentDirectory = _gameRoot;
 
-            // Si Cairn a déjà initialisé Steam, on réutilise ce contexte. Retenter
-            // SteamAPI_Init avec un autre AppID peut isoler le matchmaking dans un
-            // autre espace Steam et rendre les lobbies impossibles à rejoindre.
+            // If Cairn has already initialized Steam, we reuse that context. Retrying
+            // SteamAPI_Init with a different AppID can isolate matchmaking into a
+            // different Steam space and make lobbies impossible to join.
             if (alreadyInited)
             {
                 nativeOk = true;
@@ -312,7 +312,7 @@ public sealed class SteamLobbyManager : IDisposable
             }
             else
             {
-                // SteamAPI_Init() lit steam_appid.txt dans le CWD : on force Cairn.
+                // SteamAPI_Init() reads steam_appid.txt from the CWD: force Cairn.
                 foreach (var candidate in new[] { CairnSteamAppId })
                 {
                     WriteAppId(candidate);
@@ -321,7 +321,7 @@ public sealed class SteamLobbyManager : IDisposable
                     bool ok = false;
                     try
                     {
-                        // SDK >= 1.55 : API détaillée avec message d'erreur.
+                        // SDK >= 1.55: detailed API with an error message.
                         var errBuf     = new byte[1024];
                         int initResult = NativeSteamInternal_SteamAPI_Init(null, errBuf);
                         string errMsg  = System.Text.Encoding.ASCII.GetString(errBuf).TrimEnd('\0');
@@ -330,7 +330,7 @@ public sealed class SteamLobbyManager : IDisposable
                     }
                     catch (EntryPointNotFoundException)
                     {
-                        // SDK < 1.55 — ancienne API bool uniquement.
+                        // SDK < 1.55 — old bool-only API.
                         try { ok = NativeSteamAPI_Init(); }
                         catch (Exception ex) { Mod.Log.Warning($"[SteamLobby] NativeSteamAPI_Init threw: {ex.Message}"); }
                         Mod.LogDebug($"[SteamLobby] NativeSteamAPI_Init(appId={candidate}) = {ok}");
@@ -352,8 +352,8 @@ public sealed class SteamLobbyManager : IDisposable
 
             if (nativeOk)
             {
-                // Appel managé requis pour peupler CSteamAPIContext et rendre
-                // les accesseurs (SteamMatchmaking etc.) valides.
+                // Managed call required to populate CSteamAPIContext and make
+                // the accessors (SteamMatchmaking etc.) valid.
                 try
                 {
                     initOk = SteamAPI.Init();
@@ -375,8 +375,8 @@ public sealed class SteamLobbyManager : IDisposable
 
         try
         {
-            // Il2CppInterop convertit un délégué managé en wrapper Il2Cpp avec
-            // DelegateSupport — le ctor direct des DispatchDelegate attend un IntPtr.
+            // Il2CppInterop converts a managed delegate into an Il2Cpp wrapper via
+            // DelegateSupport — the direct DispatchDelegate ctor expects an IntPtr.
             _cbLobbyCreated           = Callback<LobbyCreated_t>.Create(
                 DelegateSupport.ConvertDelegate<Callback<LobbyCreated_t>.DispatchDelegate>(new Action<LobbyCreated_t>(OnLobbyCreatedCb)));
             _cbLobbyEnter             = Callback<LobbyEnter_t>.Create(
@@ -400,13 +400,13 @@ public sealed class SteamLobbyManager : IDisposable
         }
     }
 
-    /// <summary>Pompe les callbacks Steam — appelé chaque frame depuis Mod.OnUpdate.
-    /// Gère aussi l'initialisation différée pour laisser le temps à Cairn de
-    /// configurer son propre contexte Steam avant qu'on tente de s'y rattacher.</summary>
+    /// <summary>Pumps the Steam callbacks — called every frame from Mod.OnUpdate.
+    /// Also handles the deferred initialization to give Cairn time to
+    /// set up its own Steam context before we try to attach to it.</summary>
     public void Pump(float dt = 0f)
     {
-        // Initialisation différée : on réessaie tant que le jeu n'a pas fini de
-        // démarrer, puis on abandonne après InitMaxAttempts tentatives.
+        // Deferred initialization: we keep retrying until the game has finished
+        // starting up, then give up after InitMaxAttempts attempts.
         if (!_isInitialized)
         {
             if (_initAttempts >= InitMaxAttempts) return;
@@ -437,10 +437,10 @@ public sealed class SteamLobbyManager : IDisposable
         try { _cbLobbyDataUpdate?.Dispose(); } catch { }
     }
 
-    // ── API publique ──────────────────────────────────────────────────────────
+    // ── Public API ────────────────────────────────────────────────────────────
 
-    /// <summary>Crée un lobby Steam selon la visibilité et la capacité demandées.
-    /// Résout après LobbyCreated_t + écriture des metadonnées + LobbyEnter_t.</summary>
+    /// <summary>Creates a Steam lobby with the requested visibility and capacity.
+    /// Resolves after LobbyCreated_t + metadata write + LobbyEnter_t.</summary>
     public Task<bool> CreateLobby(HostConfig cfg)
     {
         if (!_isInitialized)
@@ -484,8 +484,8 @@ public sealed class SteamLobbyManager : IDisposable
         return _createTcs.Task;
     }
 
-    /// <summary>Rejoint un lobby via son code court "XXXX-XXXX".
-    /// Cherche d'abord via RequestLobbyList filtré sur le code, puis JoinLobby.</summary>
+    /// <summary>Joins a lobby via its short "XXXX-XXXX" code.
+    /// First searches via RequestLobbyList filtered on the code, then JoinLobby.</summary>
     public Task<bool> JoinByCode(string code)
     {
         if (_joinTcs != null) return _joinTcs.Task;
@@ -514,8 +514,8 @@ public sealed class SteamLobbyManager : IDisposable
         return task;
     }
 
-    /// <summary>Rejoint un lobby via son SteamID64 (utilisé depuis le browser ou un
-    /// invite Steam Friends).</summary>
+    /// <summary>Joins a lobby via its SteamID64 (used from the browser or a
+    /// Steam Friends invite).</summary>
     public Task<bool> JoinById(ulong lobbyId64)
     {
         if (_joinTcs != null) return _joinTcs.Task;
@@ -547,7 +547,7 @@ public sealed class SteamLobbyManager : IDisposable
         return task;
     }
 
-    /// <summary>Récupère la liste des lobbies CairnMP publics.</summary>
+    /// <summary>Fetches the list of public CairnMP lobbies.</summary>
     public Task<List<LobbyEntry>> RequestLobbyList()
     {
         if (_listTcs != null) return _listTcs.Task;
@@ -582,7 +582,7 @@ public sealed class SteamLobbyManager : IDisposable
         return task;
     }
 
-    /// <summary>Quitte le lobby courant. No-op si pas dans un lobby.</summary>
+    /// <summary>Leaves the current lobby. No-op if not in a lobby.</summary>
     public void Leave()
     {
         if (!IsInLobby) return;
@@ -593,7 +593,7 @@ public sealed class SteamLobbyManager : IDisposable
         OnLobbyLeft?.Invoke();
     }
 
-    /// <summary>Diffuse un ordre de lancement via les metadata du lobby Steam.</summary>
+    /// <summary>Broadcasts a start order via the Steam lobby metadata.</summary>
     public bool BroadcastStart(ServerStartGame start)
     {
         if (!IsInLobby)
@@ -631,7 +631,7 @@ public sealed class SteamLobbyManager : IDisposable
         }
     }
 
-    // ── Callbacks Steam ───────────────────────────────────────────────────────
+    // ── Steam callbacks ───────────────────────────────────────────────────────
 
     private void OnLobbyCreatedCb(LobbyCreated_t evt)
     {
@@ -646,8 +646,8 @@ public sealed class SteamLobbyManager : IDisposable
         IsHost      = true;
         HostSteamId = SteamUser.GetSteamID().m_SteamID;
 
-        // Code court partageable : on tente quelques fois en cas de collision.
-        // (Probabilité ~0 sur 30^8 mais faible coût de retry.)
+        // Shareable short code: we retry a few times in case of collision.
+        // (Probability ~0 over 30^8 but retry is cheap.)
         var code = GenerateRoomCode();
         var cfg  = _pendingHostConfig ?? new HostConfig();
         var hostName = string.IsNullOrWhiteSpace(cfg.PlayerName)
@@ -679,8 +679,8 @@ public sealed class SteamLobbyManager : IDisposable
 
         Mod.Log.Msg($"[SteamLobby] Lobby created: id={lobbyId.m_SteamID} code={code} name='{lobbyName}'");
 
-        // LobbyEnter_t va suivre automatiquement (le créateur entre dans son
-        // propre lobby). On résout _createTcs là-bas pour avoir _members peuplé.
+        // LobbyEnter_t will follow automatically (the creator enters their
+        // own lobby). We resolve _createTcs there so _members is populated.
     }
 
     private void OnLobbyEnterCb(LobbyEnter_t evt)
@@ -709,8 +709,8 @@ public sealed class SteamLobbyManager : IDisposable
             return;
         }
 
-        // Pour un join (pas un create), on récupère le code et le nom depuis
-        // les LobbyData déjà publiés par le host.
+        // For a join (not a create), we read the code and name from
+        // the LobbyData already published by the host.
         if (string.IsNullOrEmpty(CurrentRoomCode))
             CurrentRoomCode = SteamMatchmaking.GetLobbyData(lobbyId, KeyCode);
         if (string.IsNullOrEmpty(CurrentLobbyName))
@@ -730,8 +730,8 @@ public sealed class SteamLobbyManager : IDisposable
 
     private void OnLobbyMatchListCb(LobbyMatchList_t evt)
     {
-        // Cas 1 : on attend un JoinByCode → chaîner JoinLobby sur le premier
-        // résultat (ou échouer si vide).
+        // Case 1: we're waiting on a JoinByCode → chain JoinLobby on the first
+        // result (or fail if empty).
         if (_pendingJoinCode != null)
         {
             var context = _pendingJoinCodeFallbackScan ? "JoinByCodeFallback" : "JoinByCode";
@@ -804,7 +804,7 @@ public sealed class SteamLobbyManager : IDisposable
             return;
         }
 
-        // Cas 2 : RequestLobbyList pour le browser.
+        // Case 2: RequestLobbyList for the browser.
         if (_listTcs != null)
         {
             var results = ReadLobbyListResults(MaxLobbyBrowserResults, "RequestLobbyList", evt.m_nLobbiesMatching);
@@ -836,9 +836,9 @@ public sealed class SteamLobbyManager : IDisposable
 
     private static List<CSteamID> ReadLobbyListResults(int maxResults, string context, uint callbackCount)
     {
-        // Le wrapper IL2CPP de LobbyMatchList_t peut remonter un compteur corrompu.
-        // On lit donc les slots Steam de facon bornee et on s'arrete au premier
-        // ID invalide apres avoir trouve au moins un resultat.
+        // The IL2CPP wrapper for LobbyMatchList_t can report a corrupt count.
+        // So we read the Steam slots in a bounded way and stop at the first
+        // invalid ID once we've found at least one result.
         var reported = unchecked((int)callbackCount);
         if (reported < 0 || reported > maxResults)
             Mod.Log.Warning($"[SteamLobby] {context} callback count looked invalid ({reported}); scanning up to {maxResults}.");
@@ -876,8 +876,8 @@ public sealed class SteamLobbyManager : IDisposable
     private void OnLobbyDataUpdateCb(LobbyDataUpdate_t evt)
     {
         if (!IsInLobby || evt.m_ulSteamIDLobby != CurrentLobbyId.m_SteamID) return;
-        // Quand un member update son LobbyMemberData (ex: nom mis à jour) on
-        // peut rafraîchir la liste pour refléter les changements de pseudo.
+        // When a member updates their LobbyMemberData (e.g. name changed) we
+        // can refresh the list to reflect nickname changes.
         RebuildMembers();
         OnMembersChanged?.Invoke();
         TryHandleStartSignal();
@@ -885,7 +885,7 @@ public sealed class SteamLobbyManager : IDisposable
 
     private void OnGameLobbyJoinRequestedCb(GameLobbyJoinRequested_t evt)
     {
-        // Un ami clique "Join Game" depuis l'overlay Steam → join direct.
+        // A friend clicks "Join Game" from the Steam overlay → direct join.
         Mod.Log.Msg($"[SteamLobby] GameLobbyJoinRequested for {evt.m_steamIDLobby.m_SteamID}.");
         _ = JoinById(evt.m_steamIDLobby.m_SteamID);
     }
@@ -1038,8 +1038,8 @@ public sealed class SteamLobbyManager : IDisposable
 
     private static bool HasUsableSteamId(CSteamID lobbyId)
     {
-        // Les IDs renvoyes par SteamMatchmaking.GetLobbyByIndex sont l'autorite.
-        // Sur IL2CPP, CSteamID.IsLobby() peut retourner faux pour un ID pourtant joignable.
+        // The IDs returned by SteamMatchmaking.GetLobbyByIndex are the authority.
+        // On IL2CPP, CSteamID.IsLobby() can return false for an ID that is nonetheless joinable.
         return lobbyId.m_SteamID != 0;
     }
 
@@ -1143,7 +1143,7 @@ public sealed class SteamLobbyManager : IDisposable
         if (hadTcs) OnLobbyError?.Invoke(err);
     }
 
-    /// <summary>Génère un code "XXXX-XXXX" sur l'alphabet sans caractères ambigus.</summary>
+    /// <summary>Generates an "XXXX-XXXX" code from the alphabet without ambiguous characters.</summary>
     private static string GenerateRoomCode()
     {
         var buf = new char[CodeBlockLen * 2 + 1];
@@ -1155,12 +1155,12 @@ public sealed class SteamLobbyManager : IDisposable
         return new string(buf);
     }
 
-    /// <summary>Normalise un code saisi (uppercase, supprime les espaces internes).</summary>
+    /// <summary>Normalizes an entered code (uppercase, strips internal spaces).</summary>
     private static string NormalizeCode(string raw)
     {
         if (string.IsNullOrEmpty(raw)) return "";
         var s = raw.Trim().ToUpperInvariant().Replace(" ", "");
-        // Auto-insert du tiret si absent et qu'on a 8 caractères.
+        // Auto-insert the dash if missing and we have 8 characters.
         if (!s.Contains('-') && s.Length == CodeBlockLen * 2)
             s = s.Substring(0, CodeBlockLen) + "-" + s.Substring(CodeBlockLen);
         return s;

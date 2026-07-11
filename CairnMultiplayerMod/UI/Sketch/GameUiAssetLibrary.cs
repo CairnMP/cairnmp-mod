@@ -6,14 +6,14 @@ using UnityEngine;
 namespace CairnMultiplayerMod.UI.Sketch;
 
 /// <summary>
-/// Recupere et met en cache les assets UI « croquis » du jeu (sprites du photo-mode + polices),
-/// par nom, depuis l'ensemble des sprites charges en memoire (FindObjectsOfTypeAll). Les sprites
-/// du photo-mode sont confirmes charges des le menu principal (cf. dump de-risk : photomode-family=15).
-/// Repli sur un sprite uni si un asset manque, pour ne jamais crasher ni afficher un panneau blanc.
+/// Fetches and caches the game's "sketch" UI assets (photo-mode sprites + fonts), by name, from all
+/// sprites loaded in memory (FindObjectsOfTypeAll). The photo-mode sprites are confirmed loaded from
+/// the main menu onward (cf. de-risk dump: photomode-family=15).
+/// Falls back to a solid sprite when an asset is missing, so it never crashes or shows a blank panel.
 /// </summary>
 internal static class GameUiAssetLibrary
 {
-    // Noms exacts releves via le dump runtime (UiAssetDump, F8).
+    // Exact names captured via the runtime dump (UiAssetDump, F8).
     public const string Frame       = "UI_Photomode_Contour";
     public const string PanelTitle  = "UI_Photomode_Background_Title";
     public const string PanelBody   = "UI_Photomode_Background_Body";
@@ -29,9 +29,9 @@ internal static class GameUiAssetLibrary
     public const string IconSilhouette = "T_UI_PhotoModeIcons_silhouette";
     public const string IconEffects    = "T_UI_PhotoModeIcons_effects";
     public const string IconSave       = "T_UI_PhotoModeIcons_save";
-    public const string IconFriend     = "FM_Preference_FriendGhost";   // silhouette ami (onglet Join)
-    public const string IconPlayer     = "FM_Preference_PlayerGhost";   // silhouette joueur (onglet Browse)
-    public const string Button      = "UI_Bivouac_Bouton";   // bouton croquis dispo des le menu
+    public const string IconFriend     = "FM_Preference_FriendGhost";   // friend silhouette (Join tab)
+    public const string IconPlayer     = "FM_Preference_PlayerGhost";   // player silhouette (Browse tab)
+    public const string Button      = "UI_Bivouac_Bouton";   // sketch button available from the menu on
     public const string White       = "UI_White_1PX";
 
     private static readonly string[] Wanted =
@@ -47,7 +47,7 @@ internal static class GameUiAssetLibrary
     private static Sprite _fallback;
     private static bool _harvested;
 
-    /// <summary>Recupere les assets si pas encore fait (ou si le cache est devenu invalide).</summary>
+    /// <summary>Fetches the assets if not done yet (or if the cache has become invalid).</summary>
     public static void EnsureHarvested(bool force = false)
     {
         if (_harvested && !force && _sprites.TryGetValue(Frame, out var existing) && existing != null) return;
@@ -85,7 +85,7 @@ internal static class GameUiAssetLibrary
             $"textFont={(_textFont != null)} logoFont={(_logoFont != null)}");
     }
 
-    /// <summary>Sprite du jeu par nom, ou un sprite uni de repli si introuvable.</summary>
+    /// <summary>Game sprite by name, or a solid fallback sprite if not found.</summary>
     public static Sprite Get(string name)
     {
         EnsureHarvested();
@@ -101,10 +101,10 @@ internal static class GameUiAssetLibrary
 
     public static TMP_FontAsset TextFont { get { EnsureHarvested(); return _textFont; } }
 
-    /// <summary>Police « logo » du jeu si chargee, sinon repli sur la police texte.</summary>
+    /// <summary>The game's "logo" font if loaded, otherwise falls back to the text font.</summary>
     public static TMP_FontAsset LogoFont { get { EnsureHarvested(); return _logoFont != null ? _logoFont : _textFont; } }
 
-    /// <summary>Sprite blanc du jeu (UI_White_1PX) pour les fonds unis et le repli ; genere au besoin.</summary>
+    /// <summary>The game's white sprite (UI_White_1PX) for solid fills and the fallback; generated if needed.</summary>
     public static Sprite Fallback
     {
         get

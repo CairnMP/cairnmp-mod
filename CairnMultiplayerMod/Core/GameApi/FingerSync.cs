@@ -8,20 +8,20 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Synchronisation exacte des os de doigts entre joueurs.
+/// Exact sync of finger bones between players.
 ///
-/// Le systeme netplay du jeu ne capture que ~16 os grossiers, sans les doigts -> les mains des
-/// fantomes restent figees. On capture ici les os de doigts du squelette Aava et on les applique
-/// en localRotation sur les memes os du fantome (apres que le pipeline natif a pose le corps).
+/// The game's netplay only captures ~16 coarse bones, without the fingers -> the ghosts' hands
+/// stay frozen. Here we capture the finger bones of the Aava skeleton and apply them as
+/// localRotation onto the same ghost bones (after the native pipeline has posed the body).
 ///
-/// Resolution PAR NOM (pas via l'Animator humanoide : le rig de Cairn n'est pas humanoide,
-/// isHuman=False). Les noms sont identiques cote local et cote fantome (meme squelette Aava) :
-/// bn_{l|r}_{Thumb 00-02 | Index/Middle/Ring/Pinky 00-03}. On compresse en smallest-three.
+/// Resolution BY NAME (not via the humanoid Animator: Cairn's rig isn't humanoid, isHuman=False).
+/// The names are identical on the local and ghost sides (same Aava skeleton):
+/// bn_{l|r}_{Thumb 00-02 | Index/Middle/Ring/Pinky 00-03}. We compress with smallest-three.
 /// </summary>
 public static unsafe partial class CairnGameApi
 {
-    // Ordre canonique des os de doigts. DOIT etre identique a la capture et a l'application
-    // (l'index = position dans le payload) et compter Protocol.FingerBoneCount entrees.
+    // Canonical order of finger bones. MUST be identical for capture and application
+    // (the index = position in the payload) and hold Protocol.FingerBoneCount entries.
     private static readonly string[] FingerBoneNames = BuildFingerBoneNames();
 
     private static string[] BuildFingerBoneNames()
@@ -43,10 +43,10 @@ public static unsafe partial class CairnGameApi
     private static bool _localFingerResolved;
     private static int _lastLocalFingerResolveFrame;
 
-    // Cache des os de doigts par fantome (instance id du GameObject).
+    // Finger-bone cache per ghost (GameObject instance id).
     private static readonly Dictionary<int, Transform[]> _ghostFingerBones = new();
 
-    /// <summary>Capture la pose locale des doigts (localRotation compresses). False si indisponible.</summary>
+    /// <summary>Captures the local finger pose (compressed localRotations). False if unavailable.</summary>
     public static bool TryCaptureLocalFingerPose(out byte[] packed)
     {
         packed = null;
@@ -64,7 +64,7 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    /// <summary>Applique une pose de doigts recue sur les os du fantome.</summary>
+    /// <summary>Applies a received finger pose onto the ghost's bones.</summary>
     public static bool TryApplyRemoteFingerPose(NetplayRemotePlayer ghost, byte[] packed)
     {
         if (ghost == null || ghost.Pointer == IntPtr.Zero) return false;
@@ -93,7 +93,7 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    /// <summary>Premier Animator dans la hierarchie (utilise par d'autres modules cosmetiques).</summary>
+    /// <summary>First Animator in the hierarchy (used by other cosmetic modules).</summary>
     private static Animator TryGetHumanoidAnimator(GameObject root)
     {
         try { return root.GetComponentInChildren<Animator>(true); }
@@ -162,8 +162,8 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Resout les os de doigts par NOM dans la hierarchie. Renvoie un tableau de la taille
-    /// canonique (entrees null si un os manque), ou null si aucun os trouve.
+    /// Resolves the finger bones by NAME in the hierarchy. Returns an array of the canonical
+    /// size (null entries where a bone is missing), or null if no bone was found.
     /// </summary>
     private static Transform[] ResolveFingerBonesByName(GameObject root, out int resolvedCount)
     {

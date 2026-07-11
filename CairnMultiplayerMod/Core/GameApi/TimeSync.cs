@@ -6,41 +6,41 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Synchronisation de l'heure du jour (NightDayCycle.dayTime01) et de l'etat de
-/// sommeil (PlayerStateFeedbacks.IsAsleep) entre joueurs.
+/// Synchronizes the time of day (NightDayCycle.dayTime01) and the sleep state
+/// (PlayerStateFeedbacks.IsAsleep) between players.
 ///
-/// IMPORTANT : dayTime01 est une valeur DERIVEE, recalculee chaque frame par
-/// NightDayCycle.UpdateDayTime01() a partir de TimeManager.GameTime. Ecrire le
-/// champ directement (ndc.dayTime01 = x) est donc instantanement ecrase -> c'est
-/// pourquoi l'ancienne synchro ne tenait pas. On force desormais l'heure via le
-/// mecanisme de GEL natif (isFrozen + lastDayTime01OnFreeze) : quand isFrozen est
-/// vrai, UpdateDayTime01 conserve lastDayTime01OnFreeze au lieu de recalculer. C'est
-/// l'equivalent jour/nuit de ForceInfiniteWeatherState cote meteo.
+/// IMPORTANT: dayTime01 is a DERIVED value, recomputed every frame by
+/// NightDayCycle.UpdateDayTime01() from TimeManager.GameTime. Writing the
+/// field directly (ndc.dayTime01 = x) is therefore instantly overwritten -> that's
+/// why the old sync never held. We now force the time via the native
+/// FREEZE mechanism (isFrozen + lastDayTime01OnFreeze): when isFrozen is
+/// true, UpdateDayTime01 keeps lastDayTime01OnFreeze instead of recomputing. It's
+/// the day/night equivalent of ForceInfiniteWeatherState on the weather side.
 ///
-/// L'horloge visuelle jour-nuit est host-autoritaire : l'hote diffuse son
-/// dayTime01, les clients GELENT leur cycle sur cette valeur chaque frame. Quand un
-/// joueur dort sans consensus, l'hote gele le cycle a la derniere heure normale ; le
-/// fast-forward visuel ne se produit donc que quand tous dorment (hote libere le gel).
+/// The visual day/night clock is host-authoritative: the host broadcasts its
+/// dayTime01, the clients FREEZE their cycle to that value every frame. When a
+/// player sleeps without consensus, the host freezes the cycle at the last normal time; the
+/// visual fast-forward therefore only happens when everyone sleeps (host releases the freeze).
 ///
-/// Robustesse : singletons absents (chargement, menu) ou exceptions IL2CPP ->
-/// no-op, jamais de crash. La synchro est additive : un echec n'affecte ni le
-/// sommeil natif ni le gameplay.
+/// Robustness: missing singletons (loading, menu) or IL2CPP exceptions ->
+/// no-op, never a crash. The sync is additive: a failure affects neither
+/// native sleep nor gameplay.
 /// </summary>
 public static unsafe partial class CairnGameApi
 {
     private static MonoBehaviour _playerStateFeedbacksCached;
     private static int _lastPlayerStateFeedbacksSearchFrame;
-    private static int _isAsleepFieldOffset = -1; // -1 non resolu, -2 echec, >=0 offset
+    private static int _isAsleepFieldOffset = -1; // -1 unresolved, -2 failed, >=0 offset
     private static bool _timeApiDumped;
     private static bool _nightDayCycleWarned;
 
-    // Vrai tant que NOUS maintenons le gel du cycle jour/nuit. Sert a ne liberer que
-    // notre propre gel (UnfreezeDayCycle no-op sinon) -> on ne casse pas un gel pose
-    // par le jeu lui-meme (mode photo, etc.).
+    // True while WE hold the freeze on the day/night cycle. Used to release only
+    // our own freeze (UnfreezeDayCycle is a no-op otherwise) -> we don't break a freeze set
+    // by the game itself (photo mode, etc.).
     private static bool _dayCycleFrozenByUs;
 
-    // Noms candidats du champ booleen "is asleep" sur PlayerStateFeedbacks
-    // (resolu en runtime : le type n'est pas accessible en type compile-time).
+    // Candidate names for the "is asleep" boolean field on PlayerStateFeedbacks
+    // (resolved at runtime: the type isn't accessible as a compile-time type).
     private static readonly string[] IsAsleepFieldCandidates =
     {
         "<IsAsleep>k__BackingField",
@@ -48,7 +48,7 @@ public static unsafe partial class CairnGameApi
         "IsAsleep",
     };
 
-    /// <summary>Lit l'heure du jour normalisee (0-1) depuis NightDayCycle.</summary>
+    /// <summary>Reads the normalized time of day (0-1) from NightDayCycle.</summary>
     public static bool TryGetDayTime01(out float dayTime01)
     {
         dayTime01 = 0f;
@@ -67,11 +67,11 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Force et maintient l'heure du jour (0-1) via le gel natif du NightDayCycle.
-    /// A rappeler chaque frame : on re-pousse la valeur pour suivre l'heure de l'hote.
-    /// isFrozen empeche UpdateDayTime01 de recalculer depuis TimeManager.GameTime ; on
-    /// ecrit aussi dayTime01 pour la frame courante (anti-flicker, peu importe l'ordre
-    /// d'execution entre notre tick et NightDayCycle.Update).
+    /// Forces and holds the time of day (0-1) via the native freeze of NightDayCycle.
+    /// Call every frame: we re-push the value to track the host's time.
+    /// isFrozen prevents UpdateDayTime01 from recomputing from TimeManager.GameTime; we
+    /// also write dayTime01 for the current frame (anti-flicker, regardless of the execution
+    /// order between our tick and NightDayCycle.Update).
     /// </summary>
     public static bool FreezeDayCycle(float dayTime01)
     {
@@ -80,10 +80,10 @@ public static unsafe partial class CairnGameApi
             var ndc = NightDayCycle.Instance;
             if (ndc == null) return false;
 
-            dayTime01 = Mathf.Repeat(dayTime01, 1f); // cyclique, borne 0-1
+            dayTime01 = Mathf.Repeat(dayTime01, 1f); // cyclic, clamped to 0-1
 
-            // SetFreezeDayTime01 est l'API dediee ; on reaffirme ensuite les champs pour
-            // avoir le dernier mot quelle que soit son implementation interne.
+            // SetFreezeDayTime01 is the dedicated API; we then re-assert the fields to
+            // have the last word regardless of its internal implementation.
             ndc.SetFreezeDayTime01(dayTime01);
             ndc.isFrozen = true;
             ndc.lastDayTime01OnFreeze = dayTime01;
@@ -99,9 +99,9 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Libere NOTRE gel du cycle jour/nuit pour laisser l'heure reprendre naturellement
-    /// (heure normale ou fast-forward natif). No-op si nous n'avions pas gele (on ne
-    /// touche pas a un gel pose par le jeu).
+    /// Releases OUR freeze on the day/night cycle to let time resume naturally
+    /// (normal time or native fast-forward). No-op if we hadn't frozen it (we don't
+    /// touch a freeze set by the game).
     /// </summary>
     public static bool UnfreezeDayCycle()
     {
@@ -122,8 +122,8 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Indique si le joueur local dort. Lit le booleen IsAsleep de
-    /// PlayerStateFeedbacks par offset de champ (resolu en runtime).
+    /// Indicates whether the local player is asleep. Reads the IsAsleep boolean of
+    /// PlayerStateFeedbacks by field offset (resolved at runtime).
     /// </summary>
     public static bool TryIsLocalAsleep(out bool asleep)
     {
@@ -180,11 +180,11 @@ public static unsafe partial class CairnGameApi
     {
         _playerStateFeedbacksCached = null;
         _lastPlayerStateFeedbacksSearchFrame = 0;
-        // Libere notre gel pour ne pas laisser le cycle bloque apres une deconnexion.
+        // Release our freeze so the cycle isn't left stuck after a disconnect.
         UnfreezeDayCycle();
     }
 
-    /// <summary>Logue une fois l'etat de resolution de l'API temps (debug in-game).</summary>
+    /// <summary>Logs the resolution state of the time API once (in-game debug).</summary>
     public static void DumpTimeApi()
     {
         if (_timeApiDumped) return;

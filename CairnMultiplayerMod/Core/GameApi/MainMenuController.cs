@@ -7,8 +7,8 @@ namespace CairnMultiplayerMod.Core;
 public static unsafe partial class CairnGameApi
 {
     /// <summary>
-    /// Les valeurs correspondent à `TheGameBakers.Cairn.UI.MainMenu.Step` (vu via Cpp2IL).
-    /// Seules celles qu'on utilise réellement sont listées ; le reste est là pour référence.
+    /// The values match `TheGameBakers.Cairn.UI.MainMenu.Step` (seen via Cpp2IL).
+    /// Only the ones we actually use are listed; the rest are here for reference.
     /// </summary>
     public enum MainMenuStep
     {
@@ -40,9 +40,9 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Écrit `MainMenu.ForceStepTransition = step` via le backing field généré par le
-    /// compilateur. La boucle Update du jeu lit cette valeur chaque frame et déclenche
-    /// `TransitionToStep` quand elle n'est pas null, puis la réinitialise à null.
+    /// Writes `MainMenu.ForceStepTransition = step` via the compiler-generated
+    /// backing field. The game's Update loop reads this value every frame and triggers
+    /// `TransitionToStep` when it isn't null, then resets it to null.
     /// </summary>
     public static bool ForceMainMenuStep(MainMenuStep step)
     {
@@ -62,17 +62,17 @@ public static unsafe partial class CairnGameApi
                 return false;
             }
 
-            // Nullable<Step> — le layout managé correspond au runtime .NET :
+            // Nullable<Step> — the managed layout matches the .NET runtime:
             //   struct Nullable<T> { bool hasValue; T value; }
-            // Avec T = enum de taille int, taille totale de 8 octets (1 octet bool,
-            // 3 octets padding, 4 octets valeur).
-            // Essaie les DEUX layouts Nullable — le layout IL2CPP peut différer
-            // du managé .NET selon la version Unity/plateforme.
-            // Layout A : { bool hasValue(1), pad(3), T value(4) } = standard .NET
-            // Layout B : { T value(4), bool hasValue(1), pad(3) } = certains IL2CPP
+            // With T = an int-sized enum, total size of 8 bytes (1 byte bool,
+            // 3 bytes padding, 4 bytes value).
+            // Try BOTH Nullable layouts — the IL2CPP layout may differ from
+            // managed .NET depending on the Unity version/platform.
+            // Layout A: { bool hasValue(1), pad(3), T value(4) } = standard .NET
+            // Layout B: { T value(4), bool hasValue(1), pad(3) } = some IL2CPP builds
             var buf = stackalloc byte[8];
 
-            // Essaie d'abord le layout A (celui qui fonctionnait dans les tests précédents).
+            // Try layout A first (the one that worked in previous tests).
             *(byte*)buf = 1;
             *(int*)(buf + 4) = (int)step;
             IL2CPP.il2cpp_field_static_set_value(field, buf);

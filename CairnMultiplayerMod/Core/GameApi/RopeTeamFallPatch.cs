@@ -5,15 +5,15 @@ using Il2Cpp;
 namespace CairnMultiplayerMod.Core;
 
 /// <summary>
-/// Capture d'un template de piton pour la cordee (systeme repris d'Episure). On patche
-/// Piton.Awake pour memoriser le premier piton instancie comme template a cloner
-/// (CairnGameApi.UpdateRopeTeamAnchor). C'est plus fiable et moins couteux qu'un
-/// Resources.FindObjectsOfTypeAll chaque frame (qui reste le repli dans BelaySecure).
+/// Captures a piton template for the rope team (system carried over from Episure). We patch
+/// Piton.Awake to remember the first instantiated piton as the template to clone
+/// (CairnGameApi.UpdateRopeTeamAnchor). This is more reliable and cheaper than a
+/// Resources.FindObjectsOfTypeAll every frame (which remains the fallback in BelaySecure).
 ///
-/// L'ancienne approche (AddPiton + corde cosmetique + patch anti-respawn) a ete remplacee :
-/// la corde NATIVE de la lifeline, clippee sur un piton mobile pose chez le partenaire, sert
-/// a la fois de visuel et d'assurage (cf. BelaySecure). Plus de corde cosmetique, plus de
-/// « clac » repete, et le rattrapage de chute est gere nativement.
+/// The old approach (AddPiton + cosmetic rope + anti-respawn patch) has been replaced:
+/// the lifeline's NATIVE rope, clipped onto a mobile piton placed at the partner, serves
+/// both as the visual and as the belay (see BelaySecure). No more cosmetic rope, no more
+/// repeated "clack", and fall arrest is handled natively.
 /// </summary>
 public static unsafe partial class CairnGameApi
 {
@@ -50,7 +50,7 @@ public static unsafe partial class CairnGameApi
         }
     }
 
-    /// <summary>Memorise le premier piton instancie comme template de cordee.</summary>
+    /// <summary>Remembers the first instantiated piton as the rope-team template.</summary>
     private static void PitonAwakePostfix(Piton __instance)
     {
         CapturePitonTemplate(__instance);

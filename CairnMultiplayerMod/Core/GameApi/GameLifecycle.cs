@@ -26,9 +26,9 @@ public static unsafe partial class CairnGameApi
     private static int _lastBivouacManagerSearchFrame;
 
     /// <summary>
-    /// Lit l'etat global expose par le jeu. C'est plus fiable que la derniere
-    /// scene Unity chargee, car le bivouac et le taping utilisent des scenes
-    /// additives tout en gardant un MC valide.
+    /// Reads the global state exposed by the game. This is more reliable than the last
+    /// loaded Unity scene, because bivouac and taping use additive scenes
+    /// while keeping a valid MC.
     /// </summary>
     internal static bool TryGetGameLifecycle(out CairnGameLifecycleState state, out string detail)
     {
@@ -63,10 +63,10 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Lit l'etat brut de GlobalGameManager SANS le court-circuit bivouac. Sert a
-    /// detecter un flag BivouacManager reste bloque a la sortie : si le bivouac se
-    /// declare encore actif mais que GlobalGameManager rapporte deja InGame, le
-    /// bivouac est en realite termine et la suspension doit etre levee.
+    /// Reads the raw GlobalGameManager state WITHOUT the bivouac short-circuit. Used to
+    /// detect a BivouacManager flag stuck on exit: if the bivouac still
+    /// declares itself active but GlobalGameManager already reports InGame, the
+    /// bivouac is actually finished and the suspension must be lifted.
     /// </summary>
     internal static bool TryGetRawGameState(out CairnGameLifecycleState state)
     {
@@ -101,9 +101,9 @@ public static unsafe partial class CairnGameApi
     }
 
     /// <summary>
-    /// Vrai si le joueur LOCAL est en bivouac (ou en transition d'entree/sortie). Lecture
-    /// directe de l'etat natif (BivouacManager) — sert a interdire la teleportation pendant
-    /// un bivouac. No-op safe : false si le manager est introuvable ou en cas d'exception.
+    /// True if the LOCAL player is in a bivouac (or in an enter/exit transition). Direct read
+    /// of the native state (BivouacManager) — used to forbid teleportation during
+    /// a bivouac. Safe no-op: false if the manager can't be found or on an exception.
     /// </summary>
     public static bool IsLocalInBivouac()
     {

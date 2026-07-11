@@ -97,15 +97,15 @@ public static unsafe partial class CairnGameApi
 
         internal static bool TapingActivatePrefix(TapingFingersManager __instance, Il2CppSystem.Action onExitCallback)
         {
-            // Diagnostic uniquement : on logge l'état avant que le jeu fasse son
-            // Activate. Le prefix ne doit PAS court-circuiter le flux vanille
-            // (camera, input context, animations) sous peine de faire disparaitre
-            // le perso et bloquer le jeu.
+            // Diagnostic only: log the state before the game runs its Activate.
+            // The prefix must NOT short-circuit the vanilla flow (camera, input
+            // context, animations), otherwise the character disappears and the
+            // game locks up.
             SafeLog("TapingActivate", () => DescribeTaping(__instance));
 
-            // Repare les preconditions au cas ou (selection de main + modele
-            // courant) sans appeler StartTaping nous-memes : c'est l'Activate
-            // original qui doit piloter la suite.
+            // Repair the preconditions just in case (hand selection + current
+            // model) without calling StartTaping ourselves: the original Activate
+            // is what drives the rest.
             if (EnsureTapingManagerReady(__instance))
             {
                 PrepareTapingSelection(__instance);
