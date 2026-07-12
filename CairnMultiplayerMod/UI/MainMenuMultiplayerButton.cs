@@ -18,6 +18,10 @@ public static class MainMenuMultiplayerButton
 {
     private static bool _intercepted;
     private static int _frameCounter;
+    private static int _notReadyWarnFrames;
+
+    // Cached so we can re-assert the label each frame without re-scanning.
+    private static TextMeshProUGUI _storyTMP;
 
     // Common parent of the 4 Cairn buttons; hidden while the panel is open.
     private static GameObject _modeSelectContainer;
@@ -42,6 +46,8 @@ public static class MainMenuMultiplayerButton
         {
             _intercepted = false;
             _frameCounter = 0;
+            _notReadyWarnFrames = 0;
+            _storyTMP = null;
             _modeSelectContainer = null;
             _suspendedMenuBehaviours.Clear();
             _suspendedMenuStates.Clear();
@@ -50,13 +56,39 @@ public static class MainMenuMultiplayerButton
 
     public static void OnUpdate()
     {
-        if (_intercepted) return;
+        // The game re-localizes the button to "Story" a few frames after we swap it,
+        // so keep re-asserting the label instead of intercepting just once.
+        if (_intercepted)
+        {
+            ReassertLabel();
+            return;
+        }
+
         _frameCounter++;
         if (_frameCounter < 3) return;
 
-        try { InterceptStoryButton(); }
-        catch (Exception ex) { Mod.Log.Error($"[MainMenuBtn] Failed: {ex}"); }
-        _intercepted = true;
+        try
+        {
+            // Retry next frame if the menu isn't built yet, rather than giving up.
+            if (InterceptStoryButton())
+                _intercepted = true;
+        }
+        catch (Exception ex)
+        {
+            Mod.Log.Error($"[MainMenuBtn] Failed: {ex}");
+            _intercepted = true;
+        }
+    }
+
+    /// <summary>Re-applies the "Multiplayer" label if the game reverted it.</summary>
+    private static void ReassertLabel()
+    {
+        try
+        {
+            if (_storyTMP != null && _storyTMP.text != "Multiplayer")
+                _storyTMP.text = "Multiplayer";
+        }
+        catch { /* object destroyed mid-frame */ }
     }
 
     /// <summary>Hides the 4 Cairn menu buttons (Story/Settings/Credits/Quit).</summary>
@@ -92,10 +124,11 @@ public static class MainMenuMultiplayerButton
 
     // ── Interception ─────────────────────────────────────────────────────
 
-    private static void InterceptStoryButton()
+    /// <summary>Intercepts the Story button. Returns false if the menu isn't ready yet.</summary>
+    private static bool InterceptStoryButton()
     {
         var container = FindModeSelectContainer();
-        if (container == null) { Mod.Log.Warning("[MainMenuBtn] Container not found"); return; }
+        if (container == null) { WarnNotReady("Container not found"); return false; }
 
         _modeSelectContainer = container.gameObject;
 
@@ -105,26 +138,35 @@ public static class MainMenuMultiplayerButton
             var child = container.GetChild(i);
             if (child.name == "Story") { storyTransform = child; break; }
         }
-        if (storyTransform == null) { Mod.Log.Warning("[MainMenuBtn] Story button not found"); return; }
+        if (storyTransform == null) { WarnNotReady("Story button not found"); return false; }
 
         // Capture the game font once for use by the panel.
         var storyTMP = storyTransform.GetComponentInChildren<TextMeshProUGUI>(true);
-        if (storyTMP != null && CapturedFont == null)
+        if (storyTMP == null) { WarnNotReady("Story TMP not found"); return false; }
+
+        if (CapturedFont == null)
             CapturedFont = storyTMP.font;
 
-        // Rename the button
-        if (storyTMP != null)
-            storyTMP.text = "Multiplayer";
+        _storyTMP = storyTMP;
+        storyTMP.text = "Multiplayer";
 
         // Replace the click handler
         var btn = storyTransform.GetComponent<Button>();
-        if (btn != null)
-        {
-            btn.onClick.RemoveAllListeners();
-            btn.onClick.AddListener((UnityAction)OnMultiplayerClicked);
-        }
+        if (btn == null) { WarnNotReady("Story Button component not found"); return false; }
+
+        btn.onClick.RemoveAllListeners();
+        btn.onClick.AddListener((UnityAction)OnMultiplayerClicked);
 
         Mod.Log.Msg("[MainMenuBtn] Story intercepted → 'Multiplayer'; opens MultiplayerPanel directly");
+        return true;
+    }
+
+    /// <summary>Warns at most once every ~2s so retries don't spam the log.</summary>
+    private static void WarnNotReady(string reason)
+    {
+        if (_notReadyWarnFrames > 0) { _notReadyWarnFrames--; return; }
+        _notReadyWarnFrames = 120;
+        Mod.Log.Warning($"[MainMenuBtn] {reason}; retrying next frame");
     }
 
     private static void OnMultiplayerClicked()
