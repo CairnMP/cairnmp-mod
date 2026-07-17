@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using CairnMultiplayer.Shared;
-using CairnMultiplayerMod.Networking.Authoritative;
 using Il2CppSteamworks;
 
 namespace CairnMultiplayerMod.Networking;

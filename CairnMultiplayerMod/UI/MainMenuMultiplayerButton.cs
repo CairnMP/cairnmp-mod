@@ -4,7 +4,6 @@ using Il2CppTMPro;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
-using CairnMultiplayerMod.Core;
 
 namespace CairnMultiplayerMod.UI;
 
@@ -96,13 +95,13 @@ public static class MainMenuMultiplayerButton
     {
         if (_modeSelectContainer != null) _modeSelectContainer.SetActive(false);
         SuspendMainMenuInput();
-        CairnGameApi.BlockMainMenuActionMaps();   // blocks Delete/arrows/back in the background
+        InputApi.BlockMainMenuActionMaps();   // blocks Delete/arrows/back in the background
     }
 
     /// <summary>Re-shows the 4 Cairn menu buttons after the panel is closed.</summary>
     public static void RestoreModeSelect()
     {
-        CairnGameApi.RestoreMainMenuActionMaps();
+        InputApi.RestoreMainMenuActionMaps();
         RestoreMainMenuInput();
         if (_modeSelectContainer != null) _modeSelectContainer.SetActive(true);
     }

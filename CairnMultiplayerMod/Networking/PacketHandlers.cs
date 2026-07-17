@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using CairnMultiplayer.Shared;
-using CairnMultiplayerMod.Core;
 
 namespace CairnMultiplayerMod.Networking;
 
@@ -147,13 +146,13 @@ public partial class NetworkManager
                     break;
                 // Safety net: we may have entered a bivouac between the host's check and
                 // the packet's arrival. We don't yank the player out of a bivouac for a teleport.
-                if (CairnGameApi.IsLocalInBivouac())
+                if (GameLifecycleService.IsLocalInBivouac())
                 {
                     Mod.LogDebug("[CairnMP] ServerTeleport ignored (local player is in a bivouac)");
                     break;
                 }
                 Mod.LogDebug($"[CairnMP] ServerTeleport received -> ({pkt.X:F1}, {pkt.Y:F1}, {pkt.Z:F1})");
-                CairnGameApi.TeleportLocalPlayer(new UnityEngine.Vector3(pkt.X, pkt.Y, pkt.Z), pkt.Yaw);
+                TeleportApi.TeleportLocalPlayer(new UnityEngine.Vector3(pkt.X, pkt.Y, pkt.Z), pkt.Yaw);
                 break;
             }
             case PacketId.ServerRopeClip:

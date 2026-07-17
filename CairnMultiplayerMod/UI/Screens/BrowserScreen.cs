@@ -4,7 +4,6 @@ using Il2CppTMPro;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
-using CairnMultiplayerMod.Core;
 
 namespace CairnMultiplayerMod.UI.Screens;
 

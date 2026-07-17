@@ -6,7 +6,6 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using CairnMultiplayer.Shared;
-using CairnMultiplayerMod.Core;
 
 namespace CairnMultiplayerMod.Networking;
 

@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using CairnMultiplayerMod.Core;
-using CairnMultiplayerMod.Networking;
 using UnityEngine;
 using UnityEngine.UIElements;
 using Object = UnityEngine.Object;

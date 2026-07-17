@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using CairnMultiplayer.Shared;
-using CairnMultiplayerMod.Core;
 using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using Il2CppSteamworks;

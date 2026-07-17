@@ -5,7 +5,6 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using CairnMultiplayer.Shared;
-using CairnMultiplayerMod.Core;
 using CairnMultiplayerMod.UI;
 using Il2CppInterop.Runtime;
 using Il2CppSteamworks;
