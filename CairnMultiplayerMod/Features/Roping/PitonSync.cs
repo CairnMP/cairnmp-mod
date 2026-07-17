@@ -40,6 +40,7 @@ internal static unsafe partial class RopeApi
         _remotePitonsAdded = 0;
         _localPitonIdsByPointer.Clear();
         _remotePitonsByNetId.Clear();
+        _remotePitonPointersByNetId.Clear();
     }
 
     public static MonoBehaviour TryGetLifeline()
