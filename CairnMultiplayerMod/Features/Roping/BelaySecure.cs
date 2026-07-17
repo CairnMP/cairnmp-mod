@@ -39,6 +39,14 @@ internal static unsafe partial class RopeApi
     private static bool _belayEngaged;
     public static bool IsNativeBelayEngaged => _belayEngaged;
 
+    /// <summary>
+    /// We inject the local climbot rope into Lifeline.securingRope only when the lifeline has
+    /// no rope. Remember that ownership so unclip can restore the vanilla "no securing rope"
+    /// state instead of leaving the lifeline half-attached to the coop rope.
+    /// </summary>
+    private static bool _securingRopeInjectedByRopeTeam;
+    private static LogicalRope _injectedSecuringRope;
+
     /// <summary>True if at least one rope-team anchor is placed (used by TickRopeTeam).</summary>
     public static bool HasRopeTeamAnchors => _ropeAnchors.Count > 0;
 
@@ -210,6 +218,8 @@ internal static unsafe partial class RopeApi
             var go = rope.gameObject;
             if (go != null) go.SetActive(true);
             lifeline.securingRope = rope;
+            _injectedSecuringRope = rope;
+            _securingRopeInjectedByRopeTeam = true;
             Mod.LogDebug("[RopeTeam] Injected climbot rope into lifeline.securingRope.");
             return true;
         }
@@ -248,32 +258,89 @@ internal static unsafe partial class RopeApi
             Mod.LogDebug($"[RopeTeam] Rope anchor released for partner {partnerId}.");
         }
         _ropeAnchorsAttached.Remove(partnerId);
-        if (_ropeAnchors.Count == 0) _belayEngaged = false;
+        if (_ropeAnchors.Count == 0)
+        {
+            _belayEngaged = false;
+            RestoreInjectedSecuringRopeIfUnused();
+        }
     }
 
     /// <summary>Removes ALL rope-team anchors (disconnect / scene change).</summary>
     public static void ReleaseAllRopeTeamAnchors()
     {
-        if (_ropeAnchors.Count == 0) { _belayEngaged = false; _ropeAnchorsAttached.Clear(); return; }
+        if (_ropeAnchors.Count == 0)
+        {
+            _belayEngaged = false;
+            _ropeAnchorsAttached.Clear();
+            RestoreInjectedSecuringRopeIfUnused();
+            return;
+        }
         foreach (var kv in _ropeAnchors)
             DestroyAnchor(kv.Value);
         _ropeAnchors.Clear();
         _ropeAnchorsAttached.Clear();
         _belayEngaged = false;
+        RestoreInjectedSecuringRopeIfUnused();
         Mod.LogDebug("[RopeTeam] All rope anchors released.");
     }
 
     private static void DestroyAnchor(GameObject anchor)
     {
         if (anchor == null) return;
+        bool detachedViaLifeline = false;
         try
         {
-            // Cleanly detach the rope from the piton before destruction (avoids leaving the
-            // lifeline's securingRope pinned on a destroyed collider).
+            // Preferred path: ask Lifeline to detach the piton. This updates the native
+            // lifeline/rope bookkeeping; destroying the clone directly can leave stale
+            // belay state behind and lock the pawn on the next climb.
             var piton = anchor.GetComponent<Piton>();
-            if (piton != null) { try { piton.Detach(); } catch { } }
+            if (piton != null && piton.Pointer != IntPtr.Zero)
+                detachedViaLifeline = TryDetachPitonViaLifeline(piton.Pointer);
+
+            // Fallback only: better than leaving the anchor alive if the native method is
+            // unavailable, but the Lifeline path above is the cleanup we rely on.
+            if (!detachedViaLifeline && piton != null)
+            {
+                try { piton.Detach(); } catch { }
+            }
         }
-        catch { }
-        try { Object.Destroy(anchor); } catch { }
+        catch (Exception ex)
+        {
+            Mod.Log.Warning($"[RopeTeam] anchor detach failed: {ex.Message}");
+        }
+
+        if (!detachedViaLifeline)
+        {
+            try { Object.Destroy(anchor); } catch { }
+        }
+    }
+
+    private static void RestoreInjectedSecuringRopeIfUnused()
+    {
+        if (!_securingRopeInjectedByRopeTeam)
+            return;
+
+        try
+        {
+            var harness = ResolveLocalHarness();
+            var lifeline = harness != null ? harness.lifeline : null;
+            var current = lifeline != null ? lifeline.securingRope : null;
+
+            if (current != null && _injectedSecuringRope != null &&
+                current.Pointer == _injectedSecuringRope.Pointer)
+            {
+                lifeline.securingRope = null;
+                Mod.LogDebug("[RopeTeam] Restored lifeline.securingRope after coop unclip.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Mod.Log.Warning($"[RopeTeam] securingRope restore failed: {ex.Message}");
+        }
+        finally
+        {
+            _securingRopeInjectedByRopeTeam = false;
+            _injectedSecuringRope = null;
+        }
     }
 }
