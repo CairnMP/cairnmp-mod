@@ -47,7 +47,30 @@ public static class PacketCodec
     {
         int len = r.ReadUInt16();
         var bytes = r.ReadBytes(len);
+        if (bytes.Length != len)
+            throw new EndOfStreamException($"Expected {len} string bytes, received {bytes.Length}");
         return Utf8.GetString(bytes);
+    }
+
+    /// <summary>Writes an opaque payload as [uint16 LE length][bytes].</summary>
+    public static void WriteBytes(BinaryWriter w, byte[] value)
+    {
+        value ??= Array.Empty<byte>();
+        if (value.Length > MaxUInt16Length)
+            throw new InvalidDataException($"Binary payload too large: {value.Length} bytes");
+
+        w.Write((ushort)value.Length);
+        w.Write(value);
+    }
+
+    /// <summary>Reads an opaque payload written by <see cref="WriteBytes"/>.</summary>
+    public static byte[] ReadBytes(BinaryReader r)
+    {
+        int length = r.ReadUInt16();
+        var value = r.ReadBytes(length);
+        if (value.Length != length)
+            throw new EndOfStreamException($"Expected {length} payload bytes, received {value.Length}");
+        return value;
     }
 
     /// <summary>
@@ -217,6 +240,88 @@ public struct ClientHandshake : IPacket
         ProtocolVersion = r.ReadInt32();
         PlayerName = PacketCodec.ReadString(r);
         RoomCode = PacketCodec.ReadString(r);
+    }
+}
+
+/// <summary>One third-party extension advertised during the managed API handshake.</summary>
+public struct ExtensionManifestEntry
+{
+    public string Id;
+    public string Version;
+    public string MinimumPeerVersion;
+    public string MaximumPeerVersion;
+    public bool Required;
+
+    public void Serialize(BinaryWriter w)
+    {
+        PacketCodec.WriteString(w, Id ?? "");
+        PacketCodec.WriteString(w, Version ?? "");
+        PacketCodec.WriteString(w, MinimumPeerVersion ?? "");
+        PacketCodec.WriteString(w, MaximumPeerVersion ?? "");
+        w.Write(Required);
+    }
+
+    public void Deserialize(BinaryReader r)
+    {
+        Id = PacketCodec.ReadString(r);
+        Version = PacketCodec.ReadString(r);
+        MinimumPeerVersion = PacketCodec.ReadString(r);
+        MaximumPeerVersion = PacketCodec.ReadString(r);
+        Required = r.ReadBoolean();
+    }
+}
+
+/// <summary>Client extension inventory, sent to the authoritative host after lobby entry.</summary>
+public struct ClientExtensionManifest : IPacket
+{
+    public const int MaxEntries = 128;
+    public ExtensionManifestEntry[] Entries;
+
+    public void Serialize(BinaryWriter w)
+    {
+        int count = Entries?.Length ?? 0;
+        if (count > MaxEntries)
+            throw new InvalidDataException($"Too many extensions in manifest: {count}");
+
+        w.Write((ushort)count);
+        for (int i = 0; i < count; i++)
+            Entries[i].Serialize(w);
+    }
+
+    public void Deserialize(BinaryReader r)
+    {
+        int count = r.ReadUInt16();
+        if (count > MaxEntries)
+            throw new InvalidDataException($"Too many extensions in manifest: {count}");
+
+        Entries = new ExtensionManifestEntry[count];
+        for (int i = 0; i < count; i++)
+            Entries[i].Deserialize(r);
+    }
+}
+
+/// <summary>A typed extension command sent by a client to the authoritative host.</summary>
+public struct ClientExtensionCommand : IPacket
+{
+    public uint RequestId;
+    public string ExtensionId;
+    public string CommandId;
+    public byte[] Payload;
+
+    public void Serialize(BinaryWriter w)
+    {
+        w.Write(RequestId);
+        PacketCodec.WriteString(w, ExtensionId ?? "");
+        PacketCodec.WriteString(w, CommandId ?? "");
+        PacketCodec.WriteBytes(w, Payload);
+    }
+
+    public void Deserialize(BinaryReader r)
+    {
+        RequestId = r.ReadUInt32();
+        ExtensionId = PacketCodec.ReadString(r);
+        CommandId = PacketCodec.ReadString(r);
+        Payload = PacketCodec.ReadBytes(r);
     }
 }
 
@@ -442,6 +547,148 @@ public struct ServerHandshakeReject : IPacket
 
     public void Serialize(BinaryWriter w) => PacketCodec.WriteString(w, Reason ?? "");
     public void Deserialize(BinaryReader r) => Reason = PacketCodec.ReadString(r);
+}
+
+/// <summary>Host decision after comparing its extension inventory with a client.</summary>
+public struct ServerExtensionManifestResult : IPacket
+{
+    public bool Accepted;
+    public string Reason;
+    public string[] EnabledExtensionIds;
+
+    public void Serialize(BinaryWriter w)
+    {
+        w.Write(Accepted);
+        PacketCodec.WriteString(w, Reason ?? "");
+        int count = EnabledExtensionIds?.Length ?? 0;
+        if (count > ClientExtensionManifest.MaxEntries)
+            throw new InvalidDataException($"Too many enabled extensions: {count}");
+        w.Write((ushort)count);
+        for (int i = 0; i < count; i++)
+            PacketCodec.WriteString(w, EnabledExtensionIds[i] ?? "");
+    }
+
+    public void Deserialize(BinaryReader r)
+    {
+        Accepted = r.ReadBoolean();
+        Reason = PacketCodec.ReadString(r);
+        int count = r.ReadUInt16();
+        if (count > ClientExtensionManifest.MaxEntries)
+            throw new InvalidDataException($"Too many enabled extensions: {count}");
+        EnabledExtensionIds = new string[count];
+        for (int i = 0; i < count; i++)
+            EnabledExtensionIds[i] = PacketCodec.ReadString(r);
+    }
+}
+
+/// <summary>Completion of a client command after the host commits or aborts it.</summary>
+public struct ServerExtensionCommandResult : IPacket
+{
+    public uint RequestId;
+    public ExtensionCommandStatus Status;
+    public string Reason;
+
+    public void Serialize(BinaryWriter w)
+    {
+        w.Write(RequestId);
+        w.Write((byte)Status);
+        PacketCodec.WriteString(w, Reason ?? "");
+    }
+
+    public void Deserialize(BinaryReader r)
+    {
+        RequestId = r.ReadUInt32();
+        Status = (ExtensionCommandStatus)r.ReadByte();
+        Reason = PacketCodec.ReadString(r);
+    }
+}
+
+/// <summary>A transient extension event emitted by the authoritative host.</summary>
+public struct ServerExtensionEvent : IPacket
+{
+    public int SourcePlayerId;
+    public string ExtensionId;
+    public string EventId;
+    public byte[] Payload;
+
+    public void Serialize(BinaryWriter w)
+    {
+        w.Write(SourcePlayerId);
+        PacketCodec.WriteString(w, ExtensionId ?? "");
+        PacketCodec.WriteString(w, EventId ?? "");
+        PacketCodec.WriteBytes(w, Payload);
+    }
+
+    public void Deserialize(BinaryReader r)
+    {
+        SourcePlayerId = r.ReadInt32();
+        ExtensionId = PacketCodec.ReadString(r);
+        EventId = PacketCodec.ReadString(r);
+        Payload = PacketCodec.ReadBytes(r);
+    }
+}
+
+/// <summary>Latest host-owned value of one replicated extension state key.</summary>
+public struct ServerExtensionState : IPacket
+{
+    public string ExtensionId;
+    public string StateId;
+    public int ScopePlayerId;
+    public ulong Revision;
+    public bool Removed;
+    public byte[] Payload;
+
+    public void Serialize(BinaryWriter w)
+    {
+        PacketCodec.WriteString(w, ExtensionId ?? "");
+        PacketCodec.WriteString(w, StateId ?? "");
+        w.Write(ScopePlayerId);
+        w.Write(Revision);
+        w.Write(Removed);
+        PacketCodec.WriteBytes(w, Payload);
+    }
+
+    public void Deserialize(BinaryReader r)
+    {
+        ExtensionId = PacketCodec.ReadString(r);
+        StateId = PacketCodec.ReadString(r);
+        ScopePlayerId = r.ReadInt32();
+        Revision = r.ReadUInt64();
+        Removed = r.ReadBoolean();
+        Payload = PacketCodec.ReadBytes(r);
+    }
+}
+
+/// <summary>Host-authoritative extension capability update for one lobby member.</summary>
+public struct ServerExtensionPeerStatus : IPacket
+{
+    public int PlayerId;
+    public bool Joined;
+    public string[] EnabledExtensionIds;
+
+    public void Serialize(BinaryWriter w)
+    {
+        w.Write(PlayerId);
+        w.Write(Joined);
+        int count = EnabledExtensionIds?.Length ?? 0;
+        if (count > ClientExtensionManifest.MaxEntries)
+            throw new InvalidDataException($"Too many enabled extensions: {count}");
+        w.Write((ushort)count);
+        for (int i = 0; i < count; i++)
+            PacketCodec.WriteString(w, EnabledExtensionIds[i] ?? "");
+    }
+
+    public void Deserialize(BinaryReader r)
+    {
+        PlayerId = r.ReadInt32();
+        Joined = r.ReadBoolean();
+        int count = r.ReadUInt16();
+        if (count > ClientExtensionManifest.MaxEntries)
+            throw new InvalidDataException($"Too many enabled extensions: {count}");
+        EnabledExtensionIds = new string[count];
+        for (int i = 0; i < count; i++)
+            EnabledExtensionIds[i] = PacketCodec.ReadString(r);
+    }
 }
 
 public struct ServerPlayerJoined : IPacket

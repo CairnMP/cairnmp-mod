@@ -80,7 +80,7 @@ public class ProtocolVersionTests
     {
         // When you bump Protocol.Version, update this value AND the release notes
         // to signal to clients that they need to update.
-        Assert.Equal(6, Protocol.Version);
+        Assert.Equal(7, Protocol.Version);
     }
 
     [Fact]

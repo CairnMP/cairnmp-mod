@@ -8,6 +8,14 @@ Features include roped climbing (belay), in-game chat and host commands, world
 pings, FreeRoam, and full synchronization of players, cosmetics, weather, lamps,
 pitons and time of day.
 
+## Managed extension API
+
+Other MelonLoader mods can integrate with CairnMP through the host-authoritative
+`CairnMultiplayer.Api` surface. It provides compatible-extension negotiation,
+typed commands, transactional effects, late-join replicated state and transient
+events without exposing Steam or raw packets. See
+[`docs/multiplayer-api.md`](docs/multiplayer-api.md).
+
 ## Repository layout
 
 | Path | In `.slnx`? | Role |

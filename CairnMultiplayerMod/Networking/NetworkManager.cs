@@ -190,6 +190,7 @@ public partial class NetworkManager : IDisposable
     public void Update()
     {
         PumpSteamTransport();
+        CairnMultiplayer.Api.MultiplayerApi.Runtime.Tick();
 
         while (_pending.TryDequeue(out var payload))
         {

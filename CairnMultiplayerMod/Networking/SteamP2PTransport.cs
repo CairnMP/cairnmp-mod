@@ -51,14 +51,16 @@ public partial class NetworkManager
         CurrentRoomCode = lobby.CurrentRoomCode;
         ServerName = string.IsNullOrEmpty(lobby.CurrentLobbyName) ? "Steam lobby" : lobby.CurrentLobbyName;
         LocalPlayerId = StableSteamPlayerId(_steamLocalId);
-        IsHandshakeComplete = true;
+        IsHandshakeComplete = lobby.IsHost;
 
         try { SteamNetworking.AllowP2PPacketRelay(true); }
         catch (Exception ex) { Mod.Log.Warning($"[SteamP2P] Allow relay failed: {ex.Message}"); }
         EnsureSteamP2PCallbacks();
 
         RefreshSteamLobbyMembers(lobby);
-        OnHandshakeAck?.Invoke();
+        InitializeExtensionApi();
+        if (lobby.IsHost)
+            OnHandshakeAck?.Invoke();
         Mod.LogDebug($"[SteamP2P] Transport active. local={_steamLocalId} host={_steamHostId} playerId={LocalPlayerId}");
     }
 
@@ -95,8 +97,6 @@ public partial class NetworkManager
                 };
                 _remotePlayers[playerId] = rp;
                 OnPlayerJoined?.Invoke(playerId, rp.Name);
-                if (_steamLobby.IsHost)
-                    SendSteamSnapshotTo(member.SteamId);
             }
             else
             {
@@ -113,6 +113,7 @@ public partial class NetworkManager
 
         foreach (var playerId in toRemove)
         {
+            NotifyExtensionPeerLeft(playerId);
             if (_steamIdsByPlayerId.TryGetValue(playerId, out var steamId))
             {
                 try { SteamNetworking.CloseP2PSessionWithUser(new CSteamID(steamId)); }
@@ -185,6 +186,13 @@ public partial class NetworkManager
             return;
         }
 
+        // Clients accept authoritative Server* traffic only from the lobby owner.
+        if (remoteId.m_SteamID != _steamHostId)
+        {
+            Mod.Log.Warning($"[SteamP2P] Ignored non-host packet {id} from {remoteId.m_SteamID}");
+            return;
+        }
+
         ProcessPacket(payload);
     }
 
@@ -192,6 +200,11 @@ public partial class NetworkManager
     {
         using var ms = new MemoryStream(payload, 1, payload.Length - 1, writable: false);
         using var r = new BinaryReader(ms);
+
+        if (HandleExtensionHostPacket(remoteSteamId, id, r))
+            return;
+        if (!IsExtensionPeerAdmitted(remoteSteamId))
+            return;
 
         switch (id)
         {
@@ -398,6 +411,7 @@ public partial class NetworkManager
             case PacketId.ClientDisconnect:
             {
                 var playerId = EnsureSteamRemotePlayer(remoteSteamId);
+                NotifyExtensionPeerLeft(playerId);
                 if (_remotePlayers.Remove(playerId))
                     OnPlayerLeft?.Invoke(playerId);
                 break;
@@ -739,6 +753,7 @@ public partial class NetworkManager
         foreach (var member in _steamLobby.Members)
         {
             if (member.SteamId == 0 || member.SteamId == _steamLocalId || member.SteamId == exceptSteamId) continue;
+            if (_steamLobby.IsHost && !IsExtensionPeerAdmitted(member.SteamId)) continue;
             SendSteamPayload(new CSteamID(member.SteamId), payload, reliable);
         }
     }
@@ -958,6 +973,7 @@ public partial class NetworkManager
 
     private void ResetSteamTransportState()
     {
+        ResetExtensionApi();
         _steamTransportActive = false;
         _steamLobby = null;
         _steamLocalId = 0;

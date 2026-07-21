@@ -22,11 +22,32 @@ public partial class NetworkManager
         }
 
         var id = (PacketId)payload[0];
+        if (IsSteamTransportActive && !IsHandshakeComplete &&
+            id != PacketId.ServerExtensionManifestResult &&
+            id != PacketId.ServerHandshakeReject)
+        {
+            return;
+        }
         using var ms = new MemoryStream(payload, 1, payload.Length - 1, writable: false);
         using var r = new BinaryReader(ms);
 
         switch (id)
         {
+            case PacketId.ServerExtensionManifestResult:
+                HandleExtensionManifestResult(r);
+                break;
+            case PacketId.ServerExtensionCommandResult:
+                HandleExtensionCommandResult(r);
+                break;
+            case PacketId.ServerExtensionEvent:
+                HandleExtensionEvent(r);
+                break;
+            case PacketId.ServerExtensionState:
+                HandleExtensionState(r);
+                break;
+            case PacketId.ServerExtensionPeerStatus:
+                HandleExtensionPeerStatus(r);
+                break;
             case PacketId.ServerHandshakeAck:
                 HandleHandshakeAck(r);
                 break;

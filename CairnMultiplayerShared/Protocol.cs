@@ -6,7 +6,7 @@ namespace CairnMultiplayer.Shared;
 /// </summary>
 public static class Protocol
 {
-    public const int Version = 6;
+    public const int Version = 7;
     public const string ConnectionKey = "cairnmp";
     public const int DefaultPort = 14000;
 
@@ -104,6 +104,8 @@ public enum PacketId : byte
     ClientSleepState = 14,
     ClientRopeClip = 15,
     ClientCosmeticState = 16,
+    ClientExtensionManifest = 17,
+    ClientExtensionCommand = 18,
 
     // Server -> Client
     ServerHandshakeAck = 64,
@@ -126,6 +128,11 @@ public enum PacketId : byte
     ServerTeleport = 81,
     ServerRopeClip = 82,
     ServerCosmeticState = 83,
+    ServerExtensionManifestResult = 84,
+    ServerExtensionCommandResult = 85,
+    ServerExtensionEvent = 86,
+    ServerExtensionState = 87,
+    ServerExtensionPeerStatus = 88,
 }
 
 /// <summary>
@@ -140,4 +147,14 @@ public enum GameDifficulty : int
     Explorer  = 766328718,
     FreeSolo  = -1944667143,
     FreeRoam  = 418187680,
+}
+
+/// <summary>Outcome of a managed extension command handled by the host.</summary>
+public enum ExtensionCommandStatus : byte
+{
+    Committed = 0,
+    Rejected = 1,
+    Failed = 2,
+    TimedOut = 3,
+    Unavailable = 4,
 }
