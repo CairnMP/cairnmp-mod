@@ -11,6 +11,7 @@ global using CairnMultiplayerMod.GameApi.Internal;
 global using CairnMultiplayerMod.Session;
 global using CairnMultiplayerMod.Networking;
 global using CairnMultiplayerMod.Networking.Authoritative;
+global using CairnMultiplayerMod.Framework;
 global using CairnMultiplayerMod.Features.Bivouac;
 global using CairnMultiplayerMod.Features.Players;
 global using CairnMultiplayerMod.Features.Players.Avatar;

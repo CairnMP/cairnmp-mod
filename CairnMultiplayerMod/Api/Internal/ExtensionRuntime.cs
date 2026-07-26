@@ -41,6 +41,10 @@ internal sealed class ExtensionRuntime
     private readonly Dictionary<(int playerId, string extensionId, string commandId), RateWindow> _commandRates = new();
     private readonly Dictionary<string, int> _extensionFailures = new(StringComparer.Ordinal);
     private readonly HashSet<string> _disabledExtensions = new(StringComparer.Ordinal);
+    // Extensions shipped inside the mod itself (see Framework/). The rate limit and the
+    // circuit breaker exist to contain third-party code; applied to our own features they
+    // would throttle legitimate traffic and switch off part of the game after a hiccup.
+    private readonly HashSet<string> _privilegedExtensions = new(StringComparer.Ordinal);
     private IExtensionNetworkBridge _bridge;
     private int _nextRequestId;
 
@@ -81,6 +85,22 @@ internal sealed class ExtensionRuntime
         _extensions.Add(registration.Id, definition);
         return new MultiplayerExtension(this, definition);
     }
+
+    /// <summary>
+    /// Registers an extension that ships with the mod, exempt from the third-party
+    /// safeguards: no command rate limit (a feature may legitimately talk every frame) and
+    /// no circuit breaker (a transient failure must not switch a feature off mid-session).
+    /// Failures are still reported, so they stay visible in the logs.
+    /// </summary>
+    internal MultiplayerExtension RegisterPrivileged(ExtensionRegistration registration)
+    {
+        var extension = Register(registration);
+        _privilegedExtensions.Add(extension.Id);
+        return extension;
+    }
+
+    private bool IsPrivileged(string extensionId)
+        => extensionId != null && _privilegedExtensions.Contains(extensionId);
 
     internal MultiplayerCommand<T> RegisterCommand<T>(MultiplayerExtension extension, string commandId,
         Action<HostCommandContext<T>> handler, PayloadCodec<T> codec)
@@ -375,6 +395,8 @@ internal sealed class ExtensionRuntime
 
     private bool ConsumeCommandBudget(int playerId, string extensionId, string commandId)
     {
+        if (IsPrivileged(extensionId)) return true;
+
         var key = (playerId, extensionId ?? "", commandId ?? "");
         var now = DateTime.UtcNow;
         if (!_commandRates.TryGetValue(key, out var window) || now - window.Start >= CommandRateWindow)
@@ -390,6 +412,15 @@ internal sealed class ExtensionRuntime
     private void RecordFailure(string extensionId, Exception exception)
     {
         extensionId ??= "";
+        if (IsPrivileged(extensionId))
+        {
+            // Reported so it shows up in the logs, but never disabled: cutting one of our
+            // own features off mid-session would desync the players instead of protecting them.
+            _bridge?.ReportExtensionFailure(extensionId,
+                $"{exception.GetType().Name}: {exception.Message}");
+            return;
+        }
+
         int count = _extensionFailures.TryGetValue(extensionId, out var current) ? current + 1 : 1;
         _extensionFailures[extensionId] = count;
         _bridge?.ReportExtensionFailure(extensionId,

@@ -1,0 +1,379 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using CairnMultiplayer.Api;
+using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.Api.Internal;
+using CairnMultiplayerMod.Framework;
+using Xunit;
+
+namespace CairnMultiplayerMod.Tests;
+
+/// <summary>
+/// Exercises the feature framework without Unity. This is the point of routing feature logic
+/// through Framework/ instead of the networking layer: what a feature sends, receives and
+/// cleans up becomes assertable.
+/// </summary>
+public sealed class FeatureFrameworkTests : IDisposable
+{
+    private readonly List<string> _warnings = new();
+    private readonly List<string> _errors = new();
+
+    public FeatureFrameworkTests()
+        => FeatureLog.SetSink(_ => { }, _warnings.Add, _errors.Add);
+
+    public void Dispose() => FeatureLog.SetSink(null, null, null);
+
+    // ── Registration ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public void EveryFeatureGetsItsOnRegisterCalled()
+    {
+        var feature = new RecordingFeature("alpha");
+        HostWith(feature);
+
+        Assert.True(feature.Registered);
+    }
+
+    [Fact]
+    public void FeaturesRegisterInIdOrderWhateverTheOrderTheyComeIn()
+    {
+        var order = new List<string>();
+        var zulu = new RecordingFeature("zulu", onRegister: () => order.Add("zulu"));
+        var alpha = new RecordingFeature("alpha", onRegister: () => order.Add("alpha"));
+
+        HostWith(zulu, alpha);
+
+        Assert.Equal(new[] { "alpha", "zulu" }, order);
+    }
+
+    [Fact]
+    public void TwoFeaturesSharingAnIdIsRefusedAtStartup()
+    {
+        var host = new FeatureHost(NewRuntime(out _));
+
+        var error = Assert.Throws<InvalidOperationException>(() => host.RegisterAll(
+            new MultiplayerFeature[] { new RecordingFeature("ping"), new RecordingFeature("ping") },
+            new Version(1, 0, 0)));
+
+        Assert.Contains("ping", error.Message);
+    }
+
+    [Fact]
+    public void AFeatureThatThrowsWhileDeclaringNamesItselfInTheError()
+    {
+        var host = new FeatureHost(NewRuntime(out _));
+        var broken = new RecordingFeature("broken",
+            onRegister: () => throw new InvalidOperationException("bad declaration"));
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => host.RegisterAll(new MultiplayerFeature[] { broken }, new Version(1, 0, 0)));
+
+        Assert.Contains("broken", error.Message);
+    }
+
+    // ── Ticks and phases ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void ATickOnlyRunsInThePhaseItAskedFor()
+    {
+        var always = 0;
+        var gameplay = 0;
+        var feature = new TickingFeature(() => always++, () => gameplay++);
+        var host = HostWith(feature);
+
+        host.Tick(FeaturePhase.Always);
+
+        Assert.Equal(1, always);
+        Assert.Equal(0, gameplay);
+
+        host.Tick(FeaturePhase.Gameplay);
+
+        Assert.Equal(1, always);
+        Assert.Equal(1, gameplay);
+    }
+
+    [Fact]
+    public void AFeatureThrowingInItsTickNeitherStopsTheOthersNorItself()
+    {
+        var healthyTicks = 0;
+        var host = HostWith(
+            new TickingFeature(() => throw new InvalidOperationException("boom"), null, "aaa-broken"),
+            new TickingFeature(() => healthyTicks++, null, "bbb-healthy"));
+
+        host.Tick(FeaturePhase.Always);
+        host.Tick(FeaturePhase.Always);
+
+        Assert.Equal(2, healthyTicks);            // the healthy one kept running
+        Assert.Equal(2, _errors.Count);           // and the failure was reported each time
+        Assert.Contains("aaa-broken", _errors[0]);
+    }
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void SessionAndSceneCallbacksReachTheFeature()
+    {
+        var events = new List<string>();
+        var feature = new LifecycleFeature(events);
+        var host = HostWith(feature);
+
+        host.NotifySessionStarted();
+        host.NotifySceneReset();
+        host.NotifySessionEnded();
+
+        Assert.Equal(new[] { "started", "scene", "ended" }, events);
+    }
+
+    // ── Network channels ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void BroadcastFromAClientIsRelayedToEveryoneByTheHost()
+    {
+        var runtime = NewRuntime(out var bridge);
+        var feature = new PingLikeFeature();
+        new FeatureHost(runtime).RegisterAll(new MultiplayerFeature[] { feature }, new Version(1, 0, 0));
+        runtime.Attach(bridge);
+
+        // Player 2 asks the host to broadcast a ping.
+        var result = runtime.ExecuteHostCommand(2, CommandPacket("ping", "placed", new Point(1f, 2f, 3f)));
+
+        Assert.True(result.Committed);
+        Assert.Single(bridge.Events);
+        Assert.Equal(2, bridge.Events[0].SourcePlayerId);
+    }
+
+    [Fact]
+    public void TheSenderDoesNotReceiveItsOwnBroadcast()
+    {
+        var runtime = NewRuntime(out var bridge);
+        var feature = new PingLikeFeature();
+        new FeatureHost(runtime).RegisterAll(new MultiplayerFeature[] { feature }, new Version(1, 0, 0));
+        runtime.Attach(bridge);
+
+        // The host (player 1 in FakeBridge) broadcasts: it must not call itself back,
+        // otherwise a ping would appear twice on the sender's screen.
+        runtime.ExecuteHostCommand(1, CommandPacket("ping", "placed", new Point(4f, 5f, 6f)));
+
+        Assert.Empty(feature.Received);
+
+        // A different player's broadcast does reach us.
+        runtime.ExecuteHostCommand(2, CommandPacket("ping", "placed", new Point(7f, 8f, 9f)));
+
+        Assert.Single(feature.Received);
+        Assert.Equal(7f, feature.Received[0].X);
+    }
+
+    [Fact]
+    public void HostStateIsPublishedAndReadBack()
+    {
+        var runtime = NewRuntime(out var bridge);
+        var feature = new WeatherLikeFeature();
+        new FeatureHost(runtime).RegisterAll(new MultiplayerFeature[] { feature }, new Version(1, 0, 0));
+        runtime.Attach(bridge);
+
+        feature.Publish(new Point(0.5f, 0f, 0f));
+
+        Assert.Single(bridge.States);                       // sent on the wire for latecomers
+        Assert.True(feature.Current.TryGet(out var value));
+        Assert.Equal(0.5f, value.X);
+        Assert.Single(feature.Changes);
+    }
+
+    [Fact]
+    public void AClientPublishingHostStateIsIgnoredWithAWarning()
+    {
+        var runtime = NewRuntime(out var bridge, isHost: false);
+        var feature = new WeatherLikeFeature();
+        new FeatureHost(runtime).RegisterAll(new MultiplayerFeature[] { feature }, new Version(1, 0, 0));
+        runtime.Attach(bridge);
+
+        feature.Publish(new Point(1f, 0f, 0f));
+
+        Assert.Empty(bridge.States);
+        Assert.Contains(_warnings, warning => warning.Contains("only the host"));
+    }
+
+    [Fact]
+    public void AHostCommandCanBeRefusedAndNothingIsBroadcast()
+    {
+        var runtime = NewRuntime(out var bridge);
+        var feature = new GatedFeature(accept: false);
+        new FeatureHost(runtime).RegisterAll(new MultiplayerFeature[] { feature }, new Version(1, 0, 0));
+        runtime.Attach(bridge);
+
+        var result = runtime.ExecuteHostCommand(2, CommandPacket("gated", "try", new Point(1f, 1f, 1f)));
+
+        Assert.False(result.Committed);
+        Assert.Equal("nope", result.Reason);
+        Assert.Empty(bridge.States);
+        Assert.Empty(bridge.Events);
+    }
+
+    [Fact]
+    public void PrivilegedFeaturesAreNotRateLimited()
+    {
+        var runtime = NewRuntime(out var bridge);
+        new FeatureHost(runtime).RegisterAll(
+            new MultiplayerFeature[] { new PingLikeFeature() }, new Version(1, 0, 0));
+        runtime.Attach(bridge);
+
+        // Well past the 120-per-10s budget that protects third-party extensions: a feature
+        // sending every frame must not be throttled.
+        for (int i = 0; i < 300; i++)
+        {
+            var result = runtime.ExecuteHostCommand(2, CommandPacket("ping", "placed", new Point(i, 0f, 0f)));
+            Assert.True(result.Committed, $"send #{i} was throttled: {result.Reason}");
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static FeatureHost HostWith(params MultiplayerFeature[] features)
+    {
+        var host = new FeatureHost(NewRuntime(out _));
+        host.RegisterAll(features, new Version(1, 0, 0));
+        return host;
+    }
+
+    private static ExtensionRuntime NewRuntime(out FakeBridge bridge, bool isHost = true)
+    {
+        bridge = new FakeBridge(isHost);
+        return new ExtensionRuntime();
+    }
+
+    private static ClientExtensionCommand CommandPacket(string featureId, string commandId, Point payload)
+    {
+        using var buffer = new MemoryStream();
+        using var writer = new BinaryWriter(buffer);
+        payload.Serialize(writer);
+        writer.Flush();
+        return new ClientExtensionCommand
+        {
+            RequestId = 1,
+            ExtensionId = FeatureHost.CoreExtensionId,
+            CommandId = commandId,
+            Payload = buffer.ToArray(),
+        };
+    }
+
+    /// <summary>Minimal feature message — same serialization contract as the rest of the protocol.</summary>
+    public sealed class Point : IPacket
+    {
+        public Point() { }
+        public Point(float x, float y, float z) { X = x; Y = y; Z = z; }
+
+        public float X, Y, Z;
+
+        public void Serialize(BinaryWriter writer) { writer.Write(X); writer.Write(Y); writer.Write(Z); }
+        public void Deserialize(BinaryReader reader) { X = reader.ReadSingle(); Y = reader.ReadSingle(); Z = reader.ReadSingle(); }
+    }
+
+    private sealed class RecordingFeature : MultiplayerFeature
+    {
+        private readonly Action _onRegister;
+        internal RecordingFeature(string id, Action onRegister = null) { Id = id; _onRegister = onRegister; }
+
+        public override string Id { get; }
+        internal bool Registered { get; private set; }
+
+        protected internal override void OnRegister(FeatureBuilder feature)
+        {
+            Registered = true;
+            _onRegister?.Invoke();
+        }
+    }
+
+    private sealed class TickingFeature : MultiplayerFeature
+    {
+        private readonly Action _always;
+        private readonly Action _gameplay;
+
+        internal TickingFeature(Action always, Action gameplay, string id = "ticking")
+        {
+            _always = always;
+            _gameplay = gameplay;
+            Id = id;
+        }
+
+        public override string Id { get; }
+
+        protected internal override void OnRegister(FeatureBuilder feature)
+        {
+            if (_always != null) feature.EveryFrame(_always, FeaturePhase.Always);
+            if (_gameplay != null) feature.EveryFrame(_gameplay, FeaturePhase.Gameplay);
+        }
+    }
+
+    private sealed class LifecycleFeature : MultiplayerFeature
+    {
+        private readonly List<string> _events;
+        internal LifecycleFeature(List<string> events) => _events = events;
+
+        public override string Id => "lifecycle";
+
+        protected internal override void OnRegister(FeatureBuilder feature)
+        {
+            feature.OnSessionStarted(() => _events.Add("started"));
+            feature.OnSceneReset(() => _events.Add("scene"));
+            feature.OnSessionEnded(() => _events.Add("ended"));
+        }
+    }
+
+    private sealed class PingLikeFeature : MultiplayerFeature
+    {
+        public override string Id => "ping";
+        internal List<Point> Received { get; } = new();
+
+        protected internal override void OnRegister(FeatureBuilder feature)
+            => feature.Broadcast<Point>("placed", (_, point) => Received.Add(point));
+    }
+
+    private sealed class WeatherLikeFeature : MultiplayerFeature
+    {
+        public override string Id => "weather";
+        internal HostState<Point> Current { get; private set; }
+        internal List<Point> Changes { get; } = new();
+
+        public override string ToString() => Id;
+
+        protected internal override void OnRegister(FeatureBuilder feature)
+            => Current = feature.HostState<Point>("current", Changes.Add);
+
+        internal void Publish(Point value) => Current.Set(value);
+    }
+
+    private sealed class GatedFeature : MultiplayerFeature
+    {
+        private readonly bool _accept;
+        internal GatedFeature(bool accept) => _accept = accept;
+
+        public override string Id => "gated";
+
+        protected internal override void OnRegister(FeatureBuilder feature)
+            => feature.HostCommand<Point>("try", request =>
+            {
+                if (!_accept) request.Reject("nope");
+            });
+    }
+
+    private sealed class FakeBridge : IExtensionNetworkBridge
+    {
+        private readonly bool _isHost;
+        internal FakeBridge(bool isHost = true) => _isHost = isHost;
+
+        public bool IsConnected => true;
+        public bool IsHost => _isHost;
+        public MultiplayerPlayer LocalPlayer => new(1, "Host", isLocal: true, isHost: _isHost);
+        public IReadOnlyList<MultiplayerPlayer> Players => new[] { LocalPlayer };
+        public List<ServerExtensionEvent> Events { get; } = new();
+        public List<ServerExtensionState> States { get; } = new();
+
+        public bool IsExtensionEnabled(string extensionId, int playerId) => true;
+        public void SendCommand(ClientExtensionCommand command) { }
+        public void SendCommandResult(int targetPlayerId, ServerExtensionCommandResult result) { }
+        public void BroadcastEvent(ServerExtensionEvent multiplayerEvent, string extensionId) => Events.Add(multiplayerEvent);
+        public void BroadcastState(ServerExtensionState state, string extensionId) => States.Add(state);
+        public void ReportExtensionFailure(string extensionId, string message) { }
+    }
+}

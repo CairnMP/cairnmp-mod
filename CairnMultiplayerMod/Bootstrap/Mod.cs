@@ -54,6 +54,10 @@ public partial class Mod : MelonMod
     internal StartGameFlow StartGame { get; private set; }
     internal BivouacSyncGate Bivouac { get; private set; }
 
+    /// <summary>Runs the self-registering features (see Framework/). Mod knows nothing about
+    /// them individually — adding one never touches this file.</summary>
+    internal FeatureHost Features { get; private set; }
+
     // Scene state read by the sync components (kept authoritative here, on the mod core).
     internal string CurrentScene => _currentScene;
     internal string LastGameplayScene => _lastGameplayScene;
@@ -72,10 +76,32 @@ public partial class Mod : MelonMod
         WireLobbyEvents();
         WirePanelEvents();
         WireNetworkEvents();
+        RegisterFeatures();
 
         LoggerInstance.Msg("===========================================");
         LoggerInstance.Msg($"  Cairn Multiplayer Mod v{Protocol.GameVersion} loaded!");
         LoggerInstance.Msg("===========================================");
+    }
+
+    /// <summary>
+    /// Hands the generated feature list to the host. Must happen before any lobby is joined:
+    /// the features declare their network contracts here, and those go into the manifest
+    /// peers negotiate on connection.
+    /// </summary>
+    private void RegisterFeatures()
+    {
+        Features = new FeatureHost();
+        try
+        {
+            Features.RegisterAll(FeatureRegistry.CreateAll(), new Version(Protocol.GameVersion));
+        }
+        catch (Exception ex)
+        {
+            // A feature that cannot declare itself is a build-time mistake that slipped
+            // through — say so loudly, the mod would otherwise run with a silent hole.
+            LoggerInstance.Error($"[Features] Registration failed: {ex}");
+            CrashReporter.ReportCaughtExceptionOnce(ex, "Mod.RegisterFeatures");
+        }
     }
 
     private static void InstallGamePatches()
@@ -151,6 +177,7 @@ public partial class Mod : MelonMod
             PingMarkerManager.ClearAll();
             Rope.ClearLinks();
             Bivouac.ForceResume();
+            Features.NotifySessionEnded();
             _panel.SetStatus("Disconnected", false);
         };
         _lobby.OnMembersChanged += () =>
@@ -181,7 +208,10 @@ public partial class Mod : MelonMod
     private void WireNetworkEvents()
     {
         _network.OnHandshakeAck += () =>
+        {
             _panel.SetStatus($"Connected to {_network.ServerName} (id={_network.LocalPlayerId})", true);
+            Features.NotifySessionStarted();
+        };
         _network.OnHandshakeRejected += reason =>
             _panel.SetStatus($"Rejected: {reason}", false);
         _network.OnDisconnected += _ =>
@@ -189,6 +219,7 @@ public partial class Mod : MelonMod
             WeatherApi.ResetRemoteState();
             Rope.ClearLinks();
             Bivouac.ForceResume();
+            Features.NotifySessionEnded();
         };
         _network.OnPlayerJoined += (id, name) =>
         {
@@ -326,6 +357,7 @@ public partial class Mod : MelonMod
     {
         SceneCache.Reset();
         ResetSyncTimers();
+        Features?.NotifySceneReset();
     }
 
     /// <summary>Restarts the broadcast cadence from scratch, without touching the caches.</summary>
@@ -398,6 +430,10 @@ public partial class Mod : MelonMod
         // Process network events
         _network.Update();
 
+        // Features that must keep running whatever the state (input, HUD upkeep) — placed
+        // before the bivouac early-return, like the other always-on ticks below.
+        Features.Tick(FeaturePhase.Always);
+
         // Expire the ping markers (always runs, even during a bivouac).
         PingMarkerManager.Update();
 
@@ -460,6 +496,9 @@ public partial class Mod : MelonMod
             LoggerInstance.Error(ex.ToString());
             CrashReporter.ReportCaughtExceptionOnce(ex, "Mod.TickPlayerSync");
         }
+
+        // Features that touch the world — only once gameplay sync is active.
+        Features.Tick(FeaturePhase.Gameplay);
 
         // Progressive waiting status during lobby creation/join (provisioning).
         TickConnectingStatus();
