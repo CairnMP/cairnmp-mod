@@ -69,7 +69,6 @@ internal sealed class PlayerStateBroadcaster
                 SendLocalNetFrames();
             }
 
-            Mod.Instance.Weather.Tick();
             TickLampSync();
             TickCosmeticSync();
             TickHandPoseSync();
@@ -109,7 +108,6 @@ internal sealed class PlayerStateBroadcaster
     internal void TickSuspendedNetworkPresence()
     {
         _boneTickTimer = 0f;
-        Mod.Instance.Weather.ResetTimer();
 
         _stateTickTimer += Time.unscaledDeltaTime;
         if (_stateTickTimer < Protocol.PlayerStateUpdateIntervalSeconds)
@@ -269,7 +267,6 @@ internal sealed class PlayerStateBroadcaster
         // would make the mod believe we left Display Route (while we're still in it)
         // -> can't place a ping until we re-toggle.
         FingerApi.ResetCaches();
-        Mod.Instance.Clock.Reset();
         Mod.Instance.Rope.Reset();
     }
 

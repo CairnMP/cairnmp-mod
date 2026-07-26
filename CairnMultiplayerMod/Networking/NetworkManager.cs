@@ -90,9 +90,7 @@ public partial class NetworkManager : IDisposable
     public event Action<ServerStartGame> OnStartGameReceived;
     public event Action<ServerPitonPlaced> OnPitonPlaced;
     public event Action<ServerPitonRemoved> OnPitonRemoved;
-    public event Action<ServerWeatherState> OnWeatherState;
     public event Action<ServerHandPose> OnHandPose;
-    public event Action<ServerTimeState> OnTimeState;
 
     // Disconnection event for the UI.
     public event Action<string> OnDisconnected;
@@ -186,14 +184,6 @@ public partial class NetworkManager : IDisposable
             SendSteamPitonRemoved(pitonId);
     }
 
-    public void SendWeatherState(WeatherSyncData state, bool reliable = false)
-    {
-        if (!IsValidWeatherState(state)) return;
-
-        if (IsSteamTransportActive)
-            SendSteamWeatherState(state, reliable);
-    }
-
     public void SendLampState(int mode)
     {
         if (IsSteamTransportActive)
@@ -204,18 +194,6 @@ public partial class NetworkManager : IDisposable
     {
         if (IsSteamTransportActive)
             SendSteamCosmeticState(flags);
-    }
-
-    public void SendSleepState(bool asleep)
-    {
-        if (IsSteamTransportActive)
-            SendSteamSleepState(asleep);
-    }
-
-    public void SendTimeState(ServerTimeState state)
-    {
-        if (IsSteamTransportActive)
-            SendSteamTimeState(state);
     }
 
     public void SendHandPose(byte[] packed)

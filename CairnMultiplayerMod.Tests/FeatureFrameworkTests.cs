@@ -227,6 +227,64 @@ public sealed class FeatureFrameworkTests : IDisposable
         }
     }
 
+    // ── Feature message encoding ──────────────────────────────────────────────
+    // Ported from the protocol tests when these packets moved into features: the wire
+    // format still has to survive a round trip, it is just declared elsewhere now.
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SleepReportRoundTrips(bool asleep)
+    {
+        var got = RoundTrip(new Features.Clock.SleepReport { Asleep = asleep });
+
+        Assert.Equal(asleep, got.Asleep);
+    }
+
+    [Fact]
+    public void ClockStateRoundTrips()
+    {
+        var got = RoundTrip(new Features.Clock.ClockState { DayTime01 = 0.4275f, AllAsleep = true });
+
+        Assert.Equal(0.4275f, got.DayTime01);
+        Assert.True(got.AllAsleep);
+    }
+
+    [Fact]
+    public void ChatMessageRoundTrips()
+    {
+        var got = RoundTrip(new Features.Chat.ChatMessage { FromName = "Ana", Text = "héllo 🌍" });
+
+        Assert.Equal("Ana", got.FromName);
+        Assert.Equal("héllo 🌍", got.Text);
+    }
+
+    [Fact]
+    public void WeatherStateRoundTripsThroughItsWrapper()
+    {
+        var got = RoundTrip(new Features.Weather.WeatherState
+        {
+            Data = new WeatherSyncData { IsValid = true, WeatherType = 3, WindForce = 12.25f },
+        });
+
+        Assert.True(got.Data.IsValid);
+        Assert.Equal(3, got.Data.WeatherType);
+        Assert.Equal(12.25f, got.Data.WindForce);
+    }
+
+    private static T RoundTrip<T>(T message) where T : IPacket, new()
+    {
+        using var buffer = new MemoryStream();
+        using (var writer = new BinaryWriter(buffer, System.Text.Encoding.UTF8, leaveOpen: true))
+            message.Serialize(writer);
+
+        buffer.Position = 0;
+        using var reader = new BinaryReader(buffer);
+        var got = new T();
+        got.Deserialize(reader);
+        return got;
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static FeatureHost HostWith(params MultiplayerFeature[] features)

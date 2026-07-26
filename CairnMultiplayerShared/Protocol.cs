@@ -6,8 +6,9 @@ namespace CairnMultiplayer.Shared;
 /// </summary>
 public static class Protocol
 {
-    // 8: pings left the fixed packet list for the feature framework, freeing ids 12 and 78.
-    public const int Version = 8;
+    // 9: pings, chat, weather, time and sleep left the fixed packet list for the feature
+    // framework, freeing ids 4, 10, 12, 14, 69, 76, 78 and 80.
+    public const int Version = 9;
     public const string ConnectionKey = "cairnmp";
     public const int DefaultPort = 14000;
 
@@ -98,13 +99,13 @@ public enum PacketId : byte
     ClientPitonRemoved = 7,
     ClientPlayerFrame = 8,
     ClientClimbotFrame = 9,
-    ClientWeatherState = 10,
+    // 10 was ClientWeatherState — weather is host-published state in Features/Weather/. Reserved.
     ClientLampState = 11,
     // 12 was ClientPingPlaced — pings moved to the feature framework (Features/World/).
     // Left reserved on purpose: reusing the number would make an old client's ping look
     // like whatever packet takes its place.
     ClientHandPose = 13,
-    ClientSleepState = 14,
+    // 14 was ClientSleepState — sleep is reported through Features/Clock/. Reserved.
     ClientRopeClip = 15,
     ClientCosmeticState = 16,
     ClientExtensionManifest = 17,
@@ -123,11 +124,11 @@ public enum PacketId : byte
     ServerPitonRemoved = 73,
     ServerPlayerFrame = 74,
     ServerClimbotFrame = 75,
-    ServerWeatherState = 76,
+    // 76 was ServerWeatherState — see the note on 10. Reserved, do not reuse.
     ServerLampState = 77,
     // 78 was ServerPingPlaced — see the note on 12. Reserved, do not reuse.
     ServerHandPose = 79,
-    ServerTimeState = 80,
+    // 80 was ServerTimeState — time of day moved to Features/Clock/. Reserved.
     ServerTeleport = 81,
     ServerRopeClip = 82,
     ServerCosmeticState = 83,

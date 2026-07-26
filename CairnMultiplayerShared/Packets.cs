@@ -344,14 +344,6 @@ public struct ClientClimbotFrame : IPacket
     public void Deserialize(BinaryReader r) => Frame.Deserialize(r);
 }
 
-public struct ClientWeatherState : IPacket
-{
-    public WeatherSyncData State;
-
-    public void Serialize(BinaryWriter w) => State.Serialize(w);
-    public void Deserialize(BinaryReader r) => State.Deserialize(r);
-}
-
 /// <summary>
 /// State of the local player's lamp (AavaLightStick.CurrentMode). Mode is a
 /// game-side enum carried here as an int. Sent only on change.
@@ -384,18 +376,6 @@ public struct ClientHandPose : IPacket
         int len = r.ReadUInt16();
         Packed = r.ReadBytes(len);
     }
-}
-
-/// <summary>
-/// Sleep state of the local player (BivouacManager.IsAsleep). Sent on change;
-/// used by the host to decide whether everyone is asleep.
-/// </summary>
-public struct ClientSleepState : IPacket
-{
-    public bool Asleep;
-
-    public void Serialize(BinaryWriter w) => w.Write(Asleep);
-    public void Deserialize(BinaryReader r) => Asleep = r.ReadBoolean();
 }
 
 /// <summary>
@@ -628,14 +608,6 @@ public struct ServerClimbotFrame : IPacket
     }
 }
 
-public struct ServerWeatherState : IPacket
-{
-    public WeatherSyncData State;
-
-    public void Serialize(BinaryWriter w) => State.Serialize(w);
-    public void Deserialize(BinaryReader r) => State.Deserialize(r);
-}
-
 /// <summary>Host relay of a player's lamp Mode to everyone else.</summary>
 public struct ServerLampState : IPacket
 {
@@ -668,19 +640,6 @@ public struct ServerCosmeticState : IPacket
     public void Deserialize(BinaryReader r) { PlayerId = r.ReadInt32(); Flags = r.ReadByte(); }
 }
 
-/// <summary>
-/// Authoritative time of day broadcast by the host. DayTime01 is the normalized
-/// 0-1 value of NightDayCycle.dayTime01; AllAsleep indicates whether all players
-/// are asleep (fast-forward is allowed). Clients align their visual clock to it.
-/// </summary>
-public struct ServerTimeState : IPacket
-{
-    public float DayTime01;
-    public bool AllAsleep;
-
-    public void Serialize(BinaryWriter w) { w.Write(DayTime01); w.Write(AllAsleep); }
-    public void Deserialize(BinaryReader r) { DayTime01 = r.ReadSingle(); AllAsleep = r.ReadBoolean(); }
-}
 
 /// <summary>Host relay of a player's finger pose to everyone else.</summary>
 public struct ServerHandPose : IPacket

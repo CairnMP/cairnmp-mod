@@ -47,8 +47,6 @@ public partial class Mod : MelonMod
 
     // Per-feature sync components, constructed in OnInitializeMelon and ticked from OnUpdate.
     internal PlayerStateBroadcaster Player { get; private set; }
-    internal WeatherStateBroadcaster Weather { get; private set; }
-    internal TimeStateBroadcaster Clock { get; private set; }
     internal RopeCoupleController Rope { get; private set; }
     internal StartGameFlow StartGame { get; private set; }
     internal BivouacSyncGate Bivouac { get; private set; }
@@ -123,8 +121,6 @@ public partial class Mod : MelonMod
 
         // Per-feature sync components. They read shared state via Mod.Instance and are
         // ticked, in this exact order, from OnUpdate.
-        Weather = new WeatherStateBroadcaster(_network, _lobby);
-        Clock = new TimeStateBroadcaster(_network, _lobby);
         Rope = new RopeCoupleController(_network);
         Player = new PlayerStateBroadcaster(_network);
         StartGame = new StartGameFlow(_panel);
@@ -241,19 +237,6 @@ public partial class Mod : MelonMod
 
             RopeApi.RemoveRemotePiton(pkt.PitonId);
         };
-        _network.OnWeatherState += pkt =>
-        {
-            if (_lobby?.IsHost == true)
-                return;
-            if (IsGameplaySyncSuspended())
-                return;
-
-            WeatherApi.ApplyRemoteWeather(pkt.State);
-        };
-
-        // Authoritative day time received from the host: applied every frame client-side.
-        _network.OnTimeState += pkt => Clock.ApplyRemoteTimeState(pkt);
-
         // Authoritative game launch by the server: queues the packet, applies it in
         // Update when the MainMenu scene is active.
         _network.OnStartGameReceived += pkt => StartGame.Begin(pkt);
@@ -343,12 +326,12 @@ public partial class Mod : MelonMod
         Features?.NotifySceneReset();
     }
 
-    /// <summary>Restarts the broadcast cadence from scratch, without touching the caches.</summary>
+    /// <summary>Restarts the broadcast cadence from scratch, without touching the caches.
+    /// Features rearm their own cadence through OnSceneReset.</summary>
     internal void ResetSyncTimers()
     {
         Player.ResetSyncState();
         Player.ResetTimers();
-        Weather.ResetTimer();
     }
 
     internal bool IsGameplaySyncSuspended() => Bivouac.BlocksGameplaySync();
@@ -423,17 +406,6 @@ public partial class Mod : MelonMod
         // mode is actually open.
         try { PhotoModeNamesRow.Tick(); }
         catch (Exception ex) { LoggerInstance.Error($"[PhotoNames] tick failed: {ex.Message}"); }
-
-        // Time + sleep sync — must run BEFORE the bivouac suspension (the bivouac is
-        // exactly when we sleep and accelerate time).
-        try
-        {
-            Clock.Tick();
-        }
-        catch (Exception ex)
-        {
-            LoggerInstance.Error($"[TimeSync] tick failed: {ex.Message}");
-        }
 
         // During a bivouac, Cairn itself drives the pawn, the camera and the taping
         // hands. The mod only keeps a minimal network presence.

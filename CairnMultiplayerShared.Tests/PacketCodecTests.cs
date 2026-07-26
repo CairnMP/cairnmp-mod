@@ -80,8 +80,8 @@ public class ProtocolVersionTests
     {
         // When you bump Protocol.Version, update this value AND the release notes
         // to signal to clients that they need to update.
-        // 8: pings left the fixed packet list for the feature framework (ids 12 and 78 freed).
-        Assert.Equal(8, Protocol.Version);
+        // 9: pings, chat, weather, time and sleep moved to the feature framework.
+        Assert.Equal(9, Protocol.Version);
     }
 
     [Fact]
@@ -171,46 +171,6 @@ public class HandPosePacketTests
         got.Deserialize(r);
 
         Assert.Empty(got.Packed);
-    }
-}
-
-public class TimeSyncPacketTests
-{
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void ClientSleepState_RoundTrips(bool asleep)
-    {
-        var pkt = new ClientSleepState { Asleep = asleep };
-
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-            pkt.Serialize(w);
-
-        ms.Position = 0;
-        using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: false);
-        var got = new ClientSleepState();
-        got.Deserialize(r);
-
-        Assert.Equal(asleep, got.Asleep);
-    }
-
-    [Fact]
-    public void ServerTimeState_RoundTrips()
-    {
-        var pkt = new ServerTimeState { DayTime01 = 0.4275f, AllAsleep = true };
-
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-            pkt.Serialize(w);
-
-        ms.Position = 0;
-        using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: false);
-        var got = new ServerTimeState();
-        got.Deserialize(r);
-
-        Assert.Equal(pkt.DayTime01, got.DayTime01);
-        Assert.Equal(pkt.AllAsleep, got.AllAsleep);
     }
 }
 

@@ -38,8 +38,6 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
     private readonly Dictionary<int, int> _lampByPlayer = new();
 
     // Weather: authoritative on the host side (guests never publish it).
-    private ServerWeatherState _weather;
-    private bool _hasWeather;
 
     public SteamAuthoritativeSession(IAuthoritativeSink sink,
         Action<ServerPitonPlaced> onLocalPitonSpawn,
@@ -92,12 +90,10 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
         }
     }
 
-    /// <summary>Rejoin: pushes all the official state (weather, pitons, lamps) to the target player.</summary>
+    /// <summary>Rejoin: pushes all the official state (pitons, lamps) to the target player.
+    /// Weather and time now replay through the feature framework's own snapshot.</summary>
     public void SendSnapshotTo(int playerId)
     {
-        if (_hasWeather)
-            _sink.SendTo(playerId, PacketId.ServerWeatherState, _weather, NetReliability.ReliableOrdered);
-
         foreach (var pkt in _pitons.Values)
             _sink.SendTo(playerId, PacketId.ServerPitonPlaced, pkt, NetReliability.ReliableOrdered);
 
@@ -131,20 +127,6 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
     public void HandleHostLampState(int hostPlayerId, int mode)
         => ApplyLamp(hostPlayerId, mode, applyLocalGhost: false, exceptPlayerId: 0);
 
-    /// <summary>
-    /// Weather published by the HOST (authoritative source). Validates, stores for rejoin,
-    /// broadcasts to everyone. <paramref name="reliable"/> follows the caller (burst vs stable state).
-    /// </summary>
-    public void HandleHostWeather(WeatherSyncData state, bool reliable)
-    {
-        if (!NetworkManager.IsValidWeatherState(state))
-            return;
-        _weather = new ServerWeatherState { State = state };
-        _hasWeather = true;
-        _sink.Broadcast(PacketId.ServerWeatherState, _weather, exceptPlayerId: 0,
-            reliable ? NetReliability.ReliableOrdered : NetReliability.UnreliableSequenced);
-    }
-
     /// <summary>Full reset (scene change / disconnection).</summary>
     public void Reset()
     {
@@ -152,8 +134,6 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
         _authIdByClient.Clear();
         _nextAuthId = 1;
         _lampByPlayer.Clear();
-        _weather = default;
-        _hasWeather = false;
     }
 
     private void ApplyLamp(int playerId, int mode, bool applyLocalGhost, int exceptPlayerId)

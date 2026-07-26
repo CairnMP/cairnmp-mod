@@ -91,15 +91,6 @@ public partial class NetworkManager
                 OnPitonRemoved?.Invoke(pkt);
                 break;
             }
-            case PacketId.ServerWeatherState:
-            {
-                var pkt = new ServerWeatherState();
-                pkt.Deserialize(r);
-                if (!IsValidWeatherState(pkt.State))
-                    break;
-                OnWeatherState?.Invoke(pkt);
-                break;
-            }
             case PacketId.ServerLampState:
             {
                 var pkt = new ServerLampState();
@@ -134,13 +125,6 @@ public partial class NetworkManager
                     p.HasHandPose = true;
                 }
                 OnHandPose?.Invoke(pkt);
-                break;
-            }
-            case PacketId.ServerTimeState:
-            {
-                var pkt = new ServerTimeState();
-                pkt.Deserialize(r);
-                OnTimeState?.Invoke(pkt);
                 break;
             }
             case PacketId.ServerTeleport:
