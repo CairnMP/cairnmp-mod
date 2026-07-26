@@ -1,4 +1,3 @@
-using System;
 using Il2Cpp;
 using UnityEngine;
 
@@ -15,22 +14,33 @@ internal static unsafe partial class RopeApi
     private static Harness _localHarnessCached;
     private static int _lastLocalHarnessSearchFrame;
 
-    /// <summary>
-    /// World position of the local player's harness attach point, or false if the
-    /// harness isn't (yet) available.
-    /// </summary>
-    public static bool TryGetLocalHarnessAttachPosition(out Vector3 pos)
+    /// <summary>Returns the local player's Harness component, resolved lazily on the MC
+    /// hierarchy (the MC may appear late, so the search is throttled while it fails).</summary>
+    private static Harness ResolveLocalHarness()
     {
-        pos = default;
-        var harness = ResolveLocalHarness();
-        return harness != null && TryGetHarnessAttachPosition(harness, out pos);
-    }
+        if (_localHarnessCached != null) return _localHarnessCached;
 
-    /// <summary>Returns the local player's Harness component (for the belay probe / physical rope).</summary>
-    public static bool TryGetLocalHarness(out Harness harness)
-    {
-        harness = ResolveLocalHarness();
-        return harness != null;
+        if (_lastLocalHarnessSearchFrame != 0 && Time.frameCount - _lastLocalHarnessSearchFrame < 30)
+            return null;
+        _lastLocalHarnessSearchFrame = Time.frameCount;
+
+        var mc = LocalPlayerApi.TryGetLocalMCGameObject();
+        if (mc == null) return null;
+
+        // The local harness is a Harness in the MC's hierarchy — but NOT a
+        // NetplayRemoteHarness (those belong to the ghosts).
+        var harnesses = mc.GetComponentsInChildren<Harness>(true);
+        if (harnesses == null) return null;
+        for (int i = 0; i < harnesses.Length; i++)
+        {
+            var h = harnesses[i];
+            if (h == null) continue;
+            if (h.TryCast<Il2CppTheGameBakers.Cairn.Netplay.NetplayRemoteHarness>() != null) continue;
+            _localHarnessCached = h;
+            Mod.LogDebug("[Harness] Local harness resolved on MC hierarchy");
+            return h;
+        }
+        return null;
     }
 
     /// <summary>
@@ -60,33 +70,5 @@ internal static unsafe partial class RopeApi
         {
             return false;
         }
-    }
-
-    private static Harness ResolveLocalHarness()
-    {
-        if (_localHarnessCached != null) return _localHarnessCached;
-
-        // Throttled search while nothing is found (the MC may appear late).
-        if (_lastLocalHarnessSearchFrame != 0 && Time.frameCount - _lastLocalHarnessSearchFrame < 30)
-            return null;
-        _lastLocalHarnessSearchFrame = Time.frameCount;
-
-        var mc = LocalPlayerApi.TryGetLocalMCGameObject();
-        if (mc == null) return null;
-
-        // The local harness is a Harness in the MC's hierarchy — but NOT a
-        // NetplayRemoteHarness (those belong to the ghosts).
-        var harnesses = mc.GetComponentsInChildren<Harness>(true);
-        if (harnesses == null) return null;
-        for (int i = 0; i < harnesses.Length; i++)
-        {
-            var h = harnesses[i];
-            if (h == null) continue;
-            if (h.TryCast<Il2CppTheGameBakers.Cairn.Netplay.NetplayRemoteHarness>() != null) continue;
-            _localHarnessCached = h;
-            Mod.LogDebug("[Harness] Local harness resolved on MC hierarchy");
-            return h;
-        }
-        return null;
     }
 }

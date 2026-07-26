@@ -68,14 +68,6 @@ public partial class Mod : MelonMod
     private string    _connectingVerb = "Creating lobby"; // "Creating lobby" | "Joining lobby"
     private string    _lastLobbyError;
 
-    // Queue of actions to run on the Unity thread — async callbacks (ContinueWith)
-    // run on the ThreadPool and CANNOT touch Unity objects (TMP, Image, ...)
-    // directly under IL2CPP.
-    private readonly ConcurrentQueue<Action> _mainThreadActions = new();
-
-    /// <summary>Schedules an action to run on the next Update tick on the Unity thread.</summary>
-    private void RunOnMainThread(Action action) => _mainThreadActions.Enqueue(action);
-
     public NetworkManager Network => _network;
     public SteamLobbyManager Lobby => _lobby;
     public PlayerState LocalState { get; private set; } = PlayerState.Unknown;
@@ -512,18 +504,6 @@ public partial class Mod : MelonMod
     public override void OnUpdate()
     {
         _timeSinceLastSceneLoad += Time.unscaledDeltaTime;
-
-        // Drain the queue of actions coming from async callbacks — must run first so
-        // that post-network UI updates are visible on the very next frame.
-        while (_mainThreadActions.TryDequeue(out var action))
-        {
-            try { action(); }
-            catch (Exception ex)
-            {
-                LoggerInstance.Error($"[MainQueue] Action failed: {ex}");
-                CrashReporter.ReportCaughtExceptionOnce(ex, "Mod.MainQueue");
-            }
-        }
 
         // PANIC failsafe (F10): force-unblock inputs + close the chat, whatever the state.
         // Read from the raw keyboard device (never affected by the block) and placed BEFORE

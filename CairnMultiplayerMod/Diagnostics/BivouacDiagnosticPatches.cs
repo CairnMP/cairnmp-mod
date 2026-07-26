@@ -322,28 +322,6 @@ internal static unsafe partial class BivouacDiagnostics
             return null;
         }
 
-        private static bool TryStartTapingFallback(TapingFingersManager manager)
-        {
-            try
-            {
-                var method = AccessTools.Method(typeof(TapingFingersManager), nameof(TapingFingersManager.StartTaping));
-                if (method == null)
-                {
-                    Mod.Log.Warning("[BivouacDebug] StartTaping method not found for fallback");
-                    return false;
-                }
-
-                method.Invoke(manager, null);
-                SafeLog("TapingStartBypass", () => DescribeTaping(manager));
-                return true;
-            }
-            catch (Exception ex)
-            {
-                SafeLog("TapingStartBypassFailed", () => $"{ex.GetType().Name}:{GameInterop.FirstLine(ex.Message)}");
-                return false;
-            }
-        }
-
         private static object GetFirstRealHandValue(Type handType)
         {
             if (handType == null || !handType.IsEnum)

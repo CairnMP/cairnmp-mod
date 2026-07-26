@@ -330,25 +330,6 @@ public partial class NetworkManager
             LogRemoteClimbotFrameAccepted(playerId, frame);
     }
 
-    /// <summary>
-    /// DEBUG (solo test): injects a remote player frame as if it came from the
-    /// network, for the fake mirror ghost. Creates the RemotePlayer + spawns the ghost via
-    /// the real pipeline. Call in order: player then climbot.
-    /// </summary>
-    public void DebugInjectRemotePlayer(int id, string name, NetFrameData playerFrame,
-        bool hasClimbot, NetFrameData climbotFrame)
-    {
-        ApplyRemotePlayerFrame(id, name, playerFrame);
-        if (hasClimbot) ApplyRemoteClimbotFrame(id, climbotFrame);
-    }
-
-    /// <summary>DEBUG: removes the fake mirror player (despawns the ghost).</summary>
-    public void DebugRemoveRemotePlayer(int id)
-    {
-        if (_remotePlayers.Remove(id))
-            OnPlayerLeft?.Invoke(id);
-    }
-
     private static bool IsValidPose(float x, float y, float z, float yaw)
     {
         const float maxAbsPosition = 100000f;

@@ -450,30 +450,6 @@ public partial class NetworkManager
         }, reliable: reliablePresence);
     }
 
-    private void SendSteamBoneState(byte boneCount, float[] positions, float[] rotations)
-    {
-        if (!IsHandshakeComplete) return;
-
-        if (_steamLobby != null && _steamLobby.IsHost)
-        {
-            BroadcastSteamServerPacket(PacketId.ServerBoneState, new ServerBoneState
-            {
-                PlayerId = LocalPlayerId,
-                BoneCount = boneCount,
-                Positions = positions,
-                Rotations = rotations,
-            }, exceptSteamId: 0, reliable: true);
-            return;
-        }
-
-        SendSteamPacketToHost(PacketId.ClientBoneState, new ClientBoneState
-        {
-            BoneCount = boneCount,
-            Positions = positions,
-            Rotations = rotations,
-        }, reliable: true);
-    }
-
     private void SendSteamPlayerFrame(NetFrameData frame)
     {
         if (!IsHandshakeComplete) return;

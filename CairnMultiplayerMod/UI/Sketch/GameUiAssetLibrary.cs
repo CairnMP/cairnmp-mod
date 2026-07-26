@@ -92,12 +92,6 @@ internal static class GameUiAssetLibrary
         return Fallback;
     }
 
-    public static bool Has(string name)
-    {
-        EnsureHarvested();
-        return _sprites.TryGetValue(name, out var s) && s != null;
-    }
-
     public static TMP_FontAsset TextFont { get { EnsureHarvested(); return _textFont; } }
 
     /// <summary>The game's "logo" font if loaded, otherwise falls back to the text font.</summary>

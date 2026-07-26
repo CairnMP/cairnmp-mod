@@ -248,23 +248,6 @@ internal static unsafe partial class RopeApi
         return _localClimbotCached;
     }
 
-    /// <summary>Removes the rope anchor toward a partner (unroping / partner gone).</summary>
-    public static void ReleaseRopeTeamAnchor(int partnerId)
-    {
-        if (_ropeAnchors.TryGetValue(partnerId, out var anchor))
-        {
-            DestroyAnchor(anchor);
-            _ropeAnchors.Remove(partnerId);
-            Mod.LogDebug($"[RopeTeam] Rope anchor released for partner {partnerId}.");
-        }
-        _ropeAnchorsAttached.Remove(partnerId);
-        if (_ropeAnchors.Count == 0)
-        {
-            _belayEngaged = false;
-            RestoreInjectedSecuringRopeIfUnused();
-        }
-    }
-
     /// <summary>Removes ALL rope-team anchors (disconnect / scene change).</summary>
     public static void ReleaseAllRopeTeamAnchors()
     {

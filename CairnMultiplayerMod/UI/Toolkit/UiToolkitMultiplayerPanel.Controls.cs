@@ -93,14 +93,6 @@ public sealed partial class UiToolkitMultiplayerPanel
                 button.SetEnabled(enabled);
         }
 
-        public void SelectWithoutNotify(int index)
-        {
-            var next = Mathf.Clamp(index, 0, _labels.Length - 1);
-            if (next == SelectedIndex) return;
-            SelectedIndex = next;
-            Refresh();
-        }
-
         private void Select(int index)
         {
             if (index == SelectedIndex) return;

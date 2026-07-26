@@ -225,23 +225,6 @@ public partial class NetworkManager : IDisposable
         SendFrameNonBlocking(PacketCodec.Frame(PacketId.ClientPlayerState, pkt));
     }
 
-    public void SendBoneState(byte boneCount, float[] positions, float[] rotations)
-    {
-        if (IsSteamTransportActive)
-        {
-            SendSteamBoneState(boneCount, positions, rotations);
-            return;
-        }
-        if (!IsHandshakeComplete) return;
-        var pkt = new ClientBoneState
-        {
-            BoneCount = boneCount,
-            Positions = positions,
-            Rotations = rotations,
-        };
-        SendFrameNonBlocking(PacketCodec.Frame(PacketId.ClientBoneState, pkt));
-    }
-
     public void SendPlayerFrame(NetFrameData frame)
     {
         if (!_debugLoggedFirstLocalPlayerFrameSend)

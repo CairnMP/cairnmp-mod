@@ -10,10 +10,8 @@ namespace CairnMultiplayerMod.Features.Players.Avatar;
 
 internal static unsafe class PawnCaptureApi
 {
-    private static MonoBehaviour _pawnCaptureCached;
     private static NetplayPawnCapture _typedPawnCaptureCached;
     private static NetplayPawnCapture _typedClimbotCaptureCached;
-    private static int _lastPawnCaptureSearchFrame;
     private static int _lastTypedCaptureSearchFrame;
     private static float _nextPlayerCaptureRetryAt;
     private static float _nextClimbotCaptureRetryAt;
@@ -31,61 +29,14 @@ internal static unsafe class PawnCaptureApi
     /// old pointers can crash on the first CaptureFrame.</summary>
     internal static void ResetCaches()
     {
-        _pawnCaptureCached = null;
         _typedPawnCaptureCached = null;
         _typedClimbotCaptureCached = null;
-        _lastPawnCaptureSearchFrame = 0;
         _lastTypedCaptureSearchFrame = 0;
         _nextPlayerCaptureRetryAt = 0f;
         _nextClimbotCaptureRetryAt = 0f;
         _lastPlayerCaptureFailureLogAt = 0f;
         _lastClimbotCaptureFailureLogAt = 0f;
         _localPlayerFallbackCaptureLogged = false;
-    }
-
-    /// <summary>
-    /// Finds the NetplayPawnCapture component on the local MC (MC_Aava),
-    /// NOT on the Climbot. The MC has its capture under a child named
-    /// "Netplay", while the Climbot's is directly on "Climbot(Clone)".
-    /// </summary>
-    public static MonoBehaviour TryGetNetplayPawnCapture()
-    {
-        if (_pawnCaptureCached != null) return _pawnCaptureCached;
-
-        int frame = Time.frameCount;
-        if (frame - _lastPawnCaptureSearchFrame < 60) return null;
-        _lastPawnCaptureSearchFrame = frame;
-
-        try
-        {
-            var all = Resources.FindObjectsOfTypeAll(Il2CppType.Of<MonoBehaviour>());
-            if (all == null) return null;
-
-            for (int i = 0; i < all.Count; i++)
-            {
-                var comp = all[i].TryCast<MonoBehaviour>();
-                if (comp == null) continue;
-                if (comp.GetIl2CppType().Name != "NetplayPawnCapture") continue;
-
-                // We want the one on MC_Aava(Clone), not Climbot(Clone).
-                // The MC's has "MC_Aava(Clone)" as parent, while the
-                // Climbot's has "<root>" or "Climbot(Clone)" as parent.
-                var parentName = comp.transform.parent != null
-                    ? comp.transform.parent.gameObject.name : "";
-                if (parentName.StartsWith("MC_Aava"))
-                {
-                    _pawnCaptureCached = comp;
-                    Mod.LogDebug($"[CairnGameApi] NetplayPawnCapture found on '{comp.gameObject.name}' parent='{parentName}'");
-                    return comp;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Mod.Log.Warning($"[CairnGameApi] NetplayPawnCapture search failed: {ex.Message}");
-        }
-
-        return null;
     }
 
     /// <summary>Captures the local player's native frame via the game's Netplay pipeline.</summary>
@@ -153,14 +104,6 @@ internal static unsafe class PawnCaptureApi
             return _lastPawnState = NetFrame.PawnStateType.Invalid;
         }
     }
-
-    /// <summary>
-    /// True if the local pawn is climbing on a wall (Climbing). Does NOT include Falling:
-    /// engaging the belay mid-fall placed a piton + forced ToOffBelay (spurious
-    /// anim / involuntary belay-off). The belay must be engaged BEFORE the fall, during
-    /// the climb, then stay engaged to catch it (cf. ReconcileNativeBelay).
-    /// </summary>
-    public static bool IsLocalPlayerClimbing() => GetLocalPawnState() == NetFrame.PawnStateType.Climbing;
 
     /// <summary>True if the local pawn is walking on the ground (Walking) — a safe basis for allowing a teleport.</summary>
     public static bool IsLocalPlayerWalking() => GetLocalPawnState() == NetFrame.PawnStateType.Walking;
