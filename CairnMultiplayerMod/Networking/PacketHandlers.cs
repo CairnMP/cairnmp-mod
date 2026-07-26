@@ -61,9 +61,6 @@ public partial class NetworkManager
             case PacketId.ServerPlayerState:
                 HandlePlayerState(r);
                 break;
-            case PacketId.ServerChatBroadcast:
-                HandleChatBroadcast(r);
-                break;
             case PacketId.ServerStartGame:
                 HandleStartGame(r);
                 break;
@@ -233,14 +230,6 @@ public partial class NetworkManager
         p.SceneName = pkt.SceneName;
         p.State = pkt.State;
         p.LastUpdateTime = DateTime.UtcNow.Ticks / (double)TimeSpan.TicksPerSecond;
-    }
-
-    private void HandleChatBroadcast(BinaryReader r)
-    {
-        var pkt = new ServerChatBroadcast();
-        pkt.Deserialize(r);
-        Mod.LogDebug($"[CHAT] {pkt.FromPlayerName}: {pkt.Message}");
-        OnChatReceived?.Invoke(pkt.FromPlayerId, pkt.FromPlayerName, pkt.Message);
     }
 
     private void HandleBoneState(BinaryReader r)

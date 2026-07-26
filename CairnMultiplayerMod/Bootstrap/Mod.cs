@@ -28,10 +28,6 @@ public partial class Mod : MelonMod
     private NetworkManager _network;
     private SteamLobbyManager _lobby;
     private IMultiplayerPanel _panel;
-    private ChatController _chat;
-
-    /// <summary>In-game chat, exposed so features can stay out of the way while typing.</summary>
-    internal ChatController Chat => _chat;
     private string _currentScene;
     private readonly HashSet<string> _loadedScenes = new(StringComparer.Ordinal);
     private string _lastGameplayScene;
@@ -133,17 +129,6 @@ public partial class Mod : MelonMod
         Player = new PlayerStateBroadcaster(_network);
         StartGame = new StartGameFlow(_panel);
         Bivouac = new BivouacSyncGate(_network, _panel);
-
-        // In-game chat + admin commands. The router checks the host role at dispatch;
-        // command feedback is displayed as local system lines.
-        var commandRouter = new CommandRouter(_network, () => _lobby?.IsHost == true,
-            line => _chat?.AddSystemLine(line));
-        // canChat also requires the game to NOT be paused (Cairn pauses via timeScale=0).
-        // Otherwise, opening the chat then pausing would leave the overlay open forcing the
-        // input freeze -> player stuck after unpausing. Here, when paused the chat
-        // auto-closes (ChatController.Update) and restores input.
-        _chat = new ChatController(_network, commandRouter,
-            () => LocalState == PlayerState.InGame && Time.timeScale > 0f);
     }
 
     /// <summary>
@@ -388,25 +373,21 @@ public partial class Mod : MelonMod
     {
         _timeSinceLastSceneLoad += Time.unscaledDeltaTime;
 
-        // PANIC failsafe (F10): force-unblock inputs + close the chat, whatever the state.
-        // Read from the raw keyboard device (never affected by the block) and placed BEFORE
-        // any early return in OnUpdate (bivouac, etc.) so it's always reachable.
+        // PANIC failsafe (F10): force-unblock the game's inputs whatever the state. Read
+        // from the raw keyboard device (never affected by the block) and placed BEFORE any
+        // early return below, so it stays reachable even mid-bivouac. Whoever captured the
+        // keyboard releases it on its own side — the chat feature also listens for F10.
         var panicKeyboard = Keyboard.current;
         if (panicKeyboard != null && panicKeyboard.f10Key.wasPressedThisFrame)
         {
-            _chat?.ForceClose();
             InputApi.ForceClearBlock();
-            LoggerInstance.Msg("[CairnMP] Panic: input force-cleared + chat closed (F10)");
+            LoggerInstance.Msg("[CairnMP] Panic: input force-cleared (F10)");
         }
 
-        // Keeps inputs frozen while typing in the chat + closes if we leave the game.
-        _chat?.Update();
-
-        // While typing in the chat, we ALSO block the mod's shortcuts (E rope, F7/F8,
-        // connect, ping...) — otherwise typing text would trigger actions. The game
-        // itself is blocked at the InputManager level via ReconcileGameplayInput.
-        // Together = total block.
-        bool chatTyping = _chat?.IsTyping == true;
+        // While a mod UI has the keyboard (chat), the mod's own shortcuts must not fire —
+        // otherwise typing text triggers actions. The game itself is blocked at the
+        // InputManager level. Together = total block.
+        bool chatTyping = FeatureInput.KeyboardCaptured;
 
         // Update the button injection in the main menu
         if (SceneRoles.IsMainMenu(_currentScene))
@@ -584,7 +565,6 @@ public partial class Mod : MelonMod
     {
         _panel.OnGUI();
         Features?.DrawHud();
-        _chat?.OnGUI();
     }
 
     /// <summary>Adapts the displayed status while we wait for the Steam round-trip for

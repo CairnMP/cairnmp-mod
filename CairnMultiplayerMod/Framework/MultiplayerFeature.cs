@@ -53,6 +53,10 @@ internal abstract class MultiplayerFeature
     /// <summary>True when a session is established.</summary>
     protected bool IsConnected => Session.IsConnected;
 
+    /// <summary>True while a mod UI (the chat) is consuming key presses. Check it before
+    /// reacting to a key, otherwise typing a message triggers your shortcut.</summary>
+    protected static bool KeyboardCaptured => FeatureInput.KeyboardCaptured;
+
     /// <summary>Set by the host at registration; tests can supply their own runtime.</summary>
     internal Api.Internal.ExtensionRuntime Session { private get; set; } = MultiplayerApi.Runtime;
 }

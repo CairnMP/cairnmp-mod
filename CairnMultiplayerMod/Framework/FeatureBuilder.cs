@@ -120,6 +120,21 @@ internal sealed class FeatureBuilder
     public void OnSessionStarted(Action handler)
         => _onSessionStarted.Add(handler ?? throw new ArgumentNullException(nameof(handler)));
 
+    /// <summary>Runs when a player joins, with their id and display name.</summary>
+    public void OnPlayerJoined(Action<int, string> handler)
+    {
+        if (handler == null) throw new ArgumentNullException(nameof(handler));
+        _runtime.PlayerJoined += player => handler(player.Id, player.Name);
+    }
+
+    /// <summary>Runs when a player leaves. The name is the last one known — by then the
+    /// player is already gone from the roster.</summary>
+    public void OnPlayerLeft(Action<int, string> handler)
+    {
+        if (handler == null) throw new ArgumentNullException(nameof(handler));
+        _runtime.PlayerLeft += player => handler(player.Id, player.Name);
+    }
+
     /// <summary>Runs when the session ends (disconnect, leaving the lobby). Clean up here —
     /// anything tied to the session must not survive it.</summary>
     public void OnSessionEnded(Action handler)

@@ -92,7 +92,7 @@ public enum PacketId : byte
     ClientHandshake = 1,
     ClientDisconnect = 2,
     ClientPlayerState = 3,
-    ClientChat = 4,
+    // 4 was ClientChat — chat moved to the feature framework (Features/Chat/). Reserved.
     ClientBoneState = 5,
     ClientPitonPlaced = 6,
     ClientPitonRemoved = 7,
@@ -116,7 +116,7 @@ public enum PacketId : byte
     ServerPlayerJoined = 66,
     ServerPlayerLeft = 67,
     ServerPlayerState = 68,
-    ServerChatBroadcast = 69,
+    // 69 was ServerChatBroadcast — see the note on 4. Reserved, do not reuse.
     ServerStartGame = 70,
     ServerBoneState = 71,
     ServerPitonPlaced = 72,

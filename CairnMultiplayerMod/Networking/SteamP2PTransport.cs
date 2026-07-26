@@ -297,24 +297,6 @@ public partial class NetworkManager
                 }, exceptSteamId: remoteSteamId, reliable: false);
                 break;
             }
-            case PacketId.ClientChat:
-            {
-                var pkt = new ClientChat();
-                pkt.Deserialize(r);
-                var playerId = EnsureSteamRemotePlayer(remoteSteamId);
-                var playerName = _steamPlayerNames.TryGetValue(remoteSteamId, out var knownName)
-                    ? knownName
-                    : $"Player{playerId}";
-                var outPkt = new ServerChatBroadcast
-                {
-                    FromPlayerId = playerId,
-                    FromPlayerName = playerName,
-                    Message = pkt.Message ?? "",
-                };
-                OnChatReceived?.Invoke(playerId, playerName, outPkt.Message);
-                BroadcastSteamServerPacket(PacketId.ServerChatBroadcast, outPkt, exceptSteamId: remoteSteamId, reliable: true);
-                break;
-            }
             case PacketId.ClientRopeClip:
             {
                 var pkt = new ClientRopeClip();
@@ -581,29 +563,6 @@ public partial class NetworkManager
         }
 
         SendSteamPacketToHost(PacketId.ClientHandPose, new ClientHandPose { Packed = packed }, reliable: true);
-    }
-
-    private void SendSteamChat(string message)
-    {
-        if (!IsHandshakeComplete) return;
-
-        if (_steamLobby != null && _steamLobby.IsHost)
-        {
-            var playerName = _steamPlayerNames.TryGetValue(_steamLocalId, out var knownName)
-                ? knownName
-                : (ModConfig.PlayerName.Value ?? "Player");
-            var pkt = new ServerChatBroadcast
-            {
-                FromPlayerId = LocalPlayerId,
-                FromPlayerName = playerName,
-                Message = message ?? "",
-            };
-            OnChatReceived?.Invoke(LocalPlayerId, playerName, pkt.Message);
-            BroadcastSteamServerPacket(PacketId.ServerChatBroadcast, pkt, exceptSteamId: 0, reliable: true);
-            return;
-        }
-
-        SendSteamPacketToHost(PacketId.ClientChat, new ClientChat { Message = message ?? "" }, reliable: true);
     }
 
     private void SendSteamRopeClip(int targetPlayerId, bool clip)

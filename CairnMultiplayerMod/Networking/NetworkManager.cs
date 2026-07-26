@@ -84,7 +84,6 @@ public partial class NetworkManager : IDisposable
 
     public event Action<int, string> OnPlayerJoined;
     public event Action<int> OnPlayerLeft;
-    public event Action<int, string, string> OnChatReceived; // fromId, fromName, message
     public event Action<int, int, bool> OnRopeClip; // fromId, targetId, clip
     public event Action OnHandshakeAck;
     public event Action<string> OnHandshakeRejected;
@@ -225,12 +224,6 @@ public partial class NetworkManager : IDisposable
 
         if (IsSteamTransportActive)
             SendSteamHandPose(packed);
-    }
-
-    public void SendChat(string message)
-    {
-        if (IsSteamTransportActive)
-            SendSteamChat(message);
     }
 
     /// <summary>Requests roping up (clip=true) or unroping (clip=false) with a player.</summary>

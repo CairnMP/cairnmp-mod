@@ -8,8 +8,11 @@ namespace CairnMultiplayerMod.Features.Chat;
 /// In-game IMGUI (OnGUI) chat: an overlay of recent messages at the bottom left + an
 /// input line. Enter opens/sends, Escape cancels. While typing, the game's gameplay
 /// inputs are frozen (<see cref="InputApi.SetGameplayInputDisabled"/>) so that
-/// typing doesn't drive the climber. Reuses the existing chat plumbing
-/// (NetworkManager.SendChat / OnChatReceived); commands go through the router.
+/// typing doesn't drive the climber.
+///
+/// Rendering and typing state only — sending and receiving belong to
+/// <see cref="ChatFeature"/>, which hands this class a send callback. Commands go
+/// through the router.
 /// </summary>
 internal sealed class ChatController
 {
@@ -42,14 +45,11 @@ internal sealed class ChatController
     // Cached label style, fontSize refreshed every frame (resolution can change).
     private GUIStyle _labelStyle;
 
-    private readonly NetworkManager _network;
     private readonly CommandRouter _router;
+    private readonly Action<string> _send;
     private readonly Func<bool> _canChat;
 
     private readonly List<ChatLine> _lines = new();
-    // Last known nicknames by id, to name the player in the "X left" message
-    // (OnPlayerLeft only gives the id, the RemotePlayer is already removed by then).
-    private readonly Dictionary<int, string> _knownNames = new();
     private bool _isOpen;
     private string _input = "";
 
@@ -61,44 +61,18 @@ internal sealed class ChatController
     private int _historyIndex = -1;
     private string _draft = "";
 
-    public ChatController(NetworkManager network, CommandRouter router, Func<bool> canChat)
+    public ChatController(CommandRouter router, Action<string> send, Func<bool> canChat)
     {
-        _network = network;
         _router = router;
+        _send = send;
         _canChat = canChat;
-        _network.OnChatReceived += OnChatReceived;
-        _network.OnPlayerJoined += OnPlayerJoined;
-        _network.OnPlayerLeft += OnPlayerLeft;
     }
 
     public bool IsTyping => _isOpen;
 
-    private void OnChatReceived(int fromId, string fromName, string message)
-    {
-        // Our own message is already displayed locally by Submit (optimistic echo):
-        // we ignore the network echo sent back by the host so we don't show it twice.
-        if (fromId == _network.LocalPlayerId) return;
-        AddLine($"{fromName}: {message}", system: false);
-    }
-
-    private void OnPlayerJoined(int id, string name)
-    {
-        // Ignore ourselves and fake players (debug mirror = negative id).
-        if (id < 0 || id == _network.LocalPlayerId) return;
-        var display = string.IsNullOrWhiteSpace(name) ? $"Player{id}" : name;
-        bool isNew = !_knownNames.ContainsKey(id);
-        _knownNames[id] = display;
-        // OnPlayerJoined can re-fire on a presence update: we announce only once.
-        if (isNew) AddSystemLine($"{display} joined the session.");
-    }
-
-    private void OnPlayerLeft(int id)
-    {
-        if (id < 0 || id == _network.LocalPlayerId) return;
-        var display = _knownNames.TryGetValue(id, out var n) ? n : $"Player{id}";
-        _knownNames.Remove(id);
-        AddSystemLine($"{display} left the session.");
-    }
+    /// <summary>Shows a line received from another player.</summary>
+    public void AddRemoteLine(string fromName, string message)
+        => AddLine($"{fromName}: {message}", system: false);
 
     /// <summary>Adds a local system line (command feedback) — not broadcast.</summary>
     public void AddSystemLine(string text) => AddLine(text, system: true);
@@ -121,6 +95,9 @@ internal sealed class ChatController
         // source of truth. If one frame fails to resolve the InputManager, the next one
         // retries -> a closed chat ALWAYS returns input (no more permanent block).
         InputApi.ReconcileGameplayInput(_isOpen);
+        // Tell the other features to leave the keyboard alone while we type, otherwise
+        // typing a message fires their shortcuts.
+        FeatureInput.KeyboardCaptured = _isOpen;
     }
 
     /// <summary>Forced close (panic failsafe): doesn't touch the network, just the UI state.
@@ -129,6 +106,7 @@ internal sealed class ChatController
     {
         _isOpen = false;
         _input = "";
+        FeatureInput.KeyboardCaptured = false;
     }
 
     /// <summary>Called from Mod.OnGUI.</summary>
@@ -287,7 +265,7 @@ internal sealed class ChatController
             ? "You"
             : ModConfig.PlayerName.Value;
         AddLine($"{name}: {text}", system: false);
-        _network.SendChat(text);
+        _send(text);
     }
 
     /// <summary>Label style at the current scale (fontSize refreshed every frame).</summary>

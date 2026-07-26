@@ -34,7 +34,7 @@ internal sealed class PingFeature : MultiplayerFeature
 
     private void TickInput()
     {
-        if (Mod.Instance?.Chat?.IsTyping == true) return;
+        if (KeyboardCaptured) return;
         if (!FreecamApi.TryIsActive(out var freecamActive) || !freecamActive) return;
         if (Time.unscaledTime < _cooldownUntil) return;
 

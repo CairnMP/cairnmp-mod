@@ -267,14 +267,6 @@ public struct ClientPlayerState : IPacket
     }
 }
 
-public struct ClientChat : IPacket
-{
-    public string Message;
-
-    public void Serialize(BinaryWriter w) => PacketCodec.WriteString(w, Message ?? "");
-    public void Deserialize(BinaryReader r) => Message = PacketCodec.ReadString(r);
-}
-
 public struct ClientBoneState : IPacket
 {
     public byte BoneCount;
@@ -709,27 +701,6 @@ public struct ServerHandPose : IPacket
         PlayerId = r.ReadInt32();
         int len = r.ReadUInt16();
         Packed = r.ReadBytes(len);
-    }
-}
-
-public struct ServerChatBroadcast : IPacket
-{
-    public int FromPlayerId;
-    public string FromPlayerName;
-    public string Message;
-
-    public void Serialize(BinaryWriter w)
-    {
-        w.Write(FromPlayerId);
-        PacketCodec.WriteString(w, FromPlayerName ?? "");
-        PacketCodec.WriteString(w, Message ?? "");
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        FromPlayerId = r.ReadInt32();
-        FromPlayerName = PacketCodec.ReadString(r);
-        Message = PacketCodec.ReadString(r);
     }
 }
 

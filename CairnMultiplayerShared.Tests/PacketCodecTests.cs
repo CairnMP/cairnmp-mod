@@ -66,8 +66,8 @@ public class PacketCodecTests
     [Fact]
     public void Frame_RejectsOversizedPayload()
     {
-        var packet = new ClientChat { Message = new string('x', ushort.MaxValue) };
-        Assert.Throws<InvalidDataException>(() => PacketCodec.Frame(PacketId.ClientChat, packet));
+        var packet = new ClientHandshake { PlayerName = new string('x', ushort.MaxValue) };
+        Assert.Throws<InvalidDataException>(() => PacketCodec.Frame(PacketId.ClientHandshake, packet));
     }
 }
 
