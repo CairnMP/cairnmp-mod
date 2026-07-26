@@ -2,7 +2,7 @@
 // Propage les versions de versions.json vers les fichiers source du mod.
 // Usage: node scripts/sync-versions.js
 
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -15,6 +15,11 @@ let errors = 0;
 
 function patch(relPath, transform) {
   const abs = resolve(root, relPath);
+  if (!existsSync(abs)) {
+    console.error(`  ERROR: file not found: ${relPath}`);
+    errors++;
+    return;
+  }
   const before = readFileSync(abs, "utf8");
   const after = transform(before);
   if (before === after) {
@@ -39,8 +44,8 @@ function patchRegex(relPath, regex, replacement) {
 // ── Mod (C#) ──────────────────────────────────────────────────────────────────
 console.log("\n[mod]");
 patchRegex(
-  "CairnMultiplayerMod/Core/Mod.cs",
-  /(\[assembly: MelonInfo\(typeof\(CairnMultiplayerMod\.Core\.Mod\), "Cairn Multiplayer Mod", )".*?"(, "CairnModTeam"\)\])/,
+  "CairnMultiplayerMod/Bootstrap/Mod.cs",
+  /(\[assembly: MelonInfo\(typeof\([\w.]+\.Mod\), "Cairn Multiplayer Mod", )".*?"(, "CairnModTeam"\)\])/,
   `$1"${versions.mod}"$2`
 );
 
