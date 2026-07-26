@@ -44,6 +44,9 @@ internal abstract class MultiplayerFeature
     /// <summary>Our own player id in the current session.</summary>
     protected int LocalPlayerId => Session.LocalPlayer.Id;
 
+    /// <summary>Our own display name (Steam persona).</summary>
+    protected string LocalPlayerName => Session.LocalPlayer.Name;
+
     /// <summary>True when this peer is the authoritative host.</summary>
     protected bool IsHost => Session.IsHost;
 

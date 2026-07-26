@@ -53,47 +53,110 @@ pitons and time of day.
 ## Contributing a feature
 
 *(New on this branch.)* A multiplayer feature is **one file**. It declares what it
-sends over the network, what it does each frame, and what it cleans up — and
-nothing else in the codebase has to be touched. No packet ids, no serialization
-plumbing, no wiring in the mod core.
+sends over the network, what it does each frame and what it cleans up — nothing
+else in the codebase is touched. No packet ids, no serialization plumbing, no
+wiring in the mod core.
+
+Here is a complete, working example, start to finish. Save it as
+`CairnMultiplayerMod/Features/Wave/WaveFeature.cs`, build, and pressing **H**
+shows `<name> waves!` on every other player's screen for three seconds. Nothing
+below is hidden or abbreviated — this is the whole feature.
 
 ```csharp
-internal sealed class PingFeature : MultiplayerFeature
+using System.IO;
+using CairnMultiplayer.Shared;
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+namespace CairnMultiplayerMod.Features.Wave;
+
+/// What travels over the network when someone waves.
+/// IPacket is the same contract the rest of the protocol uses: you write the
+/// fields out and read them back, in the same order.
+internal sealed class WaveSent : IPacket
 {
-    public override string Id => "ping";
+    public string FromName = "";
 
-    private Broadcast<PingPlaced> _placed;
+    public void Serialize(BinaryWriter writer) => PacketCodec.WriteString(writer, FromName);
+    public void Deserialize(BinaryReader reader) => FromName = PacketCodec.ReadString(reader);
+}
 
+internal sealed class WaveFeature : MultiplayerFeature
+{
+    // Names this feature's messages on the wire. Lowercase, and stable: renaming it
+    // breaks compatibility with players still on the old version.
+    public override string Id => "wave";
+
+    private const float BannerSeconds = 3f;
+
+    private Broadcast<WaveSent> _wave;
+    private string _banner;
+    private float _hideBannerAt;
+
+    // Called once at startup. Declare here, don't touch the game yet.
     protected internal override void OnRegister(FeatureBuilder feature)
     {
-        _placed = feature.Broadcast<PingPlaced>("placed", ShowRemotePing);
+        _wave = feature.Broadcast<WaveSent>("sent", ShowWave);
         feature.EveryFrame(TickInput, FeaturePhase.Always);
-        feature.OnDrawHud(PingMarkerManager.OnGUI);
-        feature.OnSessionEnded(PingMarkerManager.ClearAll);
+        feature.OnDrawHud(DrawBanner);
+        feature.OnSessionEnded(() => _banner = null);
     }
 
-    private static void ShowRemotePing(int fromPlayerId, PingPlaced ping)
-        => PingMarkerManager.Spawn(fromPlayerId, ping.Position);
+    private void TickInput()
+    {
+        if (Keyboard.current?.hKey.wasPressedThisFrame != true) return;
+
+        // Goes to every other player. LocalPlayerName comes from the base class.
+        _wave.Send(new WaveSent { FromName = LocalPlayerName });
+    }
+
+    // Runs on the receiving side. Never fires on the sender — show your own
+    // effect locally when you send, if you want one.
+    private void ShowWave(int fromPlayerId, WaveSent wave)
+    {
+        _banner = $"{wave.FromName} waves!";
+        _hideBannerAt = Time.unscaledTime + BannerSeconds;
+    }
+
+    private void DrawBanner()
+    {
+        if (_banner == null) return;
+        if (Time.unscaledTime >= _hideBannerAt) { _banner = null; return; }
+
+        GUI.Label(new Rect(20f, 20f, 400f, 30f), _banner);
+    }
 }
 ```
 
-Drop the file in `Features/`, build, done — a source generator finds it and
-registers it for you.
+That is all of it. **You do not register it anywhere** — a source generator finds
+every class deriving from `MultiplayerFeature` at build time and builds the list
+for you. (Curious what it produced? Look at `obj/generated/` after a build.)
 
 **Pick your channel by what the feature needs:**
 
-| Channel | Meaning | Used by |
+| Channel | Meaning | Example in this repo |
 |---|---|---|
 | `Broadcast<T>` | everyone sees it, any player can send | pings, chat |
-| `HostState<T>` | the host owns it, players joining later catch up | weather, time, pitons |
+| `HostState<T>` | the host owns it, and players joining later catch up automatically | weather, time of day |
 | `HostCommand<T>` | the client asks, the host accepts or refuses | roping up |
 
-**And your phase:** `FeaturePhase.Always` runs every frame including in menus and
-bivouacs (input, HUD); `FeaturePhase.Gameplay` runs only while gameplay sync is
-active (anything touching the world).
+Use `HostState` whenever a latecomer would otherwise miss something that is still
+true — a broadcast is gone the moment it is sent.
 
-`Features/` is what the mod does; `Framework/` is what you write it with. A feature
-that throws is logged and isolated — it cannot take the others down with it.
+**Pick your phase:** `FeaturePhase.Always` runs every frame, including in menus
+and bivouacs — for input and HUD. `FeaturePhase.Gameplay` runs only while gameplay
+sync is active — for anything touching the world, since during a bivouac the game
+drives the pawn itself.
+
+**Where things live:** `Features/` is what the mod does, `Framework/` is what you
+write it with. Everything a feature is allowed to do is on `FeatureBuilder` — that
+one class is the whole surface to learn.
+
+A feature that throws is logged and isolated: it cannot take the other features,
+or the update loop, down with it.
+
+For a real one, read `Features/World/PingFeature.cs` — same shape, with its marker
+drawing split into a helper next to it.
 
 ## Managed extension API
 
