@@ -150,8 +150,7 @@ public partial class Mod
         WeatherApi.ResetRemoteState();
         RemotePlayerManager.ClearAll();
         PingMarkerManager.ClearAll();
-        _gameplaySyncSuspended = false;
-        ResumeNetplaySetFramePatchAfterBivouac();
+        Bivouac.ForceResume();
         _panel.SetStatus("Disconnected", false);
         LoggerInstance.Msg("Left lobby.");
     }

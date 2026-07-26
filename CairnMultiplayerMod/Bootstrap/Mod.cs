@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using CairnMultiplayer.Shared;
 using MelonLoader;
@@ -36,34 +35,9 @@ public partial class Mod : MelonMod
     private float _timeSinceLastSceneLoad;
     private Key _connectKey;
     private Key _disconnectKey;
-    private bool _gameplaySyncSuspended;
-    private bool _netplaySetFramePatchPausedForBivouac;
-    // DEFERRED resume of the SetFrame patch after leaving a bivouac: the sealing /
-    // disk write of the native save package can finish a few moments AFTER the bivouac
-    // flag drops. Re-enabling SetFrame injection right in that window left the package
-    // disposed -> 1 save OK then nothing. So we keep the patch paused for a few more
-    // seconds (0 = no resume scheduled).
-    private float _setFramePatchResumeAt;
-    private const float SetFramePatchResumeGraceSeconds = 3f;
-    private float _nextBivouacDebugLogAt;
-    private float _bivouacSuspendedSince;
-    private const float BivouacDebugLogIntervalSeconds = 3f;
-    // Diagnostic: watch window after leaving a bivouac to check whether the
-    // ghosts reappear (the double-gate deadlock case).
-    private float _bivouacRecoveryWatchUntil;
-    private float _nextBivouacRecoveryLogAt;
-    private const float BivouacRecoveryWatchSeconds = 30f;
-    private const float BivouacRecoveryLogIntervalSeconds = 3f;
-    // Anti-lockup guard for the bivouac: if the native flag stays stuck on exit,
-    // we force the sync to resume to avoid a permanent desync.
-    private UnityEngine.Vector3 _bivouacSuspendPawnPos;
-    private bool _hasBivouacSuspendPawnPos;
-    private float _bivouacStuckSince;
-    private const float BivouacStuckResumeSeconds = 8f;
-    private const float BivouacStuckMoveThresholdSqr = 2.25f; // ~1.5 m of movement
 
-    // Tracks the progress of lobby creation/join to display a status that
-    // evolves during the wait (Hetzner auto-provisioning = 1-3 min).
+    // Tracks the progress of lobby creation/join so the status message can evolve while
+    // we wait on the Steam round-trip (cf. TickConnectingStatus).
     private DateTime? _connectingStart;
     private string    _connectingVerb = "Creating lobby"; // "Creating lobby" | "Joining lobby"
     private string    _lastLobbyError;
@@ -78,6 +52,7 @@ public partial class Mod : MelonMod
     internal TimeStateBroadcaster Clock { get; private set; }
     internal RopeCoupleController Rope { get; private set; }
     internal StartGameFlow StartGame { get; private set; }
+    internal BivouacSyncGate Bivouac { get; private set; }
 
     // Scene state read by the sync components (kept authoritative here, on the mod core).
     internal string CurrentScene => _currentScene;
@@ -91,13 +66,30 @@ public partial class Mod : MelonMod
         Il2CppExceptionCapture.Install();
         ModConfig.Register();
         VerboseLogging = ModConfig.VerboseLogging.Value;
+
+        InstallGamePatches();
+        CreateComponents();
+        WireLobbyEvents();
+        WirePanelEvents();
+        WireNetworkEvents();
+
+        LoggerInstance.Msg("===========================================");
+        LoggerInstance.Msg($"  Cairn Multiplayer Mod v{Protocol.GameVersion} loaded!");
+        LoggerInstance.Msg("===========================================");
+    }
+
+    private static void InstallGamePatches()
+    {
         NetplaySetFramePatch.Install();
         BivouacDiagnostics.Install();
         RopeTeamFallPatch.Install();
         MultiplayerPausePatch.Install();
         FreeRoamUnlockPatch.Install();
         SavegamePitonGuardPatch.Install();
+    }
 
+    private void CreateComponents()
+    {
         _connectKey = ParseKey(ModConfig.ConnectKey.Value, Key.F5);
         _disconnectKey = ParseKey(ModConfig.DisconnectKey.Value, Key.F6);
         _network = new NetworkManager();
@@ -111,6 +103,7 @@ public partial class Mod : MelonMod
         Rope = new RopeCoupleController(_network);
         Player = new PlayerStateBroadcaster(_network);
         StartGame = new StartGameFlow(_panel);
+        Bivouac = new BivouacSyncGate(_network, _panel);
 
         // In-game chat + admin commands. The router checks the host role at dispatch;
         // command feedback is displayed as local system lines.
@@ -122,9 +115,14 @@ public partial class Mod : MelonMod
         // auto-closes (ChatController.Update) and restores input.
         _chat = new ChatController(_network, commandRouter,
             () => LocalState == PlayerState.InGame && Time.timeScale > 0f);
+    }
 
-        // Steam Matchmaking → UI wiring. The Steam callbacks are pumped by Cairn
-        // itself on the Unity thread, so there's no marshalling to do.
+    /// <summary>
+    /// Steam Matchmaking → UI wiring. The Steam callbacks are pumped by Cairn itself on
+    /// the Unity thread, so there's no marshalling to do.
+    /// </summary>
+    private void WireLobbyEvents()
+    {
         _lobby.OnLobbyEntered += id =>
         {
             _connectingStart = null;
@@ -152,8 +150,7 @@ public partial class Mod : MelonMod
             RemotePlayerManager.ClearAll();
             PingMarkerManager.ClearAll();
             Rope.ClearLinks();
-            _gameplaySyncSuspended = false;
-            ResumeNetplaySetFramePatchAfterBivouac();
+            Bivouac.ForceResume();
             _panel.SetStatus("Disconnected", false);
         };
         _lobby.OnMembersChanged += () =>
@@ -165,7 +162,10 @@ public partial class Mod : MelonMod
             _panel.SetStatus($"{_lobby.Members.Count} player(s) in lobby", true);
         };
         _lobby.OnStartRequested += StartGame.Begin;
+    }
 
+    private void WirePanelEvents()
+    {
         // Menu button: the Multiplayer click hides the Cairn menu and opens the panel.
         MainMenuMultiplayerButton.Bind(_panel);
 
@@ -176,7 +176,10 @@ public partial class Mod : MelonMod
         _panel.OnDisconnectRequested      += OnDisconnectRequested;
         _panel.OnStartRequested           += OnStartRequested;
         _panel.OnPanelClosed              += MainMenuMultiplayerButton.RestoreModeSelect;
+    }
 
+    private void WireNetworkEvents()
+    {
         _network.OnHandshakeAck += () =>
             _panel.SetStatus($"Connected to {_network.ServerName} (id={_network.LocalPlayerId})", true);
         _network.OnHandshakeRejected += reason =>
@@ -185,8 +188,7 @@ public partial class Mod : MelonMod
         {
             WeatherApi.ResetRemoteState();
             Rope.ClearLinks();
-            _gameplaySyncSuspended = false;
-            ResumeNetplaySetFramePatchAfterBivouac();
+            Bivouac.ForceResume();
         };
         _network.OnPlayerJoined += (id, name) =>
         {
@@ -240,59 +242,62 @@ public partial class Mod : MelonMod
 
         // Authoritative game launch by the server: queues the packet, applies it in
         // Update when the MainMenu scene is active.
-        _network.OnStartGameReceived += pkt =>
-        {
-            StartGame.Begin(pkt);
-        };
-
-        LoggerInstance.Msg("===========================================");
-        LoggerInstance.Msg($"  Cairn Multiplayer Mod v{Protocol.GameVersion} loaded!");
-        LoggerInstance.Msg("===========================================");
+        _network.OnStartGameReceived += pkt => StartGame.Begin(pkt);
     }
 
     public override void OnSceneWasLoaded(int buildIndex, string sceneName)
     {
         _loadedScenes.Add(sceneName);
-        if (IsGameplayRootScene(sceneName))
+        if (SceneRoles.IsGameplayRoot(sceneName))
             _lastGameplayScene = sceneName;
 
         _currentScene = sceneName;
         _timeSinceLastSceneLoad = 0f;
         LogDebug($"Scene loaded: [{buildIndex}] {sceneName}");
 
+        var isMainMenu = SceneRoles.IsMainMenu(sceneName);
+
         // FreeRoam unlock: active ONLY at the MainMenu (forcing the flag during boot
         // or in game sends the game onto an unready FreeRoam init path -> black screen).
-        FreeRoamUnlockPatch.SetActive(sceneName == "MainMenu");
+        FreeRoamUnlockPatch.SetActive(isMainMenu);
 
-        if (sceneName != "MainMenu")
+        if (!isMainMenu)
             _panel.DestroyResources();
 
-        if (IsNonGameplayScene(sceneName))
+        if (SceneRoles.IsBivouac(sceneName))
         {
             LogDebug($"[State] Scene {sceneName} treated as Loading for multiplayer");
-            LogBivouacDebug("scene-loaded");
+            Bivouac.LogPhase("scene-loaded");
         }
-        if (IsSceneBoundCacheResetPoint(sceneName))
+
+        // Note: we do NOT clear the pings here — they're positioned in the world and
+        // expire on their own (15 s). Clearing them on every scene stream would make
+        // them disappear while we're still in the area.
+        if (SceneRoles.IsSyncResetPoint(sceneName))
         {
             ResetSceneBoundSyncState();
-            // Note: we do NOT clear the pings here — they're positioned in the world
-            // and expire on their own (15 s). Clearing them on every scene stream would
-            // make them disappear while we're still in the area.
-            if (ShouldClearRemotePlayersOnSceneLoad(sceneName))
-                RemotePlayerManager.ClearAll();
+            RemotePlayerManager.ClearAll();
         }
+
         MainMenuMultiplayerButton.OnSceneLoaded(sceneName);
-        // Auto-disconnect when returning to the MainMenu from gameplay.
-        // Cleans up the ghosts and lets the player reconnect cleanly.
-        if (sceneName == "MainMenu" && _network.IsConnected && (_lobby == null || !_lobby.IsInLobby))
+
+        if (!isMainMenu)
+            return;
+
+        var inLobby = _lobby?.IsInLobby == true;
+        // Still connected but no lobby left to belong to: cut it here so the player can
+        // reconnect cleanly instead of dragging a half-dead session around the menu.
+        var strandedConnection = _network.IsConnected && !inLobby;
+        if (strandedConnection)
         {
             LoggerInstance.Msg("[State] Returned to MainMenu — auto-disconnecting");
             _network.Disconnect();
-            RemotePlayerManager.ClearAll();
-            Rope.ClearLinks();
             _panel.SetStatus("Disconnected (returned to menu)", false);
         }
-        else if (sceneName == "MainMenu" && _lobby != null && _lobby.IsInLobby)
+
+        // The ghosts and rope links belong to the session we just left. Nothing to clear
+        // if we were neither connected nor in a lobby.
+        if (strandedConnection || inLobby)
         {
             RemotePlayerManager.ClearAll();
             Rope.ClearLinks();
@@ -303,11 +308,10 @@ public partial class Mod : MelonMod
     {
         _loadedScenes.Remove(sceneName);
 
-        var wasCurrentScene = string.Equals(_currentScene, sceneName, StringComparison.Ordinal);
-        if (wasCurrentScene)
+        if (string.Equals(_currentScene, sceneName, StringComparison.Ordinal))
             _currentScene = ResolveCurrentSceneAfterUnload(sceneName);
 
-        if (!IsNonGameplayScene(sceneName))
+        if (!SceneRoles.IsBivouac(sceneName))
             return;
 
         _timeSinceLastSceneLoad = 0f;
@@ -316,167 +320,31 @@ public partial class Mod : MelonMod
         ResetSceneBoundSyncState();
     }
 
-    private static bool IsNonGameplayScene(string sceneName)
-    {
-        return sceneName == "BivouacIndoor";
-    }
-
-    private static bool IsSceneBoundCacheResetPoint(string sceneName)
-    {
-        return sceneName == "LoadingScreen"
-            || sceneName == "CommonBaseScene"
-            || sceneName == "MainMenu"
-            || IsGameplayRootScene(sceneName);
-    }
-
-    private static bool ShouldClearRemotePlayersOnSceneLoad(string sceneName)
-    {
-        return sceneName == "LoadingScreen"
-            || sceneName == "CommonBaseScene"
-            || sceneName == "MainMenu"
-            || IsGameplayRootScene(sceneName);
-    }
-
-    private void ResetSceneBoundSyncState()
+    /// <summary>Forgets everything bound to the scene we're leaving: IL2CPP caches held by
+    /// the game services, then the sync timers.</summary>
+    internal void ResetSceneBoundSyncState()
     {
         SceneCache.Reset();
+        ResetSyncTimers();
+    }
+
+    /// <summary>Restarts the broadcast cadence from scratch, without touching the caches.</summary>
+    internal void ResetSyncTimers()
+    {
         Player.ResetSyncState();
         Player.ResetTimers();
         Weather.ResetTimer();
     }
 
-    internal bool IsGameplaySyncSuspended()
-    {
-        return _network?.IsConnected == true && (_gameplaySyncSuspended || ShouldSuspendGameplaySync());
-    }
+    internal bool IsGameplaySyncSuspended() => Bivouac.BlocksGameplaySync();
 
-    private void UpdateGameplaySyncSuspension()
-    {
-        if (_network == null || !_network.IsConnected)
-        {
-            if (_gameplaySyncSuspended)
-                LogBivouacDebug("network-disconnected");
-
-            _gameplaySyncSuspended = false;
-            ResumeNetplaySetFramePatchAfterBivouac();
-            return;
-        }
-
-        var shouldSuspend = ShouldSuspendGameplaySync();
-        if (shouldSuspend == _gameplaySyncSuspended)
-            return;
-
-        _gameplaySyncSuspended = shouldSuspend;
-        if (_gameplaySyncSuspended)
-        {
-            LoggerInstance.Msg("[State] Gameplay sync suspended for bivouac");
-            _bivouacSuspendedSince = Time.unscaledTime;
-            _nextBivouacDebugLogAt = 0f;
-            PauseNetplaySetFramePatchForBivouac();
-            ResetGameplaySyncTimers();
-            WeatherApi.ResetRemoteState();
-            RemotePlayerManager.ClearAll();
-            // Release the native rope-team anchors: ClearAll destroys the ghosts, so a rope
-            // left pinned to their harness would point into the void. We KEEP the logical link
-            // (RopeLinkState) — it'll be re-anchored on exit when the partner's ghost returns.
-            // TickRopeCouple doesn't run during a bivouac, hence this release here.
-            RopeApi.ReleaseAllAnchors();
-            SetLocalState(PlayerState.Loading);
-            // Remember the pawn's position on entry: used by the anti-lockup guard
-            // (a pawn that has moved = we're climbing again).
-            _hasBivouacSuspendPawnPos = LocalPlayerApi.TryGetPose(out _bivouacSuspendPawnPos, out _);
-            _bivouacStuckSince = 0f;
-            LogBivouacDebug("enter");
-            return;
-        }
-
-        LogBivouacDebug("exit");
-        // Arm the recovery watch: we want to see, on each client, whether the remote
-        // ghosts come back after leaving the bivouac or whether we stay stuck (one side
-        // never InGame, or a mutual deadlock at Loading).
-        _bivouacRecoveryWatchUntil = Time.unscaledTime + BivouacRecoveryWatchSeconds;
-        _nextBivouacRecoveryLogAt = 0f;
-        _hasBivouacSuspendPawnPos = false;
-        _bivouacStuckSince = 0f;
-        ResumeNetplaySetFramePatchAfterBivouac(immediate: false);
-        LoggerInstance.Msg("[State] Gameplay sync resumed");
-        ResetSceneBoundSyncState();
-    }
-
-    private bool ShouldSuspendGameplaySync()
-    {
-        if (IsNonGameplayScene(_currentScene))
-        {
-            _bivouacStuckSince = 0f;
-            return true;
-        }
-
-        if (!GameLifecycleService.TryGetGameLifecycle(out var lifecycle, out _))
-        {
-            _bivouacStuckSince = 0f;
-            return false;
-        }
-
-        if (lifecycle != CairnGameLifecycleState.Bivouac)
-        {
-            _bivouacStuckSince = 0f;
-            return false;
-        }
-
-        // lifecycle == Bivouac, deduced from the BivouacManager flag. Guard against
-        // a flag stuck on exit (the cause of the reported permanent desync): if
-        // GlobalGameManager already reports InGame, we're on a gameplay scene, and the
-        // pawn has moved since entry (we're climbing again), the flag is stale. We
-        // require ~8 s of persistence to avoid confusing it with a real bivouac
-        // entry/exit transition.
-        if (IsBivouacFlagLikelyStuck())
-        {
-            if (_bivouacStuckSince <= 0f)
-                _bivouacStuckSince = Time.unscaledTime;
-
-            if (Time.unscaledTime - _bivouacStuckSince >= BivouacStuckResumeSeconds)
-            {
-                LoggerInstance.Warning(
-                    "[State] Bivouac flag appears stuck (game=InGame, pawn moved) — forcing gameplay sync resume");
-                _bivouacStuckSince = 0f;
-                return false;
-            }
-
-            return true;
-        }
-
-        _bivouacStuckSince = 0f;
-        return true;
-    }
-
-    /// <summary>
-    /// Heuristic: the bivouac flag is probably stuck if the game itself reports
-    /// InGame, we're on a gameplay scene, and the pawn has moved significantly since
-    /// entering the bivouac. Conservative by design: if any of the signals is
-    /// missing, we assume a real bivouac.
-    /// </summary>
-    private bool IsBivouacFlagLikelyStuck()
-    {
-        if (!IsGameplayRootScene(_currentScene))
-            return false;
-
-        if (!GameLifecycleService.TryGetRawGameState(out var raw) || raw != CairnGameLifecycleState.InGame)
-            return false;
-
-        if (!_hasBivouacSuspendPawnPos)
-            return false;
-
-        if (!LocalPlayerApi.TryGetPose(out var pos, out _))
-            return false;
-
-        return (pos - _bivouacSuspendPawnPos).sqrMagnitude >= BivouacStuckMoveThresholdSqr;
-    }
-
+    /// <summary>After an unload, the current scene becomes whichever gameplay root is
+    /// still loaded — or the last one we knew, if the unloaded scene wasn't it.</summary>
     private string ResolveCurrentSceneAfterUnload(string unloadedScene)
     {
         foreach (var scene in _loadedScenes)
         {
-            if (IsGameplayRootScene(scene))
+            if (SceneRoles.IsGameplayRoot(scene))
                 return scene;
         }
 
@@ -484,21 +352,6 @@ public partial class Mod : MelonMod
             return _lastGameplayScene;
 
         return null;
-    }
-
-    private static bool IsGameplayRootScene(string sceneName)
-    {
-        if (string.IsNullOrEmpty(sceneName) || !char.IsDigit(sceneName[0]))
-            return false;
-
-        return !sceneName.EndsWith("_Holds", StringComparison.Ordinal)
-            && !sceneName.Contains("_Holds", StringComparison.Ordinal)
-            && !sceneName.EndsWith("_Gameplay", StringComparison.Ordinal)
-            && !sceneName.EndsWith("_Art", StringComparison.Ordinal)
-            && !sceneName.EndsWith("_Audio", StringComparison.Ordinal)
-            && !sceneName.EndsWith("_Camera", StringComparison.Ordinal)
-            && !sceneName.EndsWith("_LOD", StringComparison.Ordinal)
-            && !sceneName.EndsWith("_AlwaysLoaded", StringComparison.Ordinal);
     }
 
     public override void OnUpdate()
@@ -526,7 +379,7 @@ public partial class Mod : MelonMod
         bool chatTyping = _chat?.IsTyping == true;
 
         // Update the button injection in the main menu
-        if (_currentScene == "MainMenu")
+        if (SceneRoles.IsMainMenu(_currentScene))
         {
             MainMenuMultiplayerButton.OnUpdate();
             // Unlock FreeRoam: force the tweakable field as soon as it's loaded (no-op
@@ -540,10 +393,7 @@ public partial class Mod : MelonMod
         _lobby?.Pump(Time.unscaledDeltaTime);
 
         // Lock the gameplay layer before processing network packets.
-        UpdateGameplaySyncSuspension();
-        // Deferred resume of the SetFrame patch (post-bivouac grace window) — must run
-        // every frame, including during suspension (it self-cancels then).
-        UpdateDeferredSetFramePatchResume();
+        Bivouac.Update();
 
         // Process network events
         _network.Update();
@@ -579,9 +429,9 @@ public partial class Mod : MelonMod
 
         // During a bivouac, Cairn itself drives the pawn, the camera and the taping
         // hands. The mod only keeps a minimal network presence.
-        if (_gameplaySyncSuspended)
+        if (Bivouac.IsSuspended)
         {
-            TickBivouacDebug();
+            Bivouac.TickSuspendedLog();
             Player.TickSuspendedNetworkPresence();
             TickConnectingStatus();
             return;
@@ -595,7 +445,7 @@ public partial class Mod : MelonMod
         SetLocalState(newState);
 
         // Diagnostic: watch for the sync recovering after a bivouac.
-        TickBivouacRecoveryDebug();
+        Bivouac.TickRecoveryLog();
 
         // Game launch flow
         StartGame.Tick();
@@ -642,7 +492,7 @@ public partial class Mod : MelonMod
             }
             else
             {
-                if (_currentScene != "MainMenu")
+                if (!SceneRoles.IsMainMenu(_currentScene))
                 {
                     LoggerInstance.Msg("[CairnMP] Multiplayer panel is only available from the main menu.");
                     return;
@@ -728,162 +578,7 @@ public partial class Mod : MelonMod
         }
     }
 
-    private void ResetGameplaySyncTimers()
-    {
-        Player.ResetSyncState();
-        Player.ResetTimers();
-        Weather.ResetTimer();
-    }
-
-    private void TickBivouacDebug()
-    {
-        if (Time.unscaledTime < _nextBivouacDebugLogAt)
-            return;
-
-        _nextBivouacDebugLogAt = Time.unscaledTime + BivouacDebugLogIntervalSeconds;
-        LogBivouacDebug("heartbeat");
-    }
-
-    private void LogBivouacDebug(string phase)
-    {
-        var elapsed = _bivouacSuspendedSince > 0f
-            ? Math.Max(0f, Time.unscaledTime - _bivouacSuspendedSince)
-            : 0f;
-        var networkState = _network == null
-            ? "network=null"
-            : $"network=connected:{_network.IsConnected} handshake:{_network.IsHandshakeComplete} remotes:{_network.RemotePlayers.Count}";
-
-        LoggerInstance.Msg(
-            $"[BivouacDebug] phase={phase} elapsed={elapsed:0.0}s scene='{_currentScene ?? ""}' " +
-            $"lastGameplay='{_lastGameplayScene ?? ""}' local={LocalState} suspended={_gameplaySyncSuspended} " +
-            $"{DescribeRemoteStates()} " +
-            $"panelVisible={_panel?.IsVisible == true} {networkState} {RemotePlayerManager.DebugSummary()} " +
-            $"setFramePatchInstalled={NetplaySetFramePatch.IsInstalled} " +
-            $"patchPaused={_netplaySetFramePatchPausedForBivouac} " +
-            BivouacDiagnostics.BuildBivouacDebugSnapshot());
-    }
-
-    /// <summary>
-    /// Summarizes the lifecycle state of each known remote player. Used to diagnose
-    /// the bivouac desync: if one side stays at Loading after exiting, the ghosts
-    /// never reappear.
-    /// </summary>
-    private string DescribeRemoteStates()
-    {
-        if (_network == null)
-            return "remoteStates=none";
-
-        var summary = "remoteStates=[";
-        var first = true;
-        foreach (var kv in _network.RemotePlayers)
-        {
-            if (!first)
-                summary += ",";
-            first = false;
-            var rp = kv.Value;
-            summary += $"{kv.Key}:{(rp == null ? "null" : rp.State.ToString())}";
-        }
-        return summary + "]";
-    }
-
-    /// <summary>
-    /// After leaving a bivouac, periodically logs the local + remote state + the ghost
-    /// count to verify the sync recovers. Captures the case where both sides exit but
-    /// no ghost respawns (deadlock).
-    /// </summary>
-    private void TickBivouacRecoveryDebug()
-    {
-        if (_bivouacRecoveryWatchUntil <= 0f)
-            return;
-
-        var now = Time.unscaledTime;
-        if (now >= _bivouacRecoveryWatchUntil)
-        {
-            _bivouacRecoveryWatchUntil = 0f;
-            LogBivouacDebug("recovery-end");
-            return;
-        }
-
-        if (now < _nextBivouacRecoveryLogAt)
-            return;
-
-        _nextBivouacRecoveryLogAt = now + BivouacRecoveryLogIntervalSeconds;
-        LogBivouacDebug("recovery");
-    }
-
-    // Pause/resume of the SetFrame patch during a bivouac via a simple flag (the patch
-    // stays installed). We used to Uninstall/Install (UnpatchSelf/Patch) here, but that
-    // Harmony churn fell within the bivouac's native save window and could break the
-    // sealing/reopening of the save package -> 1 save OK then nothing.
-    private void PauseNetplaySetFramePatchForBivouac()
-    {
-        // Cancel any deferred resume in progress (we re-enter a bivouac before the end
-        // of the grace window) -> the patch must stay paused.
-        _setFramePatchResumeAt = 0f;
-
-        if (_netplaySetFramePatchPausedForBivouac)
-            return;
-
-        _netplaySetFramePatchPausedForBivouac = true;
-        NetplaySetFramePatch.Pause();
-        LoggerInstance.Msg("[State] Netplay SetFrame patch paused for bivouac");
-    }
-
-    /// <summary>
-    /// Resumes the SetFrame patch. <paramref name="immediate"/> = true for teardowns
-    /// (disconnect, leave) where no save is in progress; false when leaving a bivouac,
-    /// where we defer the resume (cf. <see cref="SetFramePatchResumeGraceSeconds"/>) to
-    /// let the native save package seal before re-enabling injection.
-    /// </summary>
-    private void ResumeNetplaySetFramePatchAfterBivouac(bool immediate = true)
-    {
-        if (immediate)
-        {
-            _setFramePatchResumeAt = 0f;
-            if (!_netplaySetFramePatchPausedForBivouac)
-                return;
-
-            _netplaySetFramePatchPausedForBivouac = false;
-            NetplaySetFramePatch.Resume();
-            LoggerInstance.Msg("[State] Netplay SetFrame patch resumed after bivouac");
-            return;
-        }
-
-        if (!_netplaySetFramePatchPausedForBivouac)
-            return;
-
-        _setFramePatchResumeAt = Time.unscaledTime + SetFramePatchResumeGraceSeconds;
-        LoggerInstance.Msg(
-            $"[State] Netplay SetFrame patch resume scheduled in {SetFramePatchResumeGraceSeconds:F0}s (save-seal grace)");
-    }
-
-    /// <summary>Applies the deferred SetFrame patch resume scheduled when leaving a bivouac.</summary>
-    private void UpdateDeferredSetFramePatchResume()
-    {
-        if (_setFramePatchResumeAt <= 0f)
-            return;
-
-        // Still in a bivouac / outside gameplay -> cancel the resume (we'll stay paused
-        // until we're back in game in a stable way).
-        if (_gameplaySyncSuspended || ShouldSuspendGameplaySync())
-        {
-            _setFramePatchResumeAt = 0f;
-            return;
-        }
-
-        if (Time.unscaledTime < _setFramePatchResumeAt)
-            return;
-
-        _setFramePatchResumeAt = 0f;
-        if (!_netplaySetFramePatchPausedForBivouac)
-            return;
-
-        _netplaySetFramePatchPausedForBivouac = false;
-        NetplaySetFramePatch.Resume();
-        LoggerInstance.Msg("[State] Netplay SetFrame patch resumed after bivouac (save-seal grace elapsed)");
-    }
-
-    private void SetLocalState(PlayerState state)
+    internal void SetLocalState(PlayerState state)
     {
         if (state == LocalState)
             return;

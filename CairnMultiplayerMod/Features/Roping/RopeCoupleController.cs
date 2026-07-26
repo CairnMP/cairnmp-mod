@@ -63,8 +63,7 @@ internal sealed class RopeCoupleController
         bool dead = PawnCaptureApi.GetLocalPawnState() == NetFrame.PawnStateType.Dead;
         bool gameOver = GameLifecycleService.TryGetGameLifecycle(out var lifecycle, out _)
                         && lifecycle == CairnGameLifecycleState.GameOver;
-        var currentScene = Mod.Instance.CurrentScene;
-        bool atMainMenu = currentScene != null && currentScene.StartsWith("MainMenu");
+        bool atMainMenu = SceneRoles.IsMainMenuArea(Mod.Instance.CurrentScene);
 
         bool hardUnsafe = !connected || dead || gameOver || atMainMenu;
 

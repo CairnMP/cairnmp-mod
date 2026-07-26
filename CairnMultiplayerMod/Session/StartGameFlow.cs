@@ -57,7 +57,7 @@ internal sealed class StartGameFlow
         // rewrites them on the "new game" click). Stop as soon as we leave the menu.
         if (_forceNewGameOpts.HasValue)
         {
-            if (currentScene != null && currentScene.StartsWith("MainMenu"))
+            if (SceneRoles.IsMainMenuArea(currentScene))
             {
                 var s = _forceNewGameOpts.Value;
                 // We respect the difficulty chosen by the player in the native screen
@@ -72,7 +72,7 @@ internal sealed class StartGameFlow
             }
         }
 
-        if (_pendingStart.HasValue && currentScene != null && currentScene.StartsWith("MainMenu"))
+        if (_pendingStart.HasValue && SceneRoles.IsMainMenuArea(currentScene))
         {
             // CRUCIAL: when the MP panel opens, the `MainMenu` component was DISABLED
             // (MainMenuMultiplayerButton.SuspendMainMenuInput -> behaviour.enabled=false). But

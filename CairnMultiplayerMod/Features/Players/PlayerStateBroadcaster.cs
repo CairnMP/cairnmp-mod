@@ -164,11 +164,10 @@ internal sealed class PlayerStateBroadcaster
         if (currentScene == null)
             return PlayerState.Connecting;
 
-        // Main-menu category — covers "MainMenu" and "MainMenuBackgroundsBase".
-        if (currentScene.StartsWith("MainMenu"))
+        if (SceneRoles.IsMainMenuArea(currentScene))
             return PlayerState.InMenu;
 
-        if (currentScene == "LoadingScreen" || currentScene == "CommonBaseScene")
+        if (SceneRoles.IsLoading(currentScene))
             return PlayerState.Loading;
 
         if (GameLifecycleService.TryGetGameLifecycle(out var lifecycle, out _))
@@ -179,7 +178,7 @@ internal sealed class PlayerStateBroadcaster
             if (lifecycle != CairnGameLifecycleState.InGame)
                 return PlayerState.Loading;
         }
-        else if (IsNonGameplayScene(currentScene))
+        else if (SceneRoles.IsBivouac(currentScene))
         {
             return PlayerState.Loading;
         }
@@ -235,16 +234,11 @@ internal sealed class PlayerStateBroadcaster
 
     private static int FrameVectorCount(float[] values) => values == null ? 0 : values.Length / 3;
 
-    private static bool IsNonGameplayScene(string sceneName)
-    {
-        return sceneName == "BivouacIndoor";
-    }
-
     private string CurrentNetworkSceneName()
     {
         var currentScene = Mod.Instance.CurrentScene;
         var lastGameplayScene = Mod.Instance.LastGameplayScene;
-        if (IsNonGameplayScene(currentScene) && !string.IsNullOrEmpty(lastGameplayScene))
+        if (SceneRoles.IsBivouac(currentScene) && !string.IsNullOrEmpty(lastGameplayScene))
             return lastGameplayScene;
 
         return currentScene ?? "";
