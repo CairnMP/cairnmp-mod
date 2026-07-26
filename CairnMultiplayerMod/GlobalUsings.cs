@@ -22,7 +22,5 @@ global using CairnMultiplayerMod.Features.FreeRoam;
 global using CairnMultiplayerMod.Features.PhotoMode;
 global using CairnMultiplayerMod.Features.Chat;
 global using CairnMultiplayerMod.UI;
-global using CairnMultiplayerMod.UI.Screens;
-global using CairnMultiplayerMod.UI.Inputs;
 global using CairnMultiplayerMod.UI.Sketch;
 global using CairnMultiplayerMod.UI.Toolkit;
