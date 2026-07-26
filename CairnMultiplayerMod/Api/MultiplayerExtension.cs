@@ -127,6 +127,12 @@ public sealed class ReplicatedState<T> : IReplicatedStateHandle
         }
     }
 
+    void IReplicatedStateHandle.Reset()
+    {
+        _values.Clear();
+        _revisions.Clear();
+    }
+
     private readonly struct StateValue
     {
         public StateValue(ulong revision, T value)

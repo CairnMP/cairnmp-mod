@@ -193,6 +193,39 @@ public sealed class ExtensionTransactionTests
         Assert.Single(bridge.States);
     }
 
+    [Fact]
+    public void DetachClearsStateAndAcceptsLowerRevisionFromNextSession()
+    {
+        var runtime = new ExtensionRuntime();
+        var extension = runtime.Register(new ExtensionRegistration(
+            "com.example.reconnect", new Version(1, 0, 0)));
+        var state = extension.RegisterState<string>("phase");
+        runtime.Attach(new FakeBridge(isHost: false));
+        runtime.ApplyState(new ServerExtensionState
+        {
+            ExtensionId = extension.Id,
+            StateId = "phase",
+            Revision = 100,
+            Payload = PayloadCodec<string>.Json.Serialize("old-session"),
+        });
+
+        runtime.Detach();
+
+        Assert.False(state.TryGet(out _));
+
+        runtime.Attach(new FakeBridge(isHost: false));
+        runtime.ApplyState(new ServerExtensionState
+        {
+            ExtensionId = extension.Id,
+            StateId = "phase",
+            Revision = 1,
+            Payload = PayloadCodec<string>.Json.Serialize("new-session"),
+        });
+
+        Assert.True(state.TryGet(out var phase));
+        Assert.Equal("new-session", phase);
+    }
+
     private static ExtensionRuntime HostRuntime(out FakeBridge bridge)
     {
         var runtime = new ExtensionRuntime();

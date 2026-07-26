@@ -41,3 +41,4 @@ scripts/sync-instance2.ps1
 scripts/inspect-native.ps1
 scripts/native-dump.txt
 scripts/cecil-dump.ps1
+scripts/sync-versions.js

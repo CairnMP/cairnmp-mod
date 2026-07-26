@@ -148,6 +148,11 @@ public partial class Mod : MelonMod
             _lastLobbyError = err;
             _panel.SetStatus($"Failed: {err}", _lobby != null && _lobby.IsInLobby);
         };
+        if (!_lobby.IsSteamIntegrationAvailable)
+        {
+            _lastLobbyError = _lobby.SteamUnavailableReason;
+            _panel.SetStatus($"Unavailable: {_lastLobbyError}", false);
+        }
         _lobby.OnLobbyLeft += () =>
         {
             _network.Disconnect();
@@ -250,7 +255,6 @@ public partial class Mod : MelonMod
 
         LoggerInstance.Msg("===========================================");
         LoggerInstance.Msg($"  Cairn Multiplayer Mod v{Protocol.GameVersion} loaded!");
-        LoggerInstance.Msg($"  Keybinds: {_connectKey} (panel) / {_disconnectKey} (disconnect) / N (toggle player names)");
         LoggerInstance.Msg("===========================================");
     }
 

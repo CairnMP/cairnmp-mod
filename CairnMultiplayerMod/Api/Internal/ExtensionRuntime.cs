@@ -269,6 +269,8 @@ internal sealed class ExtensionRuntime
         foreach (var pending in _pendingCommands.Values)
             pending.Completion.TrySetResult(new CommandResult(0, CommandStatus.Unavailable, "Session ended."));
         _pendingCommands.Clear();
+        foreach (var state in _states.Values)
+            state.Reset();
         _officialStates.Clear();
         _commandRates.Clear();
         _extensionFailures.Clear();
@@ -499,6 +501,7 @@ internal interface IReplicatedStateHandle
     byte[] SerializeObject(object value);
     void Validate(byte[] payload, bool removed);
     void Apply(int scopePlayerId, ulong revision, bool removed, byte[] payload);
+    void Reset();
 }
 
 internal interface IMultiplayerEventHandle

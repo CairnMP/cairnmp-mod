@@ -5,7 +5,6 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using CairnMultiplayer.Shared;
-using CairnMultiplayerMod.UI;
 using Il2CppInterop.Runtime;
 using Il2CppSteamworks;
 
@@ -143,7 +142,46 @@ public sealed class SteamLobbyManager : IDisposable
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
+    private enum SteamApiLoadStatus
+    {
+        Loaded,
+        Missing,
+        LoadFailed,
+    }
+
     private bool _isInitialized;
+    private readonly SteamApiLoadStatus _steamApiStatus;
+    private readonly string _steamApiLoadError;
+
+    /// <summary>True when steam_api64.dll was found and loaded successfully.</summary>
+    public bool IsSteamIntegrationAvailable => _steamApiStatus == SteamApiLoadStatus.Loaded;
+
+    /// <summary>User-facing reason Steam matchmaking cannot initialize.</summary>
+    public string SteamUnavailableReason => _steamApiStatus switch
+    {
+        SteamApiLoadStatus.Missing =>
+            "Steam integration is missing (steam_api64.dll). Multiplayer requires the Steam build of Cairn; if this is a Steam installation, verify the game files.",
+        SteamApiLoadStatus.LoadFailed =>
+            $"Steam integration could not be loaded{_steamApiLoadError}. Verify the game files, then restart Cairn and Steam.",
+        _ => "",
+    };
+
+    private const string MsgSteamNotReady =
+        "Steam isn't ready. Make sure the Steam client is running, then try again in a few seconds.";
+
+    /// <summary>Message explaining why a lobby operation cannot run yet.</summary>
+    private string NotInitializedMessage() =>
+        IsSteamIntegrationAvailable ? MsgSteamNotReady : SteamUnavailableReason;
+
+    /// <summary>Guards a lobby entry point: emits a clear UI error and returns false
+    /// when Steamworks isn't initialized.</summary>
+    private bool EnsureSteamReady()
+    {
+        if (_isInitialized) return true;
+        OnLobbyError?.Invoke(NotInitializedMessage());
+        return false;
+    }
+
     // Deferred init: we don't attempt Steam in the ctor (too early in the
     // MelonLoader cycle — Cairn hasn't yet had time to call SteamAPI_Init
     // on the native side). We retry during the first frames of Pump().
@@ -183,8 +221,9 @@ public sealed class SteamLobbyManager : IDisposable
     /// — not next to Cairn.exe. Without an explicit pre-load, the P/Invoke fails to
     /// resolve it. Also tries to create steam_appid.txt if missing (required for
     /// SteamAPI.Init() to work outside of a Steam launch).</summary>
-    private static bool PreloadSteamApiDll()
+    private static SteamApiLoadStatus PreloadSteamApiDll(out string loadError)
     {
+        loadError = "";
         try
         {
             // Path of the main module (Cairn.exe) — more reliable than
@@ -201,22 +240,24 @@ public sealed class SteamLobbyManager : IDisposable
             if (!File.Exists(dllPath))
             {
                 Mod.Log.Error($"[SteamLobby] steam_api64.dll not found at {dllPath}");
-                return false;
+                return SteamApiLoadStatus.Missing;
             }
             var handle = LoadLibraryW(dllPath);
             if (handle == IntPtr.Zero)
             {
                 var err = Marshal.GetLastWin32Error();
                 Mod.Log.Error($"[SteamLobby] LoadLibrary failed (win32 error {err}) for: {dllPath}");
-                return false;
+                loadError = $" (Win32 error {err})";
+                return SteamApiLoadStatus.LoadFailed;
             }
             Mod.LogDebug($"[SteamLobby] steam_api64.dll loaded (handle=0x{handle:X}).");
-            return true;
+            return SteamApiLoadStatus.Loaded;
         }
         catch (Exception ex)
         {
             Mod.Log.Error($"[SteamLobby] Preload threw: {ex}");
-            return false;
+            loadError = $": {ex.Message}";
+            return SteamApiLoadStatus.LoadFailed;
         }
     }
 
@@ -242,10 +283,15 @@ public sealed class SteamLobbyManager : IDisposable
     {
         // DLL load + steam_appid.txt here; the Steam init is deferred to
         // TryInitializeSteam() via Pump() to let the game finish starting up.
-        if (PreloadSteamApiDll())
+        _steamApiStatus = PreloadSteamApiDll(out _steamApiLoadError);
+        if (IsSteamIntegrationAvailable)
         {
             WriteAppId(CairnSteamAppId);
             Environment.SetEnvironmentVariable("SteamAppId", CairnSteamAppId);
+        }
+        else
+        {
+            Mod.Log.Warning($"[SteamLobby] {SteamUnavailableReason}");
         }
     }
 
@@ -408,6 +454,8 @@ public sealed class SteamLobbyManager : IDisposable
         // starting up, then give up after InitMaxAttempts attempts.
         if (!_isInitialized)
         {
+            // When the native API is missing or failed to load, retries cannot help.
+            if (!IsSteamIntegrationAvailable) return;
             if (_initAttempts >= InitMaxAttempts) return;
 
             _initRetryTimer -= dt;
@@ -442,11 +490,7 @@ public sealed class SteamLobbyManager : IDisposable
     /// Resolves after LobbyCreated_t + metadata write + LobbyEnter_t.</summary>
     public Task<bool> CreateLobby(HostConfig cfg)
     {
-        if (!_isInitialized)
-        {
-            OnLobbyError?.Invoke("Steamworks not initialized — is Steam running?");
-            return Task.FromResult(false);
-        }
+        if (!EnsureSteamReady()) return Task.FromResult(false);
         if (_createTcs != null) return _createTcs.Task;
         if (HasPendingOperation())
             return BusyBoolTask("Another Steam lobby operation is already running.");
@@ -487,6 +531,7 @@ public sealed class SteamLobbyManager : IDisposable
     /// First searches via RequestLobbyList filtered on the code, then JoinLobby.</summary>
     public Task<bool> JoinByCode(string code)
     {
+        if (!EnsureSteamReady()) return Task.FromResult(false);
         if (_joinTcs != null) return _joinTcs.Task;
         if (HasPendingOperation())
             return BusyBoolTask("Another Steam lobby operation is already running.");
@@ -517,6 +562,7 @@ public sealed class SteamLobbyManager : IDisposable
     /// Steam Friends invite).</summary>
     public Task<bool> JoinById(ulong lobbyId64)
     {
+        if (!EnsureSteamReady()) return Task.FromResult(false);
         if (_joinTcs != null) return _joinTcs.Task;
         if (HasPendingOperation())
             return BusyBoolTask("Another Steam lobby operation is already running.");
@@ -549,6 +595,8 @@ public sealed class SteamLobbyManager : IDisposable
     /// <summary>Fetches the list of public CairnMP lobbies.</summary>
     public Task<List<LobbyEntry>> RequestLobbyList()
     {
+        if (!EnsureSteamReady())
+            return Task.FromResult(new List<LobbyEntry>());
         if (_listTcs != null) return _listTcs.Task;
         if (HasPendingOperation())
         {
