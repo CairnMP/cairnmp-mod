@@ -72,7 +72,7 @@ internal static unsafe class InputApi
         }
         catch (Exception ex)
         {
-            Mod.Log.Warning($"[CairnGameApi] ReconcileGameplayInput failed: {ex.Message}");
+            Mod.Log.Warning($"[Input] ReconcileGameplayInput failed: {ex.Message}");
         }
     }
 
@@ -110,7 +110,7 @@ internal static unsafe class InputApi
             if (!_menuBlockDiagLogged)
             {
                 _menuBlockDiagLogged = true;
-                Mod.Log.Msg($"[CairnGameApi] menu input block: eventSystem={(es != null)} inputManager={(mgr != null)}");
+                Mod.Log.Msg($"[Input] menu input block: eventSystem={(es != null)} inputManager={(mgr != null)}");
                 if (mgr != null)
                 {
                     try
@@ -120,16 +120,16 @@ internal static unsafe class InputApi
                         {
                             var sb = new StringBuilder();
                             foreach (var kv in maps) sb.Append(kv.Key).Append('=').Append(kv.Value ? "ON" : "off").Append("  ");
-                            Mod.Log.Msg($"[CairnGameApi] action maps: {sb}");
+                            Mod.Log.Msg($"[Input] action maps: {sb}");
                         }
                     }
-                    catch (Exception ex2) { Mod.Log.Msg($"[CairnGameApi] map enum failed: {ex2.Message}"); }
+                    catch (Exception ex2) { Mod.Log.Msg($"[Input] map enum failed: {ex2.Message}"); }
                 }
             }
         }
         catch (Exception ex)
         {
-            Mod.Log.Warning($"[CairnGameApi] BlockMainMenuActionMaps failed: {ex.Message}");
+            Mod.Log.Warning($"[Input] BlockMainMenuActionMaps failed: {ex.Message}");
         }
     }
 
@@ -151,7 +151,7 @@ internal static unsafe class InputApi
         }
         catch (Exception ex)
         {
-            Mod.Log.Warning($"[CairnGameApi] RestoreMainMenuActionMaps failed: {ex.Message}");
+            Mod.Log.Warning($"[Input] RestoreMainMenuActionMaps failed: {ex.Message}");
         }
         _menuMapsBlocked = false;
         _menuBlockDiagLogged = false;
@@ -177,7 +177,7 @@ internal static unsafe class InputApi
         }
         catch (Exception ex)
         {
-            Mod.Log.Warning($"[CairnGameApi] ForceClearInputBlock failed: {ex.Message}");
+            Mod.Log.Warning($"[Input] ForceClearInputBlock failed: {ex.Message}");
         }
         _blockApplied = false;
     }
@@ -204,11 +204,11 @@ internal static unsafe class InputApi
                     if (on.Length < 220) on.Append(kv.Key).Append(' ');
                 }
             }
-            Mod.LogDebug($"[CairnGameApi] after-unblock action maps enabled {enabled}/{total}: {on}");
+            Mod.LogDebug($"[Input] after-unblock action maps enabled {enabled}/{total}: {on}");
         }
         catch (Exception ex)
         {
-            Mod.LogDebug($"[CairnGameApi] map-status diag skipped: {ex.Message}");
+            Mod.LogDebug($"[Input] map-status diag skipped: {ex.Message}");
         }
     }
 }

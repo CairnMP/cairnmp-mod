@@ -42,13 +42,13 @@ internal static unsafe class NetplayAnimationApi
             if (prefab != null)
             {
                 _climberPrefabCached = prefab;
-                Mod.LogDebug("[CairnGameApi] NetplayClimberPrefab found via NetplayManager singleton");
+                Mod.LogDebug("[NetplayAnim] NetplayClimberPrefab found via NetplayManager singleton");
                 return prefab;
             }
         }
         catch (Exception ex)
         {
-            Mod.Log.Warning($"[CairnGameApi] NetplayManager singleton read failed: {ex.Message}");
+            Mod.Log.Warning($"[NetplayAnim] NetplayManager singleton read failed: {ex.Message}");
         }
 
         // Strategy 1: read NetplayManager.NetplayClimberPrefab.
@@ -66,14 +66,14 @@ internal static unsafe class NetplayAnimationApi
                     if (ptr != IntPtr.Zero)
                     {
                         _climberPrefabCached = new GameObject(ptr);
-                        Mod.LogDebug("[CairnGameApi] NetplayClimberPrefab found via NetplayManager");
+                        Mod.LogDebug("[NetplayAnim] NetplayClimberPrefab found via NetplayManager");
                         return _climberPrefabCached;
                     }
                 }
             }
             catch (Exception ex)
             {
-                Mod.Log.Warning($"[CairnGameApi] NetplayClimberPrefab read failed: {ex.Message}");
+                Mod.Log.Warning($"[NetplayAnim] NetplayClimberPrefab read failed: {ex.Message}");
             }
         }
 
@@ -91,7 +91,7 @@ internal static unsafe class NetplayAnimationApi
                     if (name == "MC_Netplay_Player" || name.StartsWith("MC_Netplay_Player"))
                     {
                         _climberPrefabCached = go;
-                        Mod.LogDebug($"[CairnGameApi] NetplayClimberPrefab found by name scan: '{name}'");
+                        Mod.LogDebug($"[NetplayAnim] NetplayClimberPrefab found by name scan: '{name}'");
                         return go;
                     }
                 }
@@ -99,7 +99,7 @@ internal static unsafe class NetplayAnimationApi
         }
         catch (Exception ex)
         {
-            Mod.Log.Warning($"[CairnGameApi] GameObject name scan failed: {ex.Message}");
+            Mod.Log.Warning($"[NetplayAnim] GameObject name scan failed: {ex.Message}");
         }
 
         // Strategy 3: load the prefab via the game's native Addressables.
@@ -111,13 +111,13 @@ internal static unsafe class NetplayAnimationApi
             if (prefab != null)
             {
                 _climberPrefabCached = prefab;
-                Mod.LogDebug("[CairnGameApi] NetplayClimberPrefab loaded via Addressables");
+                Mod.LogDebug("[NetplayAnim] NetplayClimberPrefab loaded via Addressables");
                 return prefab;
             }
         }
         catch (Exception ex)
         {
-            Mod.Log.Warning($"[CairnGameApi] Addressables prefab load failed: {ex.Message}");
+            Mod.Log.Warning($"[NetplayAnim] Addressables prefab load failed: {ex.Message}");
         }
 
         return null;
@@ -237,7 +237,7 @@ internal static unsafe class NetplayAnimationApi
         }
         catch (Exception ex)
         {
-            Mod.Log.Error($"[CairnGameApi] TryReadGhostBoneArray failed: {ex.Message}");
+            Mod.Log.Error($"[NetplayAnim] TryReadGhostBoneArray failed: {ex.Message}");
             return false;
         }
     }
@@ -268,7 +268,7 @@ internal static unsafe class NetplayAnimationApi
                 if (!_directBoneFallbackMismatchLogged)
                 {
                     _directBoneFallbackMismatchLogged = true;
-                    Mod.Log.Warning($"[CairnGameApi] Ghost bone fallback skipped for {label}: positionCount={positionCount} != applyCount+1={applyCount + 1} (boneCount={boneCount})");
+                    Mod.Log.Warning($"[NetplayAnim] Ghost bone fallback skipped for {label}: positionCount={positionCount} != applyCount+1={applyCount + 1} (boneCount={boneCount})");
                 }
                 return false;
             }
@@ -310,7 +310,7 @@ internal static unsafe class NetplayAnimationApi
             if (!logged)
             {
                 logged = true;
-                Mod.LogDebug($"[CairnGameApi] Direct ghost bone fallback active for {label} bones={applyCount} frameVectors={positionCount}");
+                Mod.LogDebug($"[NetplayAnim] Direct ghost bone fallback active for {label} bones={applyCount} frameVectors={positionCount}");
             }
 
             return true;
@@ -320,7 +320,7 @@ internal static unsafe class NetplayAnimationApi
             if (!_directBoneFallbackFailureLogged)
             {
                 _directBoneFallbackFailureLogged = true;
-                Mod.Log.Warning($"[CairnGameApi] Direct ghost bone fallback failed: {ex.Message}");
+                Mod.Log.Warning($"[NetplayAnim] Direct ghost bone fallback failed: {ex.Message}");
             }
             return false;
         }
@@ -360,6 +360,6 @@ internal static unsafe class NetplayAnimationApi
         logged = true;
         int positionCount = frameData.Positions == null ? 0 : frameData.Positions.Length / 3;
         int eulerCount = frameData.Eulers == null ? 0 : frameData.Eulers.Length / 3;
-        Mod.Log.Warning($"[CairnGameApi] Native {label} SetFrame failed: {ex.Message} flags=0x{frameData.Flags:X2} positions={positionCount} eulers={eulerCount}");
+        Mod.Log.Warning($"[NetplayAnim] Native {label} SetFrame failed: {ex.Message} flags=0x{frameData.Flags:X2} positions={positionCount} eulers={eulerCount}");
     }
 }

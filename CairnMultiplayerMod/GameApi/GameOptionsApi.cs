@@ -25,14 +25,14 @@ internal static unsafe class GameOptionsApi
             var menu = FindMainMenuComponent();
             if (menu == null)
             {
-                Mod.Log.Warning("[CairnGameApi] MainMenu component not found");
+                Mod.Log.Warning("[GameOptions] MainMenu component not found");
                 return false;
             }
 
             var opts = menu.nextGameStartOptions;
             if (opts == null)
             {
-                Mod.Log.Warning("[CairnGameApi] nextGameStartOptions is null on MainMenu");
+                Mod.Log.Warning("[GameOptions] nextGameStartOptions is null on MainMenu");
                 return false;
             }
 
@@ -63,14 +63,14 @@ internal static unsafe class GameOptionsApi
             {
                 // Read back to confirm (Il2Cpp structs can surprise you).
                 var check = opts.newGameOptions;
-                Mod.LogDebug($"[CairnGameApi] NewGameOptions set (typed): difficulty={difficulty} " +
+                Mod.LogDebug($"[GameOptions] NewGameOptions set (typed): difficulty={difficulty} " +
                     $"skipTut={check.skipTutorials} skipPra={check.skipPractice} assist={check.assistEnabled}");
             }
             return true;
         }
         catch (Exception ex)
         {
-            Mod.Log.Error($"[CairnGameApi] SetNextGameDifficulty failed: {ex}");
+            Mod.Log.Error($"[GameOptions] SetNextGameDifficulty failed: {ex}");
             return false;
         }
     }
@@ -113,14 +113,14 @@ internal static unsafe class GameOptionsApi
             if (verbose)
             {
                 var check = opts.newGameOptions;
-                Mod.LogDebug($"[CairnGameApi] NewGameOptions skip-only set: skipTut={check.skipTutorials} " +
+                Mod.LogDebug($"[GameOptions] NewGameOptions skip-only set: skipTut={check.skipTutorials} " +
                     $"skipPra={check.skipPractice} assist={check.assistEnabled} (difficulty preserved={check.currentSelectedDifficulty})");
             }
             return true;
         }
         catch (Exception ex)
         {
-            Mod.Log.Error($"[CairnGameApi] SetNextGameSkipOptions failed: {ex}");
+            Mod.Log.Error($"[GameOptions] SetNextGameSkipOptions failed: {ex}");
             return false;
         }
     }

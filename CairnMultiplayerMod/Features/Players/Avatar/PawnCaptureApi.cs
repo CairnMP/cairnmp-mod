@@ -203,7 +203,7 @@ internal static unsafe class PawnCaptureApi
             if (!_localPlayerFallbackCaptureLogged)
             {
                 _localPlayerFallbackCaptureLogged = true;
-                Mod.Log.Warning($"[CairnGameApi] Local player NetFrame fallback capture active bones={relativeCount}");
+                Mod.Log.Warning($"[PawnCapture] Local player NetFrame fallback capture active bones={relativeCount}");
             }
 
             return true;
@@ -281,7 +281,7 @@ internal static unsafe class PawnCaptureApi
         if (now - lastLogAt < CaptureFailureLogIntervalSeconds) return;
 
         lastLogAt = now;
-        Mod.Log.Warning($"[CairnGameApi] Capture {target} NetFrame unavailable: {reason}");
+        Mod.Log.Warning($"[PawnCapture] Capture {target} NetFrame unavailable: {reason}");
     }
 
     private static NetplayPawnCapture TryGetTypedPawnCapture()
@@ -297,13 +297,13 @@ internal static unsafe class PawnCaptureApi
                                           mc.GetComponentInChildren<NetplayPawnCapture>(true);
                 if (_typedPawnCaptureCached != null)
                 {
-                    Mod.LogDebug($"[CairnGameApi] Typed player NetplayPawnCapture found on '{_typedPawnCaptureCached.gameObject.name}'");
+                    Mod.LogDebug($"[PawnCapture] Typed player NetplayPawnCapture found on '{_typedPawnCaptureCached.gameObject.name}'");
                     return _typedPawnCaptureCached;
                 }
             }
             catch (Exception ex)
             {
-                Mod.Log.Warning($"[CairnGameApi] Typed player capture lookup failed: {ex.Message}");
+                Mod.Log.Warning($"[PawnCapture] Typed player capture lookup failed: {ex.Message}");
             }
         }
 
@@ -333,13 +333,13 @@ internal static unsafe class PawnCaptureApi
                 if (capture.target != target) continue;
 
                 cache = capture;
-                Mod.LogDebug($"[CairnGameApi] Typed {target} NetplayPawnCapture found on '{capture.gameObject.name}'");
+                Mod.LogDebug($"[PawnCapture] Typed {target} NetplayPawnCapture found on '{capture.gameObject.name}'");
                 return capture;
             }
         }
         catch (Exception ex)
         {
-            Mod.Log.Warning($"[CairnGameApi] Typed {target} capture scan failed: {ex.Message}");
+            Mod.Log.Warning($"[PawnCapture] Typed {target} capture scan failed: {ex.Message}");
         }
 
         return null;

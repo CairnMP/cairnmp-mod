@@ -83,7 +83,7 @@ internal static unsafe class NetplaySetFramePatch
             if (playerOriginal == null || climbotOriginal == null || playerPrefix == null || climbotPrefix == null)
             {
                 _netplaySetFramePatchFailed = true;
-                Mod.Log.Warning("[CairnGameApi] Netplay SetFrame patch methods were not found");
+                Mod.Log.Warning("[SetFramePatch] Netplay SetFrame patch methods were not found");
                 return;
             }
 
@@ -91,12 +91,12 @@ internal static unsafe class NetplaySetFramePatch
             NetplaySetFrameHarmony.Patch(climbotOriginal, prefix: new HarmonyMethod(climbotPrefix));
 
             _netplaySetFramePatchInstalled = true;
-            Mod.LogDebug("[CairnGameApi] Netplay SetFrame patches installed");
+            Mod.LogDebug("[SetFramePatch] Netplay SetFrame patches installed");
         }
         catch (Exception ex)
         {
             _netplaySetFramePatchFailed = true;
-            Mod.Log.Warning($"[CairnGameApi] Netplay SetFrame patch install failed: {ex.Message}");
+            Mod.Log.Warning($"[SetFramePatch] Netplay SetFrame patch install failed: {ex.Message}");
         }
     }
 
@@ -110,7 +110,7 @@ internal static unsafe class NetplaySetFramePatch
         }
         catch (Exception ex)
         {
-            Mod.Log.Warning($"[CairnGameApi] Netplay SetFrame patch uninstall failed: {ex.Message}");
+            Mod.Log.Warning($"[SetFramePatch] Netplay SetFrame patch uninstall failed: {ex.Message}");
         }
         finally
         {
@@ -238,7 +238,7 @@ internal static unsafe class NetplaySetFramePatch
         }
         catch (Exception ex)
         {
-            Mod.Log.Warning($"[CairnGameApi] NetFrame layout lookup failed, using fallback offsets: {ex.Message}");
+            Mod.Log.Warning($"[SetFramePatch] NetFrame layout lookup failed, using fallback offsets: {ex.Message}");
         }
 
         _netFrameLayoutReady = true;
@@ -269,7 +269,7 @@ internal static unsafe class NetplaySetFramePatch
         }
         catch (Exception ex)
         {
-            Mod.Log.Warning($"[CairnGameApi] Remote player layout lookup failed, using fallback offsets: {ex.Message}");
+            Mod.Log.Warning($"[SetFramePatch] Remote player layout lookup failed, using fallback offsets: {ex.Message}");
         }
 
         _remotePlayerLayoutReady = true;
@@ -295,7 +295,7 @@ internal static unsafe class NetplaySetFramePatch
         }
         catch (Exception ex)
         {
-            Mod.Log.Warning($"[CairnGameApi] Remote climbot layout lookup failed, using fallback offsets: {ex.Message}");
+            Mod.Log.Warning($"[SetFramePatch] Remote climbot layout lookup failed, using fallback offsets: {ex.Message}");
         }
 
         _remoteClimbotLayoutReady = true;
@@ -328,14 +328,14 @@ internal static unsafe class NetplaySetFramePatch
     {
         if (_netplaySetFramePathLogged) return;
         _netplaySetFramePathLogged = true;
-        Mod.LogDebug("[CairnGameApi] Native SetFrame bypass active for remote NetFrames");
+        Mod.LogDebug("[SetFramePatch] Native SetFrame bypass active for remote NetFrames");
     }
 
     private static void LogPatchedSetFrameFailureOnce(string label, Exception ex)
     {
         if (_netplaySetFramePatchFailureLogged) return;
         _netplaySetFramePatchFailureLogged = true;
-        Mod.Log.Warning($"[CairnGameApi] Patched {label} SetFrame failed: {ex.Message}");
+        Mod.Log.Warning($"[SetFramePatch] Patched {label} SetFrame failed: {ex.Message}");
     }
 
     private static void LogFrameLayoutsOnce()
@@ -345,7 +345,7 @@ internal static unsafe class NetplaySetFramePatch
 
         _netplayFrameLayoutLogged = true;
         Mod.LogDebug(
-            "[CairnGameApi] NetFrame patch offsets " +
+            "[SetFramePatch] NetFrame patch offsets " +
             $"frame(valid=0x{_netFrameIsValidOffset:X}, flags=0x{_netFrameFlagsOffset:X}, positions=0x{_netFramePositionsOffset:X}, eulers=0x{_netFrameEulersOffset:X}) " +
             $"player(id=0x{_remotePlayerIdOffset:X}, initialized=0x{_remotePlayerInitializedOffset:X}, frame=0x{_remotePlayerFrameOffset:X}) " +
             $"climbot(owner=0x{_remoteClimbotOwnerIdOffset:X}, frame=0x{_remoteClimbotFrameOffset:X})");

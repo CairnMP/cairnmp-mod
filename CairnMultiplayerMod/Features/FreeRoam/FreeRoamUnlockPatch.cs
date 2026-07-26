@@ -68,7 +68,7 @@ internal static unsafe class FreeRoamUnlockPatch
             if (postfix.method == null)
             {
                 _freeRoamUnlockFailed = true;
-                Mod.Log.Warning("[CairnGameApi] FreeRoam unlock: postfix method not found");
+                Mod.Log.Warning("[FreeRoam] FreeRoam unlock: postfix method not found");
                 return;
             }
 
@@ -80,7 +80,7 @@ internal static unsafe class FreeRoamUnlockPatch
             if (getter == null)
             {
                 _freeRoamUnlockFailed = true;
-                Mod.Log.Warning("[CairnGameApi] FreeRoam unlock: EnableFreeRoamFeature getter not found");
+                Mod.Log.Warning("[FreeRoam] FreeRoam unlock: EnableFreeRoamFeature getter not found");
                 return;
             }
 
@@ -102,16 +102,16 @@ internal static unsafe class FreeRoamUnlockPatch
             }
             else
             {
-                Mod.Log.Warning("[CairnGameApi] FreeRoam unlock: InitializeButtons method not found (rebuild hook skipped)");
+                Mod.Log.Warning("[FreeRoam] FreeRoam unlock: InitializeButtons method not found (rebuild hook skipped)");
             }
 
             _freeRoamUnlockInstalled = true;
-            Mod.Log.Msg("[CairnGameApi] FreeRoam feature unlocked (EnableFreeRoamFeature forced true)");
+            Mod.Log.Msg("[FreeRoam] FreeRoam feature unlocked (EnableFreeRoamFeature forced true)");
         }
         catch (Exception ex)
         {
             _freeRoamUnlockFailed = true;
-            Mod.Log.Warning($"[CairnGameApi] FreeRoam unlock patch install failed: {ex.Message}");
+            Mod.Log.Warning($"[FreeRoam] FreeRoam unlock patch install failed: {ex.Message}");
         }
     }
 
@@ -128,7 +128,7 @@ internal static unsafe class FreeRoamUnlockPatch
         if (TrySetFreeRoamTweakableField(true))
         {
             _freeRoamFieldForced = true;
-            Mod.LogDebug("[CairnGameApi] FreeRoam tweakable field forced true on instance");
+            Mod.LogDebug("[FreeRoam] FreeRoam tweakable field forced true on instance");
         }
     }
 
@@ -147,7 +147,7 @@ internal static unsafe class FreeRoamUnlockPatch
         if (ApplyFreeRoamModeVisible(out bool found, out int changed, out int total, out bool stillHidden))
         {
             _freeRoamDifficultyUnhidden = true;
-            Mod.LogDebug($"[CairnGameApi] FreeRoam difficulty unhide: found={found} changed={changed} stillHidden={stillHidden} (total modes={total})");
+            Mod.LogDebug($"[FreeRoam] FreeRoam difficulty unhide: found={found} changed={changed} stillHidden={stillHidden} (total modes={total})");
         }
     }
 
@@ -193,7 +193,7 @@ internal static unsafe class FreeRoamUnlockPatch
         }
         catch (Exception ex)
         {
-            Mod.Log.Warning($"[CairnGameApi] FreeRoam difficulty unhide failed: {ex.Message}");
+            Mod.Log.Warning($"[FreeRoam] FreeRoam difficulty unhide failed: {ex.Message}");
             return true; // don't loop indefinitely on error
         }
     }
@@ -214,7 +214,7 @@ internal static unsafe class FreeRoamUnlockPatch
         }
         catch (Exception ex)
         {
-            Mod.Log.Warning($"[CairnGameApi] FreeRoam tweakable field set({value}) failed: {ex.Message}");
+            Mod.Log.Warning($"[FreeRoam] FreeRoam tweakable field set({value}) failed: {ex.Message}");
             return false;
         }
     }
@@ -242,7 +242,7 @@ internal static unsafe class FreeRoamUnlockPatch
             if (!_initButtonsPrefixLogged)
             {
                 _initButtonsPrefixLogged = true;
-                Mod.LogDebug($"[CairnGameApi] InitializeButtons prefix fired (fieldSet={fieldSet} FreeRoam found={found} changed={changed} stillHidden={stillHidden} total={total})");
+                Mod.LogDebug($"[FreeRoam] InitializeButtons prefix fired (fieldSet={fieldSet} FreeRoam found={found} changed={changed} stillHidden={stillHidden} total={total})");
             }
         }
     }

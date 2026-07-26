@@ -158,7 +158,7 @@ public partial class Mod : MelonMod
         };
         _lobby.OnMembersChanged += () =>
         {
-            // The ConnectedScreen rebuilds its list on every Tick from _lobby.Members,
+            // The panel rebuilds its member list on every Tick from _lobby.Members,
             // but we also push a short status so the footer reflects the event.
             if (!_lobby.IsInLobby) return;
             _network.RefreshSteamLobbyMembers(_lobby);

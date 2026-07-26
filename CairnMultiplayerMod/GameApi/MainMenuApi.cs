@@ -53,14 +53,14 @@ internal static unsafe class MainMenuApi
             var klass = _mainMenuKlassPtr;
             if (klass == IntPtr.Zero)
             {
-                Mod.Log.Error("[CairnGameApi] MainMenu class not found");
+                Mod.Log.Error("[MainMenu] MainMenu class not found");
                 return false;
             }
 
             var field = IL2CPP.GetIl2CppField(klass, "<ForceStepTransition>k__BackingField");
             if (field == IntPtr.Zero)
             {
-                Mod.Log.Error("[CairnGameApi] ForceStepTransition backing field not found");
+                Mod.Log.Error("[MainMenu] ForceStepTransition backing field not found");
                 return false;
             }
 
@@ -79,12 +79,12 @@ internal static unsafe class MainMenuApi
             *(int*)(buf + 4) = (int)step;
             IL2CPP.il2cpp_field_static_set_value(field, buf);
 
-            Mod.LogDebug($"[CairnGameApi] Forced MainMenu step -> {step} (field=0x{field:X})");
+            Mod.LogDebug($"[MainMenu] Forced MainMenu step -> {step} (field=0x{field:X})");
             return true;
         }
         catch (Exception ex)
         {
-            Mod.Log.Error($"[CairnGameApi] ForceMainMenuStep({step}) failed: {ex}");
+            Mod.Log.Error($"[MainMenu] ForceMainMenuStep({step}) failed: {ex}");
             return false;
         }
     }

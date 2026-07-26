@@ -18,7 +18,7 @@ namespace CairnMultiplayerMod.Features.Players.Avatar;
 /// GameObjects `leftLight`/`rightLight` (the actual glow) + a `mainRenderer` (the mesh),
 /// managed automatically from the inventory. The ghost does NOT have this component -> we
 /// attach two fallback Lights to the ghost's hand bones (LeftHand/RightHand via the
-/// humanoid Animator, with a bone-name fallback like FingerSync). We don't reproduce the
+/// humanoid Animator, with a bone-name fallback like FingerApi). We don't reproduce the
 /// mesh (skeleton rebind is too fragile): the glow on the hands is enough to fix the bug.
 /// </summary>
 internal static unsafe class CosmeticApi
@@ -183,7 +183,7 @@ internal static unsafe class CosmeticApi
 
     /// <summary>
     /// Resolves the ghost's hand bones: humanoid Animator first, name-based fallback
-    /// if the rig is generic (see FingerSync, Cairn's rig isn't always humanoid).
+    /// if the rig is generic (see FingerApi, Cairn's rig isn't always humanoid).
     /// </summary>
     private static bool TryGetGhostHandBones(GameObject go, out Transform left, out Transform right)
     {
@@ -415,7 +415,7 @@ internal static unsafe class CosmeticApi
     // set a mode on it. So we reparent the ghost's stick mesh: onto loc_Stick (under bn_r_Wrist,
     // already synced by the NetFrame -> follows the wrist) when in hand, or onto its original bag
     // bone (bn_Bag_Up, native stowed position) otherwise. The mode is carried PACKED in the lamp's
-    // int (LampSync) -> no new network packet.
+    // int (LampApi) -> no new network packet.
 
     private const int LightStickModeLocator = 1;   // LightStickMode.Locator = in hand
 

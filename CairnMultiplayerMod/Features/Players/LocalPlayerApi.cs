@@ -46,11 +46,11 @@ internal static unsafe class LocalPlayerApi
             var field = IL2CPP.GetIl2CppField(klass, "<MCGameObject>k__BackingField");
             if (field == IntPtr.Zero)
             {
-                Mod.Log.Warning("[CairnGameApi] <MCGameObject>k__BackingField not found on PawnManager");
+                Mod.Log.Warning("[LocalPlayer] <MCGameObject>k__BackingField not found on PawnManager");
                 return false;
             }
             _mcGameObjectOffset = (int)IL2CPP.il2cpp_field_get_offset(field);
-            Mod.LogDebug($"[CairnGameApi] MCGameObject offset = 0x{_mcGameObjectOffset:X}");
+            Mod.LogDebug($"[LocalPlayer] MCGameObject offset = 0x{_mcGameObjectOffset:X}");
         }
 
         IntPtr goPtr = *(IntPtr*)((byte*)pm.Pointer + _mcGameObjectOffset);
@@ -60,7 +60,7 @@ internal static unsafe class LocalPlayerApi
             // every ~3 seconds so we know we're still polling.
             _nullReadCount++;
             if (_nullReadCount == 1 || _nullReadCount % 30 == 0)
-                Mod.LogDebug($"[CairnGameApi] MC still null (try #{_nullReadCount})");
+                Mod.LogDebug($"[LocalPlayer] MC still null (try #{_nullReadCount})");
             return false;
         }
 
@@ -75,7 +75,7 @@ internal static unsafe class LocalPlayerApi
         if (!_mcResolvedOnce)
         {
             _mcResolvedOnce = true;
-            Mod.LogDebug($"[CairnGameApi] MC transform RESOLVED @ ({position.x:F1}, {position.y:F1}, {position.z:F1})  after {_nullReadCount} null reads");
+            Mod.LogDebug($"[LocalPlayer] MC transform RESOLVED @ ({position.x:F1}, {position.y:F1}, {position.z:F1})  after {_nullReadCount} null reads");
         }
         return true;
     }
