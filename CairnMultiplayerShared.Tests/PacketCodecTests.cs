@@ -80,7 +80,8 @@ public class ProtocolVersionTests
     {
         // When you bump Protocol.Version, update this value AND the release notes
         // to signal to clients that they need to update.
-        Assert.Equal(7, Protocol.Version);
+        // 8: pings left the fixed packet list for the feature framework (ids 12 and 78 freed).
+        Assert.Equal(8, Protocol.Version);
     }
 
     [Fact]
@@ -99,66 +100,6 @@ public class ProtocolVersionTests
         // These values come from the Cairn game — if they change, existing packets
         // become unreadable. Safeguard against an accidental refactor.
         Assert.Equal(expected, (int)d);
-    }
-}
-
-public class PingPacketTests
-{
-    [Fact]
-    public void ClientPingPlaced_RoundTrips()
-    {
-        var pkt = new ClientPingPlaced { PosX = 12.5f, PosY = -3.25f, PosZ = 1024.75f };
-
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-            pkt.Serialize(w);
-
-        ms.Position = 0;
-        using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: false);
-        var got = new ClientPingPlaced();
-        got.Deserialize(r);
-
-        Assert.Equal(pkt.PosX, got.PosX);
-        Assert.Equal(pkt.PosY, got.PosY);
-        Assert.Equal(pkt.PosZ, got.PosZ);
-    }
-
-    [Fact]
-    public void ServerPingPlaced_RoundTrips()
-    {
-        var pkt = new ServerPingPlaced
-        {
-            FromPlayerId = 7,
-            PosX = -100.5f,
-            PosY = 64f,
-            PosZ = 0.125f,
-        };
-
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-            pkt.Serialize(w);
-
-        ms.Position = 0;
-        using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: false);
-        var got = new ServerPingPlaced();
-        got.Deserialize(r);
-
-        Assert.Equal(pkt.FromPlayerId, got.FromPlayerId);
-        Assert.Equal(pkt.PosX, got.PosX);
-        Assert.Equal(pkt.PosY, got.PosY);
-        Assert.Equal(pkt.PosZ, got.PosZ);
-    }
-
-    [Fact]
-    public void ClientPingPlaced_FramesThroughCodec()
-    {
-        // Verifies the full encoding (length + PacketId + fields) via PacketCodec.Frame.
-        var pkt = new ClientPingPlaced { PosX = 1f, PosY = 2f, PosZ = 3f };
-        var frame = PacketCodec.Frame(PacketId.ClientPingPlaced, pkt);
-
-        // [uint16 len][byte id][3 floats] => 2 + 1 + 12 = 15 bytes, payload = 13.
-        Assert.Equal(15, frame.Length);
-        Assert.Equal((byte)PacketId.ClientPingPlaced, frame[2]);
     }
 }
 

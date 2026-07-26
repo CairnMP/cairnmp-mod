@@ -11,6 +11,13 @@
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <GenerateDependencyFile>false</GenerateDependencyFile>
     <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+
+    <!--
+      Ecrit sur disque le code produit par le generateur (obj/generated, gitignore) : la
+      liste des features reste lisible et deboguable au lieu d'etre une boite noire.
+    -->
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>obj/generated</CompilerGeneratedFilesOutputPath>
   </PropertyGroup>
 
   <!-- References MelonLoader -->
@@ -156,6 +163,17 @@
   <!-- Protocole de paquets partage par le mod et les tests. -->
   <ItemGroup>
     <ProjectReference Include="..\CairnMultiplayerShared\CairnMultiplayerShared.csproj" />
+  </ItemGroup>
+
+  <!--
+    Generateur de la liste des features (Framework/). Tourne a la compilation : il ecrit
+    FeatureRegistry a partir des classes derivant de MultiplayerFeature. Rien n'est embarque
+    dans le mod (ReferenceOutputAssembly=false) et aucune reflexion n'a lieu en jeu.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\CairnMultiplayerMod.Generators\CairnMultiplayerMod.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <!--

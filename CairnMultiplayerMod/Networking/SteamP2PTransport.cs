@@ -389,25 +389,6 @@ public partial class NetworkManager
                 BroadcastSteamServerPacket(PacketId.ServerHandPose, outPkt, exceptSteamId: remoteSteamId, reliable: true);
                 break;
             }
-            case PacketId.ClientPingPlaced:
-            {
-                var pkt = new ClientPingPlaced();
-                pkt.Deserialize(r);
-                if (!IsValidPose(pkt.PosX, pkt.PosY, pkt.PosZ, 0f)) break;
-
-                var playerId = EnsureSteamRemotePlayer(remoteSteamId);
-                var outPkt = new ServerPingPlaced
-                {
-                    FromPlayerId = playerId,
-                    PosX = pkt.PosX,
-                    PosY = pkt.PosY,
-                    PosZ = pkt.PosZ,
-                };
-                // Pings are ephemeral: no snapshot for late-joiners.
-                OnPingPlaced?.Invoke(outPkt);
-                BroadcastSteamServerPacket(PacketId.ServerPingPlaced, outPkt, exceptSteamId: remoteSteamId, reliable: true);
-                break;
-            }
             case PacketId.ClientDisconnect:
             {
                 var playerId = EnsureSteamRemotePlayer(remoteSteamId);
@@ -600,33 +581,6 @@ public partial class NetworkManager
         }
 
         SendSteamPacketToHost(PacketId.ClientHandPose, new ClientHandPose { Packed = packed }, reliable: true);
-    }
-
-    private void SendSteamPingPlaced(Vector3 pos)
-    {
-        if (!IsHandshakeComplete) return;
-        if (!IsValidPose(pos.x, pos.y, pos.z, 0f)) return;
-
-        // The host broadcasts directly to the others; the sender already shows its
-        // own ping locally (no echo to itself via BroadcastSteamServerPacket).
-        if (_steamLobby != null && _steamLobby.IsHost)
-        {
-            BroadcastSteamServerPacket(PacketId.ServerPingPlaced, new ServerPingPlaced
-            {
-                FromPlayerId = LocalPlayerId,
-                PosX = pos.x,
-                PosY = pos.y,
-                PosZ = pos.z,
-            }, exceptSteamId: 0, reliable: true);
-            return;
-        }
-
-        SendSteamPacketToHost(PacketId.ClientPingPlaced, new ClientPingPlaced
-        {
-            PosX = pos.x,
-            PosY = pos.y,
-            PosZ = pos.z,
-        }, reliable: true);
     }
 
     private void SendSteamChat(string message)

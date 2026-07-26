@@ -92,6 +92,9 @@ internal sealed class FeatureHost
 
     internal void NotifySceneReset() => Dispatch(builder => builder.SceneResetHandlers, "scene-reset");
 
+    /// <summary>Lets the features draw. Called from OnGUI.</summary>
+    internal void DrawHud() => Dispatch(builder => builder.DrawHudHandlers, "draw-hud");
+
     private void Dispatch(Func<FeatureBuilder, IReadOnlyList<Action>> select, string what)
     {
         foreach (var registered in _features)

@@ -92,7 +92,6 @@ public partial class NetworkManager : IDisposable
     public event Action<ServerPitonPlaced> OnPitonPlaced;
     public event Action<ServerPitonRemoved> OnPitonRemoved;
     public event Action<ServerWeatherState> OnWeatherState;
-    public event Action<ServerPingPlaced> OnPingPlaced;
     public event Action<ServerHandPose> OnHandPose;
     public event Action<ServerTimeState> OnTimeState;
 
@@ -226,12 +225,6 @@ public partial class NetworkManager : IDisposable
 
         if (IsSteamTransportActive)
             SendSteamHandPose(packed);
-    }
-
-    public void SendPingPlaced(UnityEngine.Vector3 pos)
-    {
-        if (IsSteamTransportActive)
-            SendSteamPingPlaced(pos);
     }
 
     public void SendChat(string message)

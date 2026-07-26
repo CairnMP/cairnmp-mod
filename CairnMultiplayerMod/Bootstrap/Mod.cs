@@ -29,6 +29,9 @@ public partial class Mod : MelonMod
     private SteamLobbyManager _lobby;
     private IMultiplayerPanel _panel;
     private ChatController _chat;
+
+    /// <summary>In-game chat, exposed so features can stay out of the way while typing.</summary>
+    internal ChatController Chat => _chat;
     private string _currentScene;
     private readonly HashSet<string> _loadedScenes = new(StringComparer.Ordinal);
     private string _lastGameplayScene;
@@ -174,7 +177,6 @@ public partial class Mod : MelonMod
             _network.Disconnect();
             WeatherApi.ResetRemoteState();
             RemotePlayerManager.ClearAll();
-            PingMarkerManager.ClearAll();
             Rope.ClearLinks();
             Bivouac.ForceResume();
             Features.NotifySessionEnded();
@@ -263,10 +265,6 @@ public partial class Mod : MelonMod
 
             WeatherApi.ApplyRemoteWeather(pkt.State);
         };
-
-        // Ping marker placed by another player: display a colored HUD waypoint.
-        _network.OnPingPlaced += pkt =>
-            PingMarkerManager.Spawn(pkt.FromPlayerId, new UnityEngine.Vector3(pkt.PosX, pkt.PosY, pkt.PosZ));
 
         // Authoritative day time received from the host: applied every frame client-side.
         _network.OnTimeState += pkt => Clock.ApplyRemoteTimeState(pkt);
@@ -434,13 +432,6 @@ public partial class Mod : MelonMod
         // before the bivouac early-return, like the other always-on ticks below.
         Features.Tick(FeaturePhase.Always);
 
-        // Expire the ping markers (always runs, even during a bivouac).
-        PingMarkerManager.Update();
-
-        // Ping placement in free camera — runs before the gameplay suspension because
-        // freecam/photo mode can be treated as non-gameplay.
-        if (!chatTyping) TickPingInput();
-
         // Name toggle (N) — placed BEFORE the bivouac/photo suspension return so it stays
         // reachable in photo mode (where gameplay is suspended).
         if (!chatTyping) TickNameToggleInput();
@@ -563,43 +554,6 @@ public partial class Mod : MelonMod
         return fallback;
     }
 
-    private float _pingCooldownUntil;
-
-    /// <summary>
-    /// In free camera, a left click (or R1 PS5 / RB Xbox = rightShoulder) places a
-    /// ping at the aimed spot. Immediate local display + network send.
-    /// </summary>
-    private void TickPingInput()
-    {
-        if (_network == null)
-            return;
-
-        if (!FreecamApi.TryIsActive(out var freecamActive) || !freecamActive)
-            return;
-
-        if (Time.unscaledTime < _pingCooldownUntil)
-            return;
-
-        var pressed = Mouse.current?.leftButton.wasPressedThisFrame == true
-                      || Gamepad.current?.rightShoulder.wasPressedThisFrame == true;
-        if (!pressed)
-            return;
-
-        // We always aim in the camera's direction (screen center) — simple and
-        // consistent for keyboard/mouse as well as gamepad.
-        if (!FreecamApi.TryComputePingPoint(out var point))
-            return;
-
-        _pingCooldownUntil = Time.unscaledTime + Protocol.PingCooldownSeconds;
-
-        // Immediate local display (visible even in solo). The sender ignores the server
-        // echo of its own id. The network send only happens if we're connected.
-        PingMarkerManager.Spawn(_network.LocalPlayerId, point);
-        if (_network.IsHandshakeComplete)
-            _network.SendPingPlaced(point);
-        LoggerInstance.Msg($"[Ping] Placed @ ({point.x:F1},{point.y:F1},{point.z:F1})");
-    }
-
     /// <summary>
     /// N key: toggles the display of remote players' name plates. Works both in game
     /// and in photo mode (the hint then appears at the bottom left via PhotoModeHud).
@@ -629,7 +583,7 @@ public partial class Mod : MelonMod
     public override void OnGUI()
     {
         _panel.OnGUI();
-        PingMarkerManager.OnGUI();
+        Features?.DrawHud();
         _chat?.OnGUI();
     }
 

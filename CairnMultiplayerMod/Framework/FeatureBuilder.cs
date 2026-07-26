@@ -32,6 +32,7 @@ internal sealed class FeatureBuilder
     private readonly List<Action> _onSessionStarted = new();
     private readonly List<Action> _onSessionEnded = new();
     private readonly List<Action> _onSceneReset = new();
+    private readonly List<Action> _onDrawHud = new();
 
     internal FeatureBuilder(ExtensionRuntime runtime, MultiplayerExtension extension, string featureId)
     {
@@ -44,6 +45,7 @@ internal sealed class FeatureBuilder
     internal IReadOnlyList<Action> SessionStartedHandlers => _onSessionStarted;
     internal IReadOnlyList<Action> SessionEndedHandlers => _onSessionEnded;
     internal IReadOnlyList<Action> SceneResetHandlers => _onSceneReset;
+    internal IReadOnlyList<Action> DrawHudHandlers => _onDrawHud;
 
     // ── Network ───────────────────────────────────────────────────────────────
 
@@ -127,4 +129,9 @@ internal sealed class FeatureBuilder
     /// game destroys and recreates them, and stale pointers crash under IL2CPP.</summary>
     public void OnSceneReset(Action handler)
         => _onSceneReset.Add(handler ?? throw new ArgumentNullException(nameof(handler)));
+
+    /// <summary>Draws on the screen (IMGUI, from OnGUI). Runs several times per frame — check
+    /// <c>Event.current.type</c> and keep it cheap.</summary>
+    public void OnDrawHud(Action handler)
+        => _onDrawHud.Add(handler ?? throw new ArgumentNullException(nameof(handler)));
 }

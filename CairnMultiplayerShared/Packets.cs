@@ -373,26 +373,6 @@ public struct ClientLampState : IPacket
 }
 
 /// <summary>
-/// World position of a ping marker placed by the local player in freecam.
-/// The lifetime is a client-side constant (Protocol.PingLifetimeSeconds) and the
-/// color is derived from the player id, so nothing else is transmitted.
-/// </summary>
-public struct ClientPingPlaced : IPacket
-{
-    public float PosX, PosY, PosZ;
-
-    public void Serialize(BinaryWriter w)
-    {
-        w.Write(PosX); w.Write(PosY); w.Write(PosZ);
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        PosX = r.ReadSingle(); PosY = r.ReadSingle(); PosZ = r.ReadSingle();
-    }
-}
-
-/// <summary>
 /// Finger pose of the local player: 30 bones compressed smallest-three
 /// (Protocol.HandPosePackedSize bytes). Sent only on change.
 /// </summary>
@@ -729,28 +709,6 @@ public struct ServerHandPose : IPacket
         PlayerId = r.ReadInt32();
         int len = r.ReadUInt16();
         Packed = r.ReadBytes(len);
-    }
-}
-
-/// <summary>
-/// Host relay of a ping marker to the other players. FromPlayerId is used to color
-/// the marker (same palette as the ghosts) on the receiving side.
-/// </summary>
-public struct ServerPingPlaced : IPacket
-{
-    public int FromPlayerId;
-    public float PosX, PosY, PosZ;
-
-    public void Serialize(BinaryWriter w)
-    {
-        w.Write(FromPlayerId);
-        w.Write(PosX); w.Write(PosY); w.Write(PosZ);
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        FromPlayerId = r.ReadInt32();
-        PosX = r.ReadSingle(); PosY = r.ReadSingle(); PosZ = r.ReadSingle();
     }
 }
 

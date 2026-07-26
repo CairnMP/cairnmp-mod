@@ -6,7 +6,8 @@ namespace CairnMultiplayer.Shared;
 /// </summary>
 public static class Protocol
 {
-    public const int Version = 7;
+    // 8: pings left the fixed packet list for the feature framework, freeing ids 12 and 78.
+    public const int Version = 8;
     public const string ConnectionKey = "cairnmp";
     public const int DefaultPort = 14000;
 
@@ -99,7 +100,9 @@ public enum PacketId : byte
     ClientClimbotFrame = 9,
     ClientWeatherState = 10,
     ClientLampState = 11,
-    ClientPingPlaced = 12,
+    // 12 was ClientPingPlaced — pings moved to the feature framework (Features/World/).
+    // Left reserved on purpose: reusing the number would make an old client's ping look
+    // like whatever packet takes its place.
     ClientHandPose = 13,
     ClientSleepState = 14,
     ClientRopeClip = 15,
@@ -122,7 +125,7 @@ public enum PacketId : byte
     ServerClimbotFrame = 75,
     ServerWeatherState = 76,
     ServerLampState = 77,
-    ServerPingPlaced = 78,
+    // 78 was ServerPingPlaced — see the note on 12. Reserved, do not reuse.
     ServerHandPose = 79,
     ServerTimeState = 80,
     ServerTeleport = 81,

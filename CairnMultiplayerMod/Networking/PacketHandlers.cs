@@ -125,15 +125,6 @@ public partial class NetworkManager
                 }
                 break;
             }
-            case PacketId.ServerPingPlaced:
-            {
-                var pkt = new ServerPingPlaced();
-                pkt.Deserialize(r);
-                if (!IsValidPose(pkt.PosX, pkt.PosY, pkt.PosZ, 0f))
-                    break;
-                OnPingPlaced?.Invoke(pkt);
-                break;
-            }
             case PacketId.ServerHandPose:
             {
                 var pkt = new ServerHandPose();
