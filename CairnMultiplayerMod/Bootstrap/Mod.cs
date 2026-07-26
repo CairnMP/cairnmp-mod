@@ -98,6 +98,7 @@ public partial class Mod : MelonMod
         CrashReporter.Init();
         Il2CppExceptionCapture.Install();
         ModConfig.Register();
+        VerboseLogging = ModConfig.VerboseLogging.Value;
         NetplaySetFramePatch.InstallNetplaySetFramePatch();
         BivouacDiagnostics.InstallBivouacDiagnosticsPatches();
         RopeTeamFallPatch.InstallRopeTeamFallPatch();
