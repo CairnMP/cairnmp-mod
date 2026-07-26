@@ -195,6 +195,8 @@ public partial class Mod : MelonMod
             _panel.SetStatus($"Connected to {_network.ServerName} (id={_network.LocalPlayerId})", true);
             Features.NotifySessionStarted();
         };
+        _network.OnFeatureStream += (fromPlayerId, channel, payload) =>
+            Features.DispatchStream(fromPlayerId, channel, payload);
         _network.OnHandshakeRejected += reason =>
             _panel.SetStatus($"Rejected: {reason}", false);
         _network.OnDisconnected += _ =>

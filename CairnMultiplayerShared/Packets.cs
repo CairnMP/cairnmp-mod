@@ -597,28 +597,6 @@ public struct ServerClimbotFrame : IPacket
 }
 
 
-/// <summary>Host relay of a player's finger pose to everyone else.</summary>
-public struct ServerHandPose : IPacket
-{
-    public int PlayerId;
-    public byte[] Packed;
-
-    public void Serialize(BinaryWriter w)
-    {
-        w.Write(PlayerId);
-        var bytes = Packed ?? Array.Empty<byte>();
-        w.Write((ushort)bytes.Length);
-        w.Write(bytes);
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        PlayerId = r.ReadInt32();
-        int len = r.ReadUInt16();
-        Packed = r.ReadBytes(len);
-    }
-}
-
 /// <summary>
 /// Teleport order sent by the host to ONE targeted client (the /bring command).
 /// The client moves its local character to (X,Y,Z) with the Yaw orientation.
@@ -665,5 +643,50 @@ public struct ServerRopeClip : IPacket
         FromPlayerId = r.ReadInt32();
         TargetPlayerId = r.ReadInt32();
         Clip = r.ReadBoolean();
+    }
+}
+
+/// <summary>
+/// A feature's real-time payload on its way to the host. Channel identifies which stream
+/// of which feature it belongs to (see FeatureStreamChannel), so adding a stream never
+/// costs a packet id — which matters, since these are the packets sent every frame.
+/// </summary>
+public struct ClientFeatureStream : IPacket
+{
+    public ushort Channel;
+    public byte[] Payload;
+
+    public void Serialize(BinaryWriter w)
+    {
+        w.Write(Channel);
+        PacketCodec.WriteBytes(w, Payload);
+    }
+
+    public void Deserialize(BinaryReader r)
+    {
+        Channel = r.ReadUInt16();
+        Payload = PacketCodec.ReadBytes(r);
+    }
+}
+
+/// <summary>Host relay of <see cref="ClientFeatureStream"/>, tagged with the sender.</summary>
+public struct ServerFeatureStream : IPacket
+{
+    public int FromPlayerId;
+    public ushort Channel;
+    public byte[] Payload;
+
+    public void Serialize(BinaryWriter w)
+    {
+        w.Write(FromPlayerId);
+        w.Write(Channel);
+        PacketCodec.WriteBytes(w, Payload);
+    }
+
+    public void Deserialize(BinaryReader r)
+    {
+        FromPlayerId = r.ReadInt32();
+        Channel = r.ReadUInt16();
+        Payload = PacketCodec.ReadBytes(r);
     }
 }

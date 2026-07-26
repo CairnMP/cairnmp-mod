@@ -80,8 +80,8 @@ public class ProtocolVersionTests
     {
         // When you bump Protocol.Version, update this value AND the release notes
         // to signal to clients that they need to update.
-        // 10: pings, chat, weather, time, sleep, lamp and cosmetics moved to the framework.
-        Assert.Equal(10, Protocol.Version);
+        // 11: finger poses joined the framework, on the shared real-time stream channel.
+        Assert.Equal(11, Protocol.Version);
     }
 
     [Fact]
@@ -105,48 +105,6 @@ public class ProtocolVersionTests
 
 public class HandPosePacketTests
 {
-    private static byte[] SamplePacked()
-    {
-        var bytes = new byte[Protocol.HandPosePackedSize];
-        for (int i = 0; i < bytes.Length; i++) bytes[i] = (byte)(i * 7 + 3);
-        return bytes;
-    }
-
-    [Fact]
-    public void ClientHandPose_RoundTrips()
-    {
-        var pkt = new ClientHandPose { Packed = SamplePacked() };
-
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-            pkt.Serialize(w);
-
-        ms.Position = 0;
-        using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: false);
-        var got = new ClientHandPose();
-        got.Deserialize(r);
-
-        Assert.Equal(pkt.Packed, got.Packed);
-    }
-
-    [Fact]
-    public void ServerHandPose_RoundTrips()
-    {
-        var pkt = new ServerHandPose { PlayerId = 42, Packed = SamplePacked() };
-
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-            pkt.Serialize(w);
-
-        ms.Position = 0;
-        using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: false);
-        var got = new ServerHandPose();
-        got.Deserialize(r);
-
-        Assert.Equal(pkt.PlayerId, got.PlayerId);
-        Assert.Equal(pkt.Packed, got.Packed);
-    }
-
     [Fact]
     public void HandPosePackedSize_MatchesFingerBoneCount()
     {
@@ -154,23 +112,6 @@ public class HandPosePacketTests
         Assert.Equal(38, Protocol.FingerBoneCount);
         Assert.Equal(Protocol.FingerBoneCount * QuaternionCodec.PackedSize, Protocol.HandPosePackedSize);
         Assert.Equal(152, Protocol.HandPosePackedSize);
-    }
-
-    [Fact]
-    public void ClientHandPose_NullPacked_SerializesAsEmpty()
-    {
-        var pkt = new ClientHandPose { Packed = null };
-
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-            pkt.Serialize(w);
-
-        ms.Position = 0;
-        using var r = new BinaryReader(ms);
-        var got = new ClientHandPose();
-        got.Deserialize(r);
-
-        Assert.Empty(got.Packed);
     }
 }
 

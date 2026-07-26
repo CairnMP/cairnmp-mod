@@ -26,7 +26,6 @@ public partial class NetworkManager
     private readonly Dictionary<ulong, string> _steamPlayerNames = new();
     private readonly Dictionary<ulong, double> _steamReliableForwardTimes = new();
     // Piton + lamp state moved into SteamAuthoritativeSession (Phase 3 steps 3-4).
-    private readonly Dictionary<int, byte[]> _steamHandPoseSnapshot = new();
     private readonly HashSet<ulong> _steamLoggedFirstClientPlayerFrame = new();
     private readonly HashSet<ulong> _steamLoggedFirstClientClimbotFrame = new();
     private Callback<P2PSessionRequest_t> _steamP2PSessionRequestCallback;
@@ -311,24 +310,21 @@ public partial class NetworkManager
                 // local ghost and rebroadcast except sender (Phase 3 step 3).
                 SteamSession.OnClientPacket(EnsureSteamRemotePlayer(remoteSteamId), id, r);
                 break;
-                        case PacketId.ClientHandPose:
+            case PacketId.ClientFeatureStream:
             {
-                var pkt = new ClientHandPose();
+                var pkt = new ClientFeatureStream();
                 pkt.Deserialize(r);
-                if (pkt.Packed == null || pkt.Packed.Length != Protocol.HandPosePackedSize) break;
-
                 var playerId = EnsureSteamRemotePlayer(remoteSteamId);
-                _steamHandPoseSnapshot[playerId] = pkt.Packed;
-                if (_remotePlayers.TryGetValue(playerId, out var rp))
+                var outPkt = new ServerFeatureStream
                 {
-                    rp.HandPosePacked = pkt.Packed;
-                    rp.HasHandPose = true;
-                }
-                var outPkt = new ServerHandPose { PlayerId = playerId, Packed = pkt.Packed };
-                OnHandPose?.Invoke(outPkt);
-                // Reliable: the pose is only sent on change, so we don't want
-                // a drop to leave the ghost's fingers frozen on the old pose.
-                BroadcastSteamServerPacket(PacketId.ServerHandPose, outPkt, exceptSteamId: remoteSteamId, reliable: true);
+                    FromPlayerId = playerId,
+                    Channel = pkt.Channel,
+                    Payload = pkt.Payload,
+                };
+                // The host applies it locally too, then relays to everyone but the sender.
+                OnFeatureStream?.Invoke(playerId, pkt.Channel, pkt.Payload);
+                BroadcastSteamServerPacket(PacketId.ServerFeatureStream, outPkt,
+                    exceptSteamId: remoteSteamId, reliable: false);
                 break;
             }
             case PacketId.ClientDisconnect:
@@ -450,23 +446,27 @@ public partial class NetworkManager
         SendSteamPacketToHost(PacketId.ClientPitonRemoved, new ClientPitonRemoved { PitonId = pitonId }, reliable: true);
     }
 
-    private void SendSteamHandPose(byte[] packed)
+    /// <summary>
+    /// Real-time feature payload. The host fans it out directly; a guest sends it to the
+    /// host, which relays. Same shape as the frame packets this replaces.
+    /// </summary>
+    private void SendSteamFeatureStream(ushort channel, byte[] payload, bool reliable)
     {
         if (!IsHandshakeComplete) return;
-        if (packed == null || packed.Length != Protocol.HandPosePackedSize) return;
 
         if (_steamLobby != null && _steamLobby.IsHost)
         {
-            _steamHandPoseSnapshot[LocalPlayerId] = packed;
-            BroadcastSteamServerPacket(PacketId.ServerHandPose, new ServerHandPose
+            BroadcastSteamServerPacket(PacketId.ServerFeatureStream, new ServerFeatureStream
             {
-                PlayerId = LocalPlayerId,
-                Packed = packed,
-            }, exceptSteamId: 0, reliable: true);
+                FromPlayerId = LocalPlayerId,
+                Channel = channel,
+                Payload = payload,
+            }, exceptSteamId: 0, reliable);
             return;
         }
 
-        SendSteamPacketToHost(PacketId.ClientHandPose, new ClientHandPose { Packed = packed }, reliable: true);
+        SendSteamPacketToHost(PacketId.ClientFeatureStream,
+            new ClientFeatureStream { Channel = channel, Payload = payload }, reliable);
     }
 
     private void SendSteamRopeClip(int targetPlayerId, bool clip)
@@ -519,12 +519,6 @@ public partial class NetworkManager
         // Pitons + lamps: official state held by the authoritative core. Weather and time
         // replay through the feature framework's own snapshot.
         SteamSession.SendSnapshotTo(EnsureSteamRemotePlayer(steamId));
-
-        foreach (var kv in _steamHandPoseSnapshot)
-        {
-            var handPkt = new ServerHandPose { PlayerId = kv.Key, Packed = kv.Value };
-            SendSteamPayload(target, BuildPayload(PacketId.ServerHandPose, handPkt), reliable: true);
-        }
 
         // Active rope links (late-joiner).
         foreach (var (a, b) in RopeLinkState.Links())
@@ -768,7 +762,6 @@ public partial class NetworkManager
         _steamPlayerNames.Clear();
         _steamReliableForwardTimes.Clear();
         _steamSession?.Reset(); // pitons + lamps
-        _steamHandPoseSnapshot.Clear();
         _steamLoggedFirstClientPlayerFrame.Clear();
         _steamLoggedFirstClientClimbotFrame.Clear();
         _lastReliablePresenceSentAt = 0;

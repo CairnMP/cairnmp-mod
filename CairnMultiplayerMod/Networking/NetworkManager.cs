@@ -85,7 +85,9 @@ public partial class NetworkManager : IDisposable
     public event Action<ServerStartGame> OnStartGameReceived;
     public event Action<ServerPitonPlaced> OnPitonPlaced;
     public event Action<ServerPitonRemoved> OnPitonRemoved;
-    public event Action<ServerHandPose> OnHandPose;
+
+    /// <summary>A feature stream arrived: sender id, channel, payload. Wired by FeatureHost.</summary>
+    public event Action<int, ushort, byte[]> OnFeatureStream;
 
     // Disconnection event for the UI.
     public event Action<string> OnDisconnected;
@@ -179,12 +181,15 @@ public partial class NetworkManager : IDisposable
             SendSteamPitonRemoved(pitonId);
     }
 
-    public void SendHandPose(byte[] packed)
+    /// <summary>
+    /// Sends a feature's real-time payload. Unlike the managed command path this does not
+    /// go through a transaction — these are sent every frame, and an acknowledgement per
+    /// packet would cost more than the data itself.
+    /// </summary>
+    public void SendFeatureStream(ushort channel, byte[] payload, bool reliable)
     {
-        if (packed == null || packed.Length != Protocol.HandPosePackedSize) return;
-
         if (IsSteamTransportActive)
-            SendSteamHandPose(packed);
+            SendSteamFeatureStream(channel, payload, reliable);
     }
 
     /// <summary>Requests roping up (clip=true) or unroping (clip=false) with a player.</summary>

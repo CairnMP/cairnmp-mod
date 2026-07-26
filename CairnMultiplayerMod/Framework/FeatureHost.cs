@@ -20,11 +20,16 @@ internal sealed class FeatureHost
     internal const string CoreExtensionId = "cairnmp.core";
 
     private readonly ExtensionRuntime _runtime;
+    private readonly FeatureStreamRouter _streams = new();
     private readonly List<Registered> _features = new();
 
     /// <summary>Uses the mod-wide runtime by default; tests pass their own.</summary>
     internal FeatureHost(ExtensionRuntime runtime = null)
         => _runtime = runtime ?? MultiplayerApi.Runtime;
+
+    /// <summary>Routes incoming real-time payloads to the features that declared them.</summary>
+    internal void DispatchStream(int fromPlayerId, ushort channel, byte[] payload)
+        => _streams.Dispatch(fromPlayerId, channel, payload);
 
     private sealed class Registered
     {
@@ -52,7 +57,8 @@ internal sealed class FeatureHost
                 throw new InvalidOperationException(
                     $"Two features share the id '{feature.Id}'. Ids must be unique — they name the messages on the wire.");
 
-            var builder = new FeatureBuilder(_runtime, extension, feature.Id);
+            var builder = new FeatureBuilder(_runtime, extension, _streams,
+                () => Mod.Instance?.Network, feature.Id);
             feature.Session = _runtime;
             try
             {

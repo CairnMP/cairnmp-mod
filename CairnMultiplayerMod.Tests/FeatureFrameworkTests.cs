@@ -227,6 +227,65 @@ public sealed class FeatureFrameworkTests : IDisposable
         }
     }
 
+    // ── Real-time streams ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void AStreamPayloadReachesTheFeatureThatDeclaredIt()
+    {
+        var router = new FeatureStreamRouter();
+        var received = new List<(int From, byte[] Payload)>();
+        var channel = router.Register("ping.pose", (from, payload) => received.Add((from, payload)));
+
+        router.Dispatch(7, channel, new byte[] { 1, 2, 3 });
+
+        Assert.Single(received);
+        Assert.Equal(7, received[0].From);
+        Assert.Equal(new byte[] { 1, 2, 3 }, received[0].Payload);
+    }
+
+    [Fact]
+    public void AnUnknownChannelIsIgnoredRatherThanThrowing()
+    {
+        var router = new FeatureStreamRouter();
+        router.Register("known.stream", (_, _) => { });
+
+        // A peer on a newer build streaming something we have never heard of.
+        router.Dispatch(2, 0xBEEF, new byte[] { 9 });
+    }
+
+    [Fact]
+    public void AStreamHandlerThatThrowsIsContained()
+    {
+        var router = new FeatureStreamRouter();
+        var channel = router.Register("broken.stream", (_, _) => throw new InvalidOperationException("boom"));
+
+        router.Dispatch(1, channel, new byte[] { 0 });
+
+        Assert.Single(_errors);
+        Assert.Contains("broken.stream", _errors[0]);
+    }
+
+    [Fact]
+    public void DeclaringTheSameStreamTwiceIsRefused()
+    {
+        var router = new FeatureStreamRouter();
+        router.Register("ping.pose", (_, _) => { });
+
+        var error = Assert.Throws<InvalidOperationException>(() => router.Register("ping.pose", (_, _) => { }));
+
+        Assert.Contains("twice", error.Message);
+    }
+
+    [Fact]
+    public void ChannelHashingIsStableAndNeverZero()
+    {
+        // Both peers compute the channel id from the name, so this has to be identical
+        // everywhere and across runs — a drift would silently route to nothing.
+        Assert.Equal(FeatureStreamRouter.Hash("player.pose"), FeatureStreamRouter.Hash("player.pose"));
+        Assert.NotEqual(FeatureStreamRouter.Hash("player.pose"), FeatureStreamRouter.Hash("player.frame"));
+        Assert.NotEqual(0, FeatureStreamRouter.Hash(""));
+    }
+
     // ── Feature message encoding ──────────────────────────────────────────────
     // Ported from the protocol tests when these packets moved into features: the wire
     // format still has to survive a round trip, it is just declared elsewhere now.
@@ -248,6 +307,17 @@ public sealed class FeatureFrameworkTests : IDisposable
 
         Assert.Equal(0.4275f, got.DayTime01);
         Assert.True(got.AllAsleep);
+    }
+
+    [Fact]
+    public void HandPoseRoundTrips()
+    {
+        var packed = new byte[Protocol.HandPosePackedSize];
+        for (int i = 0; i < packed.Length; i++) packed[i] = (byte)(i * 7 + 3);
+
+        var got = RoundTrip(new Features.Players.Avatar.HandPose { Packed = packed });
+
+        Assert.Equal(packed, got.Packed);
     }
 
     [Fact]

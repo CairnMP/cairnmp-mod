@@ -91,20 +91,6 @@ public partial class NetworkManager
                 OnPitonRemoved?.Invoke(pkt);
                 break;
             }
-            case PacketId.ServerHandPose:
-            {
-                var pkt = new ServerHandPose();
-                pkt.Deserialize(r);
-                if (pkt.Packed == null || pkt.Packed.Length != Protocol.HandPosePackedSize)
-                    break;
-                if (_remotePlayers.TryGetValue(pkt.PlayerId, out var p))
-                {
-                    p.HandPosePacked = pkt.Packed;
-                    p.HasHandPose = true;
-                }
-                OnHandPose?.Invoke(pkt);
-                break;
-            }
             case PacketId.ServerTeleport:
             {
                 // Targeted teleport order from the host (/bring command). We validate
@@ -122,6 +108,13 @@ public partial class NetworkManager
                 }
                 Mod.LogDebug($"[CairnMP] ServerTeleport received -> ({pkt.X:F1}, {pkt.Y:F1}, {pkt.Z:F1})");
                 TeleportApi.TeleportLocalPlayer(new UnityEngine.Vector3(pkt.X, pkt.Y, pkt.Z), pkt.Yaw);
+                break;
+            }
+            case PacketId.ServerFeatureStream:
+            {
+                var pkt = new ServerFeatureStream();
+                pkt.Deserialize(r);
+                OnFeatureStream?.Invoke(pkt.FromPlayerId, pkt.Channel, pkt.Payload);
                 break;
             }
             case PacketId.ServerRopeClip:

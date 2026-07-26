@@ -14,8 +14,6 @@ internal sealed class PlayerStateBroadcaster
     private float _stateTickTimer;
     private float _boneTickTimer;
 
-    private float _handPosePollTimer;
-    private byte[] _lastSentHandPosePacked;
     private const float NetFrameMissingLogIntervalSeconds = 3f;
     private bool _debugLoggedFirstPlayerFrameCapture;
     private bool _debugLoggedFirstClimbotFrameCapture;
@@ -63,7 +61,6 @@ internal sealed class PlayerStateBroadcaster
                 SendLocalNetFrames();
             }
 
-            TickHandPoseSync();
 
             // Check for newly placed pitons (a lower frequency is enough).
             if (Mod.Instance.LocalState == PlayerState.InGame)
@@ -246,8 +243,6 @@ internal sealed class PlayerStateBroadcaster
         _debugLastMissingPlayerFrameLogAt = 0f;
         _debugLastMissingClimbotFrameLogAt = 0f;
         CosmeticApi.ResetCaches();
-        _handPosePollTimer = 0f;
-        _lastSentHandPosePacked = null;
         // No reset of freecam detection here: the eagle-eye/Display Route state is
         // driven by native events and persists across scene streaming. Resetting it
         // would make the mod believe we left Display Route (while we're still in it)
@@ -260,25 +255,6 @@ internal sealed class PlayerStateBroadcaster
     /// Captures the local finger pose and broadcasts it at ~12 Hz, only when it
     /// changes (motionless fingers generate no traffic).
     /// </summary>
-    private void TickHandPoseSync()
-    {
-        if (Mod.Instance.LocalState != PlayerState.InGame) return;
-
-        _handPosePollTimer += Time.unscaledDeltaTime;
-        if (_handPosePollTimer < Protocol.HandPosePollIntervalSeconds)
-            return;
-        _handPosePollTimer = 0f;
-
-        if (!FingerApi.TryCaptureLocalPose(out var packed))
-            return;
-
-        if (BytesEqual(_lastSentHandPosePacked, packed))
-            return;
-
-        _lastSentHandPosePacked = packed;
-        _network.SendHandPose(packed);
-    }
-
     private static bool BytesEqual(byte[] a, byte[] b)
     {
         if (a == null || b == null || a.Length != b.Length) return false;

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using CairnMultiplayer.Api;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Api.Internal;
@@ -27,6 +28,8 @@ internal sealed class FeatureBuilder
 {
     private readonly ExtensionRuntime _runtime;
     private readonly MultiplayerExtension _extension;
+    private readonly FeatureStreamRouter _streams;
+    private readonly Func<NetworkManager> _network;
     private readonly string _featureId;
     private readonly List<(FeaturePhase Phase, Action Tick)> _ticks = new();
     private readonly List<Action> _onSessionStarted = new();
@@ -34,10 +37,13 @@ internal sealed class FeatureBuilder
     private readonly List<Action> _onSceneReset = new();
     private readonly List<Action> _onDrawHud = new();
 
-    internal FeatureBuilder(ExtensionRuntime runtime, MultiplayerExtension extension, string featureId)
+    internal FeatureBuilder(ExtensionRuntime runtime, MultiplayerExtension extension,
+        FeatureStreamRouter streams, Func<NetworkManager> network, string featureId)
     {
         _runtime = runtime;
         _extension = extension;
+        _streams = streams;
+        _network = network;
         _featureId = featureId;
     }
 
@@ -123,6 +129,31 @@ internal sealed class FeatureBuilder
             context => handler(new HostRequest<T>(context)), FeatureCodec.For<T>());
 
         return new HostCommand<T>(_runtime, command, $"{_featureId}.{id}");
+    }
+
+    /// <summary>
+    /// Declares a stream for data you send constantly and that the next packet replaces —
+    /// a position, an animation frame. Skips the transaction machinery, so it is cheap
+    /// enough for every frame, and in exchange gives no ordering, no delivery guarantee and
+    /// no replay for latecomers.
+    /// </summary>
+    /// <param name="reliable">Leave false for anything sent continuously. Set it only when
+    /// a value is sent on change and a drop would leave the others stuck on the old one.</param>
+    public Stream<T> Stream<T>(string id, Action<int, T> onReceived, bool reliable = false)
+        where T : IPacket, new()
+    {
+        if (onReceived == null) throw new ArgumentNullException(nameof(onReceived));
+
+        var channel = _streams.Register($"{_featureId}.{id}", (fromPlayerId, payload) =>
+        {
+            var message = new T();
+            using var buffer = new MemoryStream(payload ?? Array.Empty<byte>(), writable: false);
+            using var reader = new BinaryReader(buffer);
+            message.Deserialize(reader);
+            onReceived(fromPlayerId, message);
+        });
+
+        return new Stream<T>(_network(), channel, reliable);
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
