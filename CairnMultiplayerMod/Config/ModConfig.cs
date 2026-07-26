@@ -8,6 +8,7 @@ public static class ModConfig
     private static readonly string CategoryPlayer   = "Player";
     private static readonly string CategoryRoom     = "Room";
     private static readonly string CategoryKeybinds = "Keybinds";
+    private static readonly string CategoryDebug    = "Debug";
 
     // API
     public static MelonPreferences_Entry<string> ApiBaseUrl;
@@ -24,6 +25,9 @@ public static class ModConfig
     // Keybinds
     public static MelonPreferences_Entry<string> ConnectKey;
     public static MelonPreferences_Entry<string> DisconnectKey;
+
+    // Debug
+    public static MelonPreferences_Entry<bool>   VerboseLogging;
 
     public static void Register()
     {
@@ -42,6 +46,9 @@ public static class ModConfig
         var keybinds = MelonPreferences.CreateCategory(CategoryKeybinds);
         ConnectKey    = keybinds.CreateEntry("ConnectKey", "F5");
         DisconnectKey = keybinds.CreateEntry("DisconnectKey", "F6");
+
+        var debug = MelonPreferences.CreateCategory(CategoryDebug);
+        VerboseLogging = debug.CreateEntry("VerboseLogging", false);
 
         MigrateLegacyApiUrl();
     }
