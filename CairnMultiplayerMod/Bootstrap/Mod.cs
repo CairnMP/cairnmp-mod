@@ -91,12 +91,12 @@ public partial class Mod : MelonMod
         Il2CppExceptionCapture.Install();
         ModConfig.Register();
         VerboseLogging = ModConfig.VerboseLogging.Value;
-        NetplaySetFramePatch.InstallNetplaySetFramePatch();
-        BivouacDiagnostics.InstallBivouacDiagnosticsPatches();
-        RopeTeamFallPatch.InstallRopeTeamFallPatch();
-        MultiplayerPausePatch.InstallMultiplayerPausePatch();
-        FreeRoamUnlockPatch.InstallFreeRoamUnlockPatch();
-        SavegamePitonGuardPatch.InstallSavegamePitonGuardPatch();
+        NetplaySetFramePatch.Install();
+        BivouacDiagnostics.Install();
+        RopeTeamFallPatch.Install();
+        MultiplayerPausePatch.Install();
+        FreeRoamUnlockPatch.Install();
+        SavegamePitonGuardPatch.Install();
 
         _connectKey = ParseKey(ModConfig.ConnectKey.Value, Key.F5);
         _disconnectKey = ParseKey(ModConfig.DisconnectKey.Value, Key.F6);
@@ -148,7 +148,7 @@ public partial class Mod : MelonMod
         _lobby.OnLobbyLeft += () =>
         {
             _network.Disconnect();
-            WeatherApi.ResetRemoteWeatherSyncState();
+            WeatherApi.ResetRemoteState();
             RemotePlayerManager.ClearAll();
             PingMarkerManager.ClearAll();
             Rope.ClearLinks();
@@ -183,7 +183,7 @@ public partial class Mod : MelonMod
             _panel.SetStatus($"Rejected: {reason}", false);
         _network.OnDisconnected += _ =>
         {
-            WeatherApi.ResetRemoteWeatherSyncState();
+            WeatherApi.ResetRemoteState();
             Rope.ClearLinks();
             _gameplaySyncSuspended = false;
             ResumeNetplaySetFramePatchAfterBivouac();
@@ -262,7 +262,7 @@ public partial class Mod : MelonMod
 
         // FreeRoam unlock: active ONLY at the MainMenu (forcing the flag during boot
         // or in game sends the game onto an unready FreeRoam init path -> black screen).
-        FreeRoamUnlockPatch.SetFreeRoamUnlockActive(sceneName == "MainMenu");
+        FreeRoamUnlockPatch.SetActive(sceneName == "MainMenu");
 
         if (sceneName != "MainMenu")
             _panel.DestroyResources();
@@ -339,7 +339,7 @@ public partial class Mod : MelonMod
 
     private void ResetSceneBoundSyncState()
     {
-        SceneCache.ResetSceneCaches();
+        SceneCache.Reset();
         Player.ResetSyncState();
         Player.ResetTimers();
         Weather.ResetTimer();
@@ -374,17 +374,17 @@ public partial class Mod : MelonMod
             _nextBivouacDebugLogAt = 0f;
             PauseNetplaySetFramePatchForBivouac();
             ResetGameplaySyncTimers();
-            WeatherApi.ResetRemoteWeatherSyncState();
+            WeatherApi.ResetRemoteState();
             RemotePlayerManager.ClearAll();
             // Release the native rope-team anchors: ClearAll destroys the ghosts, so a rope
             // left pinned to their harness would point into the void. We KEEP the logical link
             // (RopeLinkState) — it'll be re-anchored on exit when the partner's ghost returns.
             // TickRopeCouple doesn't run during a bivouac, hence this release here.
-            RopeApi.ReleaseAllRopeTeamAnchors();
+            RopeApi.ReleaseAllAnchors();
             SetLocalState(PlayerState.Loading);
             // Remember the pawn's position on entry: used by the anti-lockup guard
             // (a pawn that has moved = we're climbing again).
-            _hasBivouacSuspendPawnPos = LocalPlayerApi.TryGetLocalPlayerPose(out _bivouacSuspendPawnPos, out _);
+            _hasBivouacSuspendPawnPos = LocalPlayerApi.TryGetPose(out _bivouacSuspendPawnPos, out _);
             _bivouacStuckSince = 0f;
             LogBivouacDebug("enter");
             return;
@@ -466,7 +466,7 @@ public partial class Mod : MelonMod
         if (!_hasBivouacSuspendPawnPos)
             return false;
 
-        if (!LocalPlayerApi.TryGetLocalPlayerPose(out var pos, out _))
+        if (!LocalPlayerApi.TryGetPose(out var pos, out _))
             return false;
 
         return (pos - _bivouacSuspendPawnPos).sqrMagnitude >= BivouacStuckMoveThresholdSqr;
@@ -512,7 +512,7 @@ public partial class Mod : MelonMod
         if (panicKeyboard != null && panicKeyboard.f10Key.wasPressedThisFrame)
         {
             _chat?.ForceClose();
-            InputApi.ForceClearInputBlock();
+            InputApi.ForceClearBlock();
             LoggerInstance.Msg("[CairnMP] Panic: input force-cleared + chat closed (F10)");
         }
 
@@ -531,9 +531,9 @@ public partial class Mod : MelonMod
             MainMenuMultiplayerButton.OnUpdate();
             // Unlock FreeRoam: force the tweakable field as soon as it's loaded (no-op
             // once it succeeds). Complements the Harmony postfix on the public property.
-            FreeRoamUnlockPatch.TryForceFreeRoamTweakableField();
+            FreeRoamUnlockPatch.TryForceTweakableField();
             // Unhide the FreeRoam mode in the difficulty list (isHidden=false).
-            FreeRoamUnlockPatch.TryUnhideFreeRoamDifficulty();
+            FreeRoamUnlockPatch.TryUnhideDifficulty();
         }
 
         // Pump the managed Steam callback queue (also handles deferred init).
@@ -616,7 +616,7 @@ public partial class Mod : MelonMod
 
         // Long-distance post-teleport settle (prevents falling into the void + fixes the
         // zone-load repositioning). No-op if no teleport is pending.
-        TeleportApi.TickTeleportSettle(LocalState == PlayerState.InGame);
+        TeleportApi.TickSettle(LocalState == PlayerState.InGame);
 
         // Inter-player roping: clip detection (E) + maintenance of the NATIVE rope team.
         // No more cosmetic rope: the lifeline's native rope (clipped to a mobile piton
@@ -685,7 +685,7 @@ public partial class Mod : MelonMod
         if (_network == null)
             return;
 
-        if (!FreecamApi.TryIsFreecamActive(out var freecamActive) || !freecamActive)
+        if (!FreecamApi.TryIsActive(out var freecamActive) || !freecamActive)
             return;
 
         if (Time.unscaledTime < _pingCooldownUntil)
@@ -758,7 +758,7 @@ public partial class Mod : MelonMod
             $"lastGameplay='{_lastGameplayScene ?? ""}' local={LocalState} suspended={_gameplaySyncSuspended} " +
             $"{DescribeRemoteStates()} " +
             $"panelVisible={_panel?.IsVisible == true} {networkState} {RemotePlayerManager.DebugSummary()} " +
-            $"setFramePatchInstalled={NetplaySetFramePatch.IsNetplaySetFramePatchInstalled} " +
+            $"setFramePatchInstalled={NetplaySetFramePatch.IsInstalled} " +
             $"patchPaused={_netplaySetFramePatchPausedForBivouac} " +
             BivouacDiagnostics.BuildBivouacDebugSnapshot());
     }
@@ -825,7 +825,7 @@ public partial class Mod : MelonMod
             return;
 
         _netplaySetFramePatchPausedForBivouac = true;
-        NetplaySetFramePatch.PauseSetFramePatch();
+        NetplaySetFramePatch.Pause();
         LoggerInstance.Msg("[State] Netplay SetFrame patch paused for bivouac");
     }
 
@@ -844,7 +844,7 @@ public partial class Mod : MelonMod
                 return;
 
             _netplaySetFramePatchPausedForBivouac = false;
-            NetplaySetFramePatch.ResumeSetFramePatch();
+            NetplaySetFramePatch.Resume();
             LoggerInstance.Msg("[State] Netplay SetFrame patch resumed after bivouac");
             return;
         }
@@ -879,7 +879,7 @@ public partial class Mod : MelonMod
             return;
 
         _netplaySetFramePatchPausedForBivouac = false;
-        NetplaySetFramePatch.ResumeSetFramePatch();
+        NetplaySetFramePatch.Resume();
         LoggerInstance.Msg("[State] Netplay SetFrame patch resumed after bivouac (save-seal grace elapsed)");
     }
 
@@ -920,7 +920,7 @@ public partial class Mod : MelonMod
 
     public override void OnDeinitializeMelon()
     {
-        NetplaySetFramePatch.UninstallNetplaySetFramePatch();
+        NetplaySetFramePatch.Uninstall();
         _lobby?.Dispose();
         _network?.Dispose();
         LoggerInstance.Msg("Cairn Multiplayer Mod unloaded.");

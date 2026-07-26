@@ -25,7 +25,7 @@ internal static unsafe class LampApi
     private static MethodInfo _lampSetModeMethod;       // void SetMode(Mode, bool)
     private static Type _lampModeType;
 
-    public static bool TryGetLocalLampState(out int mode)
+    public static bool TryGetLocalState(out int mode)
     {
         mode = 0;
         EnsureLampReflection();
@@ -54,7 +54,7 @@ internal static unsafe class LampApi
         return false;
     }
 
-    public static bool TryApplyRemoteLampState(NetplayRemotePlayer remote, int mode)
+    public static bool TryApplyRemoteState(NetplayRemotePlayer remote, int mode)
     {
         if (remote == null || remote.Pointer == IntPtr.Zero) return false;
 
@@ -95,7 +95,7 @@ internal static unsafe class LampApi
         }
     }
 
-    public static void ResetLocalLampStateCache()
+    public static void ResetCaches()
     {
         _localLightStickCached = null;
         _lastLocalLightStickSearchFrame = 0;
@@ -188,7 +188,7 @@ internal static unsafe class LampApi
             return null;
         _lastLocalLightStickSearchFrame = frame;
 
-        var mc = LocalPlayerApi.TryGetLocalMCGameObject();
+        var mc = LocalPlayerApi.TryGetMCGameObject();
         if (mc == null) return null;
 
         try

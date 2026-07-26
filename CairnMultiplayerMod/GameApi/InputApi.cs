@@ -162,7 +162,7 @@ internal static unsafe class InputApi
     /// Independent of the chat. Call it from a shortcut read on the raw keyboard device (never
     /// affected by the block), placed before any early return in OnUpdate.
     /// </summary>
-    public static void ForceClearInputBlock()
+    public static void ForceClearBlock()
     {
         try
         {
@@ -177,7 +177,7 @@ internal static unsafe class InputApi
         }
         catch (Exception ex)
         {
-            Mod.Log.Warning($"[Input] ForceClearInputBlock failed: {ex.Message}");
+            Mod.Log.Warning($"[Input] ForceClearBlock failed: {ex.Message}");
         }
         _blockApplied = false;
     }

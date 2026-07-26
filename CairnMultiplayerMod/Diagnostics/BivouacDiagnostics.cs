@@ -83,7 +83,7 @@ internal static unsafe partial class BivouacDiagnostics
     {
         try
         {
-            var mc = LocalPlayerApi.TryGetLocalMCGameObject();
+            var mc = LocalPlayerApi.TryGetMCGameObject();
             if (mc == null)
                 return "mc=missing";
 

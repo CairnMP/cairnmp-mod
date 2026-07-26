@@ -45,7 +45,7 @@ internal static unsafe class FreecamApi
     /// Indicates whether a free camera (Display Route / Eagle Eye, or debug free-cam)
     /// is active. State driven by the native events.
     /// </summary>
-    public static bool TryIsFreecamActive(out bool active)
+    public static bool TryIsActive(out bool active)
     {
         EnsureFreecamHooks();
 

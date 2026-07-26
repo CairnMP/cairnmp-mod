@@ -29,7 +29,7 @@ internal static unsafe class FreeRoamUnlockPatch
     /// MainMenu, false everywhere else. When disabling, we reset the tweakable field to
     /// false so we don't contaminate the boot of an actually launched game.
     /// </summary>
-    public static void SetFreeRoamUnlockActive(bool active)
+    public static void SetActive(bool active)
     {
         if (_freeRoamUnlockActive == active) return;
         _freeRoamUnlockActive = active;
@@ -52,10 +52,10 @@ internal static unsafe class FreeRoamUnlockPatch
     ///   1. Harmony postfix on the public PROPERTY <c>EnableFreeRoamFeature</c> (a real
     ///      native method, patchable) -> always returns true.
     ///   2. direct write of the <c>enableFreeRoamFeature</c> field on the tweakable instance
-    ///      (cf. <see cref="TryForceFreeRoamTweakableField"/>), because the field accessor
+    ///      (cf. <see cref="TryForceTweakableField"/>), because the field accessor
     ///      <c>get_enableFreeRoamFeature</c> is NOT patchable by Il2CppInterop.
     /// </summary>
-    public static void InstallFreeRoamUnlockPatch()
+    public static void Install()
     {
         if (_freeRoamUnlockInstalled || _freeRoamUnlockFailed) return;
 
@@ -121,7 +121,7 @@ internal static unsafe class FreeRoamUnlockPatch
     /// call every frame while in the menu until it succeeds. Covers the
     /// case where the menu reads the field directly (unpatchable field accessor).
     /// </summary>
-    public static void TryForceFreeRoamTweakableField()
+    public static void TryForceTweakableField()
     {
         if (_freeRoamFieldForced || !_freeRoamUnlockActive) return;
 
@@ -140,7 +140,7 @@ internal static unsafe class FreeRoamUnlockPatch
     /// Call every frame in the menu until it succeeds. Diagnostic log: indicates whether the mode exists
     /// in the list and how many modes there are in total.
     /// </summary>
-    public static void TryUnhideFreeRoamDifficulty()
+    public static void TryUnhideDifficulty()
     {
         if (_freeRoamDifficultyUnhidden || !_freeRoamUnlockActive) return;
 

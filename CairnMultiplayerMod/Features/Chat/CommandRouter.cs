@@ -94,7 +94,7 @@ internal sealed class CommandRouter
 
         // The host can't move another player's character: it asks the target client
         // to teleport to the host's position via a dedicated ServerTeleport.
-        if (!LocalPlayerApi.TryGetLocalPlayerPose(out var pos, out var yaw))
+        if (!LocalPlayerApi.TryGetPose(out var pos, out var yaw))
         {
             _systemLine("Can't bring right now (not in game?).");
             return;

@@ -249,7 +249,7 @@ internal static unsafe partial class RopeApi
     }
 
     /// <summary>Removes ALL rope-team anchors (disconnect / scene change).</summary>
-    public static void ReleaseAllRopeTeamAnchors()
+    public static void ReleaseAllAnchors()
     {
         if (_ropeAnchors.Count == 0)
         {

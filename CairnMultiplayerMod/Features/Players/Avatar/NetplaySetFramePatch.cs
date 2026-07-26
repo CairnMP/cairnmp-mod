@@ -43,7 +43,7 @@ internal static unsafe class NetplaySetFramePatch
     private static int _remoteClimbotFrameOffset = RemoteClimbotFrameFallbackOffset;
     private static int _remoteClimbotOwnerIdOffset = RemoteClimbotOwnerIdFallbackOffset;
 
-    public static bool IsNetplaySetFramePatchInstalled => _netplaySetFramePatchInstalled;
+    public static bool IsInstalled => _netplaySetFramePatchInstalled;
 
     // LOGICAL pause of the patch, without touching Harmony. The patch stays hooked; for a
     // managed ghost the prefixes skip the native call WITHOUT an inline write (return false),
@@ -53,10 +53,10 @@ internal static unsafe class NetplaySetFramePatch
     // which could disturb the sealing/reopening of the native save package (ghost stream)
     // and leave the package disposed -> subsequent saves become silent no-ops.
     private static bool _setFramePatchPaused;
-    public static void PauseSetFramePatch() => _setFramePatchPaused = true;
-    public static void ResumeSetFramePatch() => _setFramePatchPaused = false;
+    public static void Pause() => _setFramePatchPaused = true;
+    public static void Resume() => _setFramePatchPaused = false;
 
-    public static void InstallNetplaySetFramePatch()
+    public static void Install()
     {
         if (_netplaySetFramePatchInstalled || _netplaySetFramePatchFailed) return;
 
@@ -100,7 +100,7 @@ internal static unsafe class NetplaySetFramePatch
         }
     }
 
-    public static void UninstallNetplaySetFramePatch()
+    public static void Uninstall()
     {
         if (!_netplaySetFramePatchInstalled) return;
 

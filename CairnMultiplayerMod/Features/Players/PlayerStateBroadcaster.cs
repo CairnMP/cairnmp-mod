@@ -133,7 +133,7 @@ internal sealed class PlayerStateBroadcaster
         }
 
         Vector3 p; float yaw;
-        if (!LocalPlayerApi.TryGetLocalPlayerPose(out p, out yaw))
+        if (!LocalPlayerApi.TryGetPose(out p, out yaw))
         {
             var cam = Camera.main;
             if (cam == null) return;
@@ -191,7 +191,7 @@ internal sealed class PlayerStateBroadcaster
         if (Mod.Instance.TimeSinceLastSceneLoad < 1.0f)
             return PlayerState.Loading;
 
-        if (LocalPlayerApi.TryGetLocalPlayerPose(out _, out _))
+        if (LocalPlayerApi.TryGetPose(out _, out _))
             return PlayerState.InGame;
 
         return PlayerState.Loading;
@@ -266,15 +266,15 @@ internal sealed class PlayerStateBroadcaster
         _cosmeticPollTimer = 0f;
         _hasLastSentCosmetic = false;
         _lastSentCosmeticFlags = 0;
-        CosmeticApi.ResetLocalCosmeticsCache();
+        CosmeticApi.ResetCaches();
         _handPosePollTimer = 0f;
         _lastSentHandPosePacked = null;
-        LampApi.ResetLocalLampStateCache();
+        LampApi.ResetCaches();
         // No reset of freecam detection here: the eagle-eye/Display Route state is
         // driven by native events and persists across scene streaming. Resetting it
         // would make the mod believe we left Display Route (while we're still in it)
         // -> can't place a ping until we re-toggle.
-        FingerApi.ResetFingerSyncCache();
+        FingerApi.ResetCaches();
         Mod.Instance.Clock.Reset();
         Mod.Instance.Rope.Reset();
     }
@@ -293,7 +293,7 @@ internal sealed class PlayerStateBroadcaster
             return;
         _lampPollTimer = 0f;
 
-        if (!LampApi.TryGetLocalLampState(out var lightMode))
+        if (!LampApi.TryGetLocalState(out var lightMode))
             return;
 
         // The lamp int also carries (high bits, no new packet):
@@ -351,7 +351,7 @@ internal sealed class PlayerStateBroadcaster
             return;
         _handPosePollTimer = 0f;
 
-        if (!FingerApi.TryCaptureLocalFingerPose(out var packed))
+        if (!FingerApi.TryCaptureLocalPose(out var packed))
             return;
 
         if (BytesEqual(_lastSentHandPosePacked, packed))

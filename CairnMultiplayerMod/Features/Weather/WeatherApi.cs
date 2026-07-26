@@ -88,10 +88,10 @@ internal static class WeatherApi
 
         _pendingRemoteWeather = state;
         _hasPendingRemoteWeather = true;
-        TickRemoteWeatherSync();
+        TickRemote();
     }
 
-    public static void TickRemoteWeatherSync()
+    public static void TickRemote()
     {
         if (!_hasPendingRemoteWeather)
             return;
@@ -100,7 +100,7 @@ internal static class WeatherApi
             _hasPendingRemoteWeather = false;
     }
 
-    public static void ResetRemoteWeatherSyncState()
+    public static void ResetRemoteState()
     {
         _hasPendingRemoteWeather = false;
         _pendingRemoteWeather = default;

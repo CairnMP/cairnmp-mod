@@ -44,7 +44,7 @@ internal static unsafe class CosmeticApi
     public static bool TryGetLocalCosmetics(out byte flags)
     {
         flags = 0;
-        var mc = LocalPlayerApi.TryGetLocalMCGameObject();
+        var mc = LocalPlayerApi.TryGetMCGameObject();
         if (mc == null) return false;
 
         try
@@ -65,7 +65,7 @@ internal static unsafe class CosmeticApi
         }
     }
 
-    public static void ResetLocalCosmeticsCache()
+    public static void ResetCaches()
     {
         _localGlovesCached = null;
         _lastLocalGlovesSearchFrame = 0;
@@ -317,7 +317,7 @@ internal static unsafe class CosmeticApi
             if (!on) return true;
 
             // Template: the local player's glove sub-tree (mesh GlowingGloves00.002 + Armature).
-            var mc = LocalPlayerApi.TryGetLocalMCGameObject();
+            var mc = LocalPlayerApi.TryGetMCGameObject();
             var localGloves = mc != null ? TryGetLocalGlowingGloves(mc) : null;
             var srcRenderer = localGloves != null ? localGloves.mainRenderer : null;
             if (srcRenderer == null) return false;
@@ -429,7 +429,7 @@ internal static unsafe class CosmeticApi
     public static bool TryGetLocalStickAnchorMode(out int mode)
     {
         mode = 0;
-        var mc = LocalPlayerApi.TryGetLocalMCGameObject();
+        var mc = LocalPlayerApi.TryGetMCGameObject();
         if (mc == null) return false;
         try
         {
@@ -521,7 +521,7 @@ internal static unsafe class CosmeticApi
     /// <summary>Visibility bitfield (active && renderer enabled) of the local outfit meshes.</summary>
     public static int GetLocalOutfitBits()
     {
-        var mc = LocalPlayerApi.TryGetLocalMCGameObject();
+        var mc = LocalPlayerApi.TryGetMCGameObject();
         if (mc == null) return 0;
         int bits = 0;
         try

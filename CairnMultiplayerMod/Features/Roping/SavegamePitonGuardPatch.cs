@@ -33,7 +33,7 @@ internal static unsafe class SavegamePitonGuardPatch
     private static float _lastSaveGuardLogAt;
     private const float SaveGuardLogIntervalSeconds = 2f;
 
-    public static void InstallSavegamePitonGuardPatch()
+    public static void Install()
     {
         if (_saveGuardInstalled || _saveGuardFailed) return;
 

@@ -165,6 +165,6 @@ internal sealed class TimeStateBroadcaster
         _hasHeldDayTime01 = false;
         _hasRemoteTimeState = false;
         _remoteTimeState = default;
-        TimeApi.ResetTimeSyncCache();
+        TimeApi.ResetCaches();
     }
 }

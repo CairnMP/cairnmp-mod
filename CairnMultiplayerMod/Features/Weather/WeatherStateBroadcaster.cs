@@ -44,6 +44,6 @@ internal sealed class WeatherStateBroadcaster
             return;
         }
 
-        WeatherApi.TickRemoteWeatherSync();
+        WeatherApi.TickRemote();
     }
 }

@@ -29,7 +29,7 @@ internal static unsafe class LocalPlayerApi
     /// Returns the world position + yaw of the local player's MC GameObject,
     /// or `false` if the MC hasn't been instantiated yet (still in a menu/cutscene).
     /// </summary>
-    public static bool TryGetLocalPlayerPose(out Vector3 position, out float yaw)
+    public static bool TryGetPose(out Vector3 position, out float yaw)
     {
         position = default;
         yaw = 0f;
@@ -89,7 +89,7 @@ internal static unsafe class LocalPlayerApi
     /// SkinnedMeshRenderer / custom shader / render-pass issues hit when
     /// instantiating NetplayClimberPrefab.
     /// </summary>
-    public static GameObject TryGetLocalMCGameObject()
+    public static GameObject TryGetMCGameObject()
     {
         var pm = FindPawnManager();
         if (pm == null) return null;

@@ -403,7 +403,7 @@ public static class RemotePlayerManager
             if (!entry.IsRealModel || entry.NrpComponent == null) continue;
             if (ReferenceEquals(entry.LastAppliedHandPosePacked, rp.HandPosePacked)) continue;
 
-            if (FingerApi.TryApplyRemoteFingerPose(entry.NrpComponent, rp.HandPosePacked))
+            if (FingerApi.TryApplyRemotePose(entry.NrpComponent, rp.HandPosePacked))
                 entry.LastAppliedHandPosePacked = rp.HandPosePacked;
         }
     }
@@ -433,7 +433,7 @@ public static class RemotePlayerManager
     private static void ApplyLampMode(GhostEntry entry, int lightMode)
     {
         if (entry.HasAppliedLampState && entry.LastAppliedLampMode == lightMode) return;
-        if (!LampApi.TryApplyRemoteLampState(entry.NrpComponent, lightMode)) return;
+        if (!LampApi.TryApplyRemoteState(entry.NrpComponent, lightMode)) return;
         entry.LastAppliedLampMode = lightMode;
         entry.HasAppliedLampState = true;
     }

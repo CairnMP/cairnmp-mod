@@ -47,7 +47,7 @@ internal static unsafe class FingerApi
     private static readonly Dictionary<int, Transform[]> _ghostFingerBones = new();
 
     /// <summary>Captures the local finger pose (compressed localRotations). False if unavailable.</summary>
-    public static bool TryCaptureLocalFingerPose(out byte[] packed)
+    public static bool TryCaptureLocalPose(out byte[] packed)
     {
         packed = null;
         var bones = EnsureLocalFingerBones();
@@ -65,7 +65,7 @@ internal static unsafe class FingerApi
     }
 
     /// <summary>Applies a received finger pose onto the ghost's bones.</summary>
-    public static bool TryApplyRemoteFingerPose(NetplayRemotePlayer ghost, byte[] packed)
+    public static bool TryApplyRemotePose(NetplayRemotePlayer ghost, byte[] packed)
     {
         if (ghost == null || ghost.Pointer == IntPtr.Zero) return false;
         if (packed == null || packed.Length != Protocol.HandPosePackedSize) return false;
@@ -100,7 +100,7 @@ internal static unsafe class FingerApi
         catch { return null; }
     }
 
-    public static void ResetFingerSyncCache()
+    public static void ResetCaches()
     {
         _localFingerBones = null;
         _localFingerResolved = false;
@@ -131,7 +131,7 @@ internal static unsafe class FingerApi
         if (_lastLocalFingerResolveFrame != 0 && frame - _lastLocalFingerResolveFrame < 60) return null;
         _lastLocalFingerResolveFrame = frame;
 
-        var mc = LocalPlayerApi.TryGetLocalMCGameObject();
+        var mc = LocalPlayerApi.TryGetMCGameObject();
         if (mc == null) return null;
 
         _localFingerBones = ResolveFingerBonesByName(mc, out int resolved);

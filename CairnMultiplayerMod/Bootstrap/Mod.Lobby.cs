@@ -147,7 +147,7 @@ public partial class Mod
     {
         _lobby?.Leave();
         _network.Disconnect();
-        WeatherApi.ResetRemoteWeatherSyncState();
+        WeatherApi.ResetRemoteState();
         RemotePlayerManager.ClearAll();
         PingMarkerManager.ClearAll();
         _gameplaySyncSuspended = false;

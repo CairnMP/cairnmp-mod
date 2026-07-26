@@ -21,7 +21,7 @@ internal static unsafe class RopeTeamFallPatch
     private static bool _ropeTeamPatchInstalled;
     private static bool _ropeTeamPatchFailed;
 
-    public static void InstallRopeTeamFallPatch()
+    public static void Install()
     {
         if (_ropeTeamPatchInstalled || _ropeTeamPatchFailed) return;
 

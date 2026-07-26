@@ -288,7 +288,7 @@ internal static unsafe class PawnCaptureApi
     {
         if (_typedPawnCaptureCached != null) return _typedPawnCaptureCached;
 
-        var mc = LocalPlayerApi.TryGetLocalMCGameObject();
+        var mc = LocalPlayerApi.TryGetMCGameObject();
         if (mc != null)
         {
             try

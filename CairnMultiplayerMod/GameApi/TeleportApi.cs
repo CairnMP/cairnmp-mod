@@ -44,7 +44,7 @@ internal static unsafe class TeleportApi
     /// </summary>
     public static bool TeleportLocalPlayer(Vector3 position, float yawDeg)
     {
-        var go = LocalPlayerApi.TryGetLocalMCGameObject();
+        var go = LocalPlayerApi.TryGetMCGameObject();
         if (go == null) return false;
 
         // Target zone different from the current zone? -> we do as the game does: a managed TRAVEL
@@ -156,7 +156,7 @@ internal static unsafe class TeleportApi
     /// apply the exact position (travel first places at the zone spawn) and hold until stable.
     /// No-op if nothing is pending.
     /// </summary>
-    public static void TickTeleportSettle(bool inGame)
+    public static void TickSettle(bool inGame)
     {
         if (!_teleportPending) return;
         try
@@ -171,7 +171,7 @@ internal static unsafe class TeleportApi
             // While the world is loading (or not in game), we wait — no messing with the position.
             if (!inGame || IsWorldStreamingBusy()) { _teleportStableSince = -1f; return; }
 
-            var go = LocalPlayerApi.TryGetLocalMCGameObject();
+            var go = LocalPlayerApi.TryGetMCGameObject();
             if (go == null) { _teleportStableSince = -1f; return; }
 
             var t = go.transform;

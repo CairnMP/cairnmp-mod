@@ -24,7 +24,7 @@ internal static unsafe partial class RopeApi
             return null;
         _lastLocalHarnessSearchFrame = Time.frameCount;
 
-        var mc = LocalPlayerApi.TryGetLocalMCGameObject();
+        var mc = LocalPlayerApi.TryGetMCGameObject();
         if (mc == null) return null;
 
         // The local harness is a Harness in the MC's hierarchy — but NOT a

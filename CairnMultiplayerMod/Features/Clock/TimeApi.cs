@@ -176,7 +176,7 @@ internal static unsafe class TimeApi
         return _isAsleepFieldOffset;
     }
 
-    public static void ResetTimeSyncCache()
+    public static void ResetCaches()
     {
         _playerStateFeedbacksCached = null;
         _lastPlayerStateFeedbacksSearchFrame = 0;

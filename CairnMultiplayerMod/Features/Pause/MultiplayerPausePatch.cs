@@ -46,7 +46,7 @@ internal static unsafe class MultiplayerPausePatch
         return mod?.Network != null && mod.Network.IsConnected;
     }
 
-    public static void InstallMultiplayerPausePatch()
+    public static void Install()
     {
         if (_mpPausePatchInstalled || _mpPausePatchFailed) return;
 

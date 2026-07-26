@@ -26,7 +26,7 @@ internal static unsafe partial class BivouacDiagnostics
         "TapingCurrentModelFailed"
     };
 
-    internal static void InstallBivouacDiagnosticsPatches()
+    internal static void Install()
     {
         if (_bivouacDiagnosticsPatchesInstalled || _bivouacDiagnosticsPatchesFailed)
             return;

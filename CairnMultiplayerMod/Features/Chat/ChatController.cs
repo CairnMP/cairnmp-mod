@@ -124,7 +124,7 @@ internal sealed class ChatController
     }
 
     /// <summary>Forced close (panic failsafe): doesn't touch the network, just the UI state.
-    /// Unblocking inputs is done by the caller via InputApi.ForceClearInputBlock.</summary>
+    /// Unblocking inputs is done by the caller via InputApi.ForceClearBlock.</summary>
     public void ForceClose()
     {
         _isOpen = false;
