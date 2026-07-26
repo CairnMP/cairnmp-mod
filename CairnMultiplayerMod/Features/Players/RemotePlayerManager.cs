@@ -441,33 +441,34 @@ public static class RemotePlayerManager
             int anchorMode = (rp.LampMode >> 8) & 0xFF;
             int outfitBits = (rp.LampMode >> 16) & CosmeticApi.OutfitBitsMask;
 
-            if (!entry.HasAppliedLampState || entry.LastAppliedLampMode != lightMode)
-            {
-                if (LampApi.TryApplyRemoteLampState(entry.NrpComponent, lightMode))
-                {
-                    entry.LastAppliedLampMode = lightMode;
-                    entry.HasAppliedLampState = true;
-                }
-            }
-
-            if (!entry.HasAppliedStickAnchor || entry.LastAppliedStickAnchor != anchorMode)
-            {
-                if (CosmeticApi.ApplyGhostStickByAnchorMode(entry.NrpComponent, anchorMode))
-                {
-                    entry.LastAppliedStickAnchor = anchorMode;
-                    entry.HasAppliedStickAnchor = true;
-                }
-            }
-
-            if (!entry.HasAppliedOutfit || entry.LastAppliedOutfit != outfitBits)
-            {
-                if (CosmeticApi.ApplyGhostOutfitBits(entry.NrpComponent, outfitBits))
-                {
-                    entry.LastAppliedOutfit = outfitBits;
-                    entry.HasAppliedOutfit = true;
-                }
-            }
+            ApplyLampMode(entry, lightMode);
+            ApplyStickAnchor(entry, anchorMode);
+            ApplyOutfit(entry, outfitBits);
         }
+    }
+
+    private static void ApplyLampMode(GhostEntry entry, int lightMode)
+    {
+        if (entry.HasAppliedLampState && entry.LastAppliedLampMode == lightMode) return;
+        if (!LampApi.TryApplyRemoteLampState(entry.NrpComponent, lightMode)) return;
+        entry.LastAppliedLampMode = lightMode;
+        entry.HasAppliedLampState = true;
+    }
+
+    private static void ApplyStickAnchor(GhostEntry entry, int anchorMode)
+    {
+        if (entry.HasAppliedStickAnchor && entry.LastAppliedStickAnchor == anchorMode) return;
+        if (!CosmeticApi.ApplyGhostStickByAnchorMode(entry.NrpComponent, anchorMode)) return;
+        entry.LastAppliedStickAnchor = anchorMode;
+        entry.HasAppliedStickAnchor = true;
+    }
+
+    private static void ApplyOutfit(GhostEntry entry, int outfitBits)
+    {
+        if (entry.HasAppliedOutfit && entry.LastAppliedOutfit == outfitBits) return;
+        if (!CosmeticApi.ApplyGhostOutfitBits(entry.NrpComponent, outfitBits)) return;
+        entry.LastAppliedOutfit = outfitBits;
+        entry.HasAppliedOutfit = true;
     }
 
     /// <summary>
