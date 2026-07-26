@@ -264,21 +264,7 @@ internal sealed class ChatController
         try
         {
             if (text.Length > 0)
-            {
-                // Record everything sent (messages AND commands) into the history for arrow recall.
-                PushHistory(text);
-
-                // A command? the router consumes it. Otherwise, a normal message: immediate
-                // local echo (we always see ourselves, even solo or before a peer arrives) +
-                // network broadcast.
-                if (!_router.TryHandle(text))
-                {
-                    var name = string.IsNullOrWhiteSpace(ModConfig.PlayerName.Value)
-                        ? "You" : ModConfig.PlayerName.Value;
-                    AddLine($"{name}: {text}", system: false);
-                    _network.SendChat(text);
-                }
-            }
+                DispatchSubmittedText(text);
         }
         catch (Exception ex)
         {
@@ -289,6 +275,19 @@ internal sealed class ChatController
         {
             Close();
         }
+    }
+
+    private void DispatchSubmittedText(string text)
+    {
+        // Record both messages and commands for arrow-key recall.
+        PushHistory(text);
+        if (_router.TryHandle(text)) return;
+
+        var name = string.IsNullOrWhiteSpace(ModConfig.PlayerName.Value)
+            ? "You"
+            : ModConfig.PlayerName.Value;
+        AddLine($"{name}: {text}", system: false);
+        _network.SendChat(text);
     }
 
     /// <summary>Label style at the current scale (fontSize refreshed every frame).</summary>
