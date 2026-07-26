@@ -7,14 +7,12 @@ namespace CairnMultiplayerMod.Networking;
 public partial class NetworkManager
 {
     /// <summary>
-    /// Dispatches a payload received from the server to the appropriate handler.
-    /// payload[0] = PacketId; payload[1..] = packet body.
-    /// Called from Update() on the Unity thread.
-    /// An empty payload signals an internal disconnection.
+    /// Dispatches a payload received from the transport to the appropriate handler.
+    /// payload[0] = PacketId; payload[1..] = packet body. Called on the Unity thread.
     /// </summary>
     private void ProcessPacket(byte[] payload)
     {
-        // Empty payload = disconnection marker from ReadLoop
+        // Empty payload = internal disconnection marker.
         if (payload.Length == 0)
         {
             OnDisconnected?.Invoke(LastError ?? "Connection lost");
