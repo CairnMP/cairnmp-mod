@@ -155,6 +155,7 @@ public static class RemotePlayerManager
         {
             if (_ghosts.TryGetValue(id, out var entry))
             {
+                PurgeGhostCosmeticCaches(entry);
                 if (entry.Root != null) Object.Destroy(entry.Root);
                 _ghosts.Remove(id);
                 _spawnWaits.Remove(id);
@@ -543,6 +544,7 @@ public static class RemotePlayerManager
             if (kv.Value?.Root != null) Object.Destroy(kv.Value.Root);
         _ghosts.Clear();
         _spawnWaits.Clear();
+        CosmeticApi.ResetGhostCosmeticCaches();
     }
 
     public static string DebugSummary()
@@ -602,6 +604,7 @@ public static class RemotePlayerManager
     {
         if (_ghosts.TryGetValue(id, out var entry))
         {
+            PurgeGhostCosmeticCaches(entry);
             if (entry.Root != null) Object.Destroy(entry.Root);
             _ghosts.Remove(id);
             Mod.LogDebug($"[Ghost] Despawned player {id}");
@@ -610,6 +613,14 @@ public static class RemotePlayerManager
     }
 
     // -- Internal ---------------------------------------------------------
+
+    /// <summary>Drops the cosmetic module's caches for this ghost before its GameObject dies.</summary>
+    private static void PurgeGhostCosmeticCaches(GhostEntry entry)
+    {
+        if (entry?.NrpComponent == null) return;
+        try { CosmeticApi.ResetGhostCosmeticCaches(entry.NrpComponent); }
+        catch { /* cache bookkeeping must never block a despawn */ }
+    }
 
     private static void SpawnGhost(int id, string name, RemotePlayer rp)
     {

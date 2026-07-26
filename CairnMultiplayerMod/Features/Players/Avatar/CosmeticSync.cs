@@ -73,6 +73,29 @@ internal static unsafe class CosmeticApi
     }
 
     /// <summary>
+    /// Forgets the per-ghost caches (glove rig + stick rest pose). The key is derived here,
+    /// like the setters do, because the component can sit on a child of the ghost root.
+    /// Call before destroying the ghost: IL2CPP recycles pointers, so a stale entry would let
+    /// a new ghost inherit a departed player's rig.
+    /// </summary>
+    public static void ResetGhostCosmeticCaches(NetplayRemotePlayer ghost)
+    {
+        if (ghost == null || ghost.Pointer == IntPtr.Zero) return;
+        GameObject go;
+        try { go = ghost.gameObject; } catch { return; }
+        if (go == null) return;
+        _ghostGloveRigs.Remove(go.Pointer);
+        _ghostStickRest.Remove(go.Pointer);
+    }
+
+    /// <summary>Forgets every per-ghost cosmetic cache (disconnect / scene reload).</summary>
+    public static void ResetGhostCosmeticCaches()
+    {
+        _ghostGloveRigs.Clear();
+        _ghostStickRest.Clear();
+    }
+
+    /// <summary>
     /// Enables/disables the glove glow on a ghost by attaching (or removing) two
     /// fallback Lights to the hand bones. Idempotent. Returns false on failure.
     /// </summary>
