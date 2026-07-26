@@ -26,7 +26,6 @@ public partial class NetworkManager
     private readonly Dictionary<ulong, string> _steamPlayerNames = new();
     private readonly Dictionary<ulong, double> _steamReliableForwardTimes = new();
     // Piton + lamp state moved into SteamAuthoritativeSession (Phase 3 steps 3-4).
-    private readonly Dictionary<int, byte> _steamCosmeticSnapshot = new();
     private readonly Dictionary<int, byte[]> _steamHandPoseSnapshot = new();
     private readonly HashSet<ulong> _steamLoggedFirstClientPlayerFrame = new();
     private readonly HashSet<ulong> _steamLoggedFirstClientClimbotFrame = new();
@@ -312,26 +311,7 @@ public partial class NetworkManager
                 // local ghost and rebroadcast except sender (Phase 3 step 3).
                 SteamSession.OnClientPacket(EnsureSteamRemotePlayer(remoteSteamId), id, r);
                 break;
-            case PacketId.ClientLampState:
-                // Delegate to the authoritative core (lamp snapshot + local ghost + rebroadcast).
-                SteamSession.OnClientPacket(EnsureSteamRemotePlayer(remoteSteamId), id, r);
-                break;
-            case PacketId.ClientCosmeticState:
-            {
-                var pkt = new ClientCosmeticState();
-                pkt.Deserialize(r);
-                var playerId = EnsureSteamRemotePlayer(remoteSteamId);
-                _steamCosmeticSnapshot[playerId] = pkt.Flags;
-                if (_remotePlayers.TryGetValue(playerId, out var rp))
-                {
-                    rp.CosmeticFlags = pkt.Flags;
-                    rp.HasCosmeticState = true;
-                }
-                var outPkt = new ServerCosmeticState { PlayerId = playerId, Flags = pkt.Flags };
-                BroadcastSteamServerPacket(PacketId.ServerCosmeticState, outPkt, exceptSteamId: remoteSteamId, reliable: true);
-                break;
-            }
-            case PacketId.ClientHandPose:
+                        case PacketId.ClientHandPose:
             {
                 var pkt = new ClientHandPose();
                 pkt.Deserialize(r);
@@ -470,37 +450,6 @@ public partial class NetworkManager
         SendSteamPacketToHost(PacketId.ClientPitonRemoved, new ClientPitonRemoved { PitonId = pitonId }, reliable: true);
     }
 
-    private void SendSteamLampState(int mode)
-    {
-        if (!IsHandshakeComplete) return;
-
-        if (_steamLobby != null && _steamLobby.IsHost)
-        {
-            SteamSession.HandleHostLampState(LocalPlayerId, mode);
-            return;
-        }
-
-        SendSteamPacketToHost(PacketId.ClientLampState, new ClientLampState { Mode = mode }, reliable: true);
-    }
-
-    private void SendSteamCosmeticState(byte flags)
-    {
-        if (!IsHandshakeComplete) return;
-
-        if (_steamLobby != null && _steamLobby.IsHost)
-        {
-            _steamCosmeticSnapshot[LocalPlayerId] = flags;
-            BroadcastSteamServerPacket(PacketId.ServerCosmeticState, new ServerCosmeticState
-            {
-                PlayerId = LocalPlayerId,
-                Flags = flags,
-            }, exceptSteamId: 0, reliable: true);
-            return;
-        }
-
-        SendSteamPacketToHost(PacketId.ClientCosmeticState, new ClientCosmeticState { Flags = flags }, reliable: true);
-    }
-
     private void SendSteamHandPose(byte[] packed)
     {
         if (!IsHandshakeComplete) return;
@@ -570,12 +519,6 @@ public partial class NetworkManager
         // Pitons + lamps: official state held by the authoritative core. Weather and time
         // replay through the feature framework's own snapshot.
         SteamSession.SendSnapshotTo(EnsureSteamRemotePlayer(steamId));
-
-        foreach (var kv in _steamCosmeticSnapshot)
-        {
-            var cosmeticPkt = new ServerCosmeticState { PlayerId = kv.Key, Flags = kv.Value };
-            SendSteamPayload(target, BuildPayload(PacketId.ServerCosmeticState, cosmeticPkt), reliable: true);
-        }
 
         foreach (var kv in _steamHandPoseSnapshot)
         {
@@ -825,7 +768,6 @@ public partial class NetworkManager
         _steamPlayerNames.Clear();
         _steamReliableForwardTimes.Clear();
         _steamSession?.Reset(); // pitons + lamps
-        _steamCosmeticSnapshot.Clear();
         _steamHandPoseSnapshot.Clear();
         _steamLoggedFirstClientPlayerFrame.Clear();
         _steamLoggedFirstClientClimbotFrame.Clear();

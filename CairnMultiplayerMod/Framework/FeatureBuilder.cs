@@ -93,6 +93,25 @@ internal sealed class FeatureBuilder
     }
 
     /// <summary>
+    /// Declares a value the host owns for each player separately (a lamp mode, an outfit).
+    /// <paramref name="onChanged"/> receives the player it belongs to. Latecomers get
+    /// everyone's current value; a leaving player's entry is dropped for you.
+    /// </summary>
+    public PerPlayerState<T> PerPlayerState<T>(string id, Action<int, T> onChanged) where T : IPacket, new()
+    {
+        if (onChanged == null) throw new ArgumentNullException(nameof(onChanged));
+
+        var state = _extension.RegisterState(id, FeatureCodec.For<T>());
+        state.Changed += change =>
+        {
+            if (change.Removed) return;
+            onChanged(change.ScopePlayerId, change.Value);
+        };
+
+        return new PerPlayerState<T>(_runtime, _extension, state, $"{_featureId}.{id}");
+    }
+
+    /// <summary>
     /// Declares a request the host arbitrates: <paramref name="handler"/> runs on the host
     /// only and may reject. Use it whenever a client must not decide the outcome alone.
     /// </summary>

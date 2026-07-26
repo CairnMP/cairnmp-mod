@@ -80,8 +80,8 @@ public class ProtocolVersionTests
     {
         // When you bump Protocol.Version, update this value AND the release notes
         // to signal to clients that they need to update.
-        // 9: pings, chat, weather, time and sleep moved to the feature framework.
-        Assert.Equal(9, Protocol.Version);
+        // 10: pings, chat, weather, time, sleep, lamp and cosmetics moved to the framework.
+        Assert.Equal(10, Protocol.Version);
     }
 
     [Fact]

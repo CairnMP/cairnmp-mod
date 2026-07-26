@@ -14,12 +14,6 @@ internal sealed class PlayerStateBroadcaster
     private float _stateTickTimer;
     private float _boneTickTimer;
 
-    private float _lampPollTimer;
-    private bool _hasLastSentLampState;
-    private int _lastSentLampMode;
-    private float _cosmeticPollTimer;
-    private bool _hasLastSentCosmetic;
-    private byte _lastSentCosmeticFlags;
     private float _handPosePollTimer;
     private byte[] _lastSentHandPosePacked;
     private const float NetFrameMissingLogIntervalSeconds = 3f;
@@ -69,8 +63,6 @@ internal sealed class PlayerStateBroadcaster
                 SendLocalNetFrames();
             }
 
-            TickLampSync();
-            TickCosmeticSync();
             TickHandPoseSync();
 
             // Check for newly placed pitons (a lower frequency is enough).
@@ -244,7 +236,8 @@ internal sealed class PlayerStateBroadcaster
 
     /// <summary>
     /// Resets the per-episode sync state on a scene-bound reset point: local sync debug
-    /// flags, cosmetic/lamp/hand-pose poll caches, and the time + rope sub-states.
+    /// flags, the hand-pose poll cache, and the rope sub-state. Features reset their own
+    /// through OnSceneReset.
     /// </summary>
     internal void ResetSyncState()
     {
@@ -252,81 +245,15 @@ internal sealed class PlayerStateBroadcaster
         _debugLoggedFirstClimbotFrameCapture = false;
         _debugLastMissingPlayerFrameLogAt = 0f;
         _debugLastMissingClimbotFrameLogAt = 0f;
-        _lampPollTimer = 0f;
-        _hasLastSentLampState = false;
-        _lastSentLampMode = 0;
-        _cosmeticPollTimer = 0f;
-        _hasLastSentCosmetic = false;
-        _lastSentCosmeticFlags = 0;
         CosmeticApi.ResetCaches();
         _handPosePollTimer = 0f;
         _lastSentHandPosePacked = null;
-        LampApi.ResetCaches();
         // No reset of freecam detection here: the eagle-eye/Display Route state is
         // driven by native events and persists across scene streaming. Resetting it
         // would make the mod believe we left Display Route (while we're still in it)
         // -> can't place a ping until we re-toggle.
         FingerApi.ResetCaches();
         Mod.Instance.Rope.Reset();
-    }
-
-    /// <summary>
-    /// Polls the local lamp state and broadcasts to the other players whenever it
-    /// changes. No message until we've been able to read it at least once, to avoid
-    /// sending a misleading "off" during loads.
-    /// </summary>
-    private void TickLampSync()
-    {
-        if (Mod.Instance.LocalState != PlayerState.InGame) return;
-
-        _lampPollTimer += Time.unscaledDeltaTime;
-        if (_lampPollTimer < Protocol.LampStatePollIntervalSeconds)
-            return;
-        _lampPollTimer = 0f;
-
-        if (!LampApi.TryGetLocalState(out var lightMode))
-            return;
-
-        // The lamp int also carries (high bits, no new packet):
-        //  - bits 8-15  : stick anchor mode (Locator/Default) -> ApplyGhostStickByAnchorMode
-        //  - bits 16-24 : outfit bitfield (active meshes) -> ApplyGhostOutfitBits
-        int anchorMode = 0;
-        CosmeticApi.TryGetLocalStickAnchorMode(out anchorMode);
-        int outfitBits = CosmeticApi.GetLocalOutfitBits();
-        int packed = (lightMode & 0xFF) | ((anchorMode & 0xFF) << 8)
-                     | ((outfitBits & CosmeticApi.OutfitBitsMask) << 16);
-
-        if (_hasLastSentLampState && _lastSentLampMode == packed)
-            return;
-
-        _lastSentLampMode = packed;
-        _hasLastSentLampState = true;
-        _network.SendLampState(packed);
-    }
-
-    /// <summary>
-    /// Polls the local cosmetic state (glowing gloves for now) and broadcasts it
-    /// whenever it changes. Same logic as the lamp: no send until we've read it at
-    /// least once, and only on change (cosmetics are nearly static).
-    /// </summary>
-    private void TickCosmeticSync()
-    {
-        if (Mod.Instance.LocalState != PlayerState.InGame) return;
-
-        _cosmeticPollTimer += Time.unscaledDeltaTime;
-        if (_cosmeticPollTimer < Protocol.CosmeticStatePollIntervalSeconds)
-            return;
-        _cosmeticPollTimer = 0f;
-
-        if (!CosmeticApi.TryGetLocalCosmetics(out var flags))
-            return;
-
-        if (_hasLastSentCosmetic && _lastSentCosmeticFlags == flags)
-            return;
-
-        _lastSentCosmeticFlags = flags;
-        _hasLastSentCosmetic = true;
-        _network.SendCosmeticState(flags);
     }
 
     /// <summary>

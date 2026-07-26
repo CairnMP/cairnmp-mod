@@ -43,11 +43,6 @@ public class RemotePlayer
     // to animate the ghost's hands while climbing.
     public byte[] HandPosePacked;
     public bool HasHandPose;
-
-    // Sleep state at the bivouac (BivouacManager.IsAsleep) — the host aggregates it to
-    // decide whether everyone is asleep (allows fast-forwarding time).
-    public bool IsAsleep;
-    public bool HasSleepState;
 }
 
 /// <summary>
@@ -182,18 +177,6 @@ public partial class NetworkManager : IDisposable
     {
         if (IsSteamTransportActive)
             SendSteamPitonRemoved(pitonId);
-    }
-
-    public void SendLampState(int mode)
-    {
-        if (IsSteamTransportActive)
-            SendSteamLampState(mode);
-    }
-
-    public void SendCosmeticState(byte flags)
-    {
-        if (IsSteamTransportActive)
-            SendSteamCosmeticState(flags);
     }
 
     public void SendHandPose(byte[] packed)

@@ -345,18 +345,6 @@ public struct ClientClimbotFrame : IPacket
 }
 
 /// <summary>
-/// State of the local player's lamp (AavaLightStick.CurrentMode). Mode is a
-/// game-side enum carried here as an int. Sent only on change.
-/// </summary>
-public struct ClientLampState : IPacket
-{
-    public int Mode;
-
-    public void Serialize(BinaryWriter w) => w.Write(Mode);
-    public void Deserialize(BinaryReader r) => Mode = r.ReadInt32();
-}
-
-/// <summary>
 /// Finger pose of the local player: 30 bones compressed smallest-three
 /// (Protocol.HandPosePackedSize bytes). Sent only on change.
 /// </summary>
@@ -606,38 +594,6 @@ public struct ServerClimbotFrame : IPacket
         PlayerId = r.ReadInt32();
         Frame.Deserialize(r);
     }
-}
-
-/// <summary>Host relay of a player's lamp Mode to everyone else.</summary>
-public struct ServerLampState : IPacket
-{
-    public int PlayerId;
-    public int Mode;
-
-    public void Serialize(BinaryWriter w) { w.Write(PlayerId); w.Write(Mode); }
-    public void Deserialize(BinaryReader r) { PlayerId = r.ReadInt32(); Mode = r.ReadInt32(); }
-}
-
-/// <summary>
-/// Cosmetic state of the local player (Flags bit field, see Protocol.CosmeticFlag*).
-/// For now: bit 0 = glowing gloves active. Sent only on change.
-/// </summary>
-public struct ClientCosmeticState : IPacket
-{
-    public byte Flags;
-
-    public void Serialize(BinaryWriter w) => w.Write(Flags);
-    public void Deserialize(BinaryReader r) => Flags = r.ReadByte();
-}
-
-/// <summary>Host relay of a player's cosmetic state to everyone else.</summary>
-public struct ServerCosmeticState : IPacket
-{
-    public int PlayerId;
-    public byte Flags;
-
-    public void Serialize(BinaryWriter w) { w.Write(PlayerId); w.Write(Flags); }
-    public void Deserialize(BinaryReader r) { PlayerId = r.ReadInt32(); Flags = r.ReadByte(); }
 }
 
 

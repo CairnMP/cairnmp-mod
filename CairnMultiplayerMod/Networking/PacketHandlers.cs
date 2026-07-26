@@ -91,28 +91,6 @@ public partial class NetworkManager
                 OnPitonRemoved?.Invoke(pkt);
                 break;
             }
-            case PacketId.ServerLampState:
-            {
-                var pkt = new ServerLampState();
-                pkt.Deserialize(r);
-                if (_remotePlayers.TryGetValue(pkt.PlayerId, out var p))
-                {
-                    p.LampMode = pkt.Mode;
-                    p.HasLampState = true;
-                }
-                break;
-            }
-            case PacketId.ServerCosmeticState:
-            {
-                var pkt = new ServerCosmeticState();
-                pkt.Deserialize(r);
-                if (_remotePlayers.TryGetValue(pkt.PlayerId, out var p))
-                {
-                    p.CosmeticFlags = pkt.Flags;
-                    p.HasCosmeticState = true;
-                }
-                break;
-            }
             case PacketId.ServerHandPose:
             {
                 var pkt = new ServerHandPose();

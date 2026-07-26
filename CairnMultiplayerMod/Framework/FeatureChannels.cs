@@ -85,6 +85,57 @@ internal sealed class HostState<T> where T : IPacket, new()
 }
 
 /// <summary>
+/// Host state held per player rather than globally — one lamp mode per climber, one outfit
+/// per climber. Latecomers receive everyone's current value on arrival, and a player's entry
+/// is dropped automatically when they leave.
+/// </summary>
+internal sealed class PerPlayerState<T> where T : IPacket, new()
+{
+    private readonly ExtensionRuntime _runtime;
+    private readonly MultiplayerExtension _extension;
+    private readonly ReplicatedState<T> _state;
+    private readonly string _label;
+
+    internal PerPlayerState(ExtensionRuntime runtime, MultiplayerExtension extension,
+        ReplicatedState<T> state, string label)
+    {
+        _runtime = runtime;
+        _extension = extension;
+        _state = state;
+        _label = label;
+    }
+
+    /// <summary>The underlying contract, so a host handler can publish inside its own
+    /// transaction (see <see cref="HostRequest{T}.Publish{TState}"/>).</summary>
+    internal ReplicatedState<T> Inner => _state;
+
+    /// <summary>The value currently known for that player, if any.</summary>
+    public bool TryGet(int playerId, out T value) => _state.TryGetForPlayer(playerId, out value);
+
+    /// <summary>Publishes a player's value. Host only.</summary>
+    public void Set(int playerId, T value)
+    {
+        if (!_runtime.IsConnected) return;
+        if (!_runtime.IsHost)
+        {
+            FeatureLog.Warn($"[Feature:{_label}] Set ignored: only the host publishes this state.");
+            return;
+        }
+
+        var result = _extension.Commit(context => context.SetForPlayer(_state, playerId, value));
+        if (!result.Committed)
+            FeatureLog.Warn($"[Feature:{_label}] state update refused: {result.Reason}");
+    }
+
+    /// <summary>Drops a player's value. Host only. Leaving players are cleared for you.</summary>
+    public void Remove(int playerId)
+    {
+        if (!_runtime.IsConnected || !_runtime.IsHost) return;
+        _extension.Commit(context => context.RemoveForPlayer(_state, playerId));
+    }
+}
+
+/// <summary>
 /// "I ask, the host decides." The handler runs on the host only and may refuse. Use it when
 /// a client must not be able to impose the outcome by itself — roping up with a partner,
 /// for instance.
@@ -144,4 +195,12 @@ internal readonly struct HostRequest<T>
 
     /// <summary>Refuses the request; the sender receives the reason.</summary>
     public void Reject(string reason) => _context.Reject(reason);
+
+    /// <summary>
+    /// Publishes the sender's value as part of answering. Doing it here rather than calling
+    /// Set afterwards keeps it in the same transaction: if the handler rejects or throws,
+    /// nothing is published at all.
+    /// </summary>
+    public void Publish<TState>(PerPlayerState<TState> state, TState value) where TState : IPacket, new()
+        => _context.SetForPlayer(state.Inner, FromPlayerId, value);
 }

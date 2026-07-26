@@ -6,9 +6,9 @@ namespace CairnMultiplayer.Shared;
 /// </summary>
 public static class Protocol
 {
-    // 9: pings, chat, weather, time and sleep left the fixed packet list for the feature
-    // framework, freeing ids 4, 10, 12, 14, 69, 76, 78 and 80.
-    public const int Version = 9;
+    // 10: pings, chat, weather, time, sleep, lamp and cosmetics left the fixed packet list
+    // for the feature framework, freeing ids 4, 10, 11, 12, 14, 16, 69, 76, 77, 78, 80 and 83.
+    public const int Version = 10;
     public const string ConnectionKey = "cairnmp";
     public const int DefaultPort = 14000;
 
@@ -100,14 +100,14 @@ public enum PacketId : byte
     ClientPlayerFrame = 8,
     ClientClimbotFrame = 9,
     // 10 was ClientWeatherState — weather is host-published state in Features/Weather/. Reserved.
-    ClientLampState = 11,
+    // 11 was ClientLampState — appearance is per-player host state in Features/Players/Avatar/.
     // 12 was ClientPingPlaced — pings moved to the feature framework (Features/World/).
     // Left reserved on purpose: reusing the number would make an old client's ping look
     // like whatever packet takes its place.
     ClientHandPose = 13,
     // 14 was ClientSleepState — sleep is reported through Features/Clock/. Reserved.
     ClientRopeClip = 15,
-    ClientCosmeticState = 16,
+    // 16 was ClientCosmeticState — see the note on 11. Reserved, do not reuse.
     ClientExtensionManifest = 17,
     ClientExtensionCommand = 18,
 
@@ -125,13 +125,13 @@ public enum PacketId : byte
     ServerPlayerFrame = 74,
     ServerClimbotFrame = 75,
     // 76 was ServerWeatherState — see the note on 10. Reserved, do not reuse.
-    ServerLampState = 77,
+    // 77 was ServerLampState — see the note on 11. Reserved, do not reuse.
     // 78 was ServerPingPlaced — see the note on 12. Reserved, do not reuse.
     ServerHandPose = 79,
     // 80 was ServerTimeState — time of day moved to Features/Clock/. Reserved.
     ServerTeleport = 81,
     ServerRopeClip = 82,
-    ServerCosmeticState = 83,
+    // 83 was ServerCosmeticState — see the note on 11. Reserved, do not reuse.
     ServerExtensionManifestResult = 84,
     ServerExtensionCommandResult = 85,
     ServerExtensionEvent = 86,
