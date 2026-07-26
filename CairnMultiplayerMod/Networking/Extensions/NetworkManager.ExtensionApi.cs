@@ -38,35 +38,7 @@ public partial class NetworkManager
         int playerId = EnsureSteamRemotePlayer(remoteSteamId);
         if (id == PacketId.ClientExtensionManifest)
         {
-            var manifest = new ClientExtensionManifest();
-            manifest.Deserialize(reader);
-            var result = ExtensionNegotiator.Negotiate(MultiplayerApi.Runtime.Manifest(), manifest.Entries);
-            var enabled = result.EnabledExtensionIds.ToArray();
-            SendSteamPayload(new Il2CppSteamworks.CSteamID(remoteSteamId),
-                BuildPayload(PacketId.ServerExtensionManifestResult, new ServerExtensionManifestResult
-                {
-                    Accepted = result.Accepted,
-                    Reason = result.Reason,
-                    EnabledExtensionIds = enabled,
-                }), reliable: true);
-
-            if (!result.Accepted)
-            {
-                _enabledExtensionsByPlayer.Remove(playerId);
-                Mod.Log.Warning($"[Extensions] Rejected player {playerId}: {result.Reason}");
-                return true;
-            }
-
-            bool wasAdmitted = _enabledExtensionsByPlayer.ContainsKey(playerId);
-            _enabledExtensionsByPlayer[playerId] = enabled.ToHashSet(StringComparer.Ordinal);
-            SendPeerStatusesTo(playerId);
-            if (!wasAdmitted)
-                BroadcastPeerStatus(playerId, joined: true);
-            SendSteamSnapshotTo(remoteSteamId);
-            SendExtensionSnapshotTo(playerId);
-            if (!wasAdmitted)
-                MultiplayerApi.Runtime.NotifyPlayerJoined(ToApiPlayer(playerId));
-            Mod.Log.Msg($"[Extensions] Player {playerId} admitted with {enabled.Length} extension(s).");
+            HandleClientExtensionManifest(remoteSteamId, playerId, reader);
             return true;
         }
 
@@ -75,19 +47,60 @@ public partial class NetworkManager
 
         if (id == PacketId.ClientExtensionCommand)
         {
-            var command = new ClientExtensionCommand();
-            command.Deserialize(reader);
-            var result = MultiplayerApi.Runtime.ExecuteHostCommand(playerId, command);
-            _extensionBridge.SendCommandResult(playerId, new ServerExtensionCommandResult
-            {
-                RequestId = result.RequestId,
-                Status = (ExtensionCommandStatus)result.Status,
-                Reason = result.Reason,
-            });
+            HandleClientExtensionCommand(playerId, reader);
             return true;
         }
 
         return false;
+    }
+
+    private void HandleClientExtensionManifest(
+        ulong remoteSteamId,
+        int playerId,
+        System.IO.BinaryReader reader)
+    {
+        var manifest = new ClientExtensionManifest();
+        manifest.Deserialize(reader);
+        var result = ExtensionNegotiator.Negotiate(MultiplayerApi.Runtime.Manifest(), manifest.Entries);
+        var enabled = result.EnabledExtensionIds.ToArray();
+        SendSteamPayload(new Il2CppSteamworks.CSteamID(remoteSteamId),
+            BuildPayload(PacketId.ServerExtensionManifestResult, new ServerExtensionManifestResult
+            {
+                Accepted = result.Accepted,
+                Reason = result.Reason,
+                EnabledExtensionIds = enabled,
+            }), reliable: true);
+
+        if (!result.Accepted)
+        {
+            _enabledExtensionsByPlayer.Remove(playerId);
+            Mod.Log.Warning($"[Extensions] Rejected player {playerId}: {result.Reason}");
+            return;
+        }
+
+        bool wasAdmitted = _enabledExtensionsByPlayer.ContainsKey(playerId);
+        _enabledExtensionsByPlayer[playerId] = enabled.ToHashSet(StringComparer.Ordinal);
+        SendPeerStatusesTo(playerId);
+        if (!wasAdmitted)
+            BroadcastPeerStatus(playerId, joined: true);
+        SendSteamSnapshotTo(remoteSteamId);
+        SendExtensionSnapshotTo(playerId);
+        if (!wasAdmitted)
+            MultiplayerApi.Runtime.NotifyPlayerJoined(ToApiPlayer(playerId));
+        Mod.Log.Msg($"[Extensions] Player {playerId} admitted with {enabled.Length} extension(s).");
+    }
+
+    private void HandleClientExtensionCommand(int playerId, System.IO.BinaryReader reader)
+    {
+        var command = new ClientExtensionCommand();
+        command.Deserialize(reader);
+        var result = MultiplayerApi.Runtime.ExecuteHostCommand(playerId, command);
+        _extensionBridge.SendCommandResult(playerId, new ServerExtensionCommandResult
+        {
+            RequestId = result.RequestId,
+            Status = (ExtensionCommandStatus)result.Status,
+            Reason = result.Reason,
+        });
     }
 
     private bool IsExtensionPeerAdmitted(ulong remoteSteamId)
