@@ -3,6 +3,37 @@
 All notable changes to CairnMP are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] — 2026-08-02
+
+Network protocol unchanged (still version 7), so `1.1.0` and `1.0.0` clients
+can still play together.
+
+### Added
+- **Extension API** — other mods can now register their own state, events and
+  commands and have them synchronized across a session, without touching
+  CairnMP's own networking. Handlers run in a transaction: a rejected or
+  throwing command rolls back every managed effect, and a misbehaving
+  extension is isolated behind its own circuit breaker instead of taking the
+  session down. See `docs/multiplayer-api.md`.
+- **`VerboseLogging` preference** — the verbose log switch is now a proper
+  MelonPreferences entry, so it can be toggled from the config file instead of
+  requiring a rebuild. Thanks [@nullbrik](https://github.com/nullbrik).
+
+### Fixed
+- The **Multiplayer button** no longer shows "Story" while opening the
+  multiplayer panel.
+- **Roping** — a partner unclipping now cleans up the native belay properly,
+  and remote piton references are cleared on reset instead of pointing at
+  stale objects.
+- Extension sessions are finalized when a session ends, and Steam diagnostics
+  no longer report a stale state.
+
+### Changed
+- Crash reports now carry a stable fingerprint and the tail of
+  `CairnLoader/Latest.log`. Previously every occurrence of a bug was filed as
+  a separate report with no log attached, which made most of them
+  untriageable.
+
 ## [1.0.0] — 2026-07-11
 
 First stable release. Consolidates the entire `0.1.20 → 0.1.37` beta line into a
