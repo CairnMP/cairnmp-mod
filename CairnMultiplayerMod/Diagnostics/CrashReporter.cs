@@ -38,6 +38,13 @@ public static class CrashReporter
         Timeout = TimeSpan.FromSeconds(5),
     };
 
+    // Classification sent as `kind`, used by the console to pick the right
+    // diagnostic layout and to filter the crash list.
+    private const string KindException = "exception";
+    private const string KindUnhandled = "unhandled_exception";
+    private const string KindUnobservedTask = "unobserved_task_exception";
+    private const string KindUnityLog = "unity_log_exception";
+
     private static int _initialized;
     private static readonly object ReportedCaughtLock = new();
     private static readonly HashSet<string> ReportedCaughtSignatures = new();
@@ -50,13 +57,13 @@ public static class CrashReporter
         {
             if (args.ExceptionObject is Exception ex)
             {
-                ReportException(ex, "AppDomain.UnhandledException");
+                ReportException(ex, "AppDomain.UnhandledException", KindUnhandled);
             }
         };
 
         TaskScheduler.UnobservedTaskException += (sender, args) =>
         {
-            ReportException(args.Exception, "TaskScheduler.UnobservedTaskException");
+            ReportException(args.Exception, "TaskScheduler.UnobservedTaskException", KindUnobservedTask);
             args.SetObserved();
         };
     }
@@ -65,10 +72,17 @@ public static class CrashReporter
     /// Explicit report — call from a catch block when the error is
     /// recoverable but worth tracing (e.g. a malformed network packet).
     /// </summary>
-    public static void ReportException(Exception ex, string contextLabel = null)
+    public static void ReportException(Exception ex, string contextLabel = null, string kind = KindException)
     {
         if (ex == null) return;
-        Report($"{ex.GetType().Name}: {ex.Message}", ex.ToString(), contextLabel);
+
+        var stack = ex.ToString();
+        Report(
+            $"{ex.GetType().Name}: {ex.Message}",
+            stack,
+            contextLabel,
+            kind,
+            CrashFingerprint.Build(kind, contextLabel, ex.GetType().FullName, stack));
     }
 
     public static void ReportCaughtExceptionOnce(Exception ex, string contextLabel)
@@ -102,7 +116,15 @@ public static class CrashReporter
         }
 
         var stack = string.IsNullOrEmpty(stackTrace) ? condition : $"{condition}\n{stackTrace}";
-        Report(condition, stack, contextLabel);
+        // Le type d'exception n'est pas disponible ici : la condition Unity
+        // ("NullReferenceException: Object reference not set…") en tient lieu.
+        var exceptionType = condition.Split(':')[0];
+        Report(
+            condition,
+            stack,
+            contextLabel,
+            KindUnityLog,
+            CrashFingerprint.Build(KindUnityLog, contextLabel, exceptionType, stack));
     }
 
     /// <summary>
@@ -110,19 +132,24 @@ public static class CrashReporter
     /// Never rethrows (otherwise it would loop infinitely via the
     /// UnhandledException hook).
     /// </summary>
-    private static void Report(string message, string stack, string contextLabel)
+    private static void Report(string message, string stack, string contextLabel, string kind, string fingerprint)
     {
         try
         {
             var version = MelonInfoCache.Version;
             var payload = new CrashReport
             {
-                Source     = SOURCE,
-                Version    = version,
-                Os         = $"{Environment.OSVersion.Platform} {Environment.OSVersion.Version}",
-                Message    = Truncate(message, 1024),
-                Stacktrace = Truncate(stack, 64 * 1024),
-                UserHash   = MachineHash.Value,
+                Source      = SOURCE,
+                Version     = version,
+                Os          = $"{Environment.OSVersion.Platform} {Environment.OSVersion.Version}",
+                Message     = Truncate(message, 1024),
+                Stacktrace  = Truncate(stack, 64 * 1024),
+                UserHash    = MachineHash.Value,
+                Kind        = kind,
+                Fingerprint = fingerprint,
+                // Ce que le loader a écrit juste avant explique souvent le
+                // crash mieux que la stacktrace seule.
+                Logs        = GameLogTail.Read(),
             };
             if (!string.IsNullOrEmpty(contextLabel))
             {
@@ -167,13 +194,16 @@ public static class CrashReporter
 
 internal class CrashReport
 {
-    [JsonPropertyName("source")]     public string Source { get; set; }
-    [JsonPropertyName("version")]    public string Version { get; set; }
-    [JsonPropertyName("os")]         public string Os { get; set; }
-    [JsonPropertyName("message")]    public string Message { get; set; }
-    [JsonPropertyName("stacktrace")] public string Stacktrace { get; set; }
-    [JsonPropertyName("user_hash")]  public string UserHash { get; set; }
-    [JsonPropertyName("context")]    public JsonElement? Context { get; set; }
+    [JsonPropertyName("source")]      public string Source { get; set; }
+    [JsonPropertyName("version")]     public string Version { get; set; }
+    [JsonPropertyName("os")]          public string Os { get; set; }
+    [JsonPropertyName("message")]     public string Message { get; set; }
+    [JsonPropertyName("stacktrace")]  public string Stacktrace { get; set; }
+    [JsonPropertyName("user_hash")]   public string UserHash { get; set; }
+    [JsonPropertyName("context")]     public JsonElement? Context { get; set; }
+    [JsonPropertyName("kind")]        public string Kind { get; set; }
+    [JsonPropertyName("fingerprint")] public string Fingerprint { get; set; }
+    [JsonPropertyName("logs")]        public string Logs { get; set; }
 }
 
 [JsonSourceGenerationOptions(DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
