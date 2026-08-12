@@ -28,13 +28,15 @@ Thumbs.db
 # BMad tooling (local install; not part of the mod)
 _bmad/
 
-# BMad output: generated artifacts stay local, but the spec contract and the
-# research it derives from are decision records and belong in history.
+# BMad output: scratch and rendered output stay local, but the spec contract,
+# the research it derives from, and the sprint state the build loop follows
+# are project records and belong in history.
 # Note the glob: git never descends into an excluded directory, so the
 # negations below only work against `_bmad-output/*`, not `_bmad-output/`.
 _bmad-output/*
 !_bmad-output/specs/
 !_bmad-output/planning-artifacts/
+!_bmad-output/implementation-artifacts/
 
 # Logs
 *.log
