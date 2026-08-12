@@ -31,8 +31,8 @@
 generated: 08-12-2026 13:25
 last_updated: 08-12-2026 13:25
 project: cairnmp-mod
-project_key: NOKEY
-tracking_system: file-system
+project_key: yerayalfageme-glitch/cairnmp-mod
+tracking_system: github
 story_location: _bmad-output/implementation-artifacts
 development_status:
   epic-1: backlog
@@ -41,3 +41,8 @@ development_status:
   1-3-surface-end-of-life-build-sdks-via-checksdkvulnerabilities: backlog
   1-4-raise-and-pin-test-packages-to-their-net6-0-ceilings: backlog
   epic-1-retrospective: optional
+story_issues:
+  1-1-add-github-actions-ci-for-the-protocol-test-suite: 1
+  1-2-stop-generate-il2cpp-refs-ps1-telling-contributors-to-commit: 2
+  1-3-surface-end-of-life-build-sdks-via-checksdkvulnerabilities: 3
+  1-4-raise-and-pin-test-packages-to-their-net6-0-ceilings: 4
