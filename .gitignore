@@ -23,7 +23,11 @@ Thumbs.db
 .idea/
 *.iml
 .codex/
-.claude/settings.local.json
+.claude/
+
+# BMad tooling and its generated artifacts (local install; not part of the mod)
+_bmad/
+_bmad-output/
 
 # Logs
 *.log
