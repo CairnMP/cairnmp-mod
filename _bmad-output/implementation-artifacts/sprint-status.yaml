@@ -21,6 +21,9 @@
 #   - in-progress: Actively being worked on
 #   - done: Completed
 
+# Action Item Fields:
+#   - issue: optional GitHub issue number tracking this item, in the repo named by project_key
+
 # WORKFLOW NOTES:
 # ===============
 # - Epic transitions to 'in-progress' automatically when its first story starts (via build's sprint sync)
@@ -29,7 +32,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 08-12-2026 13:25
-last_updated: 08-14-2026 12:41
+last_updated: 08-14-2026 13:17
 project: cairnmp-mod
 project_key: yerayalfageme-glitch/cairnmp-mod
 tracking_system: github
@@ -52,7 +55,7 @@ action_items:
     action: "Carry epic 1 to production, or state that it does not apply there - CAP-2
       s success signal is false on that branch and CI cannot run there"
     owner: "Yeray"
-    status: open
+    status: done
     resolved_by: "decision-q1-production-in-scope"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
   - id: "epic-1-retro-item-2-re-establish-the-red-proof-on-the-curren"
@@ -61,27 +64,30 @@ action_items:
       evidence predates the package pins and the props change"
     owner: "Yeray"
     status: open
+    issue: 16
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
   - id: "epic-1-retro-item-3-fix-spec-1-3-frontmatter-to-done-and-ver"
     epic: 1
     action: "Fix spec-1-3 frontmatter to done and verify the post-state rather than
       assuming the substitution matched"
     owner: "Yeray"
-    status: open
+    status: done
+    resolved_by: "spec-epic-1-record-corrections"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
   - id: "epic-1-retro-item-4-refresh-spec-1-1-stale-references-two-co"
     epic: 1
     action: "Refresh spec-1-1 stale references: two Code Map anchors and the push-not-yet-exercised
       note"
     owner: "Yeray"
-    status: open
+    status: done
+    resolved_by: "spec-epic-1-record-corrections"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
   - id: "epic-1-retro-item-5-decide-next-feature-framework-status-giv"
     epic: 1
     action: "Decide next/feature-framework status: give it the workflow or drop it
       from the CI trigger lists"
     owner: "Yeray"
-    status: open
+    status: done
     resolved_by: "decision-q2-next-feature-framework-keep"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
   - id: "epic-1-retro-item-6-triage-the-20-entry-deferred-work-ledger"
@@ -89,6 +95,7 @@ action_items:
     action: "Triage the 20-entry deferred-work ledger accumulated across epic 1"
     owner: "Yeray"
     status: open
+    issue: 17
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
   - id: "epic-1-retro-item-7-adopt-a-commit-subject-story-id-conventi"
     epic: 1
@@ -96,13 +103,14 @@ action_items:
       of 26 commits"
     owner: "Yeray"
     status: open
+    issue: 18
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
   - id: "epic-1-retro-item-8-amend-cap-2-success-clause-to-name-branc"
     epic: 1
     action: "Amend the CAP-2 success clause in SPEC.md to name the branches it binds;
       run it after item 1 so the wording describes the tree that exists"
     owner: "Yeray"
-    status: open
+    status: done
     resolved_by: "decision-q3-name-branches-in-spec"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
 

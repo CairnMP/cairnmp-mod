@@ -38,12 +38,14 @@ context: []
 
 ## Code Map
 
+**Anchor convention:** line numbers here are current as of the 2026-08-14 records correction, not as of story close. The one exception is the `.github/workflows/` bullet immediately below, which deliberately records the pre-story state and is therefore false at HEAD by design.
+
 - `.github/workflows/` -- does not exist; this story creates it. `.github/` currently holds only `FUNDING.yml`.
-- `CairnMultiplayerShared.Tests/CairnMultiplayerShared.Tests.csproj` -- the CI-viable suite. 3 NuGet refs; single `ProjectReference` at line 17 to `CairnMultiplayerShared`.
+- `CairnMultiplayerShared.Tests/CairnMultiplayerShared.Tests.csproj` -- the CI-viable suite. 3 NuGet refs; single `ProjectReference` at line 28 to `CairnMultiplayerShared`. (Was line 17 when this story closed; story 1.4 inserted the net6.0-ceiling comment block at lines 11-18, so line 17 is now inside that comment.)
 - `CairnMultiplayerShared/CairnMultiplayerShared.csproj` -- 11 lines, `net6.0`, zero package/project/assembly references. The graph terminates here — this is why CI is possible at all.
 - `CairnMultiplayerShared.Tests/PacketCodecTests.cs:108` -- `PingPacketTests.ClientPingPlaced_RoundTrips`, a self-contained `[Fact]` asserting three floats. The chosen break candidate for the red proof.
 - `Directory.Build.props:44` -- `WarningsAsErrors=CS8600;CS8601;CS8602;CS8603;CS8604`; a future nullable-flow warning becomes a hard CI failure. Read-only here.
-- `Directory.Build.props:46` -- `NoWarn=NETSDK1138` already suppresses the "net6.0 is out of support" build warning. No CI-side flag needed.
+- `Directory.Build.props:85` -- `<NoWarn>$(NoWarn);NETSDK1138</NoWarn>` already suppresses the "net6.0 is out of support" build warning. No CI-side flag needed. (Was line 46 and the overwrite form `NoWarn=NETSDK1138` when this story closed; story 1.3 changed it to the append form so codes set by the SDK or an outer props file survive, and moved it down the file.)
 - `Directory.Build.props:17-37` -- game/`LOCALAPPDATA` paths. Verified harmless when absent: all are plain string concatenation or `Exists()`-guarded, so they evaluate to dead strings rather than failing.
 - `CairnMultiplayerMod/CairnMultiplayerMod.csproj:171-195` -- `CopyToMods` target, an unconditional `<Copy>` to the game folder. Would hard-fail on a runner. Never reached by a project-scoped test command — the reason scope discipline matters.
 - `scripts/check.sh:21` -- runs `dotnet test CairnMultiplayer.slnx`, solution-wide. CI must not call this.
@@ -51,7 +53,7 @@ context: []
 ## Tasks & Acceptance
 
 **Execution:**
-- [x] `.github/workflows/ci.yml` -- create the workflow: a single `ubuntu-latest` job running `actions/checkout@v7`, `actions/setup-dotnet@v6` with `dotnet-version: 6.0.x`, then `dotnet test CairnMultiplayerShared.Tests -c Release`. Triggers: `push` on `develop`/`production`, `pull_request` targeting them, plus `workflow_dispatch`. Add a `concurrency` group keyed on workflow + ref with `cancel-in-progress` -- restricting `push` to long-lived branches is what stops an internal PR firing twice for one SHA.
+- [x] `.github/workflows/ci.yml` -- create the workflow: a single `ubuntu-latest` job running `actions/checkout@v7`, `actions/setup-dotnet@v6` with `dotnet-version: 6.0.x`, then `dotnet test CairnMultiplayerShared.Tests -c Release`. Triggers: `push` on `develop`/`production`/`next/feature-framework`, `pull_request` targeting them, plus `workflow_dispatch`. (`next/feature-framework` was added later, in `41607e3`, and ratified by `decision-q2-next-feature-framework-keep`; this story shipped the first two. That same commit also superseded two other details of this task: `cancel-in-progress` became conditional — `ci.yml:24` now reads `${{ github.event_name == 'pull_request' }}`, not the unconditional `true` shipped here, because on an integration branch a cancelled run is neither a pass nor a failure — and `timeout-minutes: 15` was added at `ci.yml:35`.) Add a `concurrency` group keyed on workflow + ref with `cancel-in-progress` -- restricting `push` to long-lived branches is what stops an internal PR firing twice for one SHA.
 - [x] Verify locally first -- run the test command as CI will, confirming 63 passing before spending a runner.
 - [x] Prove green on a real runner -- push the branch and open a PR to `develop`, so the `pull_request` trigger fires the job.
 - [x] Prove red -- push one commit falsifying the assertion in `PacketCodecTests.cs:108`, confirm the same PR check turns red naming that test, then revert it and confirm green returns. The revert must land before the story closes.
@@ -63,6 +65,15 @@ context: []
 - Given the workflow file, when it is read, then it references no path under `game-refs/`, no secret, and no project other than `CairnMultiplayerShared.Tests`.
 
 ## Spec Change Log
+
+**2026-08-14 -- records correction after epic 1 closed** (`spec-epic-1-record-corrections`, action item 4; baseline `1f5e30c`). Five references had drifted from the tree — four identified in planning, a fifth found by review. Every anchor below was re-verified at HEAD before being written, not inherited from the retrospective, whose own line citations for these same lines have themselves drifted. The `<frozen-after-approval>` intent block was not touched, and no acceptance criterion or verdict was altered. Two Evidence items *were* corrected — the push-trigger paragraph and the one-run-per-SHA bullet — because both had stopped describing the tree; the acceptance criteria they support are unchanged and were satisfied at story close.
+
+- Code Map, test csproj `ProjectReference`: line 17 → 28. Invalidated by **story 1.4**, which inserted the net6.0-ceiling comment block at lines 11-18; the old anchor now lands inside that comment.
+- Code Map, `Directory.Build.props` `NoWarn`: line 46 → 85, and the described shape corrected from the overwrite form `NoWarn=NETSDK1138` to the append form `$(NoWarn);NETSDK1138`. Invalidated by **story 1.3**, which changed both the form and the position.
+- Execution task text, trigger list and concurrency: now names `next/feature-framework` alongside `develop`/`production`, and records that `cancel-in-progress` became conditional and `timeout-minutes: 15` was added. Invalidated by commit **`41607e3`**, which made all three changes, and ratified in part by `decision-q2-next-feature-framework-keep`. This story shipped the first two triggers and an unconditional `cancel-in-progress`; the line says so.
+- Evidence, "Not yet exercised: the `push` trigger": replaced with the observed runs. Invalidated by **events after this story closed** — 12 push runs, all green, the first on the merge of PR #5. Count re-derived at `1f5e30c`; the retrospective's "8 push-event runs" was already stale when written down.
+- Evidence, "Exactly one run per SHA": scoped to PR #5's window, where it held, and the general claim retracted. **Found by review, not by planning** — it was false in the same direction as the push-trigger paragraph and sat three lines above it, so the file briefly contradicted itself. Counter-example `7bcf667` (push `31792852280` + pull_request `31792960792`) verified at HEAD. Acceptance criterion 3 is untouched and was satisfied at story close.
+- Code Map: an anchor-convention lead-in was added, because the section now mixes current-at-HEAD anchors with one deliberate pre-story record and stated no convention distinguishing them.
 
 ## Design Notes
 
@@ -86,10 +97,10 @@ context: []
 - Green: run `31778561382` on commit `ef194e0` -- all tests passed, 0 failed; log shows only the two shared projects restored, so nothing in the graph reached for a game assembly.
 - Red: run `31778629722` on commit `6d20388`, which falsified one assertion in `ClientPingPlaced_RoundTrips` -- job failed naming `CairnMultiplayerShared.Tests.PingPacketTests.ClientPingPlaced_RoundTrips`, 1 failed / 62 passed.
 - Green again: the break was reverted in `6e25d55` (tree byte-identical to `ef194e0`), runs `31778688304` and `31778770191` both green. The revert landed before the story closed.
-- Exactly one run per SHA: every run carries `event=pull_request` and no SHA has two, confirming the `push` filter prevents an internal PR firing twice.
+- Exactly one run per SHA, **within PR #5's window**: every run in that window carried `event=pull_request`, and no SHA in it had two. Acceptance criterion 3 was satisfied at story close and remains so. What this bullet originally went on to claim — that the `push` filter prevents an internal PR firing twice, generally — does **not** hold repo-wide, and was corrected on 2026-08-14. Counter-example: SHA `7bcf667` carries both push run `31792852280` and pull_request run `31792960792`. The `concurrency` group keys on `github.ref`, which differs between the two event contexts, so neither run cancels the other. Any SHA already pushed to a trigger branch collects a second run the moment a PR is opened from it — no concurrent push required. Two `deferred-work.md` entries diagnose this: the original duplicate-run entry, and the PR #13 refinement that corrected its precondition. Cost is duplicate runner minutes, not correctness.
 - Local pre-flight matched CI before a runner was spent: same command, .NET 6 SDK, all passing, exit 0, two projects restored.
 
-**Not yet exercised:** the `push` trigger. Only `pull_request` has fired so far -- `push` on an integration branch first runs on merge. The job is identical either way, so the risk is low but it is unproven.
+**`push` trigger, since exercised (re-derived at `1f5e30c`, 2026-08-14):** 12 push runs, all green -- `develop` 10, `production` 1 (`31793019109`), `next/feature-framework` 1 (`31793458048`). The first was `31780031548`, on the merge of PR #5, which is exactly the "first runs on merge" case this note anticipated. The trigger is proven on all three branches it binds; nothing about it is unexercised any more. (This paragraph previously read "Not yet exercised: the `push` trigger. Only `pull_request` has fired." The epic-1 retrospective's own "8 push-event runs" has itself gone stale -- re-derive the count with `gh run list` rather than quoting either number.)
 
 ## Suggested Review Order
 
