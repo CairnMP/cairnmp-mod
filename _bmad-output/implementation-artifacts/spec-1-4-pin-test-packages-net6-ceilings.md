@@ -72,7 +72,9 @@ context: []
 **Evidence (PR `yerayalfageme-glitch/cairnmp-mod#7` against `develop`):**
 - The PR must be qualified by repo. `gh` resolves a bare `#7` against the `upstream` remote (`CairnMP/cairnmp-mod`), where PR 7 is an unrelated pull request.
 - Green: run `31781260743` on commit `39e7e61` -- `Passed! - Failed: 0, Passed: 63, Skipped: 0, Total: 63`, 24s wall clock, no "Could not find testhost".
-- Green: run `31781342416` on commit `7b9d10a` -- the spec-bookkeeping commit, re-run so the PR head itself is verified rather than only its first commit. 29s.
+- Green: run `31781342416` on commit `7b9d10a` -- the spec-bookkeeping commit. 29s.
+- Green: run `31782059279` on commit `63bddbc` -- the review-patch commit, which reworded the csproj comments; 63/63 again, confirming the comment edit did not break the XML. 20s.
+- Every commit pushed to this branch gets its own run, because the workflow fires per push while the PR is open. So the PR *head* is verified, not merely its first commit -- and that stays true of any commit added after this line, which is why no sha is named as "the head" here. Current list: `gh run list --repo yerayalfageme-glitch/cairnmp-mod --branch chore/pin-test-packages-net6-ceilings`.
 - Local, on SDK 6.0.428 / runtime 6.0.36: `dotnet test CairnMultiplayerShared.Tests -c Release` passed 63/63, exit 0. This machine had no .NET SDK at all beforehand, only the 6.0.36 runtime; the SDK was installed into a scratch directory for the run, so nothing about the repo or the machine's toolchain was altered to make it pass.
 - Restore reported 0 warnings / 0 errors, so the bracket pins produced no NU16xx and were kept.
 - **The strongest evidence, and the one the story turns on:** in `CairnMultiplayerShared.Tests/obj/project.assets.json`, `Microsoft.TestPlatform.TestHost/17.13.0` resolved its `lib/netcoreapp3.1/` assets, *not* `net462`. That is direct proof `AssetTargetFallback` never engaged -- the precise failure mode this story guards against, and the one a passing test run alone would not distinguish. The declared ranges are recorded there as `[17.13.0, 17.13.0]`, `[2.9.3, 2.9.3]`, `[3.0.2, 3.0.2]`.
