@@ -1,0 +1,36 @@
+- id: "1"
+  title: Add GitHub Actions CI for the protocol test suite
+  description: >-
+    Satisfies CAP-1: a workflow running `dotnet test CairnMultiplayerShared.Tests
+    -c Release` on a stock runner with no secrets. Must not build the solution or
+    any project needing game assemblies — see the CI constraint in SPEC.md.
+  invoke_dev_with: >-
+    This repo is a fork with a separate `upstream` remote; pick trigger events
+    accordingly. Story 4 bumps test packages afterwards, so this workflow is the
+    safety net that verifies that change — get it green first.
+
+- id: "2"
+  title: Stop generate-il2cpp-refs.ps1 telling contributors to commit game-refs
+  description: >-
+    Satisfies CAP-2: line 97's completion message tells the user to commit the
+    generated assemblies, contradicting `.gitignore:2` and the README. Fix the
+    message and confirm no other line in the script says the same.
+
+- id: "3"
+  title: Surface end-of-life build SDKs via CheckSdkVulnerabilities
+  description: >-
+    Satisfies CAP-3: set `CheckSdkVulnerabilities=true` so an end-of-life build
+    SDK emits NETSDK1239. It guards the SDK, not the target framework, so it will
+    not fire on the net6.0 pin — that is intended, not a misconfiguration.
+
+- id: "4"
+  title: Raise and pin test packages to their net6.0 ceilings
+  description: >-
+    Satisfies CAP-4: xunit 2.9.2 to 2.9.3, Microsoft.NET.Test.Sdk 17.11.1 to
+    17.13.0, xunit.runner.visualstudio 2.8.2 to 3.0.2. Pin all three so a later
+    bump cannot silently cross the ceiling — the table is in stack.md.
+  invoke_dev_with: >-
+    Verify with `dotnet test CairnMultiplayerShared.Tests` after the bump, not
+    with a successful restore. A clean restore proves nothing here: two of these
+    three packages restore fine past their ceiling and then fail at runtime with
+    "Could not find testhost". Do not exceed Test.Sdk 17.13.0 or runner 3.0.2.
