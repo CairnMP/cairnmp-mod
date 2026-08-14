@@ -1,17 +1,20 @@
 # scripts/generate-il2cpp-refs.ps1
-# Genere les assemblies Il2Cpp d'interop MelonLoader en installant CairnLoader
-# dans le jeu et en le lancant une seule fois.
-# Les assemblies sont copiees dans game-refs/Il2CppAssemblies/ pour le build.
+# Generates the MelonLoader Il2Cpp interop assemblies by installing CairnLoader
+# into the game and launching it once.
+# The assemblies are copied into game-refs/Il2CppAssemblies/ for the build.
 #
-# REQUIERT un build de CairnLoader (qui vit dans le repo cairnmp-launcher).
-# Par defaut on cherche le repo launcher en frere de celui-ci ; surcharger via :
+# They are proprietary Cairn / Unity / MelonLoader assemblies that cannot be
+# redistributed: game-refs/ is git-ignored and must stay that way.
+#
+# REQUIRES a CairnLoader build (which lives in the cairnmp-launcher repo).
+# By default the launcher repo is looked up as a sibling of this one; override with:
 #     $env:CAIRNLOADER_OUTPUT_DIR = "D:\path\to\launcher\cairnloader\Output\Release\win-x64"
 $ErrorActionPreference = "Stop"
 
 $Root = Resolve-Path "$PSScriptRoot/.."
 $GameDir = "$env:LOCALAPPDATA\CairnMultiplayerData\game"
 
-# CairnLoader vit dans le repo cairnmp-launcher (frere par defaut).
+# CairnLoader lives in the cairnmp-launcher repo (sibling by default).
 if ($env:CAIRNLOADER_OUTPUT_DIR) {
     $CairnLoaderSrc = $env:CAIRNLOADER_OUTPUT_DIR
 } else {
@@ -23,14 +26,14 @@ Write-Host ""
 Write-Host "  CairnMP - Il2Cpp Assembly Generator" -ForegroundColor Cyan
 Write-Host ""
 
-# Verifier que le jeu est copie
+# Check that the game has been copied
 if (-not (Test-Path "$GameDir\Cairn.exe")) {
     Write-Host "  ERROR: Game not found at $GameDir" -ForegroundColor Red
     Write-Host "  Run the launcher first to copy the game files." -ForegroundColor Yellow
     throw "Game directory not found"
 }
 
-# Verifier que CairnLoader est builde
+# Check that CairnLoader has been built
 if (-not (Test-Path "$CairnLoaderSrc\version.dll")) {
     Write-Host "  ERROR: CairnLoader not built at $CairnLoaderSrc" -ForegroundColor Red
     Write-Host "  Build it in the cairnmp-launcher repo:" -ForegroundColor Yellow
@@ -39,7 +42,7 @@ if (-not (Test-Path "$CairnLoaderSrc\version.dll")) {
     throw "CairnLoader build output not found"
 }
 
-# Installer CairnLoader dans le jeu
+# Install CairnLoader into the game
 Write-Host "  [1/4] Installing CairnLoader into game directory..." -ForegroundColor DarkGray
 Copy-Item -Force "$CairnLoaderSrc\version.dll" "$GameDir\version.dll"
 if (Test-Path "$GameDir\dobby.dll") { Remove-Item -Force "$GameDir\dobby.dll" }
@@ -51,14 +54,14 @@ if (Test-Path $LoaderDir) { Remove-Item -Recurse -Force $LoaderDir }
 Copy-Item -Recurse -Force "$CairnLoaderSrc\CairnLoader" "$LoaderDir"
 Write-Host "  Done." -ForegroundColor Green
 
-# Lancer le jeu et attendre la generation des assemblies
+# Launch the game and wait for the assemblies to be generated
 Write-Host "  [2/4] Launching Cairn to generate Il2Cpp assemblies..." -ForegroundColor DarkGray
 Write-Host "         (the game will open briefly, then be closed automatically)" -ForegroundColor DarkGray
 
 $Il2CppDir = Join-Path $LoaderDir "Il2CppAssemblies"
 $proc = Start-Process -FilePath "$GameDir\Cairn.exe" -PassThru
 
-# Attendre que les assemblies apparaissent (timeout 5 min)
+# Wait for the assemblies to appear (5 min timeout)
 $timeout = 300
 $elapsed = 0
 while (-not (Test-Path "$Il2CppDir\UnityEngine.CoreModule.dll")) {
@@ -78,14 +81,14 @@ while (-not (Test-Path "$Il2CppDir\UnityEngine.CoreModule.dll")) {
 Write-Host ""
 Write-Host "  Assemblies generated!" -ForegroundColor Green
 
-# Fermer le jeu
+# Close the game
 Write-Host "  [3/4] Closing game..." -ForegroundColor DarkGray
 if (-not $proc.HasExited) {
     Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
 }
 
-# Copier les assemblies dans game-refs
+# Copy the assemblies into game-refs
 Write-Host "  [4/4] Copying assemblies to game-refs/..." -ForegroundColor DarkGray
 if (Test-Path $OutputDir) { Remove-Item -Recurse -Force $OutputDir }
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
@@ -94,5 +97,6 @@ Copy-Item -Force "$Il2CppDir\*.dll" $OutputDir
 $count = (Get-ChildItem "$OutputDir\*.dll").Count
 Write-Host ""
 Write-Host "  Done! $count assemblies copied to game-refs/Il2CppAssemblies/" -ForegroundColor Green
-Write-Host "  You can now commit these files and run package-mod.ps1." -ForegroundColor Green
+Write-Host "  Keep them local: these are proprietary Cairn / Unity / MelonLoader assemblies that cannot be redistributed, which is why game-refs/ is git-ignored." -ForegroundColor DarkGray
+Write-Host "  You can now run package-mod.ps1." -ForegroundColor Green
 Write-Host ""
