@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 08-12-2026 13:25
-last_updated: 08-14-2026 12:25
+last_updated: 08-14-2026 12:41
 project: cairnmp-mod
 project_key: yerayalfageme-glitch/cairnmp-mod
 tracking_system: github
@@ -152,3 +152,32 @@ decisions:
     notes: "Sequenced after item 1 - the amendment should describe the post-promotion
       tree, not the split one. Edits a spec whose epic is already closed, which is
       the accepted cost of this option."
+  - id: "decision-q4-promotion-carries-everything"
+    epic: 1
+    date: "2026-08-14"
+    decided_by: "Yeray"
+    question: "Should the develop to production promotion carry the _bmad-output
+      tree, or only the nine product files?"
+    decision: "Everything - a straight merge, no pruning. production becomes an exact
+      mirror of develop, so the .gitignore policy applies uniformly across branches,
+      an empty production...develop diff keeps meaning fully promoted, and future
+      promotions stay plain merges with nothing to remember."
+    resolves: "epic-1-retro-item-1-carry-epic-1-to-production-or-state-that"
+    notes: "Settles the sub-question left open under decision-q1. Accepted cost - the
+      release branch carries planning artifacts a consumer of the mod will not read.
+      Rejected alternative - pruning _bmad-output on production would make
+      production...develop never read clean again and would need repeating by hand
+      on every future promotion."
+  - id: "decision-q5-untrack-memlog-scratch"
+    epic: 1
+    date: "2026-08-14"
+    decided_by: "Yeray"
+    question: "Should the per-session .memlog.md scratch logs stay in history?"
+    decision: "Untrack them - add _bmad-output/**/.memlog.md to .gitignore and drop
+      both files from the index. They stay on disk locally; only history stops
+      carrying them."
+    notes: "Not a retro action item - surfaced while sizing the promotion diff. They
+      were tracked against the stated policy - .gitignore says scratch stays local,
+      but the !_bmad-output/specs/ negation re-includes each subtree wholesale,
+      dotfiles included. Runs before item 1 so production never receives them,
+      rather than promoting then removing."
