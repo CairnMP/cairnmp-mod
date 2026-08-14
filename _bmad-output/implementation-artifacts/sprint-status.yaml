@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 08-12-2026 13:25
-last_updated: 08-14-2026 11:40
+last_updated: 08-14-2026 12:05
 project: cairnmp-mod
 project_key: yerayalfageme-glitch/cairnmp-mod
 tracking_system: github

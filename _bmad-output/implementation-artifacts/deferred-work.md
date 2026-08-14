@@ -62,3 +62,23 @@ edit or de-duplicate existing entries.
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-4-pin-test-packages-net6-ceilings.md`
   summary: `sprint-status.yaml` is being edited on three branches in parallel and will conflict when their PRs land.
   evidence: Story 1.1 is `done` on `fix/generate-refs-no-commit-instruction`, still `review` on `develop`, and story 1.4 moved to `review` on its own branch. Each story branch edits the same few lines of the same file, so PRs #6 and #7 both touch it against a `develop` that has since moved. Not a defect in any one story — a consequence of running stories on parallel branches with a single shared board file. Worth deciding whether the board should be updated only on `develop` after merge, or the conflicts simply resolved by hand each time.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-check-sdk-vulnerabilities.md`
+  summary: Nothing asserts that `CheckSdkVulnerabilities` is still present and correctly spelled, and a typo in it is undetectable by any means the repo has.
+  evidence: The property emits nothing on any shipping SDK, so misspelling it, or dropping it during a future edit to that `PropertyGroup`, leaves the build byte-identical and CI green. Worse, the silence persists after .NET 11 arrives: an absent NETSDK1239 would read as "SDK supported" rather than "property misspelled". The story's own manual `dotnet msbuild -getProperty:CheckSdkVulnerabilities` probe is the check that would catch it; made repeatable in `scripts/check.sh` or the CI job it would close the gap. Out of scope here because the story's boundaries forbid touching either.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-check-sdk-vulnerabilities.md`
+  summary: `WarningsAsErrors` in `Directory.Build.props` is still in the overwrite form the story just fixed one line below in `NoWarn`.
+  evidence: `<WarningsAsErrors>CS8600;CS8601;CS8602;CS8603;CS8604</WarningsAsErrors>` discards anything an outer props file set, the same defect and the same `PropertyGroup` as the `NoWarn` line. Left alone because the approved scope named the `NoWarn` issues specifically, and because a curated error-promotion list is more plausibly deliberate than a curated suppression list — worth a decision rather than a reflex fix.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-check-sdk-vulnerabilities.md`
+  summary: The new `NoWarn` append form lets an upstream suppression silently cancel the null-flow error promotion.
+  evidence: `NoWarn` takes precedence over `WarningsAsErrors`, so an outer props file setting e.g. `NoWarn=CS8602` would now defeat the CS8600-CS8604 promotion that `Directory.Build.props` relies on; under the old overwrite form it was discarded. No such upstream setter exists in this repo today, so the impact is currently zero — but nothing asserts those five codes are still error-promoted, so the loss would be silent if one ever appeared.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-check-sdk-vulnerabilities.md`
+  summary: `CheckSdkVulnerabilities` needs re-checking when the toolchain reaches .NET 11 GA, because it is currently specified only by an unshipped preview branch.
+  evidence: The property, its task and NETSDK1238/1239/1240 exist only in dotnet/sdk `main`. Anything unshipped can be renamed, re-scoped or dropped before GA — and if it is, the line becomes dead text that still reads as an armed tripwire, which is the precise failure the comment was written to prevent. Nothing currently schedules that look.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-check-sdk-vulnerabilities.md`
+  summary: `Directory.Build.props` now ships permanently bilingual, with only the touched block translated.
+  evidence: `AGENTS.md:30` asks that French files be translated when touched. Only the edited `PropertyGroup` header was, because translating the file header means restating its claim that `game-refs/` is "versionné" — which `deferred-work.md` already records as false and which belongs to a CAP-2 decision, not to a passing edit. The half-translated state is deliberate but unmarked, and the two are best resolved together.
