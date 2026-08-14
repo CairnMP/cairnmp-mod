@@ -8,9 +8,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-    <PackageReference Include="xunit" Version="2.9.2" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <!--
+      These three are AT their net6.0 ceiling. Raising any of them does not fail restore —
+      it fails at runtime with "Could not find testhost". Ceilings and reasoning:
+      _bmad-output/specs/spec-cairnmp-melonloader-stack-currency/stack.md
+    -->
+    <!-- net6.0 ceiling: 17.14.0 drops net6.0 -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[17.13.0]" />
+    <!-- net6.0 ceiling: last of the v2 line; v3 floors at net8.0 -->
+    <PackageReference Include="xunit" Version="[2.9.3]" />
+    <!-- net6.0 ceiling: 3.1.0 drops net6.0 -->
+    <PackageReference Include="xunit.runner.visualstudio" Version="[3.0.2]" />
   </ItemGroup>
 
   <ItemGroup>
