@@ -47,7 +47,7 @@
     <!--
       Asks the SDK to warn (NETSDK1239) when the SDK *building* this repo has
       reached end of support. It looks at the build SDK only, never at
-      <TargetFramework>, so the net6.0 pin below can never trip it.
+      <TargetFramework>, so the net6.0 pin the projects carry cannot trip it.
 
       INERT TODAY - this is not live protection. The property, the task behind
       it and the NETSDK1238/1239/1240 codes exist only in dotnet/sdk main

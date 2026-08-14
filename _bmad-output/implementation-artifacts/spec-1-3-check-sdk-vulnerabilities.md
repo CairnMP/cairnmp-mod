@@ -2,7 +2,7 @@
 title: 'Story 1.3: Surface end-of-life build SDKs via CheckSdkVulnerabilities'
 type: 'chore'
 created: '2026-08-14'
-status: 'in-progress'
+status: 'review'
 baseline_commit: 'd0dc3eb0b61efa0a7f320c3c32d0f675a81bee9d'
 review_loop_iteration: 0
 context: []
@@ -63,3 +63,31 @@ context: []
 
 **Manual checks:**
 - Confirm the property is actually read as `true` (e.g. `dotnet msbuild -getProperty:CheckSdkVulnerabilities`), so the story does not ship a typo that no diagnostic would ever reveal — the failure mode of an inert flag is total silence either way.
+
+**Evidence:**
+- **The check that matters most for an inert flag.** `dotnet msbuild CairnMultiplayerShared.csproj -getProperty:CheckSdkVulnerabilities -getProperty:NoWarn -getProperty:TargetFramework` returned `{"CheckSdkVulnerabilities": "true", "NoWarn": ";NETSDK1138", "TargetFramework": "net6.0"}`. The property is genuinely evaluated as `true` on the real project, not merely typed into the file — the only way to distinguish a working inert flag from a misspelled one, since neither emits anything.
+- **`NoWarn` really does preserve upstream codes**, tested rather than assumed: a scratch project that sets `NoWarn=CS1591;UPSTREAM0001` and then imports this props file evaluates to `CS1591;UPSTREAM0001;NETSDK1138`. Before the change it would have evaluated to `NETSDK1138` alone. Note the leading `;` in the project-level value above: upstream is empty there, and empty entries are ignored by both MSBuild and the compiler — 0 warnings confirms it.
+- Local builds, SDK 8.0.424 / runtime 6.0.36: `dotnet build CairnMultiplayerShared -c Release` and `dotnet build CairnMultiplayerShared.Tests -c Release` both `0 Warning(s), 0 Error(s)`, including a `--no-incremental` rebuild so the result is not an up-to-date check reporting an old success.
+- Local rebuild under **SDK 6.0.428** — the SDK version CI installs — `-t:Rebuild -p:Configuration=Release`: clean, exit 0. Both SDKs were installed into a scratch directory; this machine has no system SDK, only the 6.0.36 runtime, so nothing about the repo or the machine's toolchain was altered to make the build pass.
+- `dotnet test CairnMultiplayerShared.Tests -c Release`: 63/63 passed, exit 0.
+- **On a runner** — PR `yerayalfageme-glitch/cairnmp-mod#8` against `develop`, run `31784180366` on commit `7ad9b9f`, green in 22s: `Passed! - Failed: 0, Passed: 63, Skipped: 0, Total: 63`. The full log contains no `NETSDK` diagnostic and no build warning, so the edit introduced no new noise on the runner either. The PR must be qualified by repo — a bare `#8` resolves against `upstream` (`CairnMP/cairnmp-mod`), a different pull request.
+- **CAP-3 second clause: unmet-by-toolchain, not satisfied.** No SDK that ships today can emit NETSDK1239, so nothing in this change makes an EOL SDK warn. It is recorded here as unmet rather than claimed, per the Intent above.
+
+**Not exercised:** the property firing. It cannot be, by anyone, until a .NET 11 SDK exists — that is the whole point of the story and the reason the comment in the file is the deliverable rather than the property.
+
+## Suggested Review Order
+
+**The actual deliverable — the comment, not the property**
+
+- Entry point. One line of build config, fourteen of comment, and that ratio is the story: judge whether a developer who finds this in two years can tell it is not watching anything. The property itself is unreviewable — it has no observable behaviour on any SDK that exists.
+  [`Directory.Build.props:47`](../../Directory.Build.props#L47)
+
+**The change that does something today**
+
+- `NoWarn` in append form. This is the only edit with a behavioural difference on a current SDK: codes set upstream now survive instead of being discarded.
+  [`Directory.Build.props:69`](../../Directory.Build.props#L69)
+
+**Scope note**
+
+- The block comment was translated to English per `AGENTS.md:30`. The French comments above line 39 were left alone: translating them means restating the "versionné" claim about `game-refs/` that `deferred-work.md` already records as false, which is a CAP-2 decision rather than one to make in passing here.
+  [`Directory.Build.props:40`](../../Directory.Build.props#L40)
