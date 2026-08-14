@@ -2,7 +2,7 @@
 title: 'Story 1.1: Add GitHub Actions CI for the protocol test suite'
 type: 'feature'
 created: '2026-08-13'
-status: 'in-review'
+status: 'done'
 baseline_commit: 'e9dc6fdbe5c97030d923b3b1ea1930691b1f1327'
 review_loop_iteration: 0
 context: []
@@ -78,7 +78,7 @@ context: []
 - `dotnet test CairnMultiplayerShared.Tests -c Release` -- expected: all tests pass, 0 failed, exit 0 (63 at time of writing).
 - `gh run list --workflow ci.yml -R yerayalfageme-glitch/cairnmp-mod` -- expected: after the red proof and its revert, a failing run followed by a passing one on the same PR.
 
-**Manual checks:**
+**Manual checks (see also Suggested Review Order below):**
 - Actions are disabled by default in a fork. Confirm the first run actually starts; if it does not, enable Actions on the repo before treating any absence of runs as a pass.
 
 **Evidence (PR #5 against `develop`, repo `yerayalfageme-glitch/cairnmp-mod`):**
@@ -90,3 +90,34 @@ context: []
 - Local pre-flight matched CI before a runner was spent: same command, .NET 6 SDK, all passing, exit 0, two projects restored.
 
 **Not yet exercised:** the `push` trigger. Only `pull_request` has fired so far -- `push` on an integration branch first runs on merge. The job is identical either way, so the risk is low but it is unproven.
+
+## Suggested Review Order
+
+**Scope discipline -- the reason this job can exist**
+
+- Entry point: the whole deliverable is one command, scoped to the one suite needing no proprietary file.
+  [`ci.yml:51`](../../.github/workflows/ci.yml#L51)
+
+- The rationale kept next to the thing it guards, so widening it is a deliberate act.
+  [`ci.yml:3`](../../.github/workflows/ci.yml#L3)
+
+**The runtime pin -- where a naive workflow would have failed**
+
+- Installs .NET 6 because runners ship 8/9/10 only; without it the testhost dies at launch, not at build.
+  [`ci.yml:45`](../../.github/workflows/ci.yml#L45)
+
+**Trigger and concurrency semantics**
+
+- Push limited to long-lived branches so one SHA gets exactly one run, never two.
+  [`ci.yml:12`](../../.github/workflows/ci.yml#L12)
+
+- Cancellation confined to PRs: on an integration branch a cancelled run would be neither pass nor fail.
+  [`ci.yml:24`](../../.github/workflows/ci.yml#L24)
+
+**Peripherals**
+
+- Bounds a hung restore or testhost well below the six-hour default.
+  [`ci.yml:35`](../../.github/workflows/ci.yml#L35)
+
+- Least privilege; the job reads the repo and needs nothing else.
+  [`ci.yml:26`](../../.github/workflows/ci.yml#L26)
