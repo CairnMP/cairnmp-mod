@@ -10,6 +10,8 @@ sources:
 
 > **Canonical contract.** This SPEC and the files in `companions:` are the complete, preservation-validated contract for what to build, test, and validate. Source documents listed in frontmatter are for traceability — consult them only if you need narrative rationale or prose color this contract intentionally omits.
 
+*Amended 2026-08-14, after epic 1 closed, under `decision-q3-name-branches-in-spec`: CAP-2's success clause and the Success signal.*
+
 # CairnMP stack: verification over currency
 
 ## Why
@@ -24,7 +26,7 @@ A mandate the project cannot discharge, plus a gap it can. CairnMP parses untrus
 
 - **CAP-2**
   - **intent:** A contributor following `scripts/generate-il2cpp-refs.ps1` is never instructed to do something the project forbids.
-  - **success:** The script's completion message no longer tells the user to commit the generated assemblies, and no remaining line of it contradicts `.gitignore:2` or the README's non-redistribution statement.
+  - **success:** On each of `develop`, `production` and `next/feature-framework`: the script's completion message no longer tells the user to commit the generated assemblies, and no remaining line of `scripts/generate-il2cpp-refs.ps1` contradicts `.gitignore:2` or the README's non-redistribution statement. Scoped to that one script — the repo-wide property is the Success signal's, not this clause's.
 
 - **CAP-3**
   - **intent:** The build surfaces its own SDK going end-of-life instead of letting it pass silently.
@@ -54,7 +56,9 @@ A mandate the project cannot discharge, plus a gap it can. CairnMP parses untrus
 
 ## Success signal
 
-A push turns the packet-parsing surface from unverified to continuously verified: CI green on a stock runner that holds no proprietary file, and a deliberately corrupted packet-codec test turns it red. Separately, nothing left in the repo instructs a contributor to commit `game-refs/`.
+A push turns the packet-parsing surface from unverified to continuously verified: CI green on a stock runner that holds no proprietary file, and a deliberately corrupted packet-codec test turns it red. Separately, and on each of `develop`, `production` and `next/feature-framework`: no file that *instructs* a contributor or an agent — build files, scripts, READMEs, agent instructions, anything read as guidance rather than as history — states or implies that `game-refs/` is committed, versioned, or otherwise carried by the repo. Historical records under `_bmad-output/` are outside this bar: they quote the defect in order to document it, and a bar satisfiable by its own evidence is no bar. `scripts/generate-il2cpp-refs.ps1` is likewise outside it, being CAP-2's to bind.
+
+> **This half of the signal is not met today (2026-08-14), and is stated unweakened rather than trimmed to fit.** Four live instructing lines still call `game-refs/` versioned: `scripts/package-mod.ps1:27,56` and `Directory.Build.props:16,21`. The gap and the work it implies are recorded in `_bmad-output/implementation-artifacts/deferred-work.md`; correcting those lines carries a French-translation question (`AGENTS.md:30`) and belongs to ledger triage, not to this spec.
 
 ## Assumptions
 

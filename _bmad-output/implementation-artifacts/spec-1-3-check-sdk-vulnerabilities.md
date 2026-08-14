@@ -2,7 +2,7 @@
 title: 'Story 1.3: Surface end-of-life build SDKs via CheckSdkVulnerabilities'
 type: 'chore'
 created: '2026-08-14'
-status: 'review'
+status: 'done'
 baseline_commit: 'd0dc3eb0b61efa0a7f320c3c32d0f675a81bee9d'
 review_loop_iteration: 0
 context: []
@@ -50,6 +50,12 @@ context: []
 - Given CAP-3's second clause (an EOL SDK emits NETSDK1239), when acceptance is assessed, then it is recorded as unmet-by-toolchain rather than claimed.
 
 ## Spec Change Log
+
+**2026-08-14 -- frontmatter status corrected** (`spec-epic-1-record-corrections`, action item 3; baseline `1f5e30c`). Frontmatter `status` flipped `'review'` → `'done'`, bringing this file into agreement with `sprint-status.yaml`, which had recorded the story as `done` since epic 1 closed. Siblings 1.1, 1.2 and 1.4 already read `'done'`; this file was the only one left behind.
+
+**The verification is the substance of the item, not a footnote.** The original flip was attempted with a pattern substitution whose pattern matched nothing, and the result was never checked — so the file kept saying `review` while everything downstream assumed `done`. This time the post-state was confirmed by re-reading the file from disk after the edit (`grep -n "^status" ` returns `5:status: 'done'`), not inferred from the edit having been issued. Any future status change to this file should be verified the same way.
+
+No other line in this file was touched; the `<frozen-after-approval>` intent block is unchanged.
 
 ## Design Notes
 
