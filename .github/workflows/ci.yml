@@ -1,0 +1,44 @@
+name: CI
+
+# Scoped deliberately to CairnMultiplayerShared.Tests: it is the only suite whose
+# project graph terminates without the proprietary Cairn / Unity / MelonLoader
+# assemblies, which live in git-ignored game-refs/ and can never reach a runner.
+# Building solution-wide, or touching CairnMultiplayerMod, would hard-fail here.
+
+on:
+  push:
+    branches: [develop, production]
+  pull_request:
+    branches: [develop, production]
+  workflow_dispatch:
+
+# Restricting push to the long-lived branches is what keeps an internal pull
+# request from firing twice for the same SHA; this group also cancels superseded
+# runs when a branch is pushed again mid-run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Protocol test suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      # Runner images ship .NET 8/9/10 only. net6.0 would still build there, but
+      # the testhost requests Microsoft.NETCore.App 6.0.0 and roll-forward never
+      # crosses a major, so the run would die at test-host launch. MelonLoader
+      # pins players to .NET 6, so testing on any other runtime proves nothing.
+      - name: Install the .NET 6 SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 6.0.x
+
+      - name: Run the protocol tests
+        run: dotnet test CairnMultiplayerShared.Tests -c Release
