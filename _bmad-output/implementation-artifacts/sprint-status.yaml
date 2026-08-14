@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 08-12-2026 13:25
-last_updated: 08-14-2026 12:20
+last_updated: 08-14-2026 12:40
 project: cairnmp-mod
 project_key: yerayalfageme-glitch/cairnmp-mod
 tracking_system: github
@@ -40,9 +40,58 @@ development_status:
   1-2-stop-generate-il2cpp-refs-ps1-telling-contributors-to-commit: done
   1-3-surface-end-of-life-build-sdks-via-checksdkvulnerabilities: done
   1-4-raise-and-pin-test-packages-to-their-net6-0-ceilings: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 story_issues:
   1-1-add-github-actions-ci-for-the-protocol-test-suite: 1
   1-2-stop-generate-il2cpp-refs-ps1-telling-contributors-to-commit: 2
   1-3-surface-end-of-life-build-sdks-via-checksdkvulnerabilities: 3
   1-4-raise-and-pin-test-packages-to-their-net6-0-ceilings: 4
+action_items:
+  - id: "epic-1-retro-item-1-carry-epic-1-to-production-or-state-that"
+    epic: 1
+    action: "Carry epic 1 to production, or state that it does not apply there - CAP-2
+      s success signal is false on that branch and CI cannot run there"
+    owner: "Yeray"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
+  - id: "epic-1-retro-item-2-re-establish-the-red-proof-on-the-curren"
+    epic: 1
+    action: "Re-establish the red proof on the current tree; the existing falsification
+      evidence predates the package pins and the props change"
+    owner: "Yeray"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
+  - id: "epic-1-retro-item-3-fix-spec-1-3-frontmatter-to-done-and-ver"
+    epic: 1
+    action: "Fix spec-1-3 frontmatter to done and verify the post-state rather than
+      assuming the substitution matched"
+    owner: "Yeray"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
+  - id: "epic-1-retro-item-4-refresh-spec-1-1-stale-references-two-co"
+    epic: 1
+    action: "Refresh spec-1-1 stale references: two Code Map anchors and the push-not-yet-exercised
+      note"
+    owner: "Yeray"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
+  - id: "epic-1-retro-item-5-decide-next-feature-framework-status-giv"
+    epic: 1
+    action: "Decide next/feature-framework status: give it the workflow or drop it
+      from the CI trigger lists"
+    owner: "Yeray"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
+  - id: "epic-1-retro-item-6-triage-the-20-entry-deferred-work-ledger"
+    epic: 1
+    action: "Triage the 20-entry deferred-work ledger accumulated across epic 1"
+    owner: "Yeray"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
+  - id: "epic-1-retro-item-7-adopt-a-commit-subject-story-id-conventi"
+    epic: 1
+    action: "Adopt a commit-subject story-id convention; git_evidence attributed 0
+      of 26 commits"
+    owner: "Yeray"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
