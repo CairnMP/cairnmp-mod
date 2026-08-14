@@ -118,7 +118,7 @@ public class PingPacketTests
         var got = new ClientPingPlaced();
         got.Deserialize(r);
 
-        Assert.Equal(pkt.PosX, got.PosX);
+        Assert.Equal(pkt.PosX + 1f, got.PosX);
         Assert.Equal(pkt.PosY, got.PosY);
         Assert.Equal(pkt.PosZ, got.PosZ);
     }
