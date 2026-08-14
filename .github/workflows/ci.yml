@@ -2,8 +2,8 @@ name: CI
 
 # Scoped deliberately to CairnMultiplayerShared.Tests: it is the only suite whose
 # project graph terminates without the proprietary Cairn / Unity / MelonLoader
-# assemblies, which live in git-ignored game-refs/ and can never reach a runner.
-# Building solution-wide, or touching CairnMultiplayerMod, would hard-fail here.
+# assemblies, which are git-ignored and can never reach a runner. Widening this
+# command to the solution, or to the mod projects, would hard-fail on a runner.
 
 on:
   push:
