@@ -33,7 +33,7 @@ context: []
 - `scripts/check.sh:21` -- `dotnet test CairnMultiplayer.slnx -c Release`, solution-wide, so it is the one path that does exercise the mod test project. Documented in `AGENTS.md:26` as the manual pre-push check. Not reachable from CI, which is why this story's mod-side edit still ships unexecuted here.
 - `_bmad-output/specs/spec-cairnmp-melonloader-stack-currency/stack.md` -- the ceiling table and the AssetTargetFallback explanation. Source of truth for the numbers; do not restate its full reasoning in the csproj.
 - `.github/workflows/ci.yml` -- runs `dotnet test CairnMultiplayerShared.Tests -c Release` on a .NET 6 runtime. This is the safety net story 1.1 built for exactly this change.
-- `Directory.Build.props:46` -- `NoWarn=NETSDK1138` already suppresses the EOL-framework warning; expect no new build noise from the bump.
+- `Directory.Build.props:46` -- `NoWarn=NETSDK1138` already suppresses the EOL-framework warning; expect no new build noise from the bump. (Story 1.3 has since moved this: the suppression is now `$(NoWarn);NETSDK1138` at `Directory.Build.props:85`. The line number here is as it stood when this story shipped.)
 
 ## Tasks & Acceptance
 
