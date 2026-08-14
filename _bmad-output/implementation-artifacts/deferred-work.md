@@ -26,3 +26,19 @@ edit or de-duplicate existing entries.
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-1-protocol-test-suite-ci.md`
   summary: Test results exist only as console scrollback — no `.trx` logger, no uploaded artifact, no job summary.
   evidence: The acceptance criterion "the job fails and names that test" is currently satisfied by raw log text alone. That held for the red proof, but a test-host launch failure or a cancelled run leaves nothing durable to triage after logs age out.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-pin-test-packages-net6-ceilings.md`
+  summary: Nothing mechanically enforces that the two test projects carry identical package versions — the acceptance criterion is satisfiable only by a human comparing two files.
+  evidence: The pins exist to stop version drift, but the parity between `CairnMultiplayerShared.Tests` and `CairnMultiplayerMod.Tests` is preserved only by whoever edits next remembering the other file — the same human-memory mechanism the pins were introduced to replace. A byte-comparison of the two version blocks needs no SDK and no game assemblies, so it would fit CI's constraints exactly; Central Package Management would also solve it but centralises versions for every project. Out of scope here because this story's boundaries forbid touching the CI workflow.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-pin-test-packages-net6-ceilings.md`
+  summary: The CI check observes only the process exit code, so a partial collapse in test discovery would stay invisible behind a green check.
+  evidence: `ci.yml:51` runs a bare `dotnet test` with no result-file inspection and no minimum-count assertion. If a future runner or xunit change left the adapter discovering a subset of the suite, every discovered test would still pass, `dotnet test` would still exit 0, and the check would be green with a fraction of the protocol surface actually run — the repo's own research names silent discovery failure as the characteristic risk of a mismatched runner. Total discovery failure does surface as an error; the gap is the partial case. A floor on the reported `Passed:` count is roughly one line in the existing step.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-pin-test-packages-net6-ceilings.md`
+  summary: The `CairnMultiplayerMod.Tests` pins ship unexecuted — no automated path restores, builds or runs that project.
+  evidence: CI deliberately runs only the shared suite, and `scripts/check.sh` (the one command that would exercise the mod tests) is manual-only and needs the gitignored `game-refs/`. A ceiling breach or a plain typo in that file — `[17.14.0]`, or `[2.9.13]` which would not even resolve — leaves CI green and surfaces later on a contributor's machine as the "reads like a broken test setup" error this story exists to prevent. Accepted knowingly when the story was approved; filed here so triage sees it rather than only the story file.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-pin-test-packages-net6-ceilings.md`
+  summary: `sprint-status.yaml` is being edited on three branches in parallel and will conflict when their PRs land.
+  evidence: Story 1.1 is `done` on `fix/generate-refs-no-commit-instruction`, still `review` on `develop`, and story 1.4 moved to `review` on its own branch. Each story branch edits the same few lines of the same file, so PRs #6 and #7 both touch it against a `develop` that has since moved. Not a defect in any one story — a consequence of running stories on parallel branches with a single shared board file. Worth deciding whether the board should be updated only on `develop` after merge, or the conflicts simply resolved by hand each time.

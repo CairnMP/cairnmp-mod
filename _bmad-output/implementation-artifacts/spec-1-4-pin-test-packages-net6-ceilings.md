@@ -2,7 +2,7 @@
 title: 'Story 1.4: Raise and pin test packages to their net6.0 ceilings'
 type: 'chore'
 created: '2026-08-14'
-status: 'in-review'
+status: 'done'
 baseline_commit: 'aad1f83ab661addf1e73f99feebfe28f0aee8685'
 review_loop_iteration: 0
 context: []
@@ -80,3 +80,23 @@ context: []
 - **The strongest evidence, and the one the story turns on:** in `CairnMultiplayerShared.Tests/obj/project.assets.json`, `Microsoft.TestPlatform.TestHost/17.13.0` resolved its `lib/netcoreapp3.1/` assets, *not* `net462`. That is direct proof `AssetTargetFallback` never engaged -- the precise failure mode this story guards against, and the one a passing test run alone would not distinguish. The declared ranges are recorded there as `[17.13.0, 17.13.0]`, `[2.9.3, 2.9.3]`, `[3.0.2, 3.0.2]`.
 
 **Not exercised:** `CairnMultiplayerMod.Tests`, for the reason given in the Code Map. Its three lines were compared against the verified ones and are identical, which is the whole of the assurance behind them.
+
+## Suggested Review Order
+
+**The durable deliverable -- what protects the next person**
+
+- Entry point: the comment is the story's actual product; the versions are the one-off. Check it teaches the right thing.
+  [`CairnMultiplayerShared.Tests.csproj:11`](../../CairnMultiplayerShared.Tests/CairnMultiplayerShared.Tests.csproj#L11)
+
+- Exact-range brackets, kept only because restore stayed warning-free.
+  [`CairnMultiplayerShared.Tests.csproj:20`](../../CairnMultiplayerShared.Tests/CairnMultiplayerShared.Tests.csproj#L20)
+
+**The half that ships unexecuted**
+
+- Byte-identical lines in the project no automated path can restore, build or run.
+  [`CairnMultiplayerMod.Tests.csproj:20`](../../CairnMultiplayerMod.Tests/CairnMultiplayerMod.Tests.csproj#L20)
+
+**Keeping the pointer honest**
+
+- The comment sends readers here, so the "CairnMP has" column had to stop contradicting the tree.
+  [`stack.md:24`](../specs/spec-cairnmp-melonloader-stack-currency/stack.md#L24)
