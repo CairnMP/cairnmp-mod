@@ -37,12 +37,35 @@
     <ModsDir2>$(CairnDir2)\Mods</ModsDir2>
   </PropertyGroup>
 
-  <!-- Style de code appliqué à tous les projets -->
+  <!-- Code style applied to every project -->
   <PropertyGroup>
     <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <WarningsAsErrors>CS8600;CS8601;CS8602;CS8603;CS8604</WarningsAsErrors>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <NoWarn>NETSDK1138</NoWarn>
+
+    <!--
+      Asks the SDK to warn (NETSDK1239) when the SDK *building* this repo has
+      reached end of support. It looks at the build SDK only, never at
+      <TargetFramework>, so the net6.0 pin below can never trip it.
+
+      INERT TODAY - this is not live protection. The property, the task behind
+      it and the NETSDK1238/1239/1240 codes exist only in dotnet/sdk main
+      (.NET 11, still in preview); no SDK shipping today reads this property at
+      all. It is a tripwire that arms itself when the toolchain reaches .NET 11,
+      with no later migration to remember. Even once armed, the check reads a
+      local support-policy cache and silently does nothing when that cache is
+      absent, so a missing warning is never evidence that the SDK is supported.
+      The thing that works today is `dotnet sdk check`, deliberately not adopted:
+      it would permanently flag the .NET 6 SDK that CI installs on purpose.
+    -->
+    <CheckSdkVulnerabilities>true</CheckSdkVulnerabilities>
+
+    <!--
+      NETSDK1138 is the target-framework counterpart (net6.0 is out of support);
+      we pin to it on purpose because MelonLoader does, so the warning is noise.
+      Append form, so codes set by the SDK or by an outer props file survive.
+    -->
+    <NoWarn>$(NoWarn);NETSDK1138</NoWarn>
   </PropertyGroup>
 </Project>
