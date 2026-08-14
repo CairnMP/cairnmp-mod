@@ -5,19 +5,23 @@ name: CI
 # assemblies, which are git-ignored and can never reach a runner. Widening this
 # command to the solution, or to the mod projects, would hard-fail on a runner.
 
+# Restricting push to the long-lived branches is what keeps an internal pull
+# request from firing twice for one SHA: a topic branch raises no push event, so
+# only pull_request fires for it.
 on:
   push:
-    branches: [develop, production]
+    branches: [develop, production, next/feature-framework]
   pull_request:
-    branches: [develop, production]
+    branches: [develop, production, next/feature-framework]
   workflow_dispatch:
 
-# Restricting push to the long-lived branches is what keeps an internal pull
-# request from firing twice for the same SHA; this group also cancels superseded
-# runs when a branch is pushed again mid-run.
+# One run at a time per ref. Cancellation is limited to pull requests, where only
+# the head SHA matters. On an integration branch every SHA must keep its own
+# verification: a cancelled run is neither a pass nor a failure, so cancelling
+# there would let a commit land verified by nothing.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -26,6 +30,9 @@ jobs:
   test:
     name: Protocol test suite
     runs-on: ubuntu-latest
+    # Runs take ~30s; this only has to catch a hung restore or testhost before it
+    # holds a runner for the six-hour default.
+    timeout-minutes: 15
 
     steps:
       - name: Check out the repository
