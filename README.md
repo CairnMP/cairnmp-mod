@@ -176,7 +176,7 @@ events without exposing Steam or raw packets. See
 | `CairnMultiplayerMod.Generators/` | ✅ | Build-time generator listing the features (never ships) |
 | `CairnMultiplayerShared/` | ✅ | Shared network protocol (packets, constants) |
 | `CairnMultiplayerShared.Tests/` | ✅ | xUnit tests for the shared protocol |
-| `CairnMultiplayerMod.Tests/` | ✅ | xUnit tests for the framework and the extension API |
+| `CairnMultiplayerMod.Tests/` | ✅ | xUnit tests for the framework and the extension API (needs the reference assemblies) |
 | `game-refs/` | — | Il2Cpp + MelonLoader reference assemblies (**not committed** — provide your own, see below) |
 
 ## Reference assemblies
