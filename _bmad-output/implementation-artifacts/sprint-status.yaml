@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 08-12-2026 13:25
-last_updated: 08-14-2026 12:40
+last_updated: 08-14-2026 12:25
 project: cairnmp-mod
 project_key: yerayalfageme-glitch/cairnmp-mod
 tracking_system: github
@@ -53,6 +53,7 @@ action_items:
       s success signal is false on that branch and CI cannot run there"
     owner: "Yeray"
     status: open
+    resolved_by: "decision-q1-production-in-scope"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
   - id: "epic-1-retro-item-2-re-establish-the-red-proof-on-the-curren"
     epic: 1
@@ -81,6 +82,7 @@ action_items:
       from the CI trigger lists"
     owner: "Yeray"
     status: open
+    resolved_by: "decision-q2-next-feature-framework-keep"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
   - id: "epic-1-retro-item-6-triage-the-20-entry-deferred-work-ledger"
     epic: 1
@@ -95,3 +97,58 @@ action_items:
     owner: "Yeray"
     status: open
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
+  - id: "epic-1-retro-item-8-amend-cap-2-success-clause-to-name-branc"
+    epic: 1
+    action: "Amend the CAP-2 success clause in SPEC.md to name the branches it binds;
+      run it after item 1 so the wording describes the tree that exists"
+    owner: "Yeray"
+    status: open
+    resolved_by: "decision-q3-name-branches-in-spec"
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
+
+# Answers to the three Open Questions the epic-1 retrospective left for a human.
+# Each resolves the either/or inside the action item named in `resolves`; the item
+# text is the retro's frozen record and is deliberately not rewritten.
+decisions:
+  - id: "decision-q1-production-in-scope"
+    epic: 1
+    date: "2026-08-14"
+    decided_by: "Yeray"
+    question: "Is production in scope for epic 1 s guarantees?"
+    decision: "In scope - promote now. Merge develop into production so ci.yml and
+      the corrected generate-il2cpp-refs.ps1 reach the release branch, making CAP-2
+      s success signal true repo-wide and the push-on-production trigger live."
+    resolves: "epic-1-retro-item-1-carry-epic-1-to-production-or-state-that"
+    notes: "Must go through a pull request - production is protected (required check
+      Protocol test suite, enforce_admins true, required_conversation_resolution
+      true), which supersedes the deferred-work entry claiming neither branch is
+      protected. The check will report - ci.yml lists production under
+      pull_request.branches and a pull_request run resolves its workflow from the
+      merge commit, which carries ci.yml from develop even though the base branch
+      has none. Open sub-question: the promotion also carries the whole
+      _bmad-output tree and a .memlog.md, 31 files and +1799 lines; whether the
+      release branch should hold BMad workflow artifacts is undecided."
+  - id: "decision-q2-next-feature-framework-keep"
+    epic: 1
+    date: "2026-08-14"
+    decided_by: "Yeray"
+    question: "What is next/feature-framework for, given its CI triggers are inert?"
+    decision: "Keep the branch and give it the workflow - merge develop into it so
+      it carries ci.yml and the package pins. The trigger entries added in 41607e3
+      then describe real coverage instead of implying coverage that cannot exist."
+    resolves: "epic-1-retro-item-5-decide-next-feature-framework-status-giv"
+    notes: "Makes spec-1-1:54 stale in a second way - its frozen task text still
+      says push on develop/production - so item 4 s refresh must cover that line
+      too."
+  - id: "decision-q3-name-branches-in-spec"
+    epic: 1
+    date: "2026-08-14"
+    decided_by: "Yeray"
+    question: "Should the epic s success signal be amended, given nothing left in
+      the repo proved ambiguous across branches?"
+    decision: "Yes - amend CAP-2 s success clause in SPEC.md to name the branches it
+      binds, so future epics are falsifiable per-branch."
+    resolves: "epic-1-retro-item-8-amend-cap-2-success-clause-to-name-branc"
+    notes: "Sequenced after item 1 - the amendment should describe the post-promotion
+      tree, not the split one. Edits a spec whose epic is already closed, which is
+      the accepted cost of this option."
