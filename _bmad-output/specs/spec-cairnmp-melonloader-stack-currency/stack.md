@@ -21,9 +21,9 @@ The three `<Reference Include>` entries pointing at `$(MelonLoaderNet6Dir)` are 
 
 | Package | CairnMP has | net6.0 ceiling | First version that drops net6.0 |
 |---|---|---|---|
-| `xunit` | 2.9.2 (2024-09-27) | **2.9.3** (2025-01-08) | v3 line entirely (floors at net8.0) |
-| `Microsoft.NET.Test.Sdk` | 17.11.1 | **17.13.0** | 17.14.0 |
-| `xunit.runner.visualstudio` | 2.8.2 | **3.0.2** (2025-02-07) | 3.1.0 (2025-05-03) |
+| `xunit` | 2.9.3 | **2.9.3** (2025-01-08) | v3 line entirely (floors at net8.0) |
+| `Microsoft.NET.Test.Sdk` | 17.13.0 | **17.13.0** | 17.14.0 |
+| `xunit.runner.visualstudio` | 3.0.2 | **3.0.2** (2025-02-07) | 3.1.0 (2025-05-03) |
 
 These are ceilings imposed by the net6.0 pin, not steps toward currency. The whole xunit v2 line is marked legacy and deprecated on NuGet — security updates only, feature work moved to v3, and no release at all since 2.9.3. That is inherited from the loader's runtime pin, not a consequence of any decision made in this repo.
 
