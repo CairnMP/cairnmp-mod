@@ -2,7 +2,7 @@
 title: 'Story 1.4: Raise and pin test packages to their net6.0 ceilings'
 type: 'chore'
 created: '2026-08-14'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: 'aad1f83ab661addf1e73f99feebfe28f0aee8685'
 review_loop_iteration: 0
 context: []
@@ -28,8 +28,9 @@ context: []
 
 ## Code Map
 
-- `CairnMultiplayerShared.Tests/CairnMultiplayerShared.Tests.csproj:11-13` -- the three `PackageReference` lines to bump. This suite is the only one CI can run, so it is where the change is actually proven.
-- `CairnMultiplayerMod.Tests/CairnMultiplayerMod.Tests.csproj:11-13` -- byte-identical three lines. Bumped for parity; **cannot be built or verified anywhere** because its graph needs the gitignored `game-refs/`.
+- `CairnMultiplayerShared.Tests/CairnMultiplayerShared.Tests.csproj:20,22,24` -- the three `PackageReference` lines to bump, each preceded by its ceiling comment. This suite is the only one CI can run, so it is where the change is actually proven.
+- `CairnMultiplayerMod.Tests/CairnMultiplayerMod.Tests.csproj:20,22,24` -- byte-identical three lines. Bumped for parity; **cannot be verified in CI, or on any machine without `game-refs/`**, because its graph needs those gitignored assemblies. A developer who has them can exercise it locally -- see `scripts/check.sh:21`.
+- `scripts/check.sh:21` -- `dotnet test CairnMultiplayer.slnx -c Release`, solution-wide, so it is the one path that does exercise the mod test project. Documented in `AGENTS.md:26` as the manual pre-push check. Not reachable from CI, which is why this story's mod-side edit still ships unexecuted here.
 - `_bmad-output/specs/spec-cairnmp-melonloader-stack-currency/stack.md` -- the ceiling table and the AssetTargetFallback explanation. Source of truth for the numbers; do not restate its full reasoning in the csproj.
 - `.github/workflows/ci.yml` -- runs `dotnet test CairnMultiplayerShared.Tests -c Release` on a .NET 6 runtime. This is the safety net story 1.1 built for exactly this change.
 - `Directory.Build.props:46` -- `NoWarn=NETSDK1138` already suppresses the EOL-framework warning; expect no new build noise from the bump.
@@ -41,7 +42,7 @@ context: []
 - [x] `CairnMultiplayerMod.Tests/CairnMultiplayerMod.Tests.csproj` -- apply the identical three versions and comments.
 - [x] Try exact-version pins (`Version="[2.9.3]"` bracket syntax) so the resolved version cannot drift upward on its own. Keep them only if restore stays warning-free; if they produce NU16xx downgrade/conflict warnings, fall back to plain versions and say so — the comment carries the ceiling either way. **Kept.** Restore reported 0 warnings / 0 errors, and `project.assets.json` records the ranges as `[17.13.0, 17.13.0]`, `[2.9.3, 2.9.3]`, `[3.0.2, 3.0.2]`.
 - [x] Verify locally: `dotnet test CairnMultiplayerShared.Tests -c Release` must pass, not merely restore. **63/63 passed, exit 0** on SDK 6.0.428 / runtime 6.0.36.
-- [x] Verify on a runner: open a PR to `develop` and confirm the CI check is green on the bumped tree. **PR #7**, check "Protocol test suite" green in 21s, log line `Passed! - Failed: 0, Passed: 63`.
+- [x] Verify on a runner: open a PR to `develop` and confirm the CI check is green on the bumped tree. **PR `yerayalfageme-glitch/cairnmp-mod#7`**; runs `31781260743` (`39e7e61`) and `31781342416` (`7b9d10a`) both green -- see Evidence below.
 
 **Acceptance Criteria:**
 - Given the bumped tree, when `dotnet test CairnMultiplayerShared.Tests -c Release` runs on a .NET 6 runtime, then all tests pass (63 at time of writing) and the run does not fail with "Could not find testhost".
@@ -55,7 +56,9 @@ context: []
 
 **Why the recorded ceiling matters more than the numbers.** `xunit` 2.9.3 is the last release of the v2 line and the whole line is marked legacy on NuGet, so this bump buys no features — it buys being at a known, documented boundary. The next person to touch these versions is the one this story protects, and the only thing that protects them is a note where they are looking.
 
-**Why the mod test project is bumped but not verified.** Its graph needs game assemblies that cannot reach CI or a clean machine, so this edit ships unexecuted. That is accepted deliberately: leaving it behind would reintroduce exactly the version drift the pins exist to prevent, and the three lines are identical to the ones that *are* verified.
+**Why the mod test project is bumped but not verified here.** Its graph needs game assemblies that cannot reach CI or a machine without `game-refs/`, so this edit ships unexecuted *by this story*. It is not unverifiable in principle: a developer holding those assemblies exercises it every time they run `scripts/check.sh`, which tests the whole solution. Shipping it unexecuted is accepted deliberately -- leaving it behind would reintroduce exactly the version drift the pins exist to prevent, and the three lines are identical to the ones that *are* verified.
+
+**What the exact pins do and do not buy.** The bracket ranges stop *resolution* drifting upward -- no transitive dependency can quietly pull a higher `Microsoft.NET.Test.Sdk` past the ceiling. They stop nothing a human does deliberately: editing the number, or running `dotnet add package`, replaces the pin outright. Against that, the only guards are the comment sitting on the line and CI -- and CI covers the shared suite alone, so a mod-side mistake is caught by neither. The pins also carry an ongoing cost worth stating: a future package that genuinely requires a higher Test.Sdk will now hard-fail restore with NU1107/NU1608 instead of resolving upward. That failure is the pin working as designed, and unpinning is the sanctioned response to it -- after confirming the new ceiling in `stack.md`.
 
 ## Verification
 
@@ -65,3 +68,13 @@ context: []
 
 **Manual checks:**
 - Confirm the resolved versions are the intended ones (e.g. inspect `obj/project.assets.json` or the restore output), not merely that restore succeeded.
+
+**Evidence (PR `yerayalfageme-glitch/cairnmp-mod#7` against `develop`):**
+- The PR must be qualified by repo. `gh` resolves a bare `#7` against the `upstream` remote (`CairnMP/cairnmp-mod`), where PR 7 is an unrelated pull request.
+- Green: run `31781260743` on commit `39e7e61` -- `Passed! - Failed: 0, Passed: 63, Skipped: 0, Total: 63`, 24s wall clock, no "Could not find testhost".
+- Green: run `31781342416` on commit `7b9d10a` -- the spec-bookkeeping commit, re-run so the PR head itself is verified rather than only its first commit. 29s.
+- Local, on SDK 6.0.428 / runtime 6.0.36: `dotnet test CairnMultiplayerShared.Tests -c Release` passed 63/63, exit 0. This machine had no .NET SDK at all beforehand, only the 6.0.36 runtime; the SDK was installed into a scratch directory for the run, so nothing about the repo or the machine's toolchain was altered to make it pass.
+- Restore reported 0 warnings / 0 errors, so the bracket pins produced no NU16xx and were kept.
+- **The strongest evidence, and the one the story turns on:** in `CairnMultiplayerShared.Tests/obj/project.assets.json`, `Microsoft.TestPlatform.TestHost/17.13.0` resolved its `lib/netcoreapp3.1/` assets, *not* `net462`. That is direct proof `AssetTargetFallback` never engaged -- the precise failure mode this story guards against, and the one a passing test run alone would not distinguish. The declared ranges are recorded there as `[17.13.0, 17.13.0]`, `[2.9.3, 2.9.3]`, `[3.0.2, 3.0.2]`.
+
+**Not exercised:** `CairnMultiplayerMod.Tests`, for the reason given in the Code Map. Its three lines were compared against the verified ones and are identical, which is the whole of the assurance behind them.
