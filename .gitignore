@@ -37,6 +37,10 @@ _bmad-output/*
 !_bmad-output/specs/
 !_bmad-output/planning-artifacts/
 !_bmad-output/implementation-artifacts/
+# The negations re-include those subtrees wholesale, dotfiles included, so the
+# per-session .memlog.md scratch logs rode in against the rule above. Last match
+# wins, hence this line sits after them.
+_bmad-output/**/.memlog.md
 
 # Logs
 *.log
