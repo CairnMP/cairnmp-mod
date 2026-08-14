@@ -37,12 +37,51 @@
     <ModsDir2>$(CairnDir2)\Mods</ModsDir2>
   </PropertyGroup>
 
-  <!-- Style de code appliqué à tous les projets -->
+  <!-- Language, diagnostics and build-SDK policy applied to every project -->
   <PropertyGroup>
     <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <WarningsAsErrors>CS8600;CS8601;CS8602;CS8603;CS8604</WarningsAsErrors>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <NoWarn>NETSDK1138</NoWarn>
+
+    <!--
+      One opt-in switch covering three SDK-currency warnings about the SDK that
+      *runs the build*: it has known CVEs (NETSDK1238), it is past end of support
+      (NETSDK1239), or its feature band has no newer release (NETSDK1240). That
+      is why a property named "Vulnerabilities" is set here for an end-of-support
+      signal; NETSDK1239 is the one we are after. None of the three look at
+      <TargetFramework>, so the net6.0 pin the projects carry cannot trip them;
+      the target-framework counterpart is NETSDK1138, suppressed below.
+      Reference: https://learn.microsoft.com/dotnet/core/tools/sdk-errors/netsdk1239
+
+      INERT TODAY. This is not live protection. The property and the task behind
+      it exist only in the .NET 11 SDK, first available in 11.0.100-preview.5 and
+      still unshipped; SDK 6.0.428 and 8.0.424 were searched and contain neither.
+      No released SDK ships it, so whichever SDK builds on CI ignores it too.
+
+      It arms itself when the toolchain reaches .NET 11, but re-check this line
+      then rather than trusting it: a property that exists only in a preview
+      branch can still be renamed, re-scoped or dropped before GA, which would
+      leave these lines reading as armed while doing nothing. Even once armed the
+      check reads a local cache (~/.dotnet/sdk-vulnerability-cache/, refreshed by
+      the CLI at most daily) and makes no network call during the build, so it
+      silently does nothing when that cache is absent. A missing warning is never
+      evidence that the SDK is supported.
+
+      The thing that works today is `dotnet sdk check`, deliberately not adopted:
+      it would permanently flag the .NET 6 SDK that CI installs on purpose.
+    -->
+    <CheckSdkVulnerabilities>true</CheckSdkVulnerabilities>
+
+    <!--
+      NETSDK1138 is the target-framework counterpart (net6.0 is out of support);
+      we pin to it on purpose because MelonLoader does, so the warning is noise.
+      Kept rather than trimmed: which SDK actually builds on CI is undetermined
+      (the workflow installs 6.0.428, but with no global.json MSBuild takes the
+      highest SDK on the runner, most likely 10.x), so nothing here shows the
+      suppression is redundant, and this line is what would be hiding it.
+      Append form, so codes set by the SDK or by an outer props file survive.
+    -->
+    <NoWarn>$(NoWarn);NETSDK1138</NoWarn>
   </PropertyGroup>
 </Project>

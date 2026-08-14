@@ -1,0 +1,51 @@
+name: CI
+
+# Scoped deliberately to CairnMultiplayerShared.Tests: it is the only suite whose
+# project graph terminates without the proprietary Cairn / Unity / MelonLoader
+# assemblies, which are git-ignored and can never reach a runner. Widening this
+# command to the solution, or to the mod projects, would hard-fail on a runner.
+
+# Restricting push to the long-lived branches is what keeps an internal pull
+# request from firing twice for one SHA: a topic branch raises no push event, so
+# only pull_request fires for it.
+on:
+  push:
+    branches: [develop, production, next/feature-framework]
+  pull_request:
+    branches: [develop, production, next/feature-framework]
+  workflow_dispatch:
+
+# One run at a time per ref. Cancellation is limited to pull requests, where only
+# the head SHA matters. On an integration branch every SHA must keep its own
+# verification: a cancelled run is neither a pass nor a failure, so cancelling
+# there would let a commit land verified by nothing.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Protocol test suite
+    runs-on: ubuntu-latest
+    # Runs take ~30s; this only has to catch a hung restore or testhost before it
+    # holds a runner for the six-hour default.
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      # Runner images ship .NET 8/9/10 only. net6.0 would still build there, but
+      # the testhost requests Microsoft.NETCore.App 6.0.0 and roll-forward never
+      # crosses a major, so the run would die at test-host launch. MelonLoader
+      # pins players to .NET 6, so testing on any other runtime proves nothing.
+      - name: Install the .NET 6 SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 6.0.x
+
+      - name: Run the protocol tests
+        run: dotnet test CairnMultiplayerShared.Tests -c Release

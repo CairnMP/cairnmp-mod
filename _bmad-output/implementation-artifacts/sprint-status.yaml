@@ -1,0 +1,183 @@
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created, ready for development
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when its first story starts (via build's sprint sync)
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates the next story after the previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; the status view surfaces open ones
+generated: 08-12-2026 13:25
+last_updated: 08-14-2026 12:41
+project: cairnmp-mod
+project_key: yerayalfageme-glitch/cairnmp-mod
+tracking_system: github
+story_location: _bmad-output/implementation-artifacts
+development_status:
+  epic-1: done
+  1-1-add-github-actions-ci-for-the-protocol-test-suite: done
+  1-2-stop-generate-il2cpp-refs-ps1-telling-contributors-to-commit: done
+  1-3-surface-end-of-life-build-sdks-via-checksdkvulnerabilities: done
+  1-4-raise-and-pin-test-packages-to-their-net6-0-ceilings: done
+  epic-1-retrospective: done
+story_issues:
+  1-1-add-github-actions-ci-for-the-protocol-test-suite: 1
+  1-2-stop-generate-il2cpp-refs-ps1-telling-contributors-to-commit: 2
+  1-3-surface-end-of-life-build-sdks-via-checksdkvulnerabilities: 3
+  1-4-raise-and-pin-test-packages-to-their-net6-0-ceilings: 4
+action_items:
+  - id: "epic-1-retro-item-1-carry-epic-1-to-production-or-state-that"
+    epic: 1
+    action: "Carry epic 1 to production, or state that it does not apply there - CAP-2
+      s success signal is false on that branch and CI cannot run there"
+    owner: "Yeray"
+    status: open
+    resolved_by: "decision-q1-production-in-scope"
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
+  - id: "epic-1-retro-item-2-re-establish-the-red-proof-on-the-curren"
+    epic: 1
+    action: "Re-establish the red proof on the current tree; the existing falsification
+      evidence predates the package pins and the props change"
+    owner: "Yeray"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
+  - id: "epic-1-retro-item-3-fix-spec-1-3-frontmatter-to-done-and-ver"
+    epic: 1
+    action: "Fix spec-1-3 frontmatter to done and verify the post-state rather than
+      assuming the substitution matched"
+    owner: "Yeray"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
+  - id: "epic-1-retro-item-4-refresh-spec-1-1-stale-references-two-co"
+    epic: 1
+    action: "Refresh spec-1-1 stale references: two Code Map anchors and the push-not-yet-exercised
+      note"
+    owner: "Yeray"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
+  - id: "epic-1-retro-item-5-decide-next-feature-framework-status-giv"
+    epic: 1
+    action: "Decide next/feature-framework status: give it the workflow or drop it
+      from the CI trigger lists"
+    owner: "Yeray"
+    status: open
+    resolved_by: "decision-q2-next-feature-framework-keep"
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
+  - id: "epic-1-retro-item-6-triage-the-20-entry-deferred-work-ledger"
+    epic: 1
+    action: "Triage the 20-entry deferred-work ledger accumulated across epic 1"
+    owner: "Yeray"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
+  - id: "epic-1-retro-item-7-adopt-a-commit-subject-story-id-conventi"
+    epic: 1
+    action: "Adopt a commit-subject story-id convention; git_evidence attributed 0
+      of 26 commits"
+    owner: "Yeray"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
+  - id: "epic-1-retro-item-8-amend-cap-2-success-clause-to-name-branc"
+    epic: 1
+    action: "Amend the CAP-2 success clause in SPEC.md to name the branches it binds;
+      run it after item 1 so the wording describes the tree that exists"
+    owner: "Yeray"
+    status: open
+    resolved_by: "decision-q3-name-branches-in-spec"
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-08-14.md"
+
+# Answers to the three Open Questions the epic-1 retrospective left for a human.
+# Each resolves the either/or inside the action item named in `resolves`; the item
+# text is the retro's frozen record and is deliberately not rewritten.
+decisions:
+  - id: "decision-q1-production-in-scope"
+    epic: 1
+    date: "2026-08-14"
+    decided_by: "Yeray"
+    question: "Is production in scope for epic 1 s guarantees?"
+    decision: "In scope - promote now. Merge develop into production so ci.yml and
+      the corrected generate-il2cpp-refs.ps1 reach the release branch, making CAP-2
+      s success signal true repo-wide and the push-on-production trigger live."
+    resolves: "epic-1-retro-item-1-carry-epic-1-to-production-or-state-that"
+    notes: "Must go through a pull request - production is protected (required check
+      Protocol test suite, enforce_admins true, required_conversation_resolution
+      true), which supersedes the deferred-work entry claiming neither branch is
+      protected. The check will report - ci.yml lists production under
+      pull_request.branches and a pull_request run resolves its workflow from the
+      merge commit, which carries ci.yml from develop even though the base branch
+      has none. Open sub-question: the promotion also carries the whole
+      _bmad-output tree and a .memlog.md, 31 files and +1799 lines; whether the
+      release branch should hold BMad workflow artifacts is undecided."
+  - id: "decision-q2-next-feature-framework-keep"
+    epic: 1
+    date: "2026-08-14"
+    decided_by: "Yeray"
+    question: "What is next/feature-framework for, given its CI triggers are inert?"
+    decision: "Keep the branch and give it the workflow - merge develop into it so
+      it carries ci.yml and the package pins. The trigger entries added in 41607e3
+      then describe real coverage instead of implying coverage that cannot exist."
+    resolves: "epic-1-retro-item-5-decide-next-feature-framework-status-giv"
+    notes: "Makes spec-1-1:54 stale in a second way - its frozen task text still
+      says push on develop/production - so item 4 s refresh must cover that line
+      too."
+  - id: "decision-q3-name-branches-in-spec"
+    epic: 1
+    date: "2026-08-14"
+    decided_by: "Yeray"
+    question: "Should the epic s success signal be amended, given nothing left in
+      the repo proved ambiguous across branches?"
+    decision: "Yes - amend CAP-2 s success clause in SPEC.md to name the branches it
+      binds, so future epics are falsifiable per-branch."
+    resolves: "epic-1-retro-item-8-amend-cap-2-success-clause-to-name-branc"
+    notes: "Sequenced after item 1 - the amendment should describe the post-promotion
+      tree, not the split one. Edits a spec whose epic is already closed, which is
+      the accepted cost of this option."
+  - id: "decision-q4-promotion-carries-everything"
+    epic: 1
+    date: "2026-08-14"
+    decided_by: "Yeray"
+    question: "Should the develop to production promotion carry the _bmad-output
+      tree, or only the nine product files?"
+    decision: "Everything - a straight merge, no pruning. production becomes an exact
+      mirror of develop, so the .gitignore policy applies uniformly across branches,
+      an empty production...develop diff keeps meaning fully promoted, and future
+      promotions stay plain merges with nothing to remember."
+    resolves: "epic-1-retro-item-1-carry-epic-1-to-production-or-state-that"
+    notes: "Settles the sub-question left open under decision-q1. Accepted cost - the
+      release branch carries planning artifacts a consumer of the mod will not read.
+      Rejected alternative - pruning _bmad-output on production would make
+      production...develop never read clean again and would need repeating by hand
+      on every future promotion."
+  - id: "decision-q5-untrack-memlog-scratch"
+    epic: 1
+    date: "2026-08-14"
+    decided_by: "Yeray"
+    question: "Should the per-session .memlog.md scratch logs stay in history?"
+    decision: "Untrack them - add _bmad-output/**/.memlog.md to .gitignore and drop
+      both files from the index. They stay on disk locally; only history stops
+      carrying them."
+    notes: "Not a retro action item - surfaced while sizing the promotion diff. They
+      were tracked against the stated policy - .gitignore says scratch stays local,
+      but the !_bmad-output/specs/ negation re-includes each subtree wholesale,
+      dotfiles included. Runs before item 1 so production never receives them,
+      rather than promoting then removing."
