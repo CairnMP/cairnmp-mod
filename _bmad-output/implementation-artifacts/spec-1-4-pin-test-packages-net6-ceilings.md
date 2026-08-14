@@ -41,7 +41,7 @@ context: []
 - [x] `CairnMultiplayerMod.Tests/CairnMultiplayerMod.Tests.csproj` -- apply the identical three versions and comments.
 - [x] Try exact-version pins (`Version="[2.9.3]"` bracket syntax) so the resolved version cannot drift upward on its own. Keep them only if restore stays warning-free; if they produce NU16xx downgrade/conflict warnings, fall back to plain versions and say so — the comment carries the ceiling either way. **Kept.** Restore reported 0 warnings / 0 errors, and `project.assets.json` records the ranges as `[17.13.0, 17.13.0]`, `[2.9.3, 2.9.3]`, `[3.0.2, 3.0.2]`.
 - [x] Verify locally: `dotnet test CairnMultiplayerShared.Tests -c Release` must pass, not merely restore. **63/63 passed, exit 0** on SDK 6.0.428 / runtime 6.0.36.
-- [ ] Verify on a runner: open a PR to `develop` and confirm the CI check is green on the bumped tree.
+- [x] Verify on a runner: open a PR to `develop` and confirm the CI check is green on the bumped tree. **PR #7**, check "Protocol test suite" green in 21s, log line `Passed! - Failed: 0, Passed: 63`.
 
 **Acceptance Criteria:**
 - Given the bumped tree, when `dotnet test CairnMultiplayerShared.Tests -c Release` runs on a .NET 6 runtime, then all tests pass (63 at time of writing) and the run does not fail with "Could not find testhost".

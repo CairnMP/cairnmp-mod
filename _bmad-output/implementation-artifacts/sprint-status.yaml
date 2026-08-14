@@ -39,7 +39,7 @@ development_status:
   1-1-add-github-actions-ci-for-the-protocol-test-suite: review
   1-2-stop-generate-il2cpp-refs-ps1-telling-contributors-to-commit: backlog
   1-3-surface-end-of-life-build-sdks-via-checksdkvulnerabilities: backlog
-  1-4-raise-and-pin-test-packages-to-their-net6-0-ceilings: in-progress
+  1-4-raise-and-pin-test-packages-to-their-net6-0-ceilings: review
   epic-1-retrospective: optional
 story_issues:
   1-1-add-github-actions-ci-for-the-protocol-test-suite: 1
