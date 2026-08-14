@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# scripts/check.sh — checkup local complet avant push (repo mod).
-# Compatible bash (git-bash sous Windows, native Linux/Mac).
+# scripts/check.sh — full local checkup before pushing (mod repo).
+# Works with bash (git-bash on Windows, native Linux/Mac).
 #
-# Usage : bash scripts/check.sh
-# Le hook .githooks/pre-push l'appelle automatiquement.
+# Usage: bash scripts/check.sh
+# Run it manually — no git hook invokes it automatically.
 
 set -euo pipefail
 
