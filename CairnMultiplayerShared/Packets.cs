@@ -654,17 +654,23 @@ public struct ServerRopeClip : IPacket
 public struct ClientFeatureStream : IPacket
 {
     public ushort Channel;
+
+    /// <summary>Delivery the sender asked for, so the host relays it the same way.</summary>
+    public bool Reliable;
+
     public byte[] Payload;
 
     public void Serialize(BinaryWriter w)
     {
         w.Write(Channel);
+        w.Write(Reliable);
         PacketCodec.WriteBytes(w, Payload);
     }
 
     public void Deserialize(BinaryReader r)
     {
         Channel = r.ReadUInt16();
+        Reliable = r.ReadBoolean();
         Payload = PacketCodec.ReadBytes(r);
     }
 }
