@@ -1,10 +1,20 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using CairnMultiplayer.Api;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Api.Internal;
 
 namespace CairnMultiplayerMod.Framework;
+
+internal static class FeatureContinuation
+{
+    /// <summary>Runs the handler inline. The runtime completes on Unity's main thread, and a
+    /// feature callback may touch the game.</summary>
+    internal static void OnCompletion<TResult>(Task<TResult> task, Action<Task<TResult>> handler)
+        => task.ContinueWith(handler, CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+}
 
 /// <summary>
 /// "Everyone sees this." Send from any player; the host relays to every other peer, so the
@@ -33,13 +43,13 @@ internal sealed class Broadcast<T> where T : IPacket, new()
     {
         if (!_runtime.IsConnected) return;
 
-        _request.SendAsync(message).ContinueWith(task =>
+        FeatureContinuation.OnCompletion(_request.SendAsync(message), task =>
         {
             if (task.IsFaulted)
                 FeatureLog.Warn($"[Feature:{_label}] send failed: {task.Exception?.GetBaseException().Message}");
             else if (task.IsCompletedSuccessfully && !task.Result.Committed)
                 FeatureLog.Warn($"[Feature:{_label}] rejected by host: {task.Result.Reason}");
-        }, TaskScheduler.Default);
+        });
     }
 }
 
@@ -155,28 +165,40 @@ internal sealed class HostCommand<T> where T : IPacket, new()
 
     /// <summary>
     /// Sends the request. <paramref name="onAnswer"/> (optional) receives the host's verdict
-    /// and the reason when refused. Never throws.
+    /// and the reason when refused, on the main thread, so it may touch the game. Never throws.
     /// </summary>
     public void Send(T request, Action<bool, string> onAnswer = null)
     {
         if (!_runtime.IsConnected)
         {
-            onAnswer?.Invoke(false, "Not connected.");
+            Answer(onAnswer, false, "Not connected.");
             return;
         }
 
-        _command.SendAsync(request).ContinueWith(task =>
+        FeatureContinuation.OnCompletion(_command.SendAsync(request), task =>
         {
             if (task.IsFaulted)
             {
                 var reason = task.Exception?.GetBaseException().Message ?? "unknown error";
                 FeatureLog.Warn($"[Feature:{_label}] command failed: {reason}");
-                onAnswer?.Invoke(false, reason);
+                Answer(onAnswer, false, reason);
                 return;
             }
 
-            onAnswer?.Invoke(task.Result.Committed, task.Result.Reason);
-        }, TaskScheduler.Default);
+            Answer(onAnswer, task.Result.Committed, task.Result.Reason);
+        });
+    }
+
+    private void Answer(Action<bool, string> onAnswer, bool committed, string reason)
+    {
+        try
+        {
+            onAnswer?.Invoke(committed, reason);
+        }
+        catch (Exception ex)
+        {
+            FeatureLog.Error($"[Feature:{_label}] answer handler failed: {ex}");
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using CairnMultiplayer.Api;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Api.Internal;
@@ -225,6 +226,33 @@ public sealed class FeatureFrameworkTests : IDisposable
             var result = runtime.ExecuteHostCommand(2, CommandPacket("ping", "placed", new Point(i, 0f, 0f)));
             Assert.True(result.Committed, $"send #{i} was throttled: {result.Reason}");
         }
+    }
+
+    [Fact]
+    public void AHostCommandAnswersOnTheCallingThread()
+    {
+        var runtime = NewRuntime(out var bridge);
+        var feature = new AnsweringFeature();
+        new FeatureHost(runtime).RegisterAll(new MultiplayerFeature[] { feature }, new Version(1, 0, 0));
+        runtime.Attach(bridge);
+
+        int? answerThread = null;
+        feature.Try.Send(new Point(1f, 1f, 1f), (_, _) => answerThread = Thread.CurrentThread.ManagedThreadId);
+
+        Assert.Equal(Thread.CurrentThread.ManagedThreadId, answerThread);
+    }
+
+    [Fact]
+    public void AThrowingAnswerHandlerIsContained()
+    {
+        var runtime = NewRuntime(out var bridge);
+        var feature = new AnsweringFeature();
+        new FeatureHost(runtime).RegisterAll(new MultiplayerFeature[] { feature }, new Version(1, 0, 0));
+        runtime.Attach(bridge);
+
+        feature.Try.Send(new Point(1f, 1f, 1f), (_, _) => throw new InvalidOperationException("boom"));
+
+        Assert.Contains(_errors, error => error.Contains("boom"));
     }
 
     // ── Real-time streams ─────────────────────────────────────────────────────
@@ -483,6 +511,16 @@ public sealed class FeatureFrameworkTests : IDisposable
             {
                 if (!_accept) request.Reject("nope");
             });
+    }
+
+    private sealed class AnsweringFeature : MultiplayerFeature
+    {
+        public override string Id => "answering";
+
+        internal HostCommand<Point> Try;
+
+        protected internal override void OnRegister(FeatureBuilder feature)
+            => Try = feature.HostCommand<Point>("try", _ => { });
     }
 
     private sealed class FakeBridge : IExtensionNetworkBridge
