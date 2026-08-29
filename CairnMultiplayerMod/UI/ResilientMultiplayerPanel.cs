@@ -117,7 +117,7 @@ internal sealed class ResilientMultiplayerPanel : IMultiplayerPanel
         if (_usingFallback)
             return _active;
 
-        Mod.Log.Warning($"[CairnMP] UI Toolkit panel failed at runtime, switching to legacy Canvas UI: {ex.Message}");
+        Mod.Log.Warning($"[CairnMP] Sketch panel failed at runtime, switching to UI Toolkit: {ex.Message}");
         _usingFallback = true;
         _active = _fallbackFactory();
         Wire(_active);
