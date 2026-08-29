@@ -324,7 +324,7 @@ public partial class NetworkManager
                 // The host applies it locally too, then relays to everyone but the sender.
                 OnFeatureStream?.Invoke(playerId, pkt.Channel, pkt.Payload);
                 BroadcastSteamServerPacket(PacketId.ServerFeatureStream, outPkt,
-                    exceptSteamId: remoteSteamId, reliable: false);
+                    exceptSteamId: remoteSteamId, reliable: pkt.Reliable);
                 break;
             }
             case PacketId.ClientDisconnect:
@@ -466,7 +466,7 @@ public partial class NetworkManager
         }
 
         SendSteamPacketToHost(PacketId.ClientFeatureStream,
-            new ClientFeatureStream { Channel = channel, Payload = payload }, reliable);
+            new ClientFeatureStream { Channel = channel, Reliable = reliable, Payload = payload }, reliable);
     }
 
     private void SendSteamRopeClip(int targetPlayerId, bool clip)

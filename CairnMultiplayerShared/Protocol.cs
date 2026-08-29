@@ -6,10 +6,12 @@ namespace CairnMultiplayer.Shared;
 /// </summary>
 public static class Protocol
 {
+    // 12: ClientFeatureStream carries the sender's reliability flag, so the host relays a
+    // stream the way it was declared instead of always relaying unreliably.
     // 11: every gameplay packet except the pose/frame streams now travels through the
     // feature framework, freeing ids 4, 10-14, 16, 69, 76-80 and 83. Real-time streams
     // share ids 19 and 89 whatever the feature.
-    public const int Version = 11;
+    public const int Version = 12;
     public const string ConnectionKey = "cairnmp";
     public const int DefaultPort = 14000;
 

@@ -80,8 +80,9 @@ public class ProtocolVersionTests
     {
         // When you bump Protocol.Version, update this value AND the release notes
         // to signal to clients that they need to update.
+        // 12: ClientFeatureStream carries a reliability flag.
         // 11: finger poses joined the framework, on the shared real-time stream channel.
-        Assert.Equal(11, Protocol.Version);
+        Assert.Equal(12, Protocol.Version);
     }
 
     [Fact]
@@ -100,6 +101,37 @@ public class ProtocolVersionTests
         // These values come from the Cairn game — if they change, existing packets
         // become unreadable. Safeguard against an accidental refactor.
         Assert.Equal(expected, (int)d);
+    }
+}
+
+public class FeatureStreamPacketTests
+{
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ClientFeatureStream_CarriesTheReliabilityFlag(bool reliable)
+    {
+        var sent = new ClientFeatureStream
+        {
+            Channel = 4242,
+            Reliable = reliable,
+            Payload = new byte[] { 1, 2, 3 },
+        };
+
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
+        {
+            sent.Serialize(w);
+        }
+        ms.Position = 0;
+        using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: false);
+
+        var received = new ClientFeatureStream();
+        received.Deserialize(r);
+
+        Assert.Equal(sent.Channel, received.Channel);
+        Assert.Equal(reliable, received.Reliable);
+        Assert.Equal(sent.Payload, received.Payload);
     }
 }
 
