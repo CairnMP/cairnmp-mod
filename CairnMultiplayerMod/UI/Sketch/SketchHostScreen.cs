@@ -33,7 +33,7 @@ internal sealed class SketchHostScreen
     public SketchHostScreen(Transform parent, string defaultLobbyName)
     {
         Root = SketchUiKit.Make("SketchHostScreen", parent);
-        MultiplayerPanelTheme.FullStretch(Root);
+        SketchUiKit.Stretch(Root);
 
         // Centered panel, sized close to the photo-mode's native frame (~828x632 ratio).
         var panel = SketchUiKit.Make("Panel", Root.transform);

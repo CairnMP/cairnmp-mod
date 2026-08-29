@@ -24,7 +24,6 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
     private readonly IAuthoritativeSink _sink;
     private readonly Action<ServerPitonPlaced> _onLocalPitonSpawn;
     private readonly Action<ServerPitonRemoved> _onLocalPitonDespawn;
-    private readonly Action<int, int> _onLocalLampApply;
 
     // Official piton state, indexed by AUTHORITATIVE id.
     private readonly Dictionary<uint, ServerPitonPlaced> _pitons = new();
@@ -33,23 +32,13 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
     private readonly Dictionary<(int playerId, uint clientId), uint> _authIdByClient = new();
     private uint _nextAuthId = 1;
 
-    // Per-player lamp state (playerId -> packed mode). The key IS the playerId,
-    // no authoritative id needed: one lamp per player.
-    private readonly Dictionary<int, int> _lampByPlayer = new();
-
-    // Weather: authoritative on the host side (guests never publish it).
-    private ServerWeatherState _weather;
-    private bool _hasWeather;
-
     public SteamAuthoritativeSession(IAuthoritativeSink sink,
         Action<ServerPitonPlaced> onLocalPitonSpawn,
-        Action<ServerPitonRemoved> onLocalPitonDespawn,
-        Action<int, int> onLocalLampApply)
+        Action<ServerPitonRemoved> onLocalPitonDespawn)
     {
         _sink = sink;
         _onLocalPitonSpawn = onLocalPitonSpawn;
         _onLocalPitonDespawn = onLocalPitonDespawn;
-        _onLocalLampApply = onLocalLampApply;
     }
 
     // -- IAuthoritativeSession -------------------------------------------------
@@ -81,29 +70,15 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
                 Remove(playerId, pkt.PitonId, despawnLocalGhost: true, exceptPlayerId: playerId);
                 break;
             }
-            case PacketId.ClientLampState:
-            {
-                var pkt = new ClientLampState();
-                pkt.Deserialize(payload);
-                // Applies to the guest's ghost on the host + rebroadcasts except sender.
-                ApplyLamp(playerId, pkt.Mode, applyLocalGhost: true, exceptPlayerId: playerId);
-                break;
-            }
         }
     }
 
-    /// <summary>Rejoin: pushes all the official state (weather, pitons, lamps) to the target player.</summary>
+    /// <summary>Rejoin: pushes the official piton state to the target player.
+    /// Weather and time now replay through the feature framework's own snapshot.</summary>
     public void SendSnapshotTo(int playerId)
     {
-        if (_hasWeather)
-            _sink.SendTo(playerId, PacketId.ServerWeatherState, _weather, NetReliability.ReliableOrdered);
-
         foreach (var pkt in _pitons.Values)
             _sink.SendTo(playerId, PacketId.ServerPitonPlaced, pkt, NetReliability.ReliableOrdered);
-
-        foreach (var kv in _lampByPlayer)
-            _sink.SendTo(playerId, PacketId.ServerLampState,
-                new ServerLampState { PlayerId = kv.Key, Mode = kv.Value }, NetReliability.ReliableOrdered);
     }
 
     // -- Placements by the HOST itself (it placed/removed a REAL piton) --------
@@ -127,41 +102,12 @@ public sealed class SteamAuthoritativeSession : IAuthoritativeSession
     public void HandleHostPitonRemoved(int hostPlayerId, uint clientPitonId)
         => Remove(hostPlayerId, clientPitonId, despawnLocalGhost: false, exceptPlayerId: 0);
 
-    /// <summary>Lamp of the HOST itself: no local ghost, broadcast to everyone.</summary>
-    public void HandleHostLampState(int hostPlayerId, int mode)
-        => ApplyLamp(hostPlayerId, mode, applyLocalGhost: false, exceptPlayerId: 0);
-
-    /// <summary>
-    /// Weather published by the HOST (authoritative source). Validates, stores for rejoin,
-    /// broadcasts to everyone. <paramref name="reliable"/> follows the caller (burst vs stable state).
-    /// </summary>
-    public void HandleHostWeather(WeatherSyncData state, bool reliable)
-    {
-        if (!NetworkManager.IsValidWeatherState(state))
-            return;
-        _weather = new ServerWeatherState { State = state };
-        _hasWeather = true;
-        _sink.Broadcast(PacketId.ServerWeatherState, _weather, exceptPlayerId: 0,
-            reliable ? NetReliability.ReliableOrdered : NetReliability.UnreliableSequenced);
-    }
-
     /// <summary>Full reset (scene change / disconnection).</summary>
     public void Reset()
     {
         _pitons.Clear();
         _authIdByClient.Clear();
         _nextAuthId = 1;
-        _lampByPlayer.Clear();
-        _weather = default;
-        _hasWeather = false;
-    }
-
-    private void ApplyLamp(int playerId, int mode, bool applyLocalGhost, int exceptPlayerId)
-    {
-        _lampByPlayer[playerId] = mode;
-        if (applyLocalGhost) _onLocalLampApply?.Invoke(playerId, mode);
-        _sink.Broadcast(PacketId.ServerLampState, new ServerLampState { PlayerId = playerId, Mode = mode },
-            exceptPlayerId, NetReliability.ReliableOrdered);
     }
 
     // -- internal --------------------------------------------------------------

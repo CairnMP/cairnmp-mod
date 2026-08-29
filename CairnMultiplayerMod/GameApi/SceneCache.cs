@@ -8,7 +8,7 @@ namespace CairnMultiplayerMod.GameApi;
 /// </summary>
 internal static class SceneCache
 {
-    public static void ResetSceneCaches()
+    public static void Reset()
     {
         LocalPlayerApi.ResetCaches();
         PawnCaptureApi.ResetCaches();

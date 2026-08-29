@@ -243,88 +243,6 @@ public struct ClientHandshake : IPacket
     }
 }
 
-/// <summary>One third-party extension advertised during the managed API handshake.</summary>
-public struct ExtensionManifestEntry
-{
-    public string Id;
-    public string Version;
-    public string MinimumPeerVersion;
-    public string MaximumPeerVersion;
-    public bool Required;
-
-    public void Serialize(BinaryWriter w)
-    {
-        PacketCodec.WriteString(w, Id ?? "");
-        PacketCodec.WriteString(w, Version ?? "");
-        PacketCodec.WriteString(w, MinimumPeerVersion ?? "");
-        PacketCodec.WriteString(w, MaximumPeerVersion ?? "");
-        w.Write(Required);
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        Id = PacketCodec.ReadString(r);
-        Version = PacketCodec.ReadString(r);
-        MinimumPeerVersion = PacketCodec.ReadString(r);
-        MaximumPeerVersion = PacketCodec.ReadString(r);
-        Required = r.ReadBoolean();
-    }
-}
-
-/// <summary>Client extension inventory, sent to the authoritative host after lobby entry.</summary>
-public struct ClientExtensionManifest : IPacket
-{
-    public const int MaxEntries = 128;
-    public ExtensionManifestEntry[] Entries;
-
-    public void Serialize(BinaryWriter w)
-    {
-        int count = Entries?.Length ?? 0;
-        if (count > MaxEntries)
-            throw new InvalidDataException($"Too many extensions in manifest: {count}");
-
-        w.Write((ushort)count);
-        for (int i = 0; i < count; i++)
-            Entries[i].Serialize(w);
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        int count = r.ReadUInt16();
-        if (count > MaxEntries)
-            throw new InvalidDataException($"Too many extensions in manifest: {count}");
-
-        Entries = new ExtensionManifestEntry[count];
-        for (int i = 0; i < count; i++)
-            Entries[i].Deserialize(r);
-    }
-}
-
-/// <summary>A typed extension command sent by a client to the authoritative host.</summary>
-public struct ClientExtensionCommand : IPacket
-{
-    public uint RequestId;
-    public string ExtensionId;
-    public string CommandId;
-    public byte[] Payload;
-
-    public void Serialize(BinaryWriter w)
-    {
-        w.Write(RequestId);
-        PacketCodec.WriteString(w, ExtensionId ?? "");
-        PacketCodec.WriteString(w, CommandId ?? "");
-        PacketCodec.WriteBytes(w, Payload);
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        RequestId = r.ReadUInt32();
-        ExtensionId = PacketCodec.ReadString(r);
-        CommandId = PacketCodec.ReadString(r);
-        Payload = PacketCodec.ReadBytes(r);
-    }
-}
-
 public struct ClientPlayerState : IPacket
 {
     public float X, Y, Z;
@@ -347,14 +265,6 @@ public struct ClientPlayerState : IPacket
         SceneName = PacketCodec.ReadString(r);
         State = (PlayerState)r.ReadByte();
     }
-}
-
-public struct ClientChat : IPacket
-{
-    public string Message;
-
-    public void Serialize(BinaryWriter w) => PacketCodec.WriteString(w, Message ?? "");
-    public void Deserialize(BinaryReader r) => Message = PacketCodec.ReadString(r);
 }
 
 public struct ClientBoneState : IPacket
@@ -434,46 +344,6 @@ public struct ClientClimbotFrame : IPacket
     public void Deserialize(BinaryReader r) => Frame.Deserialize(r);
 }
 
-public struct ClientWeatherState : IPacket
-{
-    public WeatherSyncData State;
-
-    public void Serialize(BinaryWriter w) => State.Serialize(w);
-    public void Deserialize(BinaryReader r) => State.Deserialize(r);
-}
-
-/// <summary>
-/// State of the local player's lamp (AavaLightStick.CurrentMode). Mode is a
-/// game-side enum carried here as an int. Sent only on change.
-/// </summary>
-public struct ClientLampState : IPacket
-{
-    public int Mode;
-
-    public void Serialize(BinaryWriter w) => w.Write(Mode);
-    public void Deserialize(BinaryReader r) => Mode = r.ReadInt32();
-}
-
-/// <summary>
-/// World position of a ping marker placed by the local player in freecam.
-/// The lifetime is a client-side constant (Protocol.PingLifetimeSeconds) and the
-/// color is derived from the player id, so nothing else is transmitted.
-/// </summary>
-public struct ClientPingPlaced : IPacket
-{
-    public float PosX, PosY, PosZ;
-
-    public void Serialize(BinaryWriter w)
-    {
-        w.Write(PosX); w.Write(PosY); w.Write(PosZ);
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        PosX = r.ReadSingle(); PosY = r.ReadSingle(); PosZ = r.ReadSingle();
-    }
-}
-
 /// <summary>
 /// Finger pose of the local player: 30 bones compressed smallest-three
 /// (Protocol.HandPosePackedSize bytes). Sent only on change.
@@ -494,18 +364,6 @@ public struct ClientHandPose : IPacket
         int len = r.ReadUInt16();
         Packed = r.ReadBytes(len);
     }
-}
-
-/// <summary>
-/// Sleep state of the local player (BivouacManager.IsAsleep). Sent on change;
-/// used by the host to decide whether everyone is asleep.
-/// </summary>
-public struct ClientSleepState : IPacket
-{
-    public bool Asleep;
-
-    public void Serialize(BinaryWriter w) => w.Write(Asleep);
-    public void Deserialize(BinaryReader r) => Asleep = r.ReadBoolean();
 }
 
 /// <summary>
@@ -547,148 +405,6 @@ public struct ServerHandshakeReject : IPacket
 
     public void Serialize(BinaryWriter w) => PacketCodec.WriteString(w, Reason ?? "");
     public void Deserialize(BinaryReader r) => Reason = PacketCodec.ReadString(r);
-}
-
-/// <summary>Host decision after comparing its extension inventory with a client.</summary>
-public struct ServerExtensionManifestResult : IPacket
-{
-    public bool Accepted;
-    public string Reason;
-    public string[] EnabledExtensionIds;
-
-    public void Serialize(BinaryWriter w)
-    {
-        w.Write(Accepted);
-        PacketCodec.WriteString(w, Reason ?? "");
-        int count = EnabledExtensionIds?.Length ?? 0;
-        if (count > ClientExtensionManifest.MaxEntries)
-            throw new InvalidDataException($"Too many enabled extensions: {count}");
-        w.Write((ushort)count);
-        for (int i = 0; i < count; i++)
-            PacketCodec.WriteString(w, EnabledExtensionIds[i] ?? "");
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        Accepted = r.ReadBoolean();
-        Reason = PacketCodec.ReadString(r);
-        int count = r.ReadUInt16();
-        if (count > ClientExtensionManifest.MaxEntries)
-            throw new InvalidDataException($"Too many enabled extensions: {count}");
-        EnabledExtensionIds = new string[count];
-        for (int i = 0; i < count; i++)
-            EnabledExtensionIds[i] = PacketCodec.ReadString(r);
-    }
-}
-
-/// <summary>Completion of a client command after the host commits or aborts it.</summary>
-public struct ServerExtensionCommandResult : IPacket
-{
-    public uint RequestId;
-    public ExtensionCommandStatus Status;
-    public string Reason;
-
-    public void Serialize(BinaryWriter w)
-    {
-        w.Write(RequestId);
-        w.Write((byte)Status);
-        PacketCodec.WriteString(w, Reason ?? "");
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        RequestId = r.ReadUInt32();
-        Status = (ExtensionCommandStatus)r.ReadByte();
-        Reason = PacketCodec.ReadString(r);
-    }
-}
-
-/// <summary>A transient extension event emitted by the authoritative host.</summary>
-public struct ServerExtensionEvent : IPacket
-{
-    public int SourcePlayerId;
-    public string ExtensionId;
-    public string EventId;
-    public byte[] Payload;
-
-    public void Serialize(BinaryWriter w)
-    {
-        w.Write(SourcePlayerId);
-        PacketCodec.WriteString(w, ExtensionId ?? "");
-        PacketCodec.WriteString(w, EventId ?? "");
-        PacketCodec.WriteBytes(w, Payload);
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        SourcePlayerId = r.ReadInt32();
-        ExtensionId = PacketCodec.ReadString(r);
-        EventId = PacketCodec.ReadString(r);
-        Payload = PacketCodec.ReadBytes(r);
-    }
-}
-
-/// <summary>Latest host-owned value of one replicated extension state key.</summary>
-public struct ServerExtensionState : IPacket
-{
-    public string ExtensionId;
-    public string StateId;
-    public int ScopePlayerId;
-    public ulong Revision;
-    public bool Removed;
-    public byte[] Payload;
-
-    public void Serialize(BinaryWriter w)
-    {
-        PacketCodec.WriteString(w, ExtensionId ?? "");
-        PacketCodec.WriteString(w, StateId ?? "");
-        w.Write(ScopePlayerId);
-        w.Write(Revision);
-        w.Write(Removed);
-        PacketCodec.WriteBytes(w, Payload);
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        ExtensionId = PacketCodec.ReadString(r);
-        StateId = PacketCodec.ReadString(r);
-        ScopePlayerId = r.ReadInt32();
-        Revision = r.ReadUInt64();
-        Removed = r.ReadBoolean();
-        Payload = PacketCodec.ReadBytes(r);
-    }
-}
-
-/// <summary>Host-authoritative extension capability update for one lobby member.</summary>
-public struct ServerExtensionPeerStatus : IPacket
-{
-    public int PlayerId;
-    public bool Joined;
-    public string[] EnabledExtensionIds;
-
-    public void Serialize(BinaryWriter w)
-    {
-        w.Write(PlayerId);
-        w.Write(Joined);
-        int count = EnabledExtensionIds?.Length ?? 0;
-        if (count > ClientExtensionManifest.MaxEntries)
-            throw new InvalidDataException($"Too many enabled extensions: {count}");
-        w.Write((ushort)count);
-        for (int i = 0; i < count; i++)
-            PacketCodec.WriteString(w, EnabledExtensionIds[i] ?? "");
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        PlayerId = r.ReadInt32();
-        Joined = r.ReadBoolean();
-        int count = r.ReadUInt16();
-        if (count > ClientExtensionManifest.MaxEntries)
-            throw new InvalidDataException($"Too many enabled extensions: {count}");
-        EnabledExtensionIds = new string[count];
-        for (int i = 0; i < count; i++)
-            EnabledExtensionIds[i] = PacketCodec.ReadString(r);
-    }
 }
 
 public struct ServerPlayerJoined : IPacket
@@ -880,124 +596,6 @@ public struct ServerClimbotFrame : IPacket
     }
 }
 
-public struct ServerWeatherState : IPacket
-{
-    public WeatherSyncData State;
-
-    public void Serialize(BinaryWriter w) => State.Serialize(w);
-    public void Deserialize(BinaryReader r) => State.Deserialize(r);
-}
-
-/// <summary>Host relay of a player's lamp Mode to everyone else.</summary>
-public struct ServerLampState : IPacket
-{
-    public int PlayerId;
-    public int Mode;
-
-    public void Serialize(BinaryWriter w) { w.Write(PlayerId); w.Write(Mode); }
-    public void Deserialize(BinaryReader r) { PlayerId = r.ReadInt32(); Mode = r.ReadInt32(); }
-}
-
-/// <summary>
-/// Cosmetic state of the local player (Flags bit field, see Protocol.CosmeticFlag*).
-/// For now: bit 0 = glowing gloves active. Sent only on change.
-/// </summary>
-public struct ClientCosmeticState : IPacket
-{
-    public byte Flags;
-
-    public void Serialize(BinaryWriter w) => w.Write(Flags);
-    public void Deserialize(BinaryReader r) => Flags = r.ReadByte();
-}
-
-/// <summary>Host relay of a player's cosmetic state to everyone else.</summary>
-public struct ServerCosmeticState : IPacket
-{
-    public int PlayerId;
-    public byte Flags;
-
-    public void Serialize(BinaryWriter w) { w.Write(PlayerId); w.Write(Flags); }
-    public void Deserialize(BinaryReader r) { PlayerId = r.ReadInt32(); Flags = r.ReadByte(); }
-}
-
-/// <summary>
-/// Authoritative time of day broadcast by the host. DayTime01 is the normalized
-/// 0-1 value of NightDayCycle.dayTime01; AllAsleep indicates whether all players
-/// are asleep (fast-forward is allowed). Clients align their visual clock to it.
-/// </summary>
-public struct ServerTimeState : IPacket
-{
-    public float DayTime01;
-    public bool AllAsleep;
-
-    public void Serialize(BinaryWriter w) { w.Write(DayTime01); w.Write(AllAsleep); }
-    public void Deserialize(BinaryReader r) { DayTime01 = r.ReadSingle(); AllAsleep = r.ReadBoolean(); }
-}
-
-/// <summary>Host relay of a player's finger pose to everyone else.</summary>
-public struct ServerHandPose : IPacket
-{
-    public int PlayerId;
-    public byte[] Packed;
-
-    public void Serialize(BinaryWriter w)
-    {
-        w.Write(PlayerId);
-        var bytes = Packed ?? Array.Empty<byte>();
-        w.Write((ushort)bytes.Length);
-        w.Write(bytes);
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        PlayerId = r.ReadInt32();
-        int len = r.ReadUInt16();
-        Packed = r.ReadBytes(len);
-    }
-}
-
-/// <summary>
-/// Host relay of a ping marker to the other players. FromPlayerId is used to color
-/// the marker (same palette as the ghosts) on the receiving side.
-/// </summary>
-public struct ServerPingPlaced : IPacket
-{
-    public int FromPlayerId;
-    public float PosX, PosY, PosZ;
-
-    public void Serialize(BinaryWriter w)
-    {
-        w.Write(FromPlayerId);
-        w.Write(PosX); w.Write(PosY); w.Write(PosZ);
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        FromPlayerId = r.ReadInt32();
-        PosX = r.ReadSingle(); PosY = r.ReadSingle(); PosZ = r.ReadSingle();
-    }
-}
-
-public struct ServerChatBroadcast : IPacket
-{
-    public int FromPlayerId;
-    public string FromPlayerName;
-    public string Message;
-
-    public void Serialize(BinaryWriter w)
-    {
-        w.Write(FromPlayerId);
-        PacketCodec.WriteString(w, FromPlayerName ?? "");
-        PacketCodec.WriteString(w, Message ?? "");
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        FromPlayerId = r.ReadInt32();
-        FromPlayerName = PacketCodec.ReadString(r);
-        Message = PacketCodec.ReadString(r);
-    }
-}
 
 /// <summary>
 /// Teleport order sent by the host to ONE targeted client (the /bring command).
@@ -1045,5 +643,56 @@ public struct ServerRopeClip : IPacket
         FromPlayerId = r.ReadInt32();
         TargetPlayerId = r.ReadInt32();
         Clip = r.ReadBoolean();
+    }
+}
+
+/// <summary>
+/// A feature's real-time payload on its way to the host. Channel identifies which stream
+/// of which feature it belongs to (see FeatureStreamChannel), so adding a stream never
+/// costs a packet id — which matters, since these are the packets sent every frame.
+/// </summary>
+public struct ClientFeatureStream : IPacket
+{
+    public ushort Channel;
+
+    /// <summary>Delivery the sender asked for, so the host relays it the same way.</summary>
+    public bool Reliable;
+
+    public byte[] Payload;
+
+    public void Serialize(BinaryWriter w)
+    {
+        w.Write(Channel);
+        w.Write(Reliable);
+        PacketCodec.WriteBytes(w, Payload);
+    }
+
+    public void Deserialize(BinaryReader r)
+    {
+        Channel = r.ReadUInt16();
+        Reliable = r.ReadBoolean();
+        Payload = PacketCodec.ReadBytes(r);
+    }
+}
+
+/// <summary>Host relay of <see cref="ClientFeatureStream"/>, tagged with the sender.</summary>
+public struct ServerFeatureStream : IPacket
+{
+    public int FromPlayerId;
+    public ushort Channel;
+    public byte[] Payload;
+
+    public void Serialize(BinaryWriter w)
+    {
+        w.Write(FromPlayerId);
+        w.Write(Channel);
+        PacketCodec.WriteBytes(w, Payload);
+    }
+
+    public void Deserialize(BinaryReader r)
+    {
+        FromPlayerId = r.ReadInt32();
+        Channel = r.ReadUInt16();
+        Payload = PacketCodec.ReadBytes(r);
     }
 }

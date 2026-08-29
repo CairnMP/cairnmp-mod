@@ -14,14 +14,6 @@ internal sealed class PlayerStateBroadcaster
     private float _stateTickTimer;
     private float _boneTickTimer;
 
-    private float _lampPollTimer;
-    private bool _hasLastSentLampState;
-    private int _lastSentLampMode;
-    private float _cosmeticPollTimer;
-    private bool _hasLastSentCosmetic;
-    private byte _lastSentCosmeticFlags;
-    private float _handPosePollTimer;
-    private byte[] _lastSentHandPosePacked;
     private const float NetFrameMissingLogIntervalSeconds = 3f;
     private bool _debugLoggedFirstPlayerFrameCapture;
     private bool _debugLoggedFirstClimbotFrameCapture;
@@ -69,10 +61,6 @@ internal sealed class PlayerStateBroadcaster
                 SendLocalNetFrames();
             }
 
-            Mod.Instance.Weather.Tick();
-            TickLampSync();
-            TickCosmeticSync();
-            TickHandPoseSync();
 
             // Check for newly placed pitons (a lower frequency is enough).
             if (Mod.Instance.LocalState == PlayerState.InGame)
@@ -109,7 +97,6 @@ internal sealed class PlayerStateBroadcaster
     internal void TickSuspendedNetworkPresence()
     {
         _boneTickTimer = 0f;
-        Mod.Instance.Weather.ResetTimer();
 
         _stateTickTimer += Time.unscaledDeltaTime;
         if (_stateTickTimer < Protocol.PlayerStateUpdateIntervalSeconds)
@@ -133,7 +120,7 @@ internal sealed class PlayerStateBroadcaster
         }
 
         Vector3 p; float yaw;
-        if (!LocalPlayerApi.TryGetLocalPlayerPose(out p, out yaw))
+        if (!LocalPlayerApi.TryGetPose(out p, out yaw))
         {
             var cam = Camera.main;
             if (cam == null) return;
@@ -164,11 +151,10 @@ internal sealed class PlayerStateBroadcaster
         if (currentScene == null)
             return PlayerState.Connecting;
 
-        // Main-menu category — covers "MainMenu" and "MainMenuBackgroundsBase".
-        if (currentScene.StartsWith("MainMenu"))
+        if (SceneRoles.IsMainMenuArea(currentScene))
             return PlayerState.InMenu;
 
-        if (currentScene == "LoadingScreen" || currentScene == "CommonBaseScene")
+        if (SceneRoles.IsLoading(currentScene))
             return PlayerState.Loading;
 
         if (GameLifecycleService.TryGetGameLifecycle(out var lifecycle, out _))
@@ -179,7 +165,7 @@ internal sealed class PlayerStateBroadcaster
             if (lifecycle != CairnGameLifecycleState.InGame)
                 return PlayerState.Loading;
         }
-        else if (IsNonGameplayScene(currentScene))
+        else if (SceneRoles.IsBivouac(currentScene))
         {
             return PlayerState.Loading;
         }
@@ -191,7 +177,7 @@ internal sealed class PlayerStateBroadcaster
         if (Mod.Instance.TimeSinceLastSceneLoad < 1.0f)
             return PlayerState.Loading;
 
-        if (LocalPlayerApi.TryGetLocalPlayerPose(out _, out _))
+        if (LocalPlayerApi.TryGetPose(out _, out _))
             return PlayerState.InGame;
 
         return PlayerState.Loading;
@@ -235,16 +221,11 @@ internal sealed class PlayerStateBroadcaster
 
     private static int FrameVectorCount(float[] values) => values == null ? 0 : values.Length / 3;
 
-    private static bool IsNonGameplayScene(string sceneName)
-    {
-        return sceneName == "BivouacIndoor";
-    }
-
     private string CurrentNetworkSceneName()
     {
         var currentScene = Mod.Instance.CurrentScene;
         var lastGameplayScene = Mod.Instance.LastGameplayScene;
-        if (IsNonGameplayScene(currentScene) && !string.IsNullOrEmpty(lastGameplayScene))
+        if (SceneRoles.IsBivouac(currentScene) && !string.IsNullOrEmpty(lastGameplayScene))
             return lastGameplayScene;
 
         return currentScene ?? "";
@@ -252,7 +233,8 @@ internal sealed class PlayerStateBroadcaster
 
     /// <summary>
     /// Resets the per-episode sync state on a scene-bound reset point: local sync debug
-    /// flags, cosmetic/lamp/hand-pose poll caches, and the time + rope sub-states.
+    /// flags, the hand-pose poll cache, and the rope sub-state. Features reset their own
+    /// through OnSceneReset.
     /// </summary>
     internal void ResetSyncState()
     {
@@ -260,107 +242,19 @@ internal sealed class PlayerStateBroadcaster
         _debugLoggedFirstClimbotFrameCapture = false;
         _debugLastMissingPlayerFrameLogAt = 0f;
         _debugLastMissingClimbotFrameLogAt = 0f;
-        _lampPollTimer = 0f;
-        _hasLastSentLampState = false;
-        _lastSentLampMode = 0;
-        _cosmeticPollTimer = 0f;
-        _hasLastSentCosmetic = false;
-        _lastSentCosmeticFlags = 0;
-        CosmeticApi.ResetLocalCosmeticsCache();
-        _handPosePollTimer = 0f;
-        _lastSentHandPosePacked = null;
-        LampApi.ResetLocalLampStateCache();
+        CosmeticApi.ResetCaches();
         // No reset of freecam detection here: the eagle-eye/Display Route state is
         // driven by native events and persists across scene streaming. Resetting it
         // would make the mod believe we left Display Route (while we're still in it)
         // -> can't place a ping until we re-toggle.
-        FingerApi.ResetFingerSyncCache();
-        Mod.Instance.Clock.Reset();
+        FingerApi.ResetCaches();
         Mod.Instance.Rope.Reset();
-    }
-
-    /// <summary>
-    /// Polls the local lamp state and broadcasts to the other players whenever it
-    /// changes. No message until we've been able to read it at least once, to avoid
-    /// sending a misleading "off" during loads.
-    /// </summary>
-    private void TickLampSync()
-    {
-        if (Mod.Instance.LocalState != PlayerState.InGame) return;
-
-        _lampPollTimer += Time.unscaledDeltaTime;
-        if (_lampPollTimer < Protocol.LampStatePollIntervalSeconds)
-            return;
-        _lampPollTimer = 0f;
-
-        if (!LampApi.TryGetLocalLampState(out var lightMode))
-            return;
-
-        // The lamp int also carries (high bits, no new packet):
-        //  - bits 8-15  : stick anchor mode (Locator/Default) -> ApplyGhostStickByAnchorMode
-        //  - bits 16-24 : outfit bitfield (active meshes) -> ApplyGhostOutfitBits
-        int anchorMode = 0;
-        CosmeticApi.TryGetLocalStickAnchorMode(out anchorMode);
-        int outfitBits = CosmeticApi.GetLocalOutfitBits();
-        int packed = (lightMode & 0xFF) | ((anchorMode & 0xFF) << 8)
-                     | ((outfitBits & CosmeticApi.OutfitBitsMask) << 16);
-
-        if (_hasLastSentLampState && _lastSentLampMode == packed)
-            return;
-
-        _lastSentLampMode = packed;
-        _hasLastSentLampState = true;
-        _network.SendLampState(packed);
-    }
-
-    /// <summary>
-    /// Polls the local cosmetic state (glowing gloves for now) and broadcasts it
-    /// whenever it changes. Same logic as the lamp: no send until we've read it at
-    /// least once, and only on change (cosmetics are nearly static).
-    /// </summary>
-    private void TickCosmeticSync()
-    {
-        if (Mod.Instance.LocalState != PlayerState.InGame) return;
-
-        _cosmeticPollTimer += Time.unscaledDeltaTime;
-        if (_cosmeticPollTimer < Protocol.CosmeticStatePollIntervalSeconds)
-            return;
-        _cosmeticPollTimer = 0f;
-
-        if (!CosmeticApi.TryGetLocalCosmetics(out var flags))
-            return;
-
-        if (_hasLastSentCosmetic && _lastSentCosmeticFlags == flags)
-            return;
-
-        _lastSentCosmeticFlags = flags;
-        _hasLastSentCosmetic = true;
-        _network.SendCosmeticState(flags);
     }
 
     /// <summary>
     /// Captures the local finger pose and broadcasts it at ~12 Hz, only when it
     /// changes (motionless fingers generate no traffic).
     /// </summary>
-    private void TickHandPoseSync()
-    {
-        if (Mod.Instance.LocalState != PlayerState.InGame) return;
-
-        _handPosePollTimer += Time.unscaledDeltaTime;
-        if (_handPosePollTimer < Protocol.HandPosePollIntervalSeconds)
-            return;
-        _handPosePollTimer = 0f;
-
-        if (!FingerApi.TryCaptureLocalFingerPose(out var packed))
-            return;
-
-        if (BytesEqual(_lastSentHandPosePacked, packed))
-            return;
-
-        _lastSentHandPosePacked = packed;
-        _network.SendHandPose(packed);
-    }
-
     private static bool BytesEqual(byte[] a, byte[] b)
     {
         if (a == null || b == null || a.Length != b.Length) return false;

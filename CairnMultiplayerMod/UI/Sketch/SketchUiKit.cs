@@ -23,12 +23,36 @@ internal static class SketchUiKit
     public static readonly Color RowTint    = new(0.04f, 0.06f, 0.12f, 0.55f);   // row strip (darker)
     public static readonly Color ButtonText = new(0.20f, 0.18f, 0.15f, 1f);      // dark text on light button
 
-    public static GameObject Make(string name, Transform parent) => MultiplayerPanelTheme.MakeGo(name, parent);
+    /// <summary>Creates an empty GameObject parented to <paramref name="parent"/> (local transform kept).</summary>
+    public static GameObject Make(string name, Transform parent)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        return go;
+    }
 
     /// <summary>RectTransform anchored by corners (anchorMin/Max) + offsets in pixels.</summary>
     public static RectTransform Rect(GameObject go, Vector2 aMin, Vector2 aMax,
         Vector2 offMin = default, Vector2 offMax = default)
-        => MultiplayerPanelTheme.Anchor(go, aMin, aMax, offMin, offMax);
+    {
+        var rt = go.GetComponent<RectTransform>() ?? go.AddComponent<RectTransform>();
+        rt.anchorMin = aMin;
+        rt.anchorMax = aMax;
+        rt.pivot     = new Vector2(0.5f, 0.5f);
+        rt.offsetMin = offMin;
+        rt.offsetMax = offMax;
+        return rt;
+    }
+
+    /// <summary>RectTransform covering the whole parent, with no margin.</summary>
+    public static RectTransform Stretch(GameObject go)
+    {
+        var rt = go.GetComponent<RectTransform>() ?? go.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = rt.offsetMax = Vector2.zero;
+        return rt;
+    }
 
     /// <summary>RectTransform at fixed position/size (anchored to the parent's center).</summary>
     public static RectTransform Box(GameObject go, Vector2 anchoredPos, Vector2 size)
@@ -98,11 +122,21 @@ internal static class SketchUiKit
         return img;
     }
 
+    /// <summary>Non-interactive TextMeshProUGUI covering its parent, using a game font.</summary>
     public static TextMeshProUGUI Label(Transform parent, string name, string text, float size,
         Color color, TextAlignmentOptions align, bool logo = false)
     {
+        var go = Make(name, parent);
+        Stretch(go);
+        var tmp = go.AddComponent<TextMeshProUGUI>();
         var font = logo ? GameUiAssetLibrary.LogoFont : GameUiAssetLibrary.TextFont;
-        return MultiplayerPanelTheme.Tmp(parent, name, text, font, size, color, align);
+        if (font != null) tmp.font = font;
+        tmp.fontSize      = size;
+        tmp.color         = color;
+        tmp.alignment     = align;
+        tmp.text          = text;
+        tmp.raycastTarget = false;
+        return tmp;
     }
 
     /// <summary>
@@ -112,7 +146,7 @@ internal static class SketchUiKit
     public static TMP_InputField NativeField(Transform parent, string placeholder, int characterLimit)
     {
         var root = Make("Field", parent);
-        MultiplayerPanelTheme.FullStretch(root);
+        Stretch(root);
         // RowBg is a light sprite: tint it dark midnight blue for a legible inset field.
         Sliced(root, GameUiAssetLibrary.RowBg, FieldBg, raycast: true);
 
@@ -125,7 +159,7 @@ internal static class SketchUiKit
         viewport.AddComponent<RectMask2D>();
 
         var textGo = Make("Text", viewport.transform);
-        MultiplayerPanelTheme.FullStretch(textGo);
+        Stretch(textGo);
         var textTmp = textGo.AddComponent<TextMeshProUGUI>();
         if (GameUiAssetLibrary.TextFont != null) textTmp.font = GameUiAssetLibrary.TextFont;
         textTmp.fontSize = 16f;
@@ -136,7 +170,7 @@ internal static class SketchUiKit
         textTmp.overflowMode = TextOverflowModes.Masking;
 
         var phGo = Make("Placeholder", viewport.transform);
-        MultiplayerPanelTheme.FullStretch(phGo);
+        Stretch(phGo);
         var phTmp = phGo.AddComponent<TextMeshProUGUI>();
         if (GameUiAssetLibrary.TextFont != null) phTmp.font = GameUiAssetLibrary.TextFont;
         phTmp.fontSize = 16f;

@@ -8,11 +8,11 @@ namespace CairnMultiplayerMod.Features.Roping;
 /// Captures a piton template for the rope team (system carried over from Episure). We patch
 /// Piton.Awake to remember the first instantiated piton as the template to clone
 /// (RopeApi.UpdateRopeTeamAnchor). This is more reliable and cheaper than a
-/// Resources.FindObjectsOfTypeAll every frame (which remains the fallback in BelaySecure).
+/// Resources.FindObjectsOfTypeAll every frame (which remains the fallback in RopeApi.Belay).
 ///
 /// The old approach (AddPiton + cosmetic rope + anti-respawn patch) has been replaced:
 /// the lifeline's NATIVE rope, clipped onto a mobile piton placed at the partner, serves
-/// both as the visual and as the belay (see BelaySecure). No more cosmetic rope, no more
+/// both as the visual and as the belay (see RopeApi.Belay). No more cosmetic rope, no more
 /// repeated "clack", and fall arrest is handled natively.
 /// </summary>
 internal static unsafe class RopeTeamFallPatch
@@ -21,7 +21,7 @@ internal static unsafe class RopeTeamFallPatch
     private static bool _ropeTeamPatchInstalled;
     private static bool _ropeTeamPatchFailed;
 
-    public static void InstallRopeTeamFallPatch()
+    public static void Install()
     {
         if (_ropeTeamPatchInstalled || _ropeTeamPatchFailed) return;
 

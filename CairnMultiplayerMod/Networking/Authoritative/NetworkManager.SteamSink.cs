@@ -35,19 +35,7 @@ public partial class NetworkManager
     private SteamAuthoritativeSession SteamSession => _steamSession ??= new SteamAuthoritativeSession(
         SteamSink,
         pkt => OnPitonPlaced?.Invoke(pkt),
-        pkt => OnPitonRemoved?.Invoke(pkt),
-        ApplyLocalLampState);
-
-    // Applies a guest's lamp state to their local ghost (host side), as the
-    // inline ClientLampState case did before the migration.
-    private void ApplyLocalLampState(int playerId, int mode)
-    {
-        if (_remotePlayers.TryGetValue(playerId, out var rp))
-        {
-            rp.LampMode = mode;
-            rp.HasLampState = true;
-        }
-    }
+        pkt => OnPitonRemoved?.Invoke(pkt));
 
     private sealed class SteamAuthoritativeSink : IAuthoritativeSink
     {

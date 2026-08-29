@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="CairnMultiplayerMod/CairnMultiplayerMod.csproj" />
+  <Project Path="CairnMultiplayerMod.Generators/CairnMultiplayerMod.Generators.csproj" />
   <Project Path="CairnMultiplayerShared/CairnMultiplayerShared.csproj" />
   <Project Path="CairnMultiplayerShared.Tests/CairnMultiplayerShared.Tests.csproj" />
   <Project Path="CairnMultiplayerMod.Tests/CairnMultiplayerMod.Tests.csproj" />

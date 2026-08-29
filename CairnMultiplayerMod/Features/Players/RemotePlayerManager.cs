@@ -229,23 +229,6 @@ public static class RemotePlayerManager
         }
     }
 
-    /// <summary>Returns a ghost's harness (NetplayRemoteHarness), for the belay probe.</summary>
-    public static bool TryGetGhostHarness(int playerId, out Il2Cpp.Harness harness)
-    {
-        harness = null;
-        if (!_ghosts.TryGetValue(playerId, out var entry)) return false;
-        if (!entry.IsRealModel || entry.NrpComponent == null) return false;
-        try
-        {
-            harness = entry.NrpComponent.Harness;
-            return harness != null;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     private static bool ShouldApplyPose(RemotePlayer rp, PlayerState localState)
     {
         if (localState != PlayerState.InGame) return false;
@@ -421,7 +404,7 @@ public static class RemotePlayerManager
             if (!entry.IsRealModel || entry.NrpComponent == null) continue;
             if (ReferenceEquals(entry.LastAppliedHandPosePacked, rp.HandPosePacked)) continue;
 
-            if (FingerApi.TryApplyRemoteFingerPose(entry.NrpComponent, rp.HandPosePacked))
+            if (FingerApi.TryApplyRemotePose(entry.NrpComponent, rp.HandPosePacked))
                 entry.LastAppliedHandPosePacked = rp.HandPosePacked;
         }
     }
@@ -442,33 +425,34 @@ public static class RemotePlayerManager
             int anchorMode = (rp.LampMode >> 8) & 0xFF;
             int outfitBits = (rp.LampMode >> 16) & CosmeticApi.OutfitBitsMask;
 
-            if (!entry.HasAppliedLampState || entry.LastAppliedLampMode != lightMode)
-            {
-                if (LampApi.TryApplyRemoteLampState(entry.NrpComponent, lightMode))
-                {
-                    entry.LastAppliedLampMode = lightMode;
-                    entry.HasAppliedLampState = true;
-                }
-            }
-
-            if (!entry.HasAppliedStickAnchor || entry.LastAppliedStickAnchor != anchorMode)
-            {
-                if (CosmeticApi.ApplyGhostStickByAnchorMode(entry.NrpComponent, anchorMode))
-                {
-                    entry.LastAppliedStickAnchor = anchorMode;
-                    entry.HasAppliedStickAnchor = true;
-                }
-            }
-
-            if (!entry.HasAppliedOutfit || entry.LastAppliedOutfit != outfitBits)
-            {
-                if (CosmeticApi.ApplyGhostOutfitBits(entry.NrpComponent, outfitBits))
-                {
-                    entry.LastAppliedOutfit = outfitBits;
-                    entry.HasAppliedOutfit = true;
-                }
-            }
+            ApplyLampMode(entry, lightMode);
+            ApplyStickAnchor(entry, anchorMode);
+            ApplyOutfit(entry, outfitBits);
         }
+    }
+
+    private static void ApplyLampMode(GhostEntry entry, int lightMode)
+    {
+        if (entry.HasAppliedLampState && entry.LastAppliedLampMode == lightMode) return;
+        if (!LampApi.TryApplyRemoteState(entry.NrpComponent, lightMode)) return;
+        entry.LastAppliedLampMode = lightMode;
+        entry.HasAppliedLampState = true;
+    }
+
+    private static void ApplyStickAnchor(GhostEntry entry, int anchorMode)
+    {
+        if (entry.HasAppliedStickAnchor && entry.LastAppliedStickAnchor == anchorMode) return;
+        if (!CosmeticApi.ApplyGhostStickByAnchorMode(entry.NrpComponent, anchorMode)) return;
+        entry.LastAppliedStickAnchor = anchorMode;
+        entry.HasAppliedStickAnchor = true;
+    }
+
+    private static void ApplyOutfit(GhostEntry entry, int outfitBits)
+    {
+        if (entry.HasAppliedOutfit && entry.LastAppliedOutfit == outfitBits) return;
+        if (!CosmeticApi.ApplyGhostOutfitBits(entry.NrpComponent, outfitBits)) return;
+        entry.LastAppliedOutfit = outfitBits;
+        entry.HasAppliedOutfit = true;
     }
 
     /// <summary>
@@ -507,22 +491,6 @@ public static class RemotePlayerManager
 
         var now = DateTime.UtcNow.Ticks / (double)TimeSpan.TicksPerSecond;
         return now - rp.LastPlayerFrameTime <= PlayerFrameFreshSeconds;
-    }
-
-    /// <summary>
-    /// Returns the ghost's world root (PlayerFrame.Positions[0..2]) if the frame is
-    /// fresh — exactly the source that places the ghost's BODY. Used by roping so the
-    /// rope anchor follows the same point as the body (otherwise it drifts from another
-    /// stream, ServerPlayerState, and stretches the rope). false if no fresh frame.
-    /// </summary>
-    public static bool TryGetFreshBodyRoot(RemotePlayer rp, out Vector3 root)
-    {
-        root = default;
-        if (rp == null || !HasFreshPlayerFrame(rp)) return false;
-        var pos = rp.PlayerFrame.Positions;
-        if (pos == null || pos.Length < 3) return false;
-        root = new Vector3(pos[0], pos[1], pos[2]);
-        return true;
     }
 
     private static void ApplyRootPoseFallback(GhostEntry entry, RemotePlayer rp)

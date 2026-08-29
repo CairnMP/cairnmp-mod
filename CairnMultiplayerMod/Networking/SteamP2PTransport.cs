@@ -25,11 +25,7 @@ public partial class NetworkManager
     private readonly Dictionary<int, ulong> _steamIdsByPlayerId = new();
     private readonly Dictionary<ulong, string> _steamPlayerNames = new();
     private readonly Dictionary<ulong, double> _steamReliableForwardTimes = new();
-    // Piton + lamp + weather state moved into SteamAuthoritativeSession (Phase 3 steps 3-4).
-    private readonly Dictionary<int, byte> _steamCosmeticSnapshot = new();
-    private readonly Dictionary<int, byte[]> _steamHandPoseSnapshot = new();
-    private bool _hasSteamTimeSnapshot;
-    private ServerTimeState _steamTimeSnapshot;
+    // Piton + lamp state moved into SteamAuthoritativeSession (Phase 3 steps 3-4).
     private readonly HashSet<ulong> _steamLoggedFirstClientPlayerFrame = new();
     private readonly HashSet<ulong> _steamLoggedFirstClientClimbotFrame = new();
     private Callback<P2PSessionRequest_t> _steamP2PSessionRequestCallback;
@@ -297,24 +293,6 @@ public partial class NetworkManager
                 }, exceptSteamId: remoteSteamId, reliable: false);
                 break;
             }
-            case PacketId.ClientChat:
-            {
-                var pkt = new ClientChat();
-                pkt.Deserialize(r);
-                var playerId = EnsureSteamRemotePlayer(remoteSteamId);
-                var playerName = _steamPlayerNames.TryGetValue(remoteSteamId, out var knownName)
-                    ? knownName
-                    : $"Player{playerId}";
-                var outPkt = new ServerChatBroadcast
-                {
-                    FromPlayerId = playerId,
-                    FromPlayerName = playerName,
-                    Message = pkt.Message ?? "",
-                };
-                OnChatReceived?.Invoke(playerId, playerName, outPkt.Message);
-                BroadcastSteamServerPacket(PacketId.ServerChatBroadcast, outPkt, exceptSteamId: remoteSteamId, reliable: true);
-                break;
-            }
             case PacketId.ClientRopeClip:
             {
                 var pkt = new ClientRopeClip();
@@ -332,80 +310,21 @@ public partial class NetworkManager
                 // local ghost and rebroadcast except sender (Phase 3 step 3).
                 SteamSession.OnClientPacket(EnsureSteamRemotePlayer(remoteSteamId), id, r);
                 break;
-            case PacketId.ClientWeatherState:
-                // Steam weather is authoritative on the host side: clients don't publish this state.
-                break;
-            case PacketId.ClientLampState:
-                // Delegate to the authoritative core (lamp snapshot + local ghost + rebroadcast).
-                SteamSession.OnClientPacket(EnsureSteamRemotePlayer(remoteSteamId), id, r);
-                break;
-            case PacketId.ClientCosmeticState:
+            case PacketId.ClientFeatureStream:
             {
-                var pkt = new ClientCosmeticState();
+                var pkt = new ClientFeatureStream();
                 pkt.Deserialize(r);
                 var playerId = EnsureSteamRemotePlayer(remoteSteamId);
-                _steamCosmeticSnapshot[playerId] = pkt.Flags;
-                if (_remotePlayers.TryGetValue(playerId, out var rp))
-                {
-                    rp.CosmeticFlags = pkt.Flags;
-                    rp.HasCosmeticState = true;
-                }
-                var outPkt = new ServerCosmeticState { PlayerId = playerId, Flags = pkt.Flags };
-                BroadcastSteamServerPacket(PacketId.ServerCosmeticState, outPkt, exceptSteamId: remoteSteamId, reliable: true);
-                break;
-            }
-            case PacketId.ClientSleepState:
-            {
-                var pkt = new ClientSleepState();
-                pkt.Deserialize(r);
-                var playerId = EnsureSteamRemotePlayer(remoteSteamId);
-                if (_remotePlayers.TryGetValue(playerId, out var rp))
-                {
-                    rp.IsAsleep = pkt.Asleep;
-                    rp.HasSleepState = true;
-                }
-                // No rebroadcast: only the host needs the sleep states
-                // (to decide on fast-forward). The resulting time is broadcast
-                // via ServerTimeState.
-                break;
-            }
-            case PacketId.ClientHandPose:
-            {
-                var pkt = new ClientHandPose();
-                pkt.Deserialize(r);
-                if (pkt.Packed == null || pkt.Packed.Length != Protocol.HandPosePackedSize) break;
-
-                var playerId = EnsureSteamRemotePlayer(remoteSteamId);
-                _steamHandPoseSnapshot[playerId] = pkt.Packed;
-                if (_remotePlayers.TryGetValue(playerId, out var rp))
-                {
-                    rp.HandPosePacked = pkt.Packed;
-                    rp.HasHandPose = true;
-                }
-                var outPkt = new ServerHandPose { PlayerId = playerId, Packed = pkt.Packed };
-                OnHandPose?.Invoke(outPkt);
-                // Reliable: the pose is only sent on change, so we don't want
-                // a drop to leave the ghost's fingers frozen on the old pose.
-                BroadcastSteamServerPacket(PacketId.ServerHandPose, outPkt, exceptSteamId: remoteSteamId, reliable: true);
-                break;
-            }
-            case PacketId.ClientPingPlaced:
-            {
-                var pkt = new ClientPingPlaced();
-                pkt.Deserialize(r);
-                if (!IsValidPose(pkt.PosX, pkt.PosY, pkt.PosZ, 0f)) break;
-
-                var playerId = EnsureSteamRemotePlayer(remoteSteamId);
-                var outPkt = new ServerPingPlaced
+                var outPkt = new ServerFeatureStream
                 {
                     FromPlayerId = playerId,
-                    PosX = pkt.PosX,
-                    PosY = pkt.PosY,
-                    PosZ = pkt.PosZ,
+                    Channel = pkt.Channel,
+                    Payload = pkt.Payload,
                 };
-                // Pings are ephemeral: no snapshot for late-joiners.
-                OnPingPlaced?.Invoke(outPkt);
-                BroadcastSteamServerPacket(PacketId.ServerPingPlaced, outPkt, exceptSteamId: remoteSteamId, reliable: true);
+                // The host applies it locally too, then relays to everyone but the sender.
+                OnFeatureStream?.Invoke(playerId, pkt.Channel, pkt.Payload);
+                BroadcastSteamServerPacket(PacketId.ServerFeatureStream, outPkt,
+                    exceptSteamId: remoteSteamId, reliable: pkt.Reliable);
                 break;
             }
             case PacketId.ClientDisconnect:
@@ -448,30 +367,6 @@ public partial class NetworkManager
             SceneName = sceneName ?? "",
             State = state,
         }, reliable: reliablePresence);
-    }
-
-    private void SendSteamBoneState(byte boneCount, float[] positions, float[] rotations)
-    {
-        if (!IsHandshakeComplete) return;
-
-        if (_steamLobby != null && _steamLobby.IsHost)
-        {
-            BroadcastSteamServerPacket(PacketId.ServerBoneState, new ServerBoneState
-            {
-                PlayerId = LocalPlayerId,
-                BoneCount = boneCount,
-                Positions = positions,
-                Rotations = rotations,
-            }, exceptSteamId: 0, reliable: true);
-            return;
-        }
-
-        SendSteamPacketToHost(PacketId.ClientBoneState, new ClientBoneState
-        {
-            BoneCount = boneCount,
-            Positions = positions,
-            Rotations = rotations,
-        }, reliable: true);
     }
 
     private void SendSteamPlayerFrame(NetFrameData frame)
@@ -551,129 +446,27 @@ public partial class NetworkManager
         SendSteamPacketToHost(PacketId.ClientPitonRemoved, new ClientPitonRemoved { PitonId = pitonId }, reliable: true);
     }
 
-    private void SendSteamWeatherState(WeatherSyncData state, bool reliable)
-    {
-        if (!IsHandshakeComplete || _steamLobby == null || !_steamLobby.IsHost)
-            return;
-        SteamSession.HandleHostWeather(state, reliable);
-    }
-
-    private void SendSteamLampState(int mode)
+    /// <summary>
+    /// Real-time feature payload. The host fans it out directly; a guest sends it to the
+    /// host, which relays. Same shape as the frame packets this replaces.
+    /// </summary>
+    private void SendSteamFeatureStream(ushort channel, byte[] payload, bool reliable)
     {
         if (!IsHandshakeComplete) return;
 
         if (_steamLobby != null && _steamLobby.IsHost)
         {
-            SteamSession.HandleHostLampState(LocalPlayerId, mode);
-            return;
-        }
-
-        SendSteamPacketToHost(PacketId.ClientLampState, new ClientLampState { Mode = mode }, reliable: true);
-    }
-
-    private void SendSteamCosmeticState(byte flags)
-    {
-        if (!IsHandshakeComplete) return;
-
-        if (_steamLobby != null && _steamLobby.IsHost)
-        {
-            _steamCosmeticSnapshot[LocalPlayerId] = flags;
-            BroadcastSteamServerPacket(PacketId.ServerCosmeticState, new ServerCosmeticState
-            {
-                PlayerId = LocalPlayerId,
-                Flags = flags,
-            }, exceptSteamId: 0, reliable: true);
-            return;
-        }
-
-        SendSteamPacketToHost(PacketId.ClientCosmeticState, new ClientCosmeticState { Flags = flags }, reliable: true);
-    }
-
-    private void SendSteamSleepState(bool asleep)
-    {
-        if (!IsHandshakeComplete) return;
-        // The host reads its own sleep state locally — no packet to itself.
-        if (_steamLobby != null && _steamLobby.IsHost) return;
-
-        SendSteamPacketToHost(PacketId.ClientSleepState, new ClientSleepState { Asleep = asleep }, reliable: true);
-    }
-
-    private void SendSteamTimeState(ServerTimeState state)
-    {
-        if (!IsHandshakeComplete || _steamLobby == null || !_steamLobby.IsHost) return;
-
-        _steamTimeSnapshot = state;
-        _hasSteamTimeSnapshot = true;
-        BroadcastSteamServerPacket(PacketId.ServerTimeState, state, exceptSteamId: 0, reliable: false);
-    }
-
-    private void SendSteamHandPose(byte[] packed)
-    {
-        if (!IsHandshakeComplete) return;
-        if (packed == null || packed.Length != Protocol.HandPosePackedSize) return;
-
-        if (_steamLobby != null && _steamLobby.IsHost)
-        {
-            _steamHandPoseSnapshot[LocalPlayerId] = packed;
-            BroadcastSteamServerPacket(PacketId.ServerHandPose, new ServerHandPose
-            {
-                PlayerId = LocalPlayerId,
-                Packed = packed,
-            }, exceptSteamId: 0, reliable: true);
-            return;
-        }
-
-        SendSteamPacketToHost(PacketId.ClientHandPose, new ClientHandPose { Packed = packed }, reliable: true);
-    }
-
-    private void SendSteamPingPlaced(Vector3 pos)
-    {
-        if (!IsHandshakeComplete) return;
-        if (!IsValidPose(pos.x, pos.y, pos.z, 0f)) return;
-
-        // The host broadcasts directly to the others; the sender already shows its
-        // own ping locally (no echo to itself via BroadcastSteamServerPacket).
-        if (_steamLobby != null && _steamLobby.IsHost)
-        {
-            BroadcastSteamServerPacket(PacketId.ServerPingPlaced, new ServerPingPlaced
+            BroadcastSteamServerPacket(PacketId.ServerFeatureStream, new ServerFeatureStream
             {
                 FromPlayerId = LocalPlayerId,
-                PosX = pos.x,
-                PosY = pos.y,
-                PosZ = pos.z,
-            }, exceptSteamId: 0, reliable: true);
+                Channel = channel,
+                Payload = payload,
+            }, exceptSteamId: 0, reliable);
             return;
         }
 
-        SendSteamPacketToHost(PacketId.ClientPingPlaced, new ClientPingPlaced
-        {
-            PosX = pos.x,
-            PosY = pos.y,
-            PosZ = pos.z,
-        }, reliable: true);
-    }
-
-    private void SendSteamChat(string message)
-    {
-        if (!IsHandshakeComplete) return;
-
-        if (_steamLobby != null && _steamLobby.IsHost)
-        {
-            var playerName = _steamPlayerNames.TryGetValue(_steamLocalId, out var knownName)
-                ? knownName
-                : (ModConfig.PlayerName.Value ?? "Player");
-            var pkt = new ServerChatBroadcast
-            {
-                FromPlayerId = LocalPlayerId,
-                FromPlayerName = playerName,
-                Message = message ?? "",
-            };
-            OnChatReceived?.Invoke(LocalPlayerId, playerName, pkt.Message);
-            BroadcastSteamServerPacket(PacketId.ServerChatBroadcast, pkt, exceptSteamId: 0, reliable: true);
-            return;
-        }
-
-        SendSteamPacketToHost(PacketId.ClientChat, new ClientChat { Message = message ?? "" }, reliable: true);
+        SendSteamPacketToHost(PacketId.ClientFeatureStream,
+            new ClientFeatureStream { Channel = channel, Reliable = reliable, Payload = payload }, reliable);
     }
 
     private void SendSteamRopeClip(int targetPlayerId, bool clip)
@@ -723,23 +516,9 @@ public partial class NetworkManager
 
         var target = new CSteamID(steamId);
 
-        if (_hasSteamTimeSnapshot)
-            SendSteamPayload(target, BuildPayload(PacketId.ServerTimeState, _steamTimeSnapshot), reliable: true);
-
-        // Weather + pitons + lamps: official state held by the authoritative core.
+        // Pitons + lamps: official state held by the authoritative core. Weather and time
+        // replay through the feature framework's own snapshot.
         SteamSession.SendSnapshotTo(EnsureSteamRemotePlayer(steamId));
-
-        foreach (var kv in _steamCosmeticSnapshot)
-        {
-            var cosmeticPkt = new ServerCosmeticState { PlayerId = kv.Key, Flags = kv.Value };
-            SendSteamPayload(target, BuildPayload(PacketId.ServerCosmeticState, cosmeticPkt), reliable: true);
-        }
-
-        foreach (var kv in _steamHandPoseSnapshot)
-        {
-            var handPkt = new ServerHandPose { PlayerId = kv.Key, Packed = kv.Value };
-            SendSteamPayload(target, BuildPayload(PacketId.ServerHandPose, handPkt), reliable: true);
-        }
 
         // Active rope links (late-joiner).
         foreach (var (a, b) in RopeLinkState.Links())
@@ -982,11 +761,7 @@ public partial class NetworkManager
         _steamIdsByPlayerId.Clear();
         _steamPlayerNames.Clear();
         _steamReliableForwardTimes.Clear();
-        _steamSession?.Reset(); // pitons + lamps + weather
-        _steamCosmeticSnapshot.Clear();
-        _steamHandPoseSnapshot.Clear();
-        _hasSteamTimeSnapshot = false;
-        _steamTimeSnapshot = default;
+        _steamSession?.Reset(); // pitons + lamps
         _steamLoggedFirstClientPlayerFrame.Clear();
         _steamLoggedFirstClientClimbotFrame.Clear();
         _lastReliablePresenceSentAt = 0;

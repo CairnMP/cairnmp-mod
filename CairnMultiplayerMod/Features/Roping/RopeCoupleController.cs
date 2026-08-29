@@ -63,15 +63,14 @@ internal sealed class RopeCoupleController
         bool dead = PawnCaptureApi.GetLocalPawnState() == NetFrame.PawnStateType.Dead;
         bool gameOver = GameLifecycleService.TryGetGameLifecycle(out var lifecycle, out _)
                         && lifecycle == CairnGameLifecycleState.GameOver;
-        var currentScene = Mod.Instance.CurrentScene;
-        bool atMainMenu = currentScene != null && currentScene.StartsWith("MainMenu");
+        bool atMainMenu = SceneRoles.IsMainMenuArea(Mod.Instance.CurrentScene);
 
         bool hardUnsafe = !connected || dead || gameOver || atMainMenu;
 
         if (hardUnsafe)
         {
             if (RopeApi.HasRopeTeamAnchors)
-                RopeApi.ReleaseAllRopeTeamAnchors();
+                RopeApi.ReleaseAllAnchors();
 
             if (!_ropeHardTornDown)
             {
@@ -91,7 +90,7 @@ internal sealed class RopeCoupleController
         // Transient state (loading / bivouac): keep the link, just release the native
         // anchors so we don't leave a rope pinned to an object being destroyed.
         if (!inGame && RopeApi.HasRopeTeamAnchors)
-            RopeApi.ReleaseAllRopeTeamAnchors();
+            RopeApi.ReleaseAllAnchors();
     }
 
     /// <summary>
@@ -134,7 +133,7 @@ internal sealed class RopeCoupleController
         if (keyboard == null || !keyboard[Key.E].wasPressedThisFrame)
             return;
 
-        if (!LocalPlayerApi.TryGetLocalPlayerPose(out var localPos, out _))
+        if (!LocalPlayerApi.TryGetPose(out var localPos, out _))
             return;
 
         // Nearest InGame ghost within range. Note: we keep a dedicated flag rather than a
@@ -206,7 +205,7 @@ internal sealed class RopeCoupleController
 
         if (partner < 0 || !RemotePlayerManager.TryGetGhostHarnessAttachPosition(partner, out var partnerAnchor))
         {
-            if (RopeApi.HasRopeTeamAnchors) RopeApi.ReleaseAllRopeTeamAnchors();
+            if (RopeApi.HasRopeTeamAnchors) RopeApi.ReleaseAllAnchors();
             return;
         }
 
@@ -217,7 +216,7 @@ internal sealed class RopeCoupleController
     internal void ClearLinks()
     {
         RopeLinkState.Clear();
-        RopeApi.ReleaseAllRopeTeamAnchors();
+        RopeApi.ReleaseAllAnchors();
         _ropeHardTornDown = false;
     }
 

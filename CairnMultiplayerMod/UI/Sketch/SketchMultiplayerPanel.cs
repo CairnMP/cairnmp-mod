@@ -92,7 +92,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
 
         // Dark scrim (blocks clicks behind it).
         var dim = SketchUiKit.Make("Dim", _canvasGo.transform);
-        MultiplayerPanelTheme.FullStretch(dim);
+        SketchUiKit.Stretch(dim);
         SketchUiKit.FillColor(dim, new Color(0f, 0f, 0f, 0.55f), raycast: true);
 
         // Centered panel + frame + content area (values: SketchLayout).

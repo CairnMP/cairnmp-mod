@@ -7,14 +7,12 @@ namespace CairnMultiplayerMod.Networking;
 public partial class NetworkManager
 {
     /// <summary>
-    /// Dispatches a payload received from the server to the appropriate handler.
-    /// payload[0] = PacketId; payload[1..] = packet body.
-    /// Called from Update() on the Unity thread.
-    /// An empty payload signals an internal disconnection.
+    /// Dispatches a payload received from the transport to the appropriate handler.
+    /// payload[0] = PacketId; payload[1..] = packet body. Called on the Unity thread.
     /// </summary>
     private void ProcessPacket(byte[] payload)
     {
-        // Empty payload = disconnection marker from ReadLoop
+        // Empty payload = internal disconnection marker.
         if (payload.Length == 0)
         {
             OnDisconnected?.Invoke(LastError ?? "Connection lost");
@@ -63,9 +61,6 @@ public partial class NetworkManager
             case PacketId.ServerPlayerState:
                 HandlePlayerState(r);
                 break;
-            case PacketId.ServerChatBroadcast:
-                HandleChatBroadcast(r);
-                break;
             case PacketId.ServerStartGame:
                 HandleStartGame(r);
                 break;
@@ -96,67 +91,6 @@ public partial class NetworkManager
                 OnPitonRemoved?.Invoke(pkt);
                 break;
             }
-            case PacketId.ServerWeatherState:
-            {
-                var pkt = new ServerWeatherState();
-                pkt.Deserialize(r);
-                if (!IsValidWeatherState(pkt.State))
-                    break;
-                OnWeatherState?.Invoke(pkt);
-                break;
-            }
-            case PacketId.ServerLampState:
-            {
-                var pkt = new ServerLampState();
-                pkt.Deserialize(r);
-                if (_remotePlayers.TryGetValue(pkt.PlayerId, out var p))
-                {
-                    p.LampMode = pkt.Mode;
-                    p.HasLampState = true;
-                }
-                break;
-            }
-            case PacketId.ServerCosmeticState:
-            {
-                var pkt = new ServerCosmeticState();
-                pkt.Deserialize(r);
-                if (_remotePlayers.TryGetValue(pkt.PlayerId, out var p))
-                {
-                    p.CosmeticFlags = pkt.Flags;
-                    p.HasCosmeticState = true;
-                }
-                break;
-            }
-            case PacketId.ServerPingPlaced:
-            {
-                var pkt = new ServerPingPlaced();
-                pkt.Deserialize(r);
-                if (!IsValidPose(pkt.PosX, pkt.PosY, pkt.PosZ, 0f))
-                    break;
-                OnPingPlaced?.Invoke(pkt);
-                break;
-            }
-            case PacketId.ServerHandPose:
-            {
-                var pkt = new ServerHandPose();
-                pkt.Deserialize(r);
-                if (pkt.Packed == null || pkt.Packed.Length != Protocol.HandPosePackedSize)
-                    break;
-                if (_remotePlayers.TryGetValue(pkt.PlayerId, out var p))
-                {
-                    p.HandPosePacked = pkt.Packed;
-                    p.HasHandPose = true;
-                }
-                OnHandPose?.Invoke(pkt);
-                break;
-            }
-            case PacketId.ServerTimeState:
-            {
-                var pkt = new ServerTimeState();
-                pkt.Deserialize(r);
-                OnTimeState?.Invoke(pkt);
-                break;
-            }
             case PacketId.ServerTeleport:
             {
                 // Targeted teleport order from the host (/bring command). We validate
@@ -174,6 +108,13 @@ public partial class NetworkManager
                 }
                 Mod.LogDebug($"[CairnMP] ServerTeleport received -> ({pkt.X:F1}, {pkt.Y:F1}, {pkt.Z:F1})");
                 TeleportApi.TeleportLocalPlayer(new UnityEngine.Vector3(pkt.X, pkt.Y, pkt.Z), pkt.Yaw);
+                break;
+            }
+            case PacketId.ServerFeatureStream:
+            {
+                var pkt = new ServerFeatureStream();
+                pkt.Deserialize(r);
+                OnFeatureStream?.Invoke(pkt.FromPlayerId, pkt.Channel, pkt.Payload);
                 break;
             }
             case PacketId.ServerRopeClip:
@@ -244,14 +185,6 @@ public partial class NetworkManager
         p.SceneName = pkt.SceneName;
         p.State = pkt.State;
         p.LastUpdateTime = DateTime.UtcNow.Ticks / (double)TimeSpan.TicksPerSecond;
-    }
-
-    private void HandleChatBroadcast(BinaryReader r)
-    {
-        var pkt = new ServerChatBroadcast();
-        pkt.Deserialize(r);
-        Mod.LogDebug($"[CHAT] {pkt.FromPlayerName}: {pkt.Message}");
-        OnChatReceived?.Invoke(pkt.FromPlayerId, pkt.FromPlayerName, pkt.Message);
     }
 
     private void HandleBoneState(BinaryReader r)
@@ -328,25 +261,6 @@ public partial class NetworkManager
         p.ClimbotFrame = frame;
         if (p.HasClimbotFrame)
             LogRemoteClimbotFrameAccepted(playerId, frame);
-    }
-
-    /// <summary>
-    /// DEBUG (solo test): injects a remote player frame as if it came from the
-    /// network, for the fake mirror ghost. Creates the RemotePlayer + spawns the ghost via
-    /// the real pipeline. Call in order: player then climbot.
-    /// </summary>
-    public void DebugInjectRemotePlayer(int id, string name, NetFrameData playerFrame,
-        bool hasClimbot, NetFrameData climbotFrame)
-    {
-        ApplyRemotePlayerFrame(id, name, playerFrame);
-        if (hasClimbot) ApplyRemoteClimbotFrame(id, climbotFrame);
-    }
-
-    /// <summary>DEBUG: removes the fake mirror player (despawns the ghost).</summary>
-    public void DebugRemoveRemotePlayer(int id)
-    {
-        if (_remotePlayers.Remove(id))
-            OnPlayerLeft?.Invoke(id);
     }
 
     private static bool IsValidPose(float x, float y, float z, float yaw)

@@ -46,7 +46,7 @@ internal static unsafe class MultiplayerPausePatch
         return mod?.Network != null && mod.Network.IsConnected;
     }
 
-    public static void InstallMultiplayerPausePatch()
+    public static void Install()
     {
         if (_mpPausePatchInstalled || _mpPausePatchFailed) return;
 
@@ -67,7 +67,7 @@ internal static unsafe class MultiplayerPausePatch
                 openedPostfix == null || closedPostfix == null || timePostfix == null)
             {
                 _mpPausePatchFailed = true;
-                Mod.Log.Warning("[CairnGameApi] Multiplayer pause patch methods were not found");
+                Mod.Log.Warning("[Pause] Multiplayer pause patch methods were not found");
                 return;
             }
 
@@ -76,12 +76,12 @@ internal static unsafe class MultiplayerPausePatch
             MpPauseHarmony.Patch(timeUpdate, postfix: new HarmonyMethod(timePostfix));
 
             _mpPausePatchInstalled = true;
-            Mod.Log.Msg("[CairnGameApi] Multiplayer pause patch installed (pause menu no longer freezes the shared world)");
+            Mod.Log.Msg("[Pause] Multiplayer pause patch installed (pause menu no longer freezes the shared world)");
         }
         catch (Exception ex)
         {
             _mpPausePatchFailed = true;
-            Mod.Log.Warning($"[CairnGameApi] Failed to install multiplayer pause patch: {ex.Message}");
+            Mod.Log.Warning($"[Pause] Failed to install multiplayer pause patch: {ex.Message}");
         }
     }
 

@@ -66,8 +66,8 @@ public class PacketCodecTests
     [Fact]
     public void Frame_RejectsOversizedPayload()
     {
-        var packet = new ClientChat { Message = new string('x', ushort.MaxValue) };
-        Assert.Throws<InvalidDataException>(() => PacketCodec.Frame(PacketId.ClientChat, packet));
+        var packet = new ClientHandshake { PlayerName = new string('x', ushort.MaxValue) };
+        Assert.Throws<InvalidDataException>(() => PacketCodec.Frame(PacketId.ClientHandshake, packet));
     }
 }
 
@@ -80,7 +80,9 @@ public class ProtocolVersionTests
     {
         // When you bump Protocol.Version, update this value AND the release notes
         // to signal to clients that they need to update.
-        Assert.Equal(7, Protocol.Version);
+        // 12: ClientFeatureStream carries a reliability flag.
+        // 11: finger poses joined the framework, on the shared real-time stream channel.
+        Assert.Equal(12, Protocol.Version);
     }
 
     [Fact]
@@ -102,110 +104,39 @@ public class ProtocolVersionTests
     }
 }
 
-public class PingPacketTests
+public class FeatureStreamPacketTests
 {
-    [Fact]
-    public void ClientPingPlaced_RoundTrips()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ClientFeatureStream_CarriesTheReliabilityFlag(bool reliable)
     {
-        var pkt = new ClientPingPlaced { PosX = 12.5f, PosY = -3.25f, PosZ = 1024.75f };
-
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-            pkt.Serialize(w);
-
-        ms.Position = 0;
-        using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: false);
-        var got = new ClientPingPlaced();
-        got.Deserialize(r);
-
-        Assert.Equal(pkt.PosX, got.PosX);
-        Assert.Equal(pkt.PosY, got.PosY);
-        Assert.Equal(pkt.PosZ, got.PosZ);
-    }
-
-    [Fact]
-    public void ServerPingPlaced_RoundTrips()
-    {
-        var pkt = new ServerPingPlaced
+        var sent = new ClientFeatureStream
         {
-            FromPlayerId = 7,
-            PosX = -100.5f,
-            PosY = 64f,
-            PosZ = 0.125f,
+            Channel = 4242,
+            Reliable = reliable,
+            Payload = new byte[] { 1, 2, 3 },
         };
 
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-            pkt.Serialize(w);
-
+        {
+            sent.Serialize(w);
+        }
         ms.Position = 0;
         using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: false);
-        var got = new ServerPingPlaced();
-        got.Deserialize(r);
 
-        Assert.Equal(pkt.FromPlayerId, got.FromPlayerId);
-        Assert.Equal(pkt.PosX, got.PosX);
-        Assert.Equal(pkt.PosY, got.PosY);
-        Assert.Equal(pkt.PosZ, got.PosZ);
-    }
+        var received = new ClientFeatureStream();
+        received.Deserialize(r);
 
-    [Fact]
-    public void ClientPingPlaced_FramesThroughCodec()
-    {
-        // Verifies the full encoding (length + PacketId + fields) via PacketCodec.Frame.
-        var pkt = new ClientPingPlaced { PosX = 1f, PosY = 2f, PosZ = 3f };
-        var frame = PacketCodec.Frame(PacketId.ClientPingPlaced, pkt);
-
-        // [uint16 len][byte id][3 floats] => 2 + 1 + 12 = 15 bytes, payload = 13.
-        Assert.Equal(15, frame.Length);
-        Assert.Equal((byte)PacketId.ClientPingPlaced, frame[2]);
+        Assert.Equal(sent.Channel, received.Channel);
+        Assert.Equal(reliable, received.Reliable);
+        Assert.Equal(sent.Payload, received.Payload);
     }
 }
 
 public class HandPosePacketTests
 {
-    private static byte[] SamplePacked()
-    {
-        var bytes = new byte[Protocol.HandPosePackedSize];
-        for (int i = 0; i < bytes.Length; i++) bytes[i] = (byte)(i * 7 + 3);
-        return bytes;
-    }
-
-    [Fact]
-    public void ClientHandPose_RoundTrips()
-    {
-        var pkt = new ClientHandPose { Packed = SamplePacked() };
-
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-            pkt.Serialize(w);
-
-        ms.Position = 0;
-        using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: false);
-        var got = new ClientHandPose();
-        got.Deserialize(r);
-
-        Assert.Equal(pkt.Packed, got.Packed);
-    }
-
-    [Fact]
-    public void ServerHandPose_RoundTrips()
-    {
-        var pkt = new ServerHandPose { PlayerId = 42, Packed = SamplePacked() };
-
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-            pkt.Serialize(w);
-
-        ms.Position = 0;
-        using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: false);
-        var got = new ServerHandPose();
-        got.Deserialize(r);
-
-        Assert.Equal(pkt.PlayerId, got.PlayerId);
-        Assert.Equal(pkt.Packed, got.Packed);
-    }
-
     [Fact]
     public void HandPosePackedSize_MatchesFingerBoneCount()
     {
@@ -213,63 +144,6 @@ public class HandPosePacketTests
         Assert.Equal(38, Protocol.FingerBoneCount);
         Assert.Equal(Protocol.FingerBoneCount * QuaternionCodec.PackedSize, Protocol.HandPosePackedSize);
         Assert.Equal(152, Protocol.HandPosePackedSize);
-    }
-
-    [Fact]
-    public void ClientHandPose_NullPacked_SerializesAsEmpty()
-    {
-        var pkt = new ClientHandPose { Packed = null };
-
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-            pkt.Serialize(w);
-
-        ms.Position = 0;
-        using var r = new BinaryReader(ms);
-        var got = new ClientHandPose();
-        got.Deserialize(r);
-
-        Assert.Empty(got.Packed);
-    }
-}
-
-public class TimeSyncPacketTests
-{
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void ClientSleepState_RoundTrips(bool asleep)
-    {
-        var pkt = new ClientSleepState { Asleep = asleep };
-
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-            pkt.Serialize(w);
-
-        ms.Position = 0;
-        using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: false);
-        var got = new ClientSleepState();
-        got.Deserialize(r);
-
-        Assert.Equal(asleep, got.Asleep);
-    }
-
-    [Fact]
-    public void ServerTimeState_RoundTrips()
-    {
-        var pkt = new ServerTimeState { DayTime01 = 0.4275f, AllAsleep = true };
-
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-            pkt.Serialize(w);
-
-        ms.Position = 0;
-        using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: false);
-        var got = new ServerTimeState();
-        got.Deserialize(r);
-
-        Assert.Equal(pkt.DayTime01, got.DayTime01);
-        Assert.Equal(pkt.AllAsleep, got.AllAsleep);
     }
 }
 

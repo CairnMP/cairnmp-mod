@@ -41,7 +41,7 @@ public static class MainMenuMultiplayerButton
 
     public static void OnSceneLoaded(string sceneName)
     {
-        if (sceneName == "MainMenu")
+        if (SceneRoles.IsMainMenu(sceneName))
         {
             _intercepted = false;
             _frameCounter = 0;

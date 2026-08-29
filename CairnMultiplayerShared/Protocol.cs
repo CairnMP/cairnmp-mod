@@ -6,7 +6,12 @@ namespace CairnMultiplayer.Shared;
 /// </summary>
 public static class Protocol
 {
-    public const int Version = 7;
+    // 12: ClientFeatureStream carries the sender's reliability flag, so the host relays a
+    // stream the way it was declared instead of always relaying unreliably.
+    // 11: every gameplay packet except the pose/frame streams now travels through the
+    // feature framework, freeing ids 4, 10-14, 16, 69, 76-80 and 83. Real-time streams
+    // share ids 19 and 89 whatever the feature.
+    public const int Version = 12;
     public const string ConnectionKey = "cairnmp";
     public const int DefaultPort = 14000;
 
@@ -91,21 +96,26 @@ public enum PacketId : byte
     ClientHandshake = 1,
     ClientDisconnect = 2,
     ClientPlayerState = 3,
-    ClientChat = 4,
+    // 4 was ClientChat — chat moved to the feature framework (Features/Chat/). Reserved.
     ClientBoneState = 5,
     ClientPitonPlaced = 6,
     ClientPitonRemoved = 7,
     ClientPlayerFrame = 8,
     ClientClimbotFrame = 9,
-    ClientWeatherState = 10,
-    ClientLampState = 11,
-    ClientPingPlaced = 12,
-    ClientHandPose = 13,
-    ClientSleepState = 14,
+    // 10 was ClientWeatherState — weather is host-published state in Features/Weather/. Reserved.
+    // 11 was ClientLampState — appearance is per-player host state in Features/Players/Avatar/.
+    // 12 was ClientPingPlaced — pings moved to the feature framework (Features/World/).
+    // Left reserved on purpose: reusing the number would make an old client's ping look
+    // like whatever packet takes its place.
+    // 13 was ClientHandPose — finger poses stream through Features/Players/Avatar/. Reserved.
+    // 14 was ClientSleepState — sleep is reported through Features/Clock/. Reserved.
     ClientRopeClip = 15,
-    ClientCosmeticState = 16,
+    // 16 was ClientCosmeticState — see the note on 11. Reserved, do not reuse.
     ClientExtensionManifest = 17,
     ClientExtensionCommand = 18,
+    /// <summary>Any feature's real-time stream, client to host. The channel is identified
+    /// inside the payload, so a new stream never needs a new packet id.</summary>
+    ClientFeatureStream = 19,
 
     // Server -> Client
     ServerHandshakeAck = 64,
@@ -113,26 +123,28 @@ public enum PacketId : byte
     ServerPlayerJoined = 66,
     ServerPlayerLeft = 67,
     ServerPlayerState = 68,
-    ServerChatBroadcast = 69,
+    // 69 was ServerChatBroadcast — see the note on 4. Reserved, do not reuse.
     ServerStartGame = 70,
     ServerBoneState = 71,
     ServerPitonPlaced = 72,
     ServerPitonRemoved = 73,
     ServerPlayerFrame = 74,
     ServerClimbotFrame = 75,
-    ServerWeatherState = 76,
-    ServerLampState = 77,
-    ServerPingPlaced = 78,
-    ServerHandPose = 79,
-    ServerTimeState = 80,
+    // 76 was ServerWeatherState — see the note on 10. Reserved, do not reuse.
+    // 77 was ServerLampState — see the note on 11. Reserved, do not reuse.
+    // 78 was ServerPingPlaced — see the note on 12. Reserved, do not reuse.
+    // 79 was ServerHandPose — see the note on 13. Reserved, do not reuse.
+    // 80 was ServerTimeState — time of day moved to Features/Clock/. Reserved.
     ServerTeleport = 81,
     ServerRopeClip = 82,
-    ServerCosmeticState = 83,
+    // 83 was ServerCosmeticState — see the note on 11. Reserved, do not reuse.
     ServerExtensionManifestResult = 84,
     ServerExtensionCommandResult = 85,
     ServerExtensionEvent = 86,
     ServerExtensionState = 87,
     ServerExtensionPeerStatus = 88,
+    /// <summary>Host relay of a feature stream, carrying the sender's id.</summary>
+    ServerFeatureStream = 89,
 }
 
 /// <summary>
