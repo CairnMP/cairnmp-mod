@@ -343,7 +343,7 @@ internal sealed class BivouacSyncGate
             $"panelVisible={_panel?.IsVisible == true} {networkState} {RemotePlayerManager.DebugSummary()} " +
             $"setFramePatchInstalled={NetplaySetFramePatch.IsInstalled} " +
             $"patchPaused={_patchPaused} " +
-            BivouacSafetyPatch.BuildBivouacDebugSnapshot());
+            BivouacDiagnostics.BuildBivouacDebugSnapshot());
     }
 
     /// <summary>Lifecycle state of each known remote player: if one side stays at Loading

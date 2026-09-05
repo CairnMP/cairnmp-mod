@@ -184,8 +184,9 @@ public sealed class ArchitectureBoundaryTests
         foreach (var module in modules)
         {
             var sources = SourceFilesUnder("Internal")
-                .Where(file => Path.GetFileName(file).StartsWith(module, StringComparison.Ordinal))
                 .Select(File.ReadAllText)
+                .Where(source => Regex.IsMatch(source, $@"\bclass\s+{Regex.Escape(module)}\b",
+                    RegexOptions.CultureInvariant))
                 .ToArray();
 
             Assert.Contains(sources, source => source.Contains($"class {module}", StringComparison.Ordinal));

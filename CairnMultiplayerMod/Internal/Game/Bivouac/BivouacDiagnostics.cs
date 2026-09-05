@@ -11,7 +11,7 @@ using UnityEngine.UIElements;
 
 namespace CairnMultiplayerMod.Internal.Game.Bivouac;
 
-internal static unsafe partial class BivouacSafetyPatch
+internal static unsafe partial class BivouacDiagnostics
 {
     private static MonoBehaviour _tapingFingersManagerCached;
     private static int _lastTapingFingersManagerSearchFrame;

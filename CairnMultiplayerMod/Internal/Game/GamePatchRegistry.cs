@@ -27,7 +27,7 @@ internal static class GamePatchRegistry
     private static readonly PatchModule[] Modules =
     {
         new("netplay frame", NetplaySetFramePatch.Install, NetplaySetFramePatch.Uninstall),
-        new("bivouac safety", BivouacSafetyPatch.Install, BivouacSafetyPatch.Uninstall),
+        new("bivouac safety", BivouacDiagnostics.Install, BivouacDiagnostics.Uninstall),
         new("rope-team template", RopeTeamFallPatch.Install, RopeTeamFallPatch.Uninstall),
         new("multiplayer pause", MultiplayerPausePatch.Install, MultiplayerPausePatch.Uninstall),
         new("free-roam unlock", FreeRoamUnlockPatch.Install, FreeRoamUnlockPatch.Uninstall),

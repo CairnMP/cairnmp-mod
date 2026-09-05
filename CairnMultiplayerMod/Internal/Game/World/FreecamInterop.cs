@@ -1,10 +1,10 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2CppInterop.Runtime;
 using UnityEngine;
 
-namespace CairnMultiplayerMod.Internal.Game.PhotoMode;
+namespace CairnMultiplayerMod.Internal.Game.World;
 
 /// <summary>
 /// Detection of Cairn's native free camera (the "Display Route" button = aerial

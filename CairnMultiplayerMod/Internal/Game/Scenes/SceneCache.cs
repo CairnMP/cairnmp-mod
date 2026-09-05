@@ -21,7 +21,7 @@ internal static class SceneCache
         RopeInterop.ResetCaches();
         NetplayAnimationInterop.ResetCaches();
         WeatherInterop.ResetCaches();
-        BivouacSafetyPatch.ResetCaches();
+        BivouacDiagnostics.ResetCaches();
         GameLifecycleService.ResetCaches();
 
         ModLog.Debug("[SceneCache] Scene-bound IL2CPP caches reset");

@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace CairnMultiplayerMod.Internal.Game.Bivouac;
 
-internal static partial class BivouacSafetyPatch
+internal static partial class BivouacDiagnostics
 {
     // Keep the historical id so reloads can unpatch hooks installed by older builds.
     private static readonly HarmonyLib.Harmony BivouacSafetyHarmony = new("CairnMultiplayerMod.BivouacDiagnostics");
