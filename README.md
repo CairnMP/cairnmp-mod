@@ -156,7 +156,7 @@ events without exposing Steam or raw packets. See
 
 ## Repository layout
 
-| Path | In `.slnx`? | Role |
+| Path | In `.sln`? | Role |
 |---|---|---|
 | `CairnMultiplayerMod/` | ✅ | MelonLoader mod loaded into Cairn |
 | `CairnMultiplayerMod/Features/` | ✅ | What the mod does — one folder per feature |
