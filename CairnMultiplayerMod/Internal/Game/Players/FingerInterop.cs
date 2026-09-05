@@ -1,12 +1,12 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2CppTheGameBakers.Cairn.Netplay;
 using UnityEngine;
 
-namespace CairnMultiplayerMod.Internal.Game.Players.Avatar;
+namespace CairnMultiplayerMod.Internal.Game.Players;
 
 /// <summary>
 /// Exact sync of finger bones between players.

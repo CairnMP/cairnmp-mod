@@ -1,11 +1,11 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2CppTheGameBakers.Cairn;
 using Il2CppTheGameBakers.Cairn.Netplay;
 using UnityEngine;
 
-namespace CairnMultiplayerMod.Internal.Game.Players.Avatar;
+namespace CairnMultiplayerMod.Internal.Game.Players;
 
 /// <summary>
 /// Syncs the character's cosmetics between players.

@@ -5,7 +5,7 @@ using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal.Game.Chat;
 using CairnMultiplayerMod.Internal.Game.Input;
 using CairnMultiplayerMod.Internal.Game.PhotoMode;
-using CairnMultiplayerMod.Internal.Game.Players.Avatar;
+using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Game.World;
 using CairnMultiplayerMod.Internal.Networking;
 using UnityEngine;

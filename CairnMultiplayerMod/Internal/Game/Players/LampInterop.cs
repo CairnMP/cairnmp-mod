@@ -1,11 +1,11 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using System.Reflection;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2Cpp;
 using Il2CppTheGameBakers.Cairn.Netplay;
 using UnityEngine;
 
-namespace CairnMultiplayerMod.Internal.Game.Players.Avatar;
+namespace CairnMultiplayerMod.Internal.Game.Players;
 
 /// <summary>
 /// Syncs the lamp (AavaLightStick) between players.

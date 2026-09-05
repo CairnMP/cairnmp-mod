@@ -1,14 +1,13 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2Cpp;
 using Il2CppInterop.Runtime;
-using Il2CppTheGameBakers.Cairn;
 using Il2CppTheGameBakers.Cairn.Netplay;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 
-namespace CairnMultiplayerMod.Internal.Game.Players.Avatar;
+namespace CairnMultiplayerMod.Internal.Game.Players;
 
 internal static unsafe class NetplayAnimationInterop
 {

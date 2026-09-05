@@ -2,7 +2,6 @@ using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game.Bivouac;
 using CairnMultiplayerMod.Internal.Game.Lifecycle;
 using CairnMultiplayerMod.Internal.Game.Players;
-using CairnMultiplayerMod.Internal.Game.Players.Avatar;
 using CairnMultiplayerMod.Internal.Game.Roping;
 
 namespace CairnMultiplayerMod.Internal.Game.Scenes;

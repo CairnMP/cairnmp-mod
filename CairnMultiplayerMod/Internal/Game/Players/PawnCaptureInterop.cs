@@ -1,13 +1,11 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using CairnMultiplayer.Shared;
-using Il2Cpp;
-using Il2CppInterop.Runtime;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using Il2CppTheGameBakers.Cairn.Netplay;
 using UnityEngine;
 
-namespace CairnMultiplayerMod.Internal.Game.Players.Avatar;
+namespace CairnMultiplayerMod.Internal.Game.Players;
 
 internal static unsafe class PawnCaptureInterop
 {

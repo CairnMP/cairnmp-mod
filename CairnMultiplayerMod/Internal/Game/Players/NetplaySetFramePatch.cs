@@ -1,11 +1,11 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using System.Reflection;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using HarmonyLib;
 using Il2CppInterop.Runtime;
 using Il2CppTheGameBakers.Cairn.Netplay;
 
-namespace CairnMultiplayerMod.Internal.Game.Players.Avatar;
+namespace CairnMultiplayerMod.Internal.Game.Players;
 
 internal static unsafe class NetplaySetFramePatch
 {
