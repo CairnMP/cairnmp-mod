@@ -1,3 +1,5 @@
+#nullable enable
+
 using CairnMultiplayer.Shared;
 using Xunit;
 

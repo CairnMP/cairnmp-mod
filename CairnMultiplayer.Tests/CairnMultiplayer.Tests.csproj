@@ -20,7 +20,5 @@
     <Compile Include="../CairnMultiplayerMod/Internal/Diagnostics/CrashFingerprint.cs" Link="Production/CrashFingerprint.cs" />
     <Compile Include="../CairnMultiplayerMod/Internal/Diagnostics/DiagnosticRetention.cs" Link="Production/DiagnosticRetention.cs" />
     <Compile Include="../CairnMultiplayerMod/Internal/Diagnostics/BoundedSessionLog.cs" Link="Production/BoundedSessionLog.cs" />
-    <Compile Include="../CairnMultiplayerMod.Tests/PitonAuthorityTests.cs" Link="PitonAuthorityTests.cs" />
-    <Compile Include="../CairnMultiplayerMod.Tests/CrashDiagnosticsTests.cs" Link="CrashDiagnosticsTests.cs" />
   </ItemGroup>
 </Project>

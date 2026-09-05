@@ -1,3 +1,5 @@
+#nullable enable
+
 using System.IO;
 using CairnMultiplayer.Shared;
 using CairnMultiplayer.Shared.Extensions;
