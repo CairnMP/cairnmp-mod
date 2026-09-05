@@ -1,5 +1,5 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Networking;
 using CairnMultiplayerMod.Internal.UI.Sketch;
 using CairnMultiplayerMod.Internal.UI.Toolkit;

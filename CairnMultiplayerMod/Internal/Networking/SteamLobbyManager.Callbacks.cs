@@ -1,9 +1,9 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading.Tasks;
 using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2CppSteamworks;
 
 namespace CairnMultiplayerMod.Internal.Networking

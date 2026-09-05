@@ -3,7 +3,7 @@
 # Compatible bash (git-bash sous Windows, native Linux/Mac).
 #
 # Usage : bash scripts/check.sh
-# Le hook .githooks/pre-push l'appelle automatiquement.
+# A lancer manuellement avant un push.
 
 set -euo pipefail
 

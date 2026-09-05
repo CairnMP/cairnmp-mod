@@ -1,5 +1,5 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game.Roping;
 using CairnMultiplayerMod.Internal.Networking;
 using UnityEngine;

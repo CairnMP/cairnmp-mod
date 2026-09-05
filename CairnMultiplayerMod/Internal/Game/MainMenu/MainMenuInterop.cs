@@ -1,5 +1,5 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2CppInterop.Runtime;
 using UnityEngine;
 

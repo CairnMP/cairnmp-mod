@@ -1,7 +1,7 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using System.Collections.Generic;
 using CairnMultiplayerMod.GameApi;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2CppTMPro;
 using UnityEngine;
 using UnityEngine.Events;

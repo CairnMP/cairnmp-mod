@@ -1,6 +1,6 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using System.Collections.Generic;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using HarmonyLib;
 using Il2Cpp;
 using Il2CppTheGameBakers.Cairn;

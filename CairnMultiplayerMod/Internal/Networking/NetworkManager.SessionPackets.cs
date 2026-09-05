@@ -1,6 +1,6 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System.IO;
 using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.Internal.Diagnostics;
 
 namespace CairnMultiplayerMod.Internal.Networking;
 

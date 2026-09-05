@@ -1,12 +1,12 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Globalization;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2CppInterop.Runtime;
 using Il2CppSteamworks;
 

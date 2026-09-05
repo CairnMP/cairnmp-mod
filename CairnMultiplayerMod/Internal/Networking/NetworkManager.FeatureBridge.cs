@@ -1,10 +1,10 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using CairnMultiplayer.Api;
 using CairnMultiplayer.Shared;
 using CairnMultiplayer.Shared.Extensions;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Extensions;
 using CairnMultiplayerMod.Internal.Networking.Authoritative;
 

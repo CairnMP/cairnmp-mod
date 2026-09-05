@@ -1,8 +1,8 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using HarmonyLib;
 using Il2CppInterop.Runtime;
 using UnityEngine;

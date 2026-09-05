@@ -1,5 +1,5 @@
-using CairnMultiplayerMod.Internal.Networking.Authoritative;
 using CairnMultiplayerMod.Internal.Diagnostics;
+using CairnMultiplayerMod.Internal.Networking.Authoritative;
 using Xunit;
 
 public sealed class ResourceBoundaryTests

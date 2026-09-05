@@ -1,5 +1,5 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using UnityEngine;
 
 namespace CairnMultiplayerMod.Internal.Game.MainMenu;
