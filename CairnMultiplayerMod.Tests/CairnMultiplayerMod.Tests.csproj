@@ -14,7 +14,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\CairnMultiplayerMod\CairnMultiplayerMod.csproj" />
+    <ProjectReference Include="..\CairnMultiplayerMod\CairnMultiplayerMod.csproj"
+                      AdditionalProperties="DeployMod=false" />
     <ProjectReference Include="..\CairnMultiplayerShared\CairnMultiplayerShared.csproj" />
   </ItemGroup>
 

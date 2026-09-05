@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  portable-tests:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [CairnMultiplayerShared.Tests, CairnMultiplayerArchitecture.Tests, CairnMultiplayerPortable.Tests]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check version declarations
+        run: node scripts/sync-versions.js --check
+      - name: Restore locked dependencies
+        run: dotnet restore "${{ matrix.project }}/${{ matrix.project }}.csproj" --locked-mode
+      - name: Test
+        run: dotnet test "${{ matrix.project }}/${{ matrix.project }}.csproj" --configuration Release --no-restore -p:DeployMod=false

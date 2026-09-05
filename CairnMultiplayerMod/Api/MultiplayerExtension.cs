@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using CairnMultiplayerMod.Api.Internal;
+using CairnMultiplayerMod.Internal.Extensions;
 
 namespace CairnMultiplayer.Api;
 

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using CairnMultiplayer.Shared;
-using UnityEngine;
+using CairnMultiplayerMod.Framework;
 
 namespace CairnMultiplayerMod.Features.Clock;
 
@@ -57,6 +57,7 @@ internal sealed class ClockFeature : MultiplayerFeature
     private float _publishTimer;
     private bool _hasReportedSleep;
     private bool _lastReportedSleep;
+    private float _sleepRefreshTimer;
 
     // Time held by the host while it sleeps alone, so its bivouac fast-forward does not
     // drag everyone else's clock with it.
@@ -83,8 +84,8 @@ internal sealed class ClockFeature : MultiplayerFeature
     {
         if (!IsConnected) return;
 
-        if (Mod.Instance.LocalState == PlayerState.InGame)
-            TimeApi.DumpTimeApi();
+        if (Game.State.IsLocalPlayerInGame)
+            Game.Clock.LogDiagnosticsOnce();
 
         ReportLocalSleep();
 
@@ -95,9 +96,11 @@ internal sealed class ClockFeature : MultiplayerFeature
     /// <summary>Tells the host when our own sleep state flips — not every frame.</summary>
     private void ReportLocalSleep()
     {
-        if (!TimeApi.TryIsLocalAsleep(out var asleep)) return;
-        if (_hasReportedSleep && _lastReportedSleep == asleep) return;
+        if (!Game.Clock.TryGetLocalSleep(out var asleep)) return;
+        _sleepRefreshTimer += Game.Time.UnscaledDeltaTime;
+        if (_hasReportedSleep && _lastReportedSleep == asleep && _sleepRefreshTimer < 1f) return;
 
+        _sleepRefreshTimer = 0f;
         _hasReportedSleep = true;
         _lastReportedSleep = asleep;
         _sleep.Send(new SleepReport { Asleep = asleep });
@@ -108,7 +111,7 @@ internal sealed class ClockFeature : MultiplayerFeature
 
     private void TickHost()
     {
-        bool hostAsleep = TimeApi.TryIsLocalAsleep(out var a) && a;
+        bool hostAsleep = Game.Clock.TryGetLocalSleep(out var a) && a;
         bool allAsleep = hostAsleep && EveryoneElseAsleep();
 
         float authoritative;
@@ -116,20 +119,20 @@ internal sealed class ClockFeature : MultiplayerFeature
         {
             // Sleeping without consensus: freeze the cycle at the last normal time, or the
             // native bivouac acceleration would move time on for everyone.
-            if (!_hasHeldDayTime01 && TimeApi.TryGetDayTime01(out var current))
+            if (!_hasHeldDayTime01 && Game.Clock.TryGetDayTime(out var current))
             {
                 _heldDayTime01 = current;
                 _hasHeldDayTime01 = true;
             }
             authoritative = _heldDayTime01;
-            TimeApi.FreezeDayCycle(authoritative);
+            Game.Clock.Freeze(authoritative);
         }
         else
         {
             // Follow natural time (normal, or fast-forward once everyone sleeps) and keep
             // the baseline current.
-            TimeApi.UnfreezeDayCycle();
-            if (TimeApi.TryGetDayTime01(out var current))
+            Game.Clock.Unfreeze();
+            if (Game.Clock.TryGetDayTime(out var current))
             {
                 _heldDayTime01 = current;
                 _hasHeldDayTime01 = true;
@@ -145,7 +148,7 @@ internal sealed class ClockFeature : MultiplayerFeature
             ? Protocol.TimeStateFastForwardIntervalSeconds
             : Protocol.TimeStateUpdateIntervalSeconds;
 
-        _publishTimer += Time.unscaledDeltaTime;
+        _publishTimer += Game.Time.UnscaledDeltaTime;
         if (_publishTimer < interval) return;
 
         _publishTimer = 0f;
@@ -157,18 +160,16 @@ internal sealed class ClockFeature : MultiplayerFeature
         // Re-freeze every frame: neutralises a lone sleeper's local acceleration and locks
         // the day/night visuals onto the host.
         if (_lastReceived != null)
-            TimeApi.FreezeDayCycle(_lastReceived.DayTime01);
+            Game.Clock.Freeze(_lastReceived.DayTime01);
     }
 
     /// <summary>True when every other player who is actually in game is asleep. Players
     /// loading or in a menu do not block the consensus.</summary>
     private bool EveryoneElseAsleep()
     {
-        foreach (var kv in Mod.Instance.Network.RemotePlayers)
+        foreach (var playerId in Game.Players.RemoteSleepParticipants)
         {
-            var player = kv.Value;
-            if (player == null || player.State != PlayerState.InGame) continue;
-            if (!_asleepByPlayer.TryGetValue(kv.Key, out var asleep) || !asleep) return false;
+            if (!_asleepByPlayer.TryGetValue(playerId, out var asleep) || !asleep) return false;
         }
         return true;
     }
@@ -177,11 +178,12 @@ internal sealed class ClockFeature : MultiplayerFeature
     {
         _publishTimer = 0f;
         _hasReportedSleep = false;
+        _sleepRefreshTimer = 0f;
         _lastReportedSleep = false;
         _heldDayTime01 = 0f;
         _hasHeldDayTime01 = false;
         _lastReceived = null;
         _asleepByPlayer.Clear();
-        TimeApi.ResetCaches();
+        Game.Clock.Reset();
     }
 }

@@ -1,7 +1,9 @@
 using System;
 using System.IO;
+using System.IO.Compression;
+using System.Linq;
 using System.Text;
-using CairnMultiplayerMod.Diagnostics;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using Xunit;
 
 namespace CairnMultiplayerMod.Tests;
@@ -79,8 +81,7 @@ public sealed class CrashFingerprintTests
         Assert.Equal("mod:exception:Weird__label:T", withSeparator);
     }
 
-    // Sans rien de stable à quoi s'accrocher, mieux vaut laisser l'API dériver
-    // la signature que renvoyer une clé qui regrouperait tous les crashes.
+    // Without a stable element, an empty fingerprint is safer than grouping unrelated crashes.
     [Fact]
     public void ReturnsEmptyWhenNothingIsStable()
     {
@@ -88,66 +89,168 @@ public sealed class CrashFingerprintTests
     }
 
     [Fact]
-    public void StaysWithinTheApiColumnLimit()
+    public void StaysCompactForArchiveNamesAndSupportTools()
     {
         var huge = new string('x', 400);
         Assert.True(CrashFingerprint.Build("exception", huge, huge, null).Length <= 255);
     }
 }
 
-public sealed class GameLogTailTests : IDisposable
+public sealed class CrashArchiveBuilderTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "cairnmp-logtail-" + Guid.NewGuid().ToString("N"));
+    private readonly string _directory = Path.Combine(
+        Path.GetTempPath(), "cairnmp-crash-bundle-" + Guid.NewGuid().ToString("N"));
 
-    public GameLogTailTests() => Directory.CreateDirectory(_dir);
+    public CrashArchiveBuilderTests() => Directory.CreateDirectory(_directory);
 
     public void Dispose()
     {
-        try { Directory.Delete(_dir, recursive: true); } catch { }
+        try { Directory.Delete(_directory, recursive: true); }
+        catch { }
     }
 
-    private string WriteLog(string content)
+    [Fact]
+    public void CreatesALocalBundleWithReportPrivacyNoticeAndLogs()
     {
-        var path = Path.Combine(_dir, "Latest.log");
-        File.WriteAllText(path, content, new UTF8Encoding(false));
+        var logPath = Path.Combine(_directory, "Latest.log");
+        File.WriteAllText(logPath, "loader output", Encoding.UTF8);
+        var output = Path.Combine(_directory, "Crashes");
+
+        var archivePath = CrashArchiveBuilder.Create(output, Incident(), new[] { logPath });
+
+        Assert.True(File.Exists(archivePath));
+        using var archive = ZipFile.OpenRead(archivePath);
+        var names = archive.Entries.Select(entry => entry.FullName).ToArray();
+        Assert.Contains("crash-report.txt", names);
+        Assert.Contains("README.txt", names);
+        Assert.Contains("logs/Latest.log", names);
+        Assert.Contains("not uploaded or transmitted", ReadEntry(archive, "README.txt"));
+        Assert.Contains("Mod.OnUpdate", ReadEntry(archive, "crash-report.txt"));
+        Assert.Equal("loader output", ReadEntry(archive, "logs/Latest.log"));
+    }
+
+    [Fact]
+    public void ReadsALogThatIsStillOpenAndDisambiguatesDuplicateNames()
+    {
+        var firstDirectory = Path.Combine(_directory, "first");
+        var secondDirectory = Path.Combine(_directory, "second");
+        Directory.CreateDirectory(firstDirectory);
+        Directory.CreateDirectory(secondDirectory);
+        var first = Path.Combine(firstDirectory, "Player.log");
+        var second = Path.Combine(secondDirectory, "Player.log");
+        File.WriteAllText(first, "first");
+        File.WriteAllText(second, "second");
+        using var heldOpen = new FileStream(first, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+
+        var archivePath = CrashArchiveBuilder.Create(
+            Path.Combine(_directory, "Crashes"), Incident(), new[] { first, second, first });
+
+        using var archive = ZipFile.OpenRead(archivePath);
+        Assert.NotNull(archive.GetEntry("logs/Player.log"));
+        Assert.NotNull(archive.GetEntry("logs/Player-2.log"));
+        Assert.Equal(2, archive.Entries.Count(entry => entry.FullName.StartsWith("logs/", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void RecordsAnOptionalLogThatCouldNotBeCollected()
+    {
+        var logPath = Path.Combine(_directory, "locked.log");
+        File.WriteAllText(logPath, "unavailable");
+        using var heldOpen = new FileStream(logPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+        var archivePath = CrashArchiveBuilder.Create(
+            Path.Combine(_directory, "Crashes"), Incident(), new[] { logPath });
+
+        using var archive = ZipFile.OpenRead(archivePath);
+        var collectionErrors = ReadEntry(archive, "logs/collection-errors.txt");
+        Assert.Contains("locked.log", collectionErrors);
+        Assert.Contains("IOException", collectionErrors);
+    }
+
+    [Fact]
+    public void KeepsOnlyTheBoundedTailOfAnOversizedLog()
+    {
+        var logPath = Path.Combine(_directory, "oversized.log");
+        using (var file = new FileStream(logPath, FileMode.Create, FileAccess.Write))
+        {
+            file.SetLength(CrashArchiveBuilder.MaxLogBytes + 128);
+            file.Seek(-4, SeekOrigin.End);
+            file.Write(Encoding.UTF8.GetBytes("tail"));
+        }
+
+        var archivePath = CrashArchiveBuilder.Create(
+            Path.Combine(_directory, "Crashes"), Incident(), new[] { logPath });
+
+        using var archive = ZipFile.OpenRead(archivePath);
+        var content = ReadEntry(archive, "logs/oversized.log");
+        Assert.StartsWith("[truncated by CairnMP", content);
+        Assert.EndsWith("tail", content);
+    }
+
+    private static CrashIncident Incident() => new()
+    {
+        OccurredAtUtc = new DateTimeOffset(2026, 9, 4, 12, 30, 0, TimeSpan.Zero),
+        ModVersion = "1.1.0",
+        Context = "Mod.OnUpdate",
+        ExceptionType = typeof(InvalidOperationException).FullName,
+        Message = "fatal test",
+        StackTrace = "at CairnMultiplayerMod.Bootstrap.Mod.OnUpdate()",
+        Fingerprint = "mod:fatal:Mod.OnUpdate",
+    };
+
+    private static string ReadEntry(ZipArchive archive, string name)
+    {
+        using var reader = new StreamReader(archive.GetEntry(name)!.Open(), Encoding.UTF8);
+        return reader.ReadToEnd();
+    }
+}
+
+public sealed class DiagnosticRetentionTests : IDisposable
+{
+    private readonly string _directory = Path.Combine(
+        Path.GetTempPath(), "cairnmp-retention-" + Guid.NewGuid().ToString("N"));
+
+    public DiagnosticRetentionTests() => Directory.CreateDirectory(_directory);
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_directory, recursive: true); }
+        catch { }
+    }
+
+    [Fact]
+    public void KeepsNewestFilesWithinCountAndAlwaysKeepsProtectedFile()
+    {
+        var files = Enumerable.Range(1, 5)
+            .Select(index => Write($"crash-{index}.zip", index, DateTime.UtcNow.AddMinutes(index)))
+            .ToArray();
+
+        DiagnosticRetention.Prune(_directory, "*.zip", maxFiles: 2, maxTotalBytes: 100, files[0]);
+
+        Assert.True(File.Exists(files[0]));
+        Assert.True(File.Exists(files[4]));
+        Assert.False(File.Exists(files[1]));
+        Assert.False(File.Exists(files[2]));
+        Assert.False(File.Exists(files[3]));
+    }
+
+    [Fact]
+    public void ProtectedFileConsumesTheTotalByteBudget()
+    {
+        var older = Write("crash-old.zip", 6, DateTime.UtcNow.AddMinutes(-1));
+        var current = Write("crash-current.zip", 6, DateTime.UtcNow);
+
+        DiagnosticRetention.Prune(_directory, "*.zip", maxFiles: 10, maxTotalBytes: 10, current);
+
+        Assert.True(File.Exists(current));
+        Assert.False(File.Exists(older));
+    }
+
+    private string Write(string name, int bytes, DateTime timestamp)
+    {
+        var path = Path.Combine(_directory, name);
+        File.WriteAllBytes(path, new byte[bytes]);
+        File.SetLastWriteTimeUtc(path, timestamp);
         return path;
-    }
-
-    [Fact]
-    public void ReadsASmallLogWhole()
-    {
-        var path = WriteLog("line one\nline two\n");
-        Assert.Equal("line one\nline two\n", GameLogTail.ReadFrom(path));
-    }
-
-    [Fact]
-    public void KeepsTheTailAndFlagsTheTruncation()
-    {
-        var path = WriteLog(string.Concat(new string('a', 500), "\nthe interesting part\n"));
-
-        var tail = GameLogTail.ReadFrom(path, maxBytes: 64);
-
-        Assert.StartsWith("[truncated", tail);
-        Assert.Contains("the interesting part", tail);
-        Assert.DoesNotContain(new string('a', 500), tail);
-    }
-
-    // Le loader garde Latest.log ouvert en écriture pendant toute la partie.
-    [Fact]
-    public void ReadsWhileTheFileIsHeldOpenForWriting()
-    {
-        var path = WriteLog("held open\n");
-        using var writer = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
-
-        Assert.Equal("held open\n", GameLogTail.ReadFrom(path));
-    }
-
-    [Fact]
-    public void ReturnsEmptyRatherThanThrowing()
-    {
-        Assert.Equal(string.Empty, GameLogTail.ReadFrom(Path.Combine(_dir, "missing.log")));
-        Assert.Equal(string.Empty, GameLogTail.ReadFrom(null));
-        Assert.Equal(string.Empty, GameLogTail.ReadFrom(WriteLog(""), maxBytes: 0));
-        Assert.Equal(string.Empty, GameLogTail.ReadFrom(WriteLog("")));
     }
 }

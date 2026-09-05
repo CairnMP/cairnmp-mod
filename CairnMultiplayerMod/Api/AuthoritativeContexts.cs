@@ -1,5 +1,5 @@
 using System;
-using CairnMultiplayerMod.Api.Internal;
+using CairnMultiplayerMod.Internal.Extensions;
 
 namespace CairnMultiplayer.Api;
 

@@ -3,6 +3,18 @@
 All notable changes to CairnMP are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## Unreleased — audit corrections, 2026-09-05
+
+- Protocol 13: feature-scoped contract identifiers and explicit bivouac presence. Older clients are incompatible.
+- Fix distant rope release, maintain rope safety during chat, and include awake campers in sleep consensus.
+- Deliver asynchronous feature callbacks on the game thread; release subscriptions, pending starts and clock state on shutdown.
+- Correct panel close state and clean up the primary UI before fallback.
+- End sessions on host ownership changes; refresh hand poses for late joiners.
+- Validate rope endpoints, bound piton creation and rope churn, attribute chat to authenticated players, and prevent repeated admission snapshots.
+- Bound session logs, deduplication, recurring feature errors and archive copies; preserve native save failures instead of suppressing them.
+- Pin SDK/C# and NuGet dependencies, add portable security/generator regressions, disable implicit deployment, and test release packaging with an explicit DLL list.
+- See `docs/corrections-audit-2026-09-05.md` for evidence and required native validation.
+
 ## [1.1.0] — 2026-08-02
 
 Network protocol unchanged (still version 7), so `1.1.0` and `1.0.0` clients
@@ -29,10 +41,22 @@ can still play together.
   no longer report a stale state.
 
 ### Changed
-- Crash reports now carry a stable fingerprint and the tail of
-  `CairnLoader/Latest.log`. Previously every occurrence of a bug was filed as
-  a separate report with no log attached, which made most of them
-  untriageable.
+- **Crash diagnostics are now local-only.** CairnMP no longer uploads errors or
+  creates a machine identifier. A fatal mod error stops multiplayer safely,
+  bundles the available CairnMP, MelonLoader and Unity logs under
+  `UserData/CairnMultiplayer/Crashes`, displays that path, then closes Cairn
+  cleanly. The player alone decides whether to share the ZIP. Session logs and
+  archives now have count/size retention limits, and oversized logs are tailed.
+- Game-facing features now use the safe `GameApi` façade; Unity, IL2CPP, Steam
+  and Harmony implementations live under `Internal`, with source-level boundary
+  tests enforcing the dependency direction.
+- Runtime services no longer reach through `Mod.Instance`: state, networking and
+  Steam dependencies are supplied explicitly by the bootstrap composition root.
+- Harmony patches, exception hooks, Steam callbacks and pending operations now
+  have symmetric shutdown paths. Every Melon callback is protected by the fatal
+  error boundary.
+- Portable protocol and architecture checks now run in GitHub Actions without
+  requiring redistributable game assemblies.
 
 ## [1.0.0] — 2026-07-11
 
@@ -96,9 +120,9 @@ stays at version 6).
   states, and the current weather.
 
 ### Changed (internal)
-- Host-authoritative session refactor: pitons, lamps and weather are now owned by a
-  single transport-agnostic core (`SteamAuthoritativeSession`) instead of being handled
-  inline in the transport. No gameplay change; groundwork for future sync work.
+- Host-side piton authority is now owned by a transport-agnostic core
+  (`PitonAuthority`) instead of being handled inline in the Steam transport. No
+  gameplay change; groundwork for future sync work.
 - Removed the unused standalone LiteNetLib server — multiplayer is Steam relay only.
 
 ### Notes for testers

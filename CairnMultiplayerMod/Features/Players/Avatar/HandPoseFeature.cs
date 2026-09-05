@@ -1,6 +1,6 @@
 using System.IO;
 using CairnMultiplayer.Shared;
-using UnityEngine;
+using CairnMultiplayerMod.Framework;
 
 namespace CairnMultiplayerMod.Features.Players.Avatar;
 
@@ -29,26 +29,32 @@ internal sealed class HandPoseFeature : MultiplayerFeature
     private Stream<HandPose> _pose;
     private float _pollTimer;
     private byte[] _lastSent;
+    private float _refreshTimer;
 
     protected internal override void OnRegister(FeatureBuilder feature)
     {
         _pose = feature.Stream<HandPose>("pose", ApplyRemote, reliable: true);
 
         feature.EveryFrame(Tick, FeaturePhase.Gameplay);
-        feature.OnSceneReset(() => { _pollTimer = 0f; _lastSent = null; FingerApi.ResetCaches(); });
+        feature.OnSceneReset(() => { _pollTimer = 0f; _lastSent = null; Game.Players.ResetHandPoseCaches(); });
+        feature.OnSessionStarted(() => { _lastSent = null; _refreshTimer = 0f; });
+        feature.OnSessionEnded(() => { _lastSent = null; _refreshTimer = 0f; });
+        feature.OnPlayerJoined((_, _) => _lastSent = null);
     }
 
     private void Tick()
     {
-        if (Mod.Instance.LocalState != PlayerState.InGame) return;
+        if (!Game.State.IsLocalPlayerInGame) return;
 
-        _pollTimer += Time.unscaledDeltaTime;
+        _pollTimer += Game.Time.UnscaledDeltaTime;
+        _refreshTimer += Game.Time.UnscaledDeltaTime;
         if (_pollTimer < Protocol.HandPosePollIntervalSeconds) return;
         _pollTimer = 0f;
 
-        if (!FingerApi.TryCaptureLocalPose(out var packed)) return;
-        if (BytesEqual(_lastSent, packed)) return;
+        if (!Game.Players.TryCaptureHandPose(out var packed)) return;
+        if (BytesEqual(_lastSent, packed) && _refreshTimer < 1f) return;
 
+        _refreshTimer = 0f;
         _lastSent = packed;
         _pose.Send(new HandPose { Packed = packed });
     }
@@ -56,10 +62,7 @@ internal sealed class HandPoseFeature : MultiplayerFeature
     private void ApplyRemote(int fromPlayerId, HandPose pose)
     {
         if (pose.Packed == null || pose.Packed.Length != Protocol.HandPosePackedSize) return;
-        if (!Mod.Instance.Network.RemotePlayers.TryGetValue(fromPlayerId, out var player) || player == null) return;
-
-        player.HandPosePacked = pose.Packed;
-        player.HasHandPose = true;
+        Game.Players.SetRemoteHandPose(fromPlayerId, pose.Packed);
     }
 
     private static bool BytesEqual(byte[] left, byte[] right)

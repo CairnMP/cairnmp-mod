@@ -82,7 +82,7 @@ public class ProtocolVersionTests
         // to signal to clients that they need to update.
         // 12: ClientFeatureStream carries a reliability flag.
         // 11: finger poses joined the framework, on the shared real-time stream channel.
-        Assert.Equal(12, Protocol.Version);
+        Assert.Equal(13, Protocol.Version);
     }
 
     [Fact]

@@ -1,6 +1,6 @@
 using System.IO;
 using CairnMultiplayer.Shared;
-using UnityEngine;
+using CairnMultiplayerMod.Framework;
 
 namespace CairnMultiplayerMod.Features.Players.Avatar;
 
@@ -73,19 +73,13 @@ internal sealed class AppearanceFeature : MultiplayerFeature
     /// <summary>Polls the local look and reports it only when it actually changes.</summary>
     private void TickAppearance()
     {
-        if (Mod.Instance.LocalState != PlayerState.InGame) return;
+        if (!Game.State.IsLocalPlayerInGame) return;
 
-        _appearancePollTimer += Time.unscaledDeltaTime;
+        _appearancePollTimer += Game.Time.UnscaledDeltaTime;
         if (_appearancePollTimer < Protocol.LampStatePollIntervalSeconds) return;
         _appearancePollTimer = 0f;
 
-        if (!LampApi.TryGetLocalState(out var lightMode)) return;
-
-        CosmeticApi.TryGetLocalStickAnchorMode(out var anchorMode);
-        var outfitBits = CosmeticApi.GetLocalOutfitBits();
-        var packed = (lightMode & 0xFF)
-                     | ((anchorMode & 0xFF) << 8)
-                     | ((outfitBits & CosmeticApi.OutfitBitsMask) << 16);
+        if (!Game.Players.TryCaptureAppearance(out var packed)) return;
 
         if (_hasSentAppearance && _lastSentAppearance == packed) return;
 
@@ -96,13 +90,13 @@ internal sealed class AppearanceFeature : MultiplayerFeature
 
     private void TickCosmetics()
     {
-        if (Mod.Instance.LocalState != PlayerState.InGame) return;
+        if (!Game.State.IsLocalPlayerInGame) return;
 
-        _cosmeticPollTimer += Time.unscaledDeltaTime;
+        _cosmeticPollTimer += Game.Time.UnscaledDeltaTime;
         if (_cosmeticPollTimer < Protocol.CosmeticStatePollIntervalSeconds) return;
         _cosmeticPollTimer = 0f;
 
-        if (!CosmeticApi.TryGetLocalCosmetics(out var flags)) return;
+        if (!Game.Players.TryCaptureCosmetics(out var flags)) return;
         if (_hasSentCosmetics && _lastSentCosmetics == flags) return;
 
         _lastSentCosmetics = flags;
@@ -113,19 +107,13 @@ internal sealed class AppearanceFeature : MultiplayerFeature
     private void ApplyAppearance(int playerId, AppearanceState state)
     {
         if (playerId == LocalPlayerId) return;
-        if (!Mod.Instance.Network.RemotePlayers.TryGetValue(playerId, out var player) || player == null) return;
-
-        player.LampMode = state.Packed;
-        player.HasLampState = true;
+        Game.Players.SetRemoteAppearance(playerId, state.Packed);
     }
 
     private void ApplyCosmetics(int playerId, CosmeticState state)
     {
         if (playerId == LocalPlayerId) return;
-        if (!Mod.Instance.Network.RemotePlayers.TryGetValue(playerId, out var player) || player == null) return;
-
-        player.CosmeticFlags = state.Flags;
-        player.HasCosmeticState = true;
+        Game.Players.SetRemoteCosmetics(playerId, state.Flags);
     }
 
     /// <summary>Forces the next poll to report, so a reloaded scene re-publishes our look
@@ -136,6 +124,6 @@ internal sealed class AppearanceFeature : MultiplayerFeature
         _cosmeticPollTimer = 0f;
         _hasSentAppearance = false;
         _hasSentCosmetics = false;
-        LampApi.ResetCaches();
+        Game.Players.ResetAppearanceCaches();
     }
 }

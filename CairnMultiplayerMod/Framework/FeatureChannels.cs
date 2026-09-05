@@ -1,20 +1,9 @@
 using System;
-using System.Threading;
-using System.Threading.Tasks;
 using CairnMultiplayer.Api;
 using CairnMultiplayer.Shared;
-using CairnMultiplayerMod.Api.Internal;
+using CairnMultiplayerMod.Internal.Extensions;
 
 namespace CairnMultiplayerMod.Framework;
-
-internal static class FeatureContinuation
-{
-    /// <summary>Runs the handler inline. The runtime completes on Unity's main thread, and a
-    /// feature callback may touch the game.</summary>
-    internal static void OnCompletion<TResult>(Task<TResult> task, Action<Task<TResult>> handler)
-        => task.ContinueWith(handler, CancellationToken.None,
-            TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-}
 
 /// <summary>
 /// "Everyone sees this." Send from any player; the host relays to every other peer, so the
@@ -43,7 +32,7 @@ internal sealed class Broadcast<T> where T : IPacket, new()
     {
         if (!_runtime.IsConnected) return;
 
-        FeatureContinuation.OnCompletion(_request.SendAsync(message), task =>
+        _runtime.ObserveCompletion(_request.SendAsync(message), task =>
         {
             if (task.IsFaulted)
                 FeatureLog.Warn($"[Feature:{_label}] send failed: {task.Exception?.GetBaseException().Message}");
@@ -175,8 +164,13 @@ internal sealed class HostCommand<T> where T : IPacket, new()
             return;
         }
 
-        FeatureContinuation.OnCompletion(_command.SendAsync(request), task =>
+        _runtime.ObserveCompletion(_command.SendAsync(request), task =>
         {
+            if (task.IsCanceled)
+            {
+                Answer(onAnswer, false, "Command cancelled.");
+                return;
+            }
             if (task.IsFaulted)
             {
                 var reason = task.Exception?.GetBaseException().Message ?? "unknown error";

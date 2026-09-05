@@ -32,7 +32,7 @@ public static class PacketCodec
     private const int MaxUInt16Length = ushort.MaxValue;
 
     /// <summary>Writes a string as [uint16 LE : byteCount][UTF-8 bytes].</summary>
-    public static void WriteString(BinaryWriter w, string s)
+    public static void WriteString(BinaryWriter w, string? s)
     {
         var bytes = Utf8.GetBytes(s ?? "");
         if (bytes.Length > MaxUInt16Length)
@@ -53,7 +53,7 @@ public static class PacketCodec
     }
 
     /// <summary>Writes an opaque payload as [uint16 LE length][bytes].</summary>
-    public static void WriteBytes(BinaryWriter w, byte[] value)
+    public static void WriteBytes(BinaryWriter w, byte[]? value)
     {
         value ??= Array.Empty<byte>();
         if (value.Length > MaxUInt16Length)
@@ -99,7 +99,7 @@ public static class PacketCodec
     }
 
     /// <summary>Writes a flattened Vector3 array [x0,y0,z0, ...].</summary>
-    public static void WriteVectorArray(BinaryWriter w, float[] values)
+    public static void WriteVectorArray(BinaryWriter w, float[]? values)
     {
         var count = values == null ? 0 : values.Length / 3;
         if (values != null && values.Length % 3 != 0)
@@ -109,7 +109,7 @@ public static class PacketCodec
 
         w.Write(count);
         for (int i = 0; i < count * 3; i++)
-            w.Write(values[i]);
+            w.Write(values![i]);
     }
 
     /// <summary>Reads a flattened Vector3 array [x0,y0,z0, ...].</summary>

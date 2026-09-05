@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+    <ProjectReference Include="../CairnMultiplayerShared/CairnMultiplayerShared.csproj" />
+    <ProjectReference Include="../CairnMultiplayerMod.Generators/CairnMultiplayerMod.Generators.csproj" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Networking/Authoritative/PitonAuthority.cs" Link="Production/PitonAuthority.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Networking/Authoritative/IAuthoritativeSink.cs" Link="Production/IAuthoritativeSink.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Networking/Authoritative/PeerBudget.cs" Link="Production/PeerBudget.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Networking/Authoritative/RopeRequests.cs" Link="Production/RopeRequests.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Diagnostics/CrashArchiveBuilder.cs" Link="Production/CrashArchiveBuilder.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Diagnostics/CrashFingerprint.cs" Link="Production/CrashFingerprint.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Diagnostics/DiagnosticRetention.cs" Link="Production/DiagnosticRetention.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Diagnostics/BoundedSessionLog.cs" Link="Production/BoundedSessionLog.cs" />
+    <Compile Include="../CairnMultiplayerMod.Tests/PitonAuthorityTests.cs" Link="PitonAuthorityTests.cs" />
+    <Compile Include="../CairnMultiplayerMod.Tests/CrashDiagnosticsTests.cs" Link="CrashDiagnosticsTests.cs" />
+  </ItemGroup>
+</Project>

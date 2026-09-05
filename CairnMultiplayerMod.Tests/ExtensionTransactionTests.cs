@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using CairnMultiplayer.Api;
 using CairnMultiplayer.Shared;
-using CairnMultiplayerMod.Api.Internal;
+using CairnMultiplayerMod.Internal.Extensions;
 using Xunit;
 
 namespace CairnMultiplayerMod.Tests;

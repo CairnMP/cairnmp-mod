@@ -1,7 +1,7 @@
 using System.IO;
 using CairnMultiplayer.Shared;
-using UnityEngine;
-using UnityEngine.InputSystem;
+using CairnMultiplayerMod.Framework;
+using CairnMultiplayerMod.GameApi;
 
 namespace CairnMultiplayerMod.Features.World;
 
@@ -26,54 +26,54 @@ internal sealed class PingFeature : MultiplayerFeature
         // Always: pings are placed from the free camera, which the game treats as
         // non-gameplay, and the markers must keep expiring even during a bivouac.
         feature.EveryFrame(TickInput, FeaturePhase.Always);
-        feature.EveryFrame(PingMarkerManager.Update, FeaturePhase.Always);
+        feature.EveryFrame(Game.World.TickPings, FeaturePhase.Always);
 
-        feature.OnDrawHud(PingMarkerManager.OnGUI);
-        feature.OnSessionEnded(PingMarkerManager.ClearAll);
+        feature.OnDrawHud(Game.World.DrawPings);
+        feature.OnSessionEnded(Game.World.ClearPings);
     }
 
     private void TickInput()
     {
         if (KeyboardCaptured) return;
-        if (!FreecamApi.TryIsActive(out var freecamActive) || !freecamActive) return;
-        if (Time.unscaledTime < _cooldownUntil) return;
+        if (!Game.World.IsFreeCameraActive) return;
+        if (Game.Time.UnscaledTime < _cooldownUntil) return;
 
-        var pressed = Mouse.current?.leftButton.wasPressedThisFrame == true
-                      || Gamepad.current?.rightShoulder.wasPressedThisFrame == true;
+        var pressed = Game.Input.WasPressed(GameInputAction.PrimaryPointer)
+                      || Game.Input.WasPressed(GameInputAction.PingController);
         if (!pressed) return;
 
         // We always aim along the camera's direction (screen centre) — consistent for
         // mouse and pad alike.
-        if (!FreecamApi.TryComputePingPoint(out var point)) return;
+        if (!Game.World.TryGetAimPoint(out var point)) return;
 
-        _cooldownUntil = Time.unscaledTime + Protocol.PingCooldownSeconds;
+        _cooldownUntil = Game.Time.UnscaledTime + Protocol.PingCooldownSeconds;
 
         // Shown locally straight away, so the ping feels instant even in solo; the others
         // get it over the network. Broadcast never echoes back to the sender.
-        PingMarkerManager.Spawn(LocalPlayerId, point);
+        Game.World.SpawnPing(LocalPlayerId, point);
         _placed.Send(new PingPlaced(point));
-        Mod.Log.Msg($"[Ping] Placed @ ({point.x:F1},{point.y:F1},{point.z:F1})");
+        LogInfo($"Placed @ ({point.X:F1},{point.Y:F1},{point.Z:F1})");
     }
 
-    private static void ShowRemotePing(int fromPlayerId, PingPlaced ping)
-        => PingMarkerManager.Spawn(fromPlayerId, ping.Position);
+    private void ShowRemotePing(int fromPlayerId, PingPlaced ping)
+        => Game.World.SpawnPing(fromPlayerId, ping.Position);
 }
 
 /// <summary>Where a player dropped a ping.</summary>
 internal sealed class PingPlaced : IPacket
 {
     public PingPlaced() { }
-    public PingPlaced(Vector3 position) => Position = position;
+    public PingPlaced(WorldPosition position) => Position = position;
 
-    public Vector3 Position;
+    public WorldPosition Position;
 
     public void Serialize(BinaryWriter writer)
     {
-        writer.Write(Position.x);
-        writer.Write(Position.y);
-        writer.Write(Position.z);
+        writer.Write(Position.X);
+        writer.Write(Position.Y);
+        writer.Write(Position.Z);
     }
 
     public void Deserialize(BinaryReader reader)
-        => Position = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
+        => Position = new WorldPosition(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
 }

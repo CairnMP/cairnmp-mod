@@ -37,3 +37,7 @@ Thumbs.db
 
 # Scripts
 scripts/sync-versions.js
+
+# Local working documents and skill observations
+docs/local/
+skill-observations/

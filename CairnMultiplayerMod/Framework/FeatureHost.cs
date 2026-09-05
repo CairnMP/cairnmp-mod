@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using CairnMultiplayer.Api;
-using CairnMultiplayerMod.Api.Internal;
+using CairnMultiplayerMod.GameApi;
+using CairnMultiplayerMod.Internal.Extensions;
+using CairnMultiplayerMod.Internal.Networking;
 
 namespace CairnMultiplayerMod.Framework;
 
@@ -14,18 +16,27 @@ namespace CairnMultiplayerMod.Framework;
 /// travel over the same authoritative machinery as third-party integrations without paying
 /// the safeguards meant for untrusted code.
 /// </summary>
-internal sealed class FeatureHost
+internal sealed class FeatureHost : IDisposable
 {
     /// <summary>Reserved id of the extension carrying every built-in feature.</summary>
     internal const string CoreExtensionId = "cairnmp.core";
 
     private readonly ExtensionRuntime _runtime;
+    private readonly IGameApi _game;
+    private readonly Func<NetworkManager> _networkProvider;
     private readonly FeatureStreamRouter _streams = new();
     private readonly List<Registered> _features = new();
 
     /// <summary>Uses the mod-wide runtime by default; tests pass their own.</summary>
-    internal FeatureHost(ExtensionRuntime runtime = null)
-        => _runtime = runtime ?? MultiplayerApi.Runtime;
+    internal FeatureHost(
+        ExtensionRuntime runtime = null,
+        IGameApi game = null,
+        Func<NetworkManager> networkProvider = null)
+    {
+        _runtime = runtime ?? MultiplayerApi.Runtime;
+        _game = game ?? UnavailableGameApi.Instance;
+        _networkProvider = networkProvider ?? (() => null);
+    }
 
     /// <summary>Routes incoming real-time payloads to the features that declared them.</summary>
     internal void DispatchStream(int fromPlayerId, ushort channel, byte[] payload)
@@ -58,14 +69,16 @@ internal sealed class FeatureHost
                     $"Two features share the id '{feature.Id}'. Ids must be unique — they name the messages on the wire.");
 
             var builder = new FeatureBuilder(_runtime, extension, _streams,
-                () => Mod.Instance?.Network, feature.Id);
+                _networkProvider, _game, feature.Id);
             feature.Session = _runtime;
+            feature.BindGame(builder.Game);
             try
             {
                 feature.OnRegister(builder);
             }
             catch (Exception ex)
             {
+                builder.Dispose();
                 // A declaration error is a programming mistake: fail loudly at startup rather
                 // than run a mod where one feature is silently absent.
                 throw new InvalidOperationException(
@@ -123,7 +136,14 @@ internal sealed class FeatureHost
         }
         catch (Exception ex)
         {
-            FeatureLog.Error($"[Feature:{featureId}] {what} failed: {ex}");
+            FeatureLog.ErrorThrottled($"{featureId}:{what}", $"[Feature:{featureId}] {what} failed: {ex}");
         }
+    }
+
+    public void Dispose()
+    {
+        for (var i = _features.Count - 1; i >= 0; i--)
+            _features[i].Builder.Dispose();
+        _features.Clear();
     }
 }

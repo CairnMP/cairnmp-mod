@@ -6,12 +6,13 @@ namespace CairnMultiplayer.Shared;
 /// </summary>
 public static class Protocol
 {
+    // 13: feature-scoped contract ids and explicit Bivouac presence for sleep consensus.
     // 12: ClientFeatureStream carries the sender's reliability flag, so the host relays a
     // stream the way it was declared instead of always relaying unreliably.
     // 11: every gameplay packet except the pose/frame streams now travels through the
     // feature framework, freeing ids 4, 10-14, 16, 69, 76-80 and 83. Real-time streams
     // share ids 19 and 89 whatever the feature.
-    public const int Version = 12;
+    public const int Version = 13;
     public const string ConnectionKey = "cairnmp";
     public const int DefaultPort = 14000;
 
@@ -78,11 +79,12 @@ public static class Protocol
 /// </summary>
 public enum PlayerState : byte
 {
-    Unknown    = 0, // default, no state received yet
+    Unknown = 0, // default, no state received yet
     Connecting = 1, // socket connected, handshake not finished yet
-    InMenu     = 2, // main menu, not in a game
-    Loading    = 3, // scene transitions in progress, intro cinematic
-    InGame     = 4, // MC spawned, scenes stable -- ok to render ghosts
+    InMenu = 2, // main menu, not in a game
+    Loading = 3, // scene transitions in progress, intro cinematic
+    InGame = 4, // MC spawned, scenes stable -- ok to render ghosts
+    Bivouac = 5, // active participant, gameplay animation suspended; still votes on sleep
 }
 
 /// <summary>
@@ -154,11 +156,11 @@ public enum PacketId : byte
 /// </summary>
 public enum GameDifficulty : int
 {
-    Invalid  = 0,
-    Alpinist  = 1769420573,
-    Explorer  = 766328718,
-    FreeSolo  = -1944667143,
-    FreeRoam  = 418187680,
+    Invalid = 0,
+    Alpinist = 1769420573,
+    Explorer = 766328718,
+    FreeSolo = -1944667143,
+    FreeRoam = 418187680,
 }
 
 /// <summary>Outcome of a managed extension command handled by the host.</summary>

@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
 using CairnMultiplayer.Api;
 using CairnMultiplayer.Shared;
-using CairnMultiplayerMod.Api.Internal;
 using CairnMultiplayerMod.Framework;
+using CairnMultiplayerMod.GameApi;
+using CairnMultiplayerMod.Internal.Extensions;
 using Xunit;
 
 namespace CairnMultiplayerMod.Tests;
@@ -17,6 +20,58 @@ namespace CairnMultiplayerMod.Tests;
 /// </summary>
 public sealed class FeatureFrameworkTests : IDisposable
 {
+    [Fact]
+    public void WorkerCompletionIsDeliveredOnlyByTheGameThreadPump()
+    {
+        var runtime = new ExtensionRuntime();
+        var thread = Environment.CurrentManagedThreadId;
+        var source = new System.Threading.Tasks.TaskCompletionSource<int>(System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+        var calledOn = 0;
+        runtime.ObserveCompletion(source.Task, _ => calledOn = Environment.CurrentManagedThreadId);
+        var worker = new Thread(() => source.SetResult(7));
+        worker.Start();
+        Assert.True(worker.Join(TimeSpan.FromSeconds(5)));
+        Assert.Equal(0, calledOn);
+        runtime.Tick();
+        Assert.Equal(thread, calledOn);
+    }
+
+    [Fact]
+    public void PendingCompletionIsNotLostWhenThePumpRunsEarly()
+    {
+        var runtime = new ExtensionRuntime();
+        var source = new System.Threading.Tasks.TaskCompletionSource<int>();
+        var calls = 0;
+        runtime.ObserveCompletion(source.Task, _ => calls++);
+        runtime.Tick();
+        Assert.Equal(0, calls);
+        source.SetCanceled();
+        runtime.Tick();
+        runtime.Tick();
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public void DifferentFeaturesCanReuseAllLocalContractNames()
+    {
+        var runtime = NewRuntime(out _);
+        var host = new FeatureHost(runtime);
+        host.RegisterAll(new MultiplayerFeature[] { new SharedNamesFeature("alpha"), new SharedNamesFeature("beta") }, new Version(1, 0));
+    }
+
+    private sealed class SharedNamesFeature : MultiplayerFeature
+    {
+        internal SharedNamesFeature(string id) => Id = id;
+        public override string Id { get; }
+        protected internal override void OnRegister(FeatureBuilder feature)
+        {
+            feature.HostState<Point>("current", _ => { });
+            feature.PerPlayerState<Point>("player", (_, _) => { });
+            feature.Broadcast<Point>("line", (_, _) => { });
+            feature.HostCommand<Point>("try", _ => { });
+        }
+    }
+
     private readonly List<string> _warnings = new();
     private readonly List<string> _errors = new();
 
@@ -73,6 +128,58 @@ public sealed class FeatureFrameworkTests : IDisposable
         Assert.Contains("broken", error.Message);
     }
 
+    [Fact]
+    public void AFailedFeatureDeclarationReleasesItsGameRegistrations()
+    {
+        var game = new FakeGameApi();
+        var host = new FeatureHost(NewRuntime(out _), game);
+
+        Assert.Throws<InvalidOperationException>(() => host.RegisterAll(
+            new MultiplayerFeature[] { new RegisteringThenThrowingFeature() },
+            new Version(1, 0, 0)));
+
+        Assert.False(game.Menu.RegistrationIsActive);
+    }
+
+    [Fact]
+    public void AFeatureReceivesTheInjectedGameFacade()
+    {
+        var game = new FakeGameApi();
+        var feature = new MenuFeature();
+        var host = new FeatureHost(NewRuntime(out _), game);
+
+        host.RegisterAll(new MultiplayerFeature[] { feature }, new Version(1, 0, 0));
+
+        Assert.Equal("menu.menu-test", game.Menu.ButtonId);
+        Assert.Equal("Test menu", game.Menu.ButtonLabel);
+        Assert.True(feature.Registration.IsActive);
+
+        game.Menu.Click();
+        Assert.Equal(1, feature.Clicks);
+
+        host.Dispose();
+        Assert.False(feature.Registration.IsActive);
+    }
+
+    [Fact]
+    public void GameApiContractsExposeNoEngineOrInteropTypes()
+    {
+        var contractTypes = new[]
+        {
+            typeof(IGameApi), typeof(IGameRegistration), typeof(IMainMenuApi),
+            typeof(IGameStateApi), typeof(IGameTimeApi), typeof(IGameInputApi),
+            typeof(IGameHudApi), typeof(IChatApi), typeof(IClockApi), typeof(IPlayersApi),
+            typeof(IWeatherApi), typeof(IWorldApi), typeof(WorldPosition),
+        };
+        var exposedTypes = contractTypes.SelectMany(TypesInPublicSignatures)
+            .SelectMany(FlattenType).ToArray();
+        var forbiddenPrefixes = new[] { "Unity", "Il2Cpp", "Steamworks", "Harmony" };
+
+        Assert.DoesNotContain(exposedTypes, type =>
+            forbiddenPrefixes.Any(prefix =>
+                (type.Namespace ?? string.Empty).StartsWith(prefix, StringComparison.Ordinal)));
+    }
+
     // ── Ticks and phases ──────────────────────────────────────────────────────
 
     [Fact]
@@ -106,7 +213,7 @@ public sealed class FeatureFrameworkTests : IDisposable
         host.Tick(FeaturePhase.Always);
 
         Assert.Equal(2, healthyTicks);            // the healthy one kept running
-        Assert.Equal(2, _errors.Count);           // and the failure was reported each time
+        Assert.Single(_errors);                 // repeated frame failures are rate limited
         Assert.Contains("aaa-broken", _errors[0]);
     }
 
@@ -383,6 +490,26 @@ public sealed class FeatureFrameworkTests : IDisposable
         return got;
     }
 
+    private static IEnumerable<Type> TypesInPublicSignatures(Type contract)
+    {
+        foreach (var property in contract.GetProperties()) yield return property.PropertyType;
+        foreach (var method in contract.GetMethods().Where(method => !method.IsSpecialName))
+        {
+            yield return method.ReturnType;
+            foreach (var parameter in method.GetParameters()) yield return parameter.ParameterType;
+        }
+    }
+
+    private static IEnumerable<Type> FlattenType(Type type)
+    {
+        while (type.HasElementType) type = type.GetElementType();
+        yield return type.IsGenericType ? type.GetGenericTypeDefinition() : type;
+        if (!type.IsGenericType) yield break;
+        foreach (var argument in type.GetGenericArguments())
+            foreach (var nested in FlattenType(argument))
+                yield return nested;
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static FeatureHost HostWith(params MultiplayerFeature[] features)
@@ -408,7 +535,7 @@ public sealed class FeatureFrameworkTests : IDisposable
         {
             RequestId = 1,
             ExtensionId = FeatureHost.CoreExtensionId,
-            CommandId = commandId,
+            CommandId = $"{featureId}.{commandId}",
             Payload = buffer.ToArray(),
         };
     }
@@ -458,6 +585,71 @@ public sealed class FeatureFrameworkTests : IDisposable
         {
             if (_always != null) feature.EveryFrame(_always, FeaturePhase.Always);
             if (_gameplay != null) feature.EveryFrame(_gameplay, FeaturePhase.Gameplay);
+        }
+    }
+
+    private sealed class MenuFeature : MultiplayerFeature
+    {
+        public override string Id => "menu";
+        internal IGameRegistration Registration { get; private set; }
+        internal int Clicks { get; private set; }
+
+        protected internal override void OnRegister(FeatureBuilder feature)
+            => Registration = feature.Game.MainMenu.AddButton(
+                "menu-test", "Test menu", () => Clicks++);
+    }
+
+    private sealed class RegisteringThenThrowingFeature : MultiplayerFeature
+    {
+        public override string Id => "broken-menu";
+
+        protected internal override void OnRegister(FeatureBuilder feature)
+        {
+            feature.Game.MainMenu.AddButton("broken", "Broken", () => { });
+            throw new InvalidOperationException("declaration failed");
+        }
+    }
+
+    private sealed class FakeGameApi : IGameApi
+    {
+        internal FakeMainMenuApi Menu { get; } = new();
+        public IMainMenuApi MainMenu => Menu;
+        public IGameStateApi State => UnavailableGameApi.Instance.State;
+        public IGameTimeApi Time => UnavailableGameApi.Instance.Time;
+        public IGameInputApi Input => UnavailableGameApi.Instance.Input;
+        public IGameHudApi Hud => UnavailableGameApi.Instance.Hud;
+        public IChatApi Chat => UnavailableGameApi.Instance.Chat;
+        public IClockApi Clock => UnavailableGameApi.Instance.Clock;
+        public IPlayersApi Players => UnavailableGameApi.Instance.Players;
+        public IWeatherApi Weather => UnavailableGameApi.Instance.Weather;
+        public IWorldApi World => UnavailableGameApi.Instance.World;
+    }
+
+    private sealed class FakeMainMenuApi : IMainMenuApi
+    {
+        private FakeRegistration _registration;
+        private Action _onClick;
+
+        internal string ButtonId { get; private set; }
+        internal string ButtonLabel { get; private set; }
+        internal bool RegistrationIsActive => _registration?.IsActive == true;
+
+        public IGameRegistration AddButton(string id, string label, Action onClick)
+        {
+            ButtonId = id;
+            ButtonLabel = label;
+            _onClick = onClick;
+            return _registration = new FakeRegistration(id);
+        }
+
+        internal void Click() => _onClick();
+
+        private sealed class FakeRegistration : IGameRegistration
+        {
+            internal FakeRegistration(string id) => Id = id;
+            public string Id { get; }
+            public bool IsActive { get; private set; } = true;
+            public void Dispose() => IsActive = false;
         }
     }
 

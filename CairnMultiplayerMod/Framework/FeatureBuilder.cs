@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using CairnMultiplayer.Api;
 using CairnMultiplayer.Shared;
-using CairnMultiplayerMod.Api.Internal;
+using CairnMultiplayerMod.GameApi;
+using CairnMultiplayerMod.Internal.Extensions;
+using CairnMultiplayerMod.Internal.Networking;
 
 namespace CairnMultiplayerMod.Framework;
 
@@ -36,15 +38,136 @@ internal sealed class FeatureBuilder
     private readonly List<Action> _onSessionEnded = new();
     private readonly List<Action> _onSceneReset = new();
     private readonly List<Action> _onDrawHud = new();
+    private readonly List<IGameRegistration> _gameRegistrations = new();
+    private readonly List<Action> _unsubscribe = new();
 
     internal FeatureBuilder(ExtensionRuntime runtime, MultiplayerExtension extension,
-        FeatureStreamRouter streams, Func<NetworkManager> network, string featureId)
+        FeatureStreamRouter streams, Func<NetworkManager> network, IGameApi game, string featureId)
     {
         _runtime = runtime;
         _extension = extension;
         _streams = streams;
         _network = network;
         _featureId = featureId;
+        Game = new FeatureGameApi(game ?? throw new ArgumentNullException(nameof(game)), Own, featureId);
+    }
+
+    /// <summary>
+    /// Safe access to Cairn. This façade contains no Unity, IL2CPP, Steam or Harmony type;
+    /// scene-bound objects and retries are owned by its internal adapters.
+    /// </summary>
+    public IGameApi Game { get; }
+
+    internal void Dispose()
+    {
+        foreach (var unsubscribe in _unsubscribe) unsubscribe();
+        _unsubscribe.Clear();
+        for (var i = _gameRegistrations.Count - 1; i >= 0; i--)
+        {
+            try
+            {
+                _gameRegistrations[i].Dispose();
+            }
+            catch (Exception ex)
+            {
+                FeatureLog.Error($"[Feature:{_featureId}] game registration cleanup failed: {ex}");
+            }
+        }
+        _gameRegistrations.Clear();
+    }
+
+    private IGameRegistration Own(IGameRegistration registration)
+    {
+        if (registration == null)
+            throw new InvalidOperationException("A game API returned a null registration.");
+        _gameRegistrations.Add(registration);
+        return registration;
+    }
+
+    private sealed class FeatureGameApi : IGameApi
+    {
+        internal FeatureGameApi(IGameApi inner, Func<IGameRegistration, IGameRegistration> own,
+            string featureId)
+        {
+            MainMenu = new FeatureMainMenuApi(inner.MainMenu, own, featureId);
+            Hud = new FeatureHudApi(inner.Hud, featureId);
+            Chat = new FeatureChatApi(inner.Chat, own);
+            State = inner.State;
+            Time = inner.Time;
+            Input = inner.Input;
+            Clock = inner.Clock;
+            Players = inner.Players;
+            Weather = inner.Weather;
+            World = inner.World;
+        }
+
+        public IMainMenuApi MainMenu { get; }
+        public IGameStateApi State { get; }
+        public IGameTimeApi Time { get; }
+        public IGameInputApi Input { get; }
+        public IGameHudApi Hud { get; }
+        public IChatApi Chat { get; }
+        public IClockApi Clock { get; }
+        public IPlayersApi Players { get; }
+        public IWeatherApi Weather { get; }
+        public IWorldApi World { get; }
+    }
+
+    private sealed class FeatureMainMenuApi : IMainMenuApi
+    {
+        private readonly IMainMenuApi _inner;
+        private readonly Func<IGameRegistration, IGameRegistration> _own;
+
+        internal FeatureMainMenuApi(IMainMenuApi inner,
+            Func<IGameRegistration, IGameRegistration> own, string featureId)
+        {
+            _inner = inner;
+            _own = own;
+            _featureId = featureId;
+        }
+
+        private readonly string _featureId;
+
+        public IGameRegistration AddButton(string id, string label, Action onClick)
+            => _own(_inner.AddButton($"{_featureId}.{id}", label, onClick));
+    }
+
+    private sealed class FeatureHudApi : IGameHudApi
+    {
+        private readonly IGameHudApi _inner;
+        private readonly string _featureId;
+
+        internal FeatureHudApi(IGameHudApi inner, string featureId)
+        {
+            _inner = inner;
+            _featureId = featureId;
+        }
+
+        public void ShowMessage(string id, string text, float durationSeconds)
+            => _inner.ShowMessage($"{_featureId}.{id}", text, durationSeconds);
+
+        public void HideMessage(string id) => _inner.HideMessage($"{_featureId}.{id}");
+    }
+
+    private sealed class FeatureChatApi : IChatApi
+    {
+        private readonly IChatApi _inner;
+        private readonly Func<IGameRegistration, IGameRegistration> _own;
+
+        internal FeatureChatApi(IChatApi inner, Func<IGameRegistration, IGameRegistration> own)
+        {
+            _inner = inner;
+            _own = own;
+        }
+
+        public bool IsTyping => _inner.IsTyping;
+        public IGameRegistration Configure(Action<string> send, Func<bool> isHost, Func<bool> canType)
+            => _own(_inner.Configure(send, isHost, canType));
+        public void AddRemoteLine(string fromName, string message) => _inner.AddRemoteLine(fromName, message);
+        public void AddSystemLine(string text) => _inner.AddSystemLine(text);
+        public void Tick() => _inner.Tick();
+        public void Draw() => _inner.Draw();
+        public void ForceClose() => _inner.ForceClose();
     }
 
     internal IReadOnlyList<(FeaturePhase Phase, Action Tick)> Ticks => _ticks;
@@ -65,7 +188,7 @@ internal sealed class FeatureBuilder
         if (onReceived == null) throw new ArgumentNullException(nameof(onReceived));
 
         var codec = FeatureCodec.For<T>();
-        var relayed = _extension.RegisterEvent($"{id}.relayed", codec);
+        var relayed = _extension.RegisterEvent($"{_featureId}.{id}.relayed", codec);
         relayed.Received += message =>
         {
             // The host commits its own send locally, clients do not — filtering here keeps
@@ -74,7 +197,7 @@ internal sealed class FeatureBuilder
             onReceived(message.SourcePlayerId, message.Payload);
         };
 
-        var request = _extension.RegisterCommand<T>(id,
+        var request = _extension.RegisterCommand($"{_featureId}.{id}",
             context => context.Broadcast(relayed, context.Request), codec);
 
         return new Broadcast<T>(_runtime, request, $"{_featureId}.{id}");
@@ -88,7 +211,7 @@ internal sealed class FeatureBuilder
     {
         if (onChanged == null) throw new ArgumentNullException(nameof(onChanged));
 
-        var state = _extension.RegisterState(id, FeatureCodec.For<T>());
+        var state = _extension.RegisterState($"{_featureId}.{id}", FeatureCodec.For<T>());
         state.Changed += change =>
         {
             if (change.Removed) return;
@@ -107,7 +230,7 @@ internal sealed class FeatureBuilder
     {
         if (onChanged == null) throw new ArgumentNullException(nameof(onChanged));
 
-        var state = _extension.RegisterState(id, FeatureCodec.For<T>());
+        var state = _extension.RegisterState($"{_featureId}.{id}", FeatureCodec.For<T>());
         state.Changed += change =>
         {
             if (change.Removed) return;
@@ -125,7 +248,7 @@ internal sealed class FeatureBuilder
     {
         if (handler == null) throw new ArgumentNullException(nameof(handler));
 
-        var command = _extension.RegisterCommand<T>(id,
+        var command = _extension.RegisterCommand($"{_featureId}.{id}",
             context => handler(new HostRequest<T>(context)), FeatureCodec.For<T>());
 
         return new HostCommand<T>(_runtime, command, $"{_featureId}.{id}");
@@ -137,6 +260,8 @@ internal sealed class FeatureBuilder
     /// enough for every frame, and in exchange gives no ordering, no delivery guarantee and
     /// no replay for latecomers.
     /// </summary>
+    /// <param name="id">Stable stream identifier within the feature.</param>
+    /// <param name="onReceived">Callback receiving the sender id and decoded payload.</param>
     /// <param name="reliable">Leave false for anything sent continuously. Set it only when
     /// a value is sent on change and a drop would leave the others stuck on the old one.</param>
     public Stream<T> Stream<T>(string id, Action<int, T> onReceived, bool reliable = false)
@@ -174,7 +299,9 @@ internal sealed class FeatureBuilder
     public void OnPlayerJoined(Action<int, string> handler)
     {
         if (handler == null) throw new ArgumentNullException(nameof(handler));
-        _runtime.PlayerJoined += player => handler(player.Id, player.Name);
+        Action<MultiplayerPlayer> callback = player => handler(player.Id, player.Name);
+        _runtime.PlayerJoined += callback;
+        _unsubscribe.Add(() => _runtime.PlayerJoined -= callback);
     }
 
     /// <summary>Runs when a player leaves. The name is the last one known — by then the
@@ -182,7 +309,9 @@ internal sealed class FeatureBuilder
     public void OnPlayerLeft(Action<int, string> handler)
     {
         if (handler == null) throw new ArgumentNullException(nameof(handler));
-        _runtime.PlayerLeft += player => handler(player.Id, player.Name);
+        Action<MultiplayerPlayer> callback = player => handler(player.Id, player.Name);
+        _runtime.PlayerLeft += callback;
+        _unsubscribe.Add(() => _runtime.PlayerLeft -= callback);
     }
 
     /// <summary>Runs when the session ends (disconnect, leaving the lobby). Clean up here —

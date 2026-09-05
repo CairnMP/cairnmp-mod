@@ -4,7 +4,7 @@
     <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>CairnMultiplayerShared</AssemblyName>
     <RootNamespace>CairnMultiplayer.Shared</RootNamespace>
-    <Nullable>disable</Nullable>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
 
 

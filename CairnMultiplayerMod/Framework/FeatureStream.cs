@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.Internal.Networking;
 
 namespace CairnMultiplayerMod.Framework;
 

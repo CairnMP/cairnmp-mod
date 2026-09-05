@@ -44,7 +44,7 @@ public struct ClientExtensionManifest : IPacket
 
         writer.Write((ushort)count);
         for (int i = 0; i < count; i++)
-            Entries[i].Serialize(writer);
+            Entries![i].Serialize(writer);
     }
 
     public void Deserialize(BinaryReader reader)
@@ -213,13 +213,13 @@ public struct ServerExtensionPeerStatus : IPacket
 
 internal static class ExtensionPacketSerialization
 {
-    internal static void WriteExtensionIds(BinaryWriter writer, string[] extensionIds)
+    internal static void WriteExtensionIds(BinaryWriter writer, string[]? extensionIds)
     {
         int count = extensionIds?.Length ?? 0;
         ClientExtensionManifest.EnsureValidEntryCount(count, "Too many enabled extensions");
         writer.Write((ushort)count);
         for (int i = 0; i < count; i++)
-            PacketCodec.WriteString(writer, extensionIds[i] ?? "");
+            PacketCodec.WriteString(writer, extensionIds![i] ?? "");
     }
 
     internal static string[] ReadExtensionIds(BinaryReader reader)

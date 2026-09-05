@@ -1,6 +1,6 @@
 using System.IO;
 using CairnMultiplayer.Shared;
-using UnityEngine;
+using CairnMultiplayerMod.Framework;
 
 namespace CairnMultiplayerMod.Features.Weather;
 
@@ -40,23 +40,23 @@ internal sealed class WeatherFeature : MultiplayerFeature
         // so the next capture goes out promptly instead of waiting a full interval.
         feature.OnSceneReset(() =>
         {
-            WeatherApi.ResetRemoteState();
+            Game.Weather.Reset();
             _publishTimer = Protocol.WeatherStateUpdateIntervalSeconds;
         });
-        feature.OnSessionEnded(WeatherApi.ResetRemoteState);
+        feature.OnSessionEnded(Game.Weather.Reset);
     }
 
     private void TickHost()
     {
-        if (!IsHost || Mod.Instance.LocalState != PlayerState.InGame) return;
+        if (!IsHost || !Game.State.IsLocalPlayerInGame) return;
 
-        _publishTimer += Time.unscaledDeltaTime;
+        _publishTimer += Game.Time.UnscaledDeltaTime;
         if (_publishTimer < Protocol.WeatherStateUpdateIntervalSeconds) return;
 
         _publishTimer = 0f;
         // Validate before publishing: a garbled capture reaching the other players is worse
         // than a missed tick — the next one is a second away.
-        if (WeatherApi.TryCaptureWeather(out var captured) && NetworkManager.IsValidWeatherState(captured))
+        if (Game.Weather.TryCapture(out var captured) && Game.Weather.IsValid(captured))
             _weather.Set(new WeatherState { Data = captured });
     }
 
@@ -65,7 +65,7 @@ internal sealed class WeatherFeature : MultiplayerFeature
     private void TickClient()
     {
         if (IsHost) return;
-        WeatherApi.TickRemote();
+        Game.Weather.TickRemote();
     }
 
     private void ApplyRemote(WeatherState state)
@@ -73,6 +73,6 @@ internal sealed class WeatherFeature : MultiplayerFeature
         // The host already runs this weather — applying our own publication back would
         // fight the game's own weather manager.
         if (IsHost) return;
-        WeatherApi.ApplyRemoteWeather(state.Data);
+        Game.Weather.ApplyRemote(state.Data);
     }
 }
