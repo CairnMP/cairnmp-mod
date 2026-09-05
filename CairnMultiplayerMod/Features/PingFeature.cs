@@ -3,7 +3,7 @@ using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Framework;
 using CairnMultiplayerMod.GameApi;
 
-namespace CairnMultiplayerMod.Features.World;
+namespace CairnMultiplayerMod.Features;
 
 /// <summary>
 /// Marking a spot for the others. In free camera, a left click (or R1/RB on a pad) drops a

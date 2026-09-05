@@ -3,7 +3,7 @@ using System.IO;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Framework;
 
-namespace CairnMultiplayerMod.Features.Clock;
+namespace CairnMultiplayerMod.Features;
 
 /// <summary>The authoritative time of day, plus whether everyone is asleep.</summary>
 internal sealed class ClockState : IPacket

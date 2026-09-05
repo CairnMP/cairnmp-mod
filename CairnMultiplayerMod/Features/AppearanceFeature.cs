@@ -2,7 +2,7 @@ using System.IO;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Framework;
 
-namespace CairnMultiplayerMod.Features.Players.Avatar;
+namespace CairnMultiplayerMod.Features;
 
 /// <summary>
 /// How a climber looks to the others: head lamp mode, walking-stick anchor and outfit,

@@ -2,7 +2,7 @@ using System.IO;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Framework;
 
-namespace CairnMultiplayerMod.Features.Weather;
+namespace CairnMultiplayerMod.Features;
 
 /// <summary>
 /// The weather the host is currently running. Wraps the shared struct in a class: the

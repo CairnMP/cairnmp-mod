@@ -2,7 +2,7 @@ using System.IO;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Framework;
 
-namespace CairnMultiplayerMod.Features.Players.Avatar;
+namespace CairnMultiplayerMod.Features;
 
 /// <summary>A climber's finger pose, compressed (smallest-three per bone).</summary>
 internal sealed class HandPose : IPacket

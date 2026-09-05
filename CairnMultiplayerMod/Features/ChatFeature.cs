@@ -3,7 +3,7 @@ using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Framework;
 using CairnMultiplayerMod.GameApi;
 
-namespace CairnMultiplayerMod.Features.Chat;
+namespace CairnMultiplayerMod.Features;
 
 /// <summary>A chat line sent by a player.</summary>
 internal sealed class ChatMessage : IPacket
