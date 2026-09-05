@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Threading;
 using CairnMultiplayer.Api;
 using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.Features;
 using CairnMultiplayerMod.Framework;
 using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal.Extensions;
@@ -430,7 +431,7 @@ public sealed class FeatureFrameworkTests : IDisposable
     [InlineData(false)]
     public void SleepReportRoundTrips(bool asleep)
     {
-        var got = RoundTrip(new Features.Clock.SleepReport { Asleep = asleep });
+        var got = RoundTrip(new SleepReport { Asleep = asleep });
 
         Assert.Equal(asleep, got.Asleep);
     }
@@ -438,7 +439,7 @@ public sealed class FeatureFrameworkTests : IDisposable
     [Fact]
     public void ClockStateRoundTrips()
     {
-        var got = RoundTrip(new Features.Clock.ClockState { DayTime01 = 0.4275f, AllAsleep = true });
+        var got = RoundTrip(new ClockState { DayTime01 = 0.4275f, AllAsleep = true });
 
         Assert.Equal(0.4275f, got.DayTime01);
         Assert.True(got.AllAsleep);
@@ -450,7 +451,7 @@ public sealed class FeatureFrameworkTests : IDisposable
         var packed = new byte[Protocol.HandPosePackedSize];
         for (int i = 0; i < packed.Length; i++) packed[i] = (byte)(i * 7 + 3);
 
-        var got = RoundTrip(new Features.Players.Avatar.HandPose { Packed = packed });
+        var got = RoundTrip(new HandPose { Packed = packed });
 
         Assert.Equal(packed, got.Packed);
     }
@@ -458,7 +459,7 @@ public sealed class FeatureFrameworkTests : IDisposable
     [Fact]
     public void ChatMessageRoundTrips()
     {
-        var got = RoundTrip(new Features.Chat.ChatMessage { FromName = "Ana", Text = "héllo 🌍" });
+        var got = RoundTrip(new ChatMessage { FromName = "Ana", Text = "héllo 🌍" });
 
         Assert.Equal("Ana", got.FromName);
         Assert.Equal("héllo 🌍", got.Text);
@@ -467,7 +468,7 @@ public sealed class FeatureFrameworkTests : IDisposable
     [Fact]
     public void WeatherStateRoundTripsThroughItsWrapper()
     {
-        var got = RoundTrip(new Features.Weather.WeatherState
+        var got = RoundTrip(new WeatherState
         {
             Data = new WeatherSyncData { IsValid = true, WeatherType = 3, WindForce = 12.25f },
         });

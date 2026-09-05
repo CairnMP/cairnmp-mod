@@ -1,13 +1,11 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using System.Collections.Generic;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game.Bivouac;
-using CairnMultiplayerMod.Internal.Game.FreeRoam;
-using CairnMultiplayerMod.Internal.Game.Pause;
 using CairnMultiplayerMod.Internal.Game.Players.Avatar;
 using CairnMultiplayerMod.Internal.Game.Roping;
 
-namespace CairnMultiplayerMod.Internal.Game.Patching;
+namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>Owns the complete, symmetric lifecycle of CairnMP's Harmony patches.</summary>
 internal static class GamePatchRegistry

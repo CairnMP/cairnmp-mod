@@ -1,12 +1,11 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using System.Reflection;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using HarmonyLib;
 using Il2CppCairn.UI;
-using CairnMultiplayer.Shared;
 using UnityEngine;
 
-namespace CairnMultiplayerMod.Internal.Game.Pause;
+namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>
 /// "Multiplayer-friendly" pause: in solo, opening the pause menu (ESC) freezes everything

@@ -1,10 +1,10 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2Cpp;
 using Il2CppInterop.Runtime;
 using UnityEngine;
 
-namespace CairnMultiplayerMod.Internal.Game.Clock;
+namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>
 /// Synchronizes the time of day (NightDayCycle.dayTime01) and the sleep state

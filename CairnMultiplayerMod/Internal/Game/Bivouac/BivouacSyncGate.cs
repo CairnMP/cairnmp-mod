@@ -6,7 +6,6 @@ using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Game.Players.Avatar;
 using CairnMultiplayerMod.Internal.Game.Roping;
 using CairnMultiplayerMod.Internal.Game.Scenes;
-using CairnMultiplayerMod.Internal.Game.Weather;
 using CairnMultiplayerMod.Internal.Networking;
 using CairnMultiplayerMod.Internal.UI;
 using UnityEngine;

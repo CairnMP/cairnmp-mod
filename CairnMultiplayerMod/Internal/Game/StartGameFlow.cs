@@ -1,13 +1,13 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using CairnMultiplayer.Shared;
-using CairnMultiplayerMod.Internal.Game.MainMenu;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game.Lifecycle;
+using CairnMultiplayerMod.Internal.Game.MainMenu;
 using CairnMultiplayerMod.Internal.Game.Scenes;
 using CairnMultiplayerMod.Internal.UI;
 using UnityEngine;
 
-namespace CairnMultiplayerMod.Internal.Game.Session;
+namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>
 /// Drives the MainMenu toward the game's native save menu during an authoritative

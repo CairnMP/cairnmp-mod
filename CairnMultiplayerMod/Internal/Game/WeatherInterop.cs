@@ -1,11 +1,11 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2Cpp;
 using UnityEngine;
 using WeatherStateDefinition = Il2Cpp.WeatherZoneData.WeatherStateDefinition;
 
-namespace CairnMultiplayerMod.Internal.Game.Weather;
+namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>
 /// Global weather capture/replication against Cairn's native WeatherManager. On Steam only

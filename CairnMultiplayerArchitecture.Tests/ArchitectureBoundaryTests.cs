@@ -174,7 +174,7 @@ public sealed class ArchitectureBoundaryTests
     public void EveryRegisteredGamePatchHasAnUninstallPath()
     {
         var registry = File.ReadAllText(Path.Combine(
-            ProjectDirectory, "Internal", "Game", "Patching", "GamePatchRegistry.cs"));
+            ProjectDirectory, "Internal", "Game", "GamePatchRegistry.cs"));
         var modules = Regex.Matches(registry, @"new\([^\r\n]+?,\s*(\w+)\.Uninstall\)")
             .Select(match => match.Groups[1].Value)
             .Distinct(StringComparer.Ordinal)

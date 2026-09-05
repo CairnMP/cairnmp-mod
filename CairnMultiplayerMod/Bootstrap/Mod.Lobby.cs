@@ -1,8 +1,8 @@
 using System;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Internal.Config;
+using CairnMultiplayerMod.Internal.Game;
 using CairnMultiplayerMod.Internal.Game.Players;
-using CairnMultiplayerMod.Internal.Game.Weather;
 using CairnMultiplayerMod.Internal.Game.World;
 using CairnMultiplayerMod.Internal.Networking;
 using MelonLoader;

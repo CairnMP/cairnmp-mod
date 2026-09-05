@@ -1,11 +1,11 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using System.Reflection;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using HarmonyLib;
 using Il2CppTheGameBakers.Cairn;
 using Il2CppTheGameBakers.Cairn.UI;
 
-namespace CairnMultiplayerMod.Internal.Game.FreeRoam;
+namespace CairnMultiplayerMod.Internal.Game;
 
 internal static unsafe class FreeRoamUnlockPatch
 {
