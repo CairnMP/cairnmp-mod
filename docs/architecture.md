@@ -62,9 +62,49 @@ Unity, `GameApi`, game adapters or UI implementations directly.
 
 ## Build and deployment
 
-Normal mod builds deploy by default. Automated builds and tests must set
-`DeployMod=false`; the mod test project already passes that property through its project
-reference, so running tests does not mutate the installed game.
+Normal builds never deploy: `DeployMod` defaults to `false`. Set `-p:DeployMod=true`
+explicitly to install a development build into the local game. Automated checks also
+pass `DeployMod=false`; the mod test project passes it through its project reference.
+
+`CairnMultiplayer.sln` is the only solution. `CairnMultiplayer.Tests` runs on .NET 10
+without game assemblies and owns the protocol, architecture, generator and source-linked
+authority/diagnostic suites. `CairnMultiplayerMod.Tests` runs on .NET 6 and requires the
+proprietary references. CI runs the portable project with locked dependencies.
+
+## Folder and naming conventions
+
+A domain folder exists only when it contains at least three source files. Smaller groups
+live in their parent; filenames carry the domain. Keep the architectural layers above
+separate even when a layer is small. In particular, `Internal/Extensions` remains its own
+boundary for the managed extension runtime. `Internal/Polyfills.cs` keeps its required
+`System.Runtime.CompilerServices` namespace.
+
+Features live directly in `Features/`, in namespace `CairnMultiplayerMod.Features`.
+Their implementations live under `Internal/Game`, with larger domains such as `Players`,
+`Roping`, `Bivouac`, `MainMenu` and `World` retaining folders. Small domains are identified
+by filenames such as `ChatController.cs`, `TimeInterop.cs` and `WeatherInterop.cs`.
+All `NetworkManager` partials live together under `Internal/Networking`; packet dispatch
+stays separate from deserialization and packet application.
+
+Use these suffixes when naming new code:
+
+| Suffix | Responsibility |
+|---|---|
+| `Feature` | Declarative gameplay capability using Framework and GameApi |
+| `Interop` | Access to native game or engine APIs |
+| `Adapter` | Implements a managed contract over integration code |
+| `Patch` | Installs and uninstalls a Harmony behavior change |
+| `Diagnostics` | Observes and reports behavior without concealing failures |
+| `Controller` | Coordinates interactions for one gameplay or UI domain |
+| `Manager` | Owns a collection of entities or a subsystem's resources |
+| `Broadcaster` | Captures and publishes recurring state updates |
+| `Service` | Provides a cohesive capability used by multiple callers |
+| `Flow` | Sequences a process through multiple stages |
+| `Gate` | Decides whether another operation may proceed |
+
+Existing names are not a reason for mass renaming. Preserve `AssemblyName`, `MelonInfo`,
+preference category names, Harmony IDs, protocol IDs and the public namespace
+`CairnMultiplayer.Api`: these are compatibility contracts with installed clients and extensions.
 
 ## Fatal errors and privacy
 

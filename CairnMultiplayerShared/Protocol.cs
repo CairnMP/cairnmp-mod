@@ -98,19 +98,19 @@ public enum PacketId : byte
     ClientHandshake = 1,
     ClientDisconnect = 2,
     ClientPlayerState = 3,
-    // 4 was ClientChat — chat moved to the feature framework (Features/Chat/). Reserved.
+    // 4 was ClientChat — chat moved to ChatFeature. Reserved.
     ClientBoneState = 5,
     ClientPitonPlaced = 6,
     ClientPitonRemoved = 7,
     ClientPlayerFrame = 8,
     ClientClimbotFrame = 9,
-    // 10 was ClientWeatherState — weather is host-published state in Features/Weather/. Reserved.
-    // 11 was ClientLampState — appearance is per-player host state in Features/Players/Avatar/.
-    // 12 was ClientPingPlaced — pings moved to the feature framework (Features/World/).
+    // 10 was ClientWeatherState — weather is host-published state in WeatherFeature. Reserved.
+    // 11 was ClientLampState — appearance is per-player host state in AppearanceFeature.
+    // 12 was ClientPingPlaced — pings moved to PingFeature.
     // Left reserved on purpose: reusing the number would make an old client's ping look
     // like whatever packet takes its place.
     // 13 was ClientHandPose — finger poses now stream through HandPoseFeature. Reserved.
-    // 14 was ClientSleepState — sleep is reported through Features/Clock/. Reserved.
+    // 14 was ClientSleepState — sleep is reported through ClockFeature. Reserved.
     ClientRopeClip = 15,
     // 16 was ClientCosmeticState — see the note on 11. Reserved, do not reuse.
     ClientExtensionManifest = 17,
@@ -136,7 +136,7 @@ public enum PacketId : byte
     // 77 was ServerLampState — see the note on 11. Reserved, do not reuse.
     // 78 was ServerPingPlaced — see the note on 12. Reserved, do not reuse.
     // 79 was ServerHandPose — see the note on 13. Reserved, do not reuse.
-    // 80 was ServerTimeState — time of day moved to Features/Clock/. Reserved.
+    // 80 was ServerTimeState — time of day moved to ClockFeature. Reserved.
     ServerTeleport = 81,
     ServerRopeClip = 82,
     // 83 was ServerCosmeticState — see the note on 11. Reserved, do not reuse.

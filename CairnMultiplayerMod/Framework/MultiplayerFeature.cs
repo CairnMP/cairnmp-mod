@@ -17,11 +17,11 @@ namespace CairnMultiplayerMod.Framework;
 ///
 ///     private Broadcast&lt;PingPlaced&gt; _placed;
 ///
-///     protected override void OnRegister(FeatureBuilder feature)
+///     protected internal override void OnRegister(FeatureBuilder feature)
 ///     {
 ///         _placed = feature.Broadcast&lt;PingPlaced&gt;("placed", ShowRemotePing);
 ///         feature.EveryFrame(TickInput, FeaturePhase.Always);
-///         feature.OnSessionEnded(PingMarkerManager.ClearAll);
+///         feature.OnSessionEnded(Game.World.ClearPings);
 ///     }
 /// }
 /// </code>

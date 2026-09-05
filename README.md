@@ -58,15 +58,17 @@ else in the codebase is touched. No packet ids, no serialization plumbing, no
 wiring in the mod core.
 
 Here is a complete, working example, start to finish. Save it as
-`CairnMultiplayerMod/Features/Wave/WaveFeature.cs`, build, and pressing **H**
+`CairnMultiplayerMod/Features/WaveFeature.cs`, build, and pressing **H**
 shows `<name> waves!` on every other player's screen for three seconds. Nothing
 below is hidden or abbreviated — this is the whole feature.
 
 ```csharp
 using System.IO;
 using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.Framework;
+using CairnMultiplayerMod.GameApi;
 
-namespace CairnMultiplayerMod.Features.Wave;
+namespace CairnMultiplayerMod.Features;
 
 /// What travels over the network when someone waves.
 /// IPacket is the same contract the rest of the protocol uses: you write the
@@ -125,7 +127,9 @@ for you. (Curious what it produced? Look at `obj/generated/` after a build.)
 |---|---|---|
 | `Broadcast<T>` | everyone sees it, any player can send | pings, chat |
 | `HostState<T>` | the host owns it, and players joining later catch up automatically | weather, time of day |
-| `HostCommand<T>` | the client asks, the host accepts or refuses | roping up |
+| `HostCommand<T>` | the client asks, the host accepts or refuses | sleep requests, appearance changes |
+| `PerPlayerState<T>` | the host owns a value per player; late joiners receive the current values | appearance |
+| `Stream<T>` | transient updates with a bounded send rate | finger poses |
 
 Use `HostState` whenever a latecomer would otherwise miss something that is still
 true — a broadcast is gone the moment it is sent.
@@ -143,7 +147,7 @@ feature that bypasses that boundary.
 A feature that throws is logged and isolated: it cannot take the other features,
 or the update loop, down with it.
 
-For a real one, read `Features/World/PingFeature.cs`: input, world queries and HUD
+For a real one, read [`Features/PingFeature.cs`](CairnMultiplayerMod/Features/PingFeature.cs): input, world queries and HUD
 markers all go through `GameApi`, while its networking remains declared locally.
 
 ## Managed extension API
@@ -159,24 +163,29 @@ events without exposing Steam or raw packets. See
 | Path | In `.sln`? | Role |
 |---|---|---|
 | `CairnMultiplayerMod/` | ✅ | MelonLoader mod loaded into Cairn |
-| `CairnMultiplayerMod/Features/` | ✅ | What the mod does — one folder per feature |
+| `CairnMultiplayerMod/Features/` | ✅ | What the mod does — one file per feature |
+| `CairnMultiplayerMod/Api/` | ✅ | Public managed extension contracts; namespace `CairnMultiplayer.Api` |
+| `CairnMultiplayerMod/Bootstrap/` | ✅ | Composition and startup wiring |
 | `CairnMultiplayerMod/Framework/` | ✅ | What you write a feature with (channels, lifecycle) |
 | `CairnMultiplayerMod/GameApi/` | ✅ | Safe, documented façade available to features |
 | `CairnMultiplayerMod/Internal/` | ✅ | Cairn, Unity, IL2CPP, Steam, Harmony and UI implementations |
 | `CairnMultiplayerMod.Generators/` | ✅ | Build-time generator listing the features (never ships) |
 | `CairnMultiplayerShared/` | ✅ | Shared network protocol (packets, constants) |
-| `CairnMultiplayerShared.Tests/` | ✅ | xUnit tests for the shared protocol |
-| `CairnMultiplayerMod.Tests/` | ✅ | xUnit tests for the framework and the extension API |
-| `CairnMultiplayerArchitecture.Tests/` | ✅ | Source-level dependency, privacy and lifecycle rules; no game DLLs required |
+| `CairnMultiplayer.Tests/` | ✅ | Portable protocol, architecture, generator, authority and diagnostics tests; no game DLLs required |
+| `CairnMultiplayerMod.Tests/` | ✅ | Framework, gameplay, panel and extension tests requiring game references |
+| `docs/` | — | Published architecture and API documentation; `docs/local/` is ignored |
+| `examples/` | — | Managed extension source example |
+| `scripts/` | — | Local checks, reference generation, version synchronization and packaging |
 | `game-refs/` | — | Il2Cpp + MelonLoader reference assemblies (**not committed** — provide your own, see below) |
 
 The dependency rules and inbound packet flow are documented in
-[`docs/architecture.md`](docs/architecture.md).
+[`docs/architecture.md`](docs/architecture.md). Start with [CONTRIBUTING.md](CONTRIBUTING.md)
+for setup, verification and contribution conventions.
 
 ## JetBrains Rider
 
 Open `CairnMultiplayer.sln` from the repository root in JetBrains Rider. It loads
-the mod, shared protocol, source generator and all four test projects together, and
+the mod, shared protocol, source generator and both test projects together, and
 exposes the main documentation files under the `Documentation` solution folder.
 Use Rider rather than IntelliJ IDEA: Rider is JetBrains' C#/.NET IDE and provides
 the syntax highlighting, code completion, navigation, refactoring and test runner
@@ -199,6 +208,15 @@ in one of two ways (resolved by `Directory.Build.props`):
 
 ## Build & test
 
+From a fresh clone without Cairn installed, run the portable suite:
+
+```bash
+dotnet restore CairnMultiplayer.Tests/CairnMultiplayer.Tests.csproj --locked-mode
+dotnet test CairnMultiplayer.Tests/CairnMultiplayer.Tests.csproj -c Release --no-restore
+```
+
+With the game references available, build and test the complete solution:
+
 ```bash
 dotnet restore CairnMultiplayer.sln --locked-mode
 dotnet build CairnMultiplayer.sln -c Release --no-restore -p:DeployMod=false
@@ -211,7 +229,7 @@ GitHub Actions always runs the portable shared-protocol tests, the source-level
 architecture tests, generator regression tests and source-linked authority/diagnostic tests with locked NuGet dependencies. The full mod suite remains a local
 verification because Cairn's proprietary reference assemblies cannot be redistributed.
 
-The audit corrections and remaining in-game validation are tracked in [the remediation report](docs/corrections-audit-2026-09-05.md). A change of lobby owner ends the session; reconnect through a new lobby. All players must use protocol 13.
+A change of lobby owner ends the session; reconnect through a new lobby. All players must use protocol 13.
 
 ## Local crash reports
 

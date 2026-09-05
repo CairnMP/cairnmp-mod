@@ -14,6 +14,9 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Documentation", "Documentation", "{6B934DC3-F322-46FC-ACF7-862CB246F8C7}"
 	ProjectSection(SolutionItems) = preProject
 		CHANGELOG.md = CHANGELOG.md
+		CONTRIBUTING.md = CONTRIBUTING.md
+		docs\architecture.md = docs\architecture.md
+		docs\multiplayer-api.md = docs\multiplayer-api.md
 		Directory.Build.props = Directory.Build.props
 		README.md = README.md
 		versions.json = versions.json
