@@ -9,7 +9,7 @@ namespace CairnMultiplayerMod.Internal.Networking
     /// The client's session with the other players: connection state, the roster of remote
     /// players, and one Send method per kind of state we replicate.
     ///
-    /// Transport is Steam P2P (see the SteamP2PTransport half of this class), which delivers
+    /// Transport is Steam P2P (see NetworkManager.Transport.cs), which delivers
     /// packets on the Unity thread — Steam callbacks are pumped by Cairn's own main loop — so
     /// the handlers can touch Unity objects directly.
     /// </summary>
