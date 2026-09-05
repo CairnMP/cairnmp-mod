@@ -7,7 +7,6 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using CairnMultiplayer.Shared;
-using CairnMultiplayerMod.Internal.Config;
 using Il2CppInterop.Runtime;
 using Il2CppSteamworks;
 

@@ -1,6 +1,6 @@
 using CairnMultiplayer.Shared;
 
-namespace CairnMultiplayerMod.Internal.Game.Lifecycle;
+namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>
 /// Mutable session/scene state owned by the bootstrap and explicitly shared with the

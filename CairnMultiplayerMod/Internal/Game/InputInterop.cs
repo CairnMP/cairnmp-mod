@@ -1,11 +1,10 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using System.Text;
-using Il2CppInterop.Runtime;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-namespace CairnMultiplayerMod.Internal.Game.Input;
+namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>Reconciles Cairn's gameplay/menu input blocking (used to freeze gameplay input
 /// while the chat overlay is open).</summary>

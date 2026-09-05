@@ -1,9 +1,7 @@
 using CairnMultiplayerMod.Internal.Diagnostics;
 using System.Collections.Generic;
 using CairnMultiplayer.Shared;
-using CairnMultiplayerMod.Internal.Game.Lifecycle;
 using CairnMultiplayerMod.Internal.Game.Players;
-using CairnMultiplayerMod.Internal.Game.Scenes;
 using CairnMultiplayerMod.Internal.Networking;
 using Il2CppTheGameBakers.Cairn.Netplay;
 using UnityEngine;
@@ -47,7 +45,7 @@ internal sealed class RopeCoupleController
         if (_state.LocalPlayerState != PlayerState.InGame)
             return;
 
-        if (!CairnMultiplayerMod.Internal.Game.Input.InputCaptureState.IsKeyboardCaptured)
+        if (!InputCaptureState.IsKeyboardCaptured)
             HandleRopeClipInput();
         TickRopeTeam();
     }

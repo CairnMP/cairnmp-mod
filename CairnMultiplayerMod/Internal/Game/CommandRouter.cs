@@ -1,13 +1,12 @@
 using System;
 using CairnMultiplayer.Shared;
-using CairnMultiplayerMod.Internal.Game.Lifecycle;
 using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Game.World;
 using CairnMultiplayerMod.Internal.Networking;
 using Il2CppTheGameBakers.Cairn.Netplay;
 using UnityEngine;
 
-namespace CairnMultiplayerMod.Internal.Game.Chat;
+namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>
 /// Parses and executes chat commands ("/name args"). The teleport commands are

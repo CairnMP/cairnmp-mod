@@ -1,6 +1,6 @@
 using MelonLoader;
 
-namespace CairnMultiplayerMod.Internal.Config;
+namespace CairnMultiplayerMod.Internal;
 
 internal static class ModConfig
 {

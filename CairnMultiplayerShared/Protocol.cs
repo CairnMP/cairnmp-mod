@@ -109,7 +109,7 @@ public enum PacketId : byte
     // 12 was ClientPingPlaced — pings moved to the feature framework (Features/World/).
     // Left reserved on purpose: reusing the number would make an old client's ping look
     // like whatever packet takes its place.
-    // 13 was ClientHandPose — finger poses stream through Features/Players/Avatar/. Reserved.
+    // 13 was ClientHandPose — finger poses now stream through HandPoseFeature. Reserved.
     // 14 was ClientSleepState — sleep is reported through Features/Clock/. Reserved.
     ClientRopeClip = 15,
     // 16 was ClientCosmeticState — see the note on 11. Reserved, do not reuse.

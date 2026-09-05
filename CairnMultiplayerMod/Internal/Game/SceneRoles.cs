@@ -1,6 +1,6 @@
 using System;
 
-namespace CairnMultiplayerMod.Internal.Game.Scenes;
+namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>
 /// What a Unity scene name means to the mod. Cairn streams a lot of additive scenes

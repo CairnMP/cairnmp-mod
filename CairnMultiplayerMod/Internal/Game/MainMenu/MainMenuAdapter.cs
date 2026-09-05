@@ -2,8 +2,6 @@ using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using System.Collections.Generic;
 using CairnMultiplayerMod.GameApi;
-using CairnMultiplayerMod.Internal.Game.Input;
-using CairnMultiplayerMod.Internal.Game.Scenes;
 using Il2CppTMPro;
 using UnityEngine;
 using UnityEngine.Events;

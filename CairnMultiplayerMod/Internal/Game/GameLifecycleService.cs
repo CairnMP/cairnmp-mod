@@ -1,11 +1,10 @@
 using System;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2Cpp;
-using Il2CppInterop.Runtime;
 using Il2CppTheGameBakers.Cairn;
 using UnityEngine;
 
-namespace CairnMultiplayerMod.Internal.Game.Lifecycle
+namespace CairnMultiplayerMod.Internal.Game
 {
     internal enum CairnGameLifecycleState
     {

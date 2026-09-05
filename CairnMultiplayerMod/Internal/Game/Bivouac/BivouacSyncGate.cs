@@ -1,10 +1,8 @@
 using System;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Internal.Diagnostics;
-using CairnMultiplayerMod.Internal.Game.Lifecycle;
 using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Game.Roping;
-using CairnMultiplayerMod.Internal.Game.Scenes;
 using CairnMultiplayerMod.Internal.Networking;
 using CairnMultiplayerMod.Internal.UI;
 using UnityEngine;

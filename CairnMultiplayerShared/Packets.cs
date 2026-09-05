@@ -345,28 +345,6 @@ public struct ClientClimbotFrame : IPacket
 }
 
 /// <summary>
-/// Finger pose of the local player: 30 bones compressed smallest-three
-/// (Protocol.HandPosePackedSize bytes). Sent only on change.
-/// </summary>
-public struct ClientHandPose : IPacket
-{
-    public byte[] Packed;
-
-    public void Serialize(BinaryWriter w)
-    {
-        var bytes = Packed ?? Array.Empty<byte>();
-        w.Write((ushort)bytes.Length);
-        w.Write(bytes);
-    }
-
-    public void Deserialize(BinaryReader r)
-    {
-        int len = r.ReadUInt16();
-        Packed = r.ReadBytes(len);
-    }
-}
-
-/// <summary>
 /// The client requests to rope up (Clip=true) or unrope (Clip=false) with another
 /// player. The host relays it as ServerRopeClip to everyone.
 /// </summary>

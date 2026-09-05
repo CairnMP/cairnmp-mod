@@ -1,11 +1,9 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
 using System.Collections.Generic;
-using CairnMultiplayerMod.Internal.Config;
-using CairnMultiplayerMod.Internal.Game.Input;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using UnityEngine;
 
-namespace CairnMultiplayerMod.Internal.Game.Chat;
+namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>
 /// In-game IMGUI (OnGUI) chat: an overlay of recent messages at the bottom left + an

@@ -1,4 +1,4 @@
-namespace CairnMultiplayerMod.Internal.Game.Input;
+namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>Tracks whether a mod-owned overlay currently consumes keyboard input.</summary>
 internal static class InputCaptureState

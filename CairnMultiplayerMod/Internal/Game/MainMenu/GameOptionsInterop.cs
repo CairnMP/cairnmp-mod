@@ -1,7 +1,5 @@
 using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
-using CairnMultiplayer.Shared;
-using Il2Cpp;
 using UnityEngine;
 
 namespace CairnMultiplayerMod.Internal.Game.MainMenu;
@@ -11,73 +9,7 @@ namespace CairnMultiplayerMod.Internal.Game.MainMenu;
 internal static unsafe class GameOptionsInterop
 {
     /// <summary>
-    /// Pre-sets the options for the next new game (difficulty, skip tutorials/practice,
-    /// assist) on the native MainMenu, via the TYPED Il2CppInterop API (no pointer arithmetic).
-    ///
-    /// nextGameStartOptions.newGameOptions is a STRUCT (NewGameLaunchOptions): we read a
-    /// copy, modify the fields, then write it back via the setter. GameDifficulty (Shared) already
-    /// has the same hashed values as the native SelectedDifficulty -> direct cast.
-    /// </summary>
-    public static bool SetNextGameDifficulty(GameDifficulty difficulty,
-        bool skipTutorials, bool skipPractice, bool assistEnabled, bool verbose = true)
-    {
-        try
-        {
-            var menu = FindMainMenuComponent();
-            if (menu == null)
-            {
-                ModLog.Warning("[GameOptions] MainMenu component not found");
-                return false;
-            }
-
-            var opts = menu.nextGameStartOptions;
-            if (opts == null)
-            {
-                ModLog.Warning("[GameOptions] nextGameStartOptions is null on MainMenu");
-                return false;
-            }
-
-            // Struct -> local copy, modify, write back via the setter.
-            var ng = opts.newGameOptions;
-            var targetDifficulty = (DifficultyTweakables.SelectedDifficulty)(int)difficulty;
-
-            // CRUCIAL idempotence: this setter is called EVERY frame while the native
-            // save menu is open (StartGameFlow). Rewriting the same value makes the
-            // game emit a "difficulty changed" notification in a loop. So we only rewrite if
-            // at least one field actually differs (typically after the native flow has
-            // reset newGameOptions to its defaults on the "new game" click).
-            if (ng.currentSelectedDifficulty == targetDifficulty
-                && ng.skipTutorials == skipTutorials
-                && ng.skipPractice == skipPractice
-                && ng.assistEnabled == assistEnabled)
-            {
-                return true;
-            }
-
-            ng.skipTutorials = skipTutorials;
-            ng.skipPractice = skipPractice;
-            ng.assistEnabled = assistEnabled;
-            ng.currentSelectedDifficulty = targetDifficulty;
-            opts.newGameOptions = ng;
-
-            if (verbose)
-            {
-                // Read back to confirm (Il2Cpp structs can surprise you).
-                var check = opts.newGameOptions;
-                ModLog.Debug($"[GameOptions] NewGameOptions set (typed): difficulty={difficulty} " +
-                    $"skipTut={check.skipTutorials} skipPra={check.skipPractice} assist={check.assistEnabled}");
-            }
-            return true;
-        }
-        catch (Exception ex)
-        {
-            ModLog.Error($"[GameOptions] SetNextGameDifficulty failed: {ex}");
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Variant of <see cref="SetNextGameDifficulty"/> that forces ONLY the
+    /// Sets only the
     /// skip tutorials/practice + assist flags, while PRESERVING the difficulty chosen by the player
     /// in the native screen. Used by the launch flow when we want to respect the native
     /// difficulty choice (e.g. FreeRoam) instead of forcing it: the native flow resets the

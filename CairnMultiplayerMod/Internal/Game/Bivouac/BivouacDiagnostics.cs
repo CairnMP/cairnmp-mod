@@ -1,7 +1,5 @@
 using System;
 using CairnMultiplayerMod.Internal.Diagnostics;
-using CairnMultiplayerMod.Internal.Game.Input;
-using CairnMultiplayerMod.Internal.Game.Lifecycle;
 using CairnMultiplayerMod.Internal.Game.Players;
 using Il2CppTheGameBakers.Cairn;
 using UnityEngine;

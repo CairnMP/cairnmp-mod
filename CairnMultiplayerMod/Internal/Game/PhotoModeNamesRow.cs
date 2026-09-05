@@ -1,5 +1,5 @@
-using CairnMultiplayerMod.Internal.Diagnostics;
 using System;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game.Players;
 using Il2CppTGBTools.PhotoMode;
 using Il2CppTMPro;
@@ -7,7 +7,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
-namespace CairnMultiplayerMod.Internal.Game.PhotoMode;
+namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>
 /// Injects a "[N] Hide/Show player names" row into Cairn's native photo-mode

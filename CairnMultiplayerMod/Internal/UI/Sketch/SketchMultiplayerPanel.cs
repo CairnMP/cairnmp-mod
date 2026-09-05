@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using CairnMultiplayerMod.Internal.Networking;
 using System.Text;
-using CairnMultiplayerMod.Internal.Config;
 using Il2CppTMPro;
 using UnityEngine;
 using UnityEngine.Events;
