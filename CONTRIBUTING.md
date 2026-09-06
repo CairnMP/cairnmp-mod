@@ -1,5 +1,53 @@
 # Contributing to CairnMP
 
+Bug reports, feature suggestions, documentation fixes and code contributions are welcome.
+You can write issues and pull requests in English or French. You do not need to build the
+mod to report a problem.
+
+## Report a bug or suggest an improvement
+
+1. Search [existing issues](https://github.com/CairnMP/cairnmp-mod/issues), including closed
+   ones. Add new reproduction details to an existing report when it describes the same bug.
+2. Select [New issue](https://github.com/CairnMP/cairnmp-mod/issues/new/choose) and choose the
+   bug report, feature request or question template. Keep one topic per issue.
+3. Give it a specific title, such as `Client pings disappear after leaving a bivouac`.
+   Describe the steps, expected result and actual result. If you cannot reproduce it
+   consistently, explain what happened and how often you have seen it.
+4. Include the CairnMP version/channel on each client, game and loader versions if known,
+   number of players, host/client role, operating system and other installed mods.
+5. Attach relevant log excerpts, screenshots or a short recording if available. Review
+   attachments for personal paths, identifiers and private chat before sharing them.
+   Do not upload game DLLs or your entire game folder. Logs are helpful, not mandatory.
+
+For a feature request, explain the player problem and an example of the desired behavior.
+Mention any workaround you use today. For larger changes, discuss the approach in an issue
+before spending time on an implementation.
+
+## Open a pull request
+
+1. Fork the repository if you do not have write access, then create a branch in your fork
+   for one change, such as `fix/bivouac-pings` or `docs/setup`.
+2. Start from the branch your change targets. Stable fixes normally target `develop`;
+   changes using the new feature framework target `next/feature-framework` while that work
+   remains separate. Check the PR's **base branch** explicitly and avoid unrelated commits.
+3. Make the change and update relevant documentation. Add regression coverage for behavior
+   changes where practical; documentation-only changes do not require a game installation.
+4. Run the applicable checks below. Record the commands and results, and explain anything
+   you could not test. For gameplay changes, include host/client results from two-player
+   testing when available. CI currently checks the portable suite, not the full mod or game.
+5. Commit explicit paths, push your branch, then use **Compare & pull request** on GitHub.
+   Fill in the PR template: problem, resulting behavior, related issue, verification and
+   any compatibility impact. Use `Fixes #123` only if the PR fully resolves that issue;
+   otherwise write `Related to #123`.
+6. Open a **draft PR** if implementation or validation is unfinished. Check the diff for
+   accidental files, address CI failures and respond to review comments. Further commits
+   pushed to the same branch update the existing PR.
+
+A good PR title describes the result: `Fix client pings after bivouac`, rather than
+`Various fixes`. Screenshots help reviewers assess visible UI changes.
+
+## Set up a development environment
+
 Use the SDK pinned in `global.json`. Open `CairnMultiplayer.sln` in Rider for C# navigation
 and semantic refactoring. Read [the architecture](docs/architecture.md) before changing
 layer dependencies, and [the feature example](README.md#contributing-a-feature) to add
