@@ -399,6 +399,7 @@ public partial class Mod
         });
         SafeStop("feature session", () => Features?.NotifySessionEnded());
         SafeStop("features", () => Features?.Dispose());
+        SafeStop("voice", () => _voice?.Dispose());
         SafeStop("main-menu registration", () => _mainMenuButton?.Dispose());
         SafeStop("main-menu adapter", () => _mainMenu?.Dispose());
         SafeStop("remote players", RemotePlayerManager.ClearAll);

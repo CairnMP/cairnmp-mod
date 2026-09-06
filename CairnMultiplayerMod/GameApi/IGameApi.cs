@@ -16,4 +16,5 @@ internal interface IGameApi
     IPlayersApi Players { get; }
     IWeatherApi Weather { get; }
     IWorldApi World { get; }
+    IVoiceApi Voice => UnavailableVoiceApi.Instance;
 }

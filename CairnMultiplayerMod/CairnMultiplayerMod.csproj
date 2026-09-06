@@ -9,7 +9,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <DeployMod Condition="'$(DeployMod)' == ''">false</DeployMod>
 
-    <!-- Les mods MelonLoader ne doivent pas embarquer leurs dependances. -->
+    <!-- Copier les dependances gerees ; les assemblies du jeu restent Private=false. -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <GenerateDependencyFile>false</GenerateDependencyFile>
     <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
@@ -23,6 +23,18 @@
   </PropertyGroup>
 
   <!-- References MelonLoader -->
+  <ItemGroup>
+    <PackageReference Include="Concentus" Version="2.2.2" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+    <Reference Include="Il2CppTheGameBakers.TGBTools.UI.Runtime">
+      <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.TGBTools.UI.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppTheGameBakers.TGBTools.Localization.Runtime">
+      <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.TGBTools.Localization.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
   <ItemGroup>
     <Reference Include="MelonLoader">
       <HintPath>$(MelonLoaderNet6Dir)\MelonLoader.dll</HintPath>
@@ -186,6 +198,10 @@
   <ItemGroup>
     <ModDeployFiles Include="$(OutputPath)$(AssemblyName).dll" />
     <ModDeployFiles Include="$(OutputPath)CairnMultiplayerShared.dll" />
+    <ModDeployFiles Include="$(OutputPath)Concentus.dll" />
+    <ModDeployFiles Include="$(OutputPath)NAudio.Core.dll" />
+    <ModDeployFiles Include="$(OutputPath)NAudio.Wasapi.dll" />
+    <ModDeployFiles Include="$(MSBuildProjectDirectory)\..\THIRD-PARTY-NOTICES.txt" />
   </ItemGroup>
 
   <Target Name="CopyToMods" AfterTargets="Build" Condition="'$(DeployMod)' == 'true'">

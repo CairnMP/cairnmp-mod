@@ -99,6 +99,7 @@ internal sealed class FeatureBuilder
             Players = inner.Players;
             Weather = inner.Weather;
             World = inner.World;
+            Voice = inner.Voice;
         }
 
         public IMainMenuApi MainMenu { get; }
@@ -111,6 +112,7 @@ internal sealed class FeatureBuilder
         public IPlayersApi Players { get; }
         public IWeatherApi Weather { get; }
         public IWorldApi World { get; }
+        public IVoiceApi Voice { get; }
     }
 
     private sealed class FeatureMainMenuApi : IMainMenuApi

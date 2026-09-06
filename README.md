@@ -50,6 +50,10 @@ Features include roped climbing (belay), in-game chat and host commands, world
 pings, FreeRoam, and full synchronization of players, cosmetics, weather, lamps,
 pitons and time of day.
 
+Experimental [proximity voice](docs/proximity-voice.md) is available under
+**Settings → CairnMP**, with open-mic detection, push-to-talk, microphone selection
+and a local microphone test. Two-player voice validation is still pending.
+
 ## Contributing a feature
 
 *(New on this branch.)* A multiplayer feature is **one file**. It declares what it

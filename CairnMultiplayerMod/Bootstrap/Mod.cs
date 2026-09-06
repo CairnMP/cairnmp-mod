@@ -11,6 +11,7 @@ using CairnMultiplayerMod.Internal.Game.MainMenu;
 using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Game.Roping;
 using CairnMultiplayerMod.Internal.Game.World;
+using CairnMultiplayerMod.Internal.Game.Voice;
 using CairnMultiplayerMod.Internal.Networking;
 using CairnMultiplayerMod.Internal.UI;
 using MelonLoader;
@@ -38,6 +39,7 @@ public partial class Mod : MelonMod
     private MainMenuAdapter _mainMenu;
     private HudAdapter _hud;
     private IGameApi _game;
+    private VoiceAdapter _voice;
     private IGameRegistration _mainMenuButton;
     private readonly HashSet<string> _loadedScenes = new(StringComparer.Ordinal);
     private Key _connectKey;
@@ -81,6 +83,7 @@ public partial class Mod : MelonMod
         {
             Il2CppExceptionCapture.Install();
             ModConfig.Register();
+            VoicePreferences.Register();
             VerboseLogging = ModConfig.VerboseLogging.Value;
             ModLog.Initialize(
                 message => LoggerInstance.Msg(message),
@@ -147,6 +150,7 @@ public partial class Mod : MelonMod
         _panel = MultiplayerPanelFactory.Create(Lobby);
         _mainMenu = new MainMenuAdapter();
         _hud = new HudAdapter();
+        _voice = new VoiceAdapter(() => Network, () => LocalState == PlayerState.InGame);
         _game = new GameApiFacade(
             _mainMenu,
             new GameStateAdapter(() => LocalState),
@@ -157,7 +161,7 @@ public partial class Mod : MelonMod
             new ClockAdapter(),
             new PlayersAdapter(() => Network),
             new WeatherAdapter(),
-            new WorldAdapter());
+            new WorldAdapter(), _voice);
 
         // Per-feature sync components share only their explicit dependencies and are
         // ticked, in this exact order, from OnUpdate.

@@ -100,6 +100,10 @@ New-Item -ItemType Directory -Force -Path "$PayloadMod/mods" | Out-Null
 $ModBin = "CairnMultiplayerMod/bin/Release/net6.0"
 Copy-Item "$ModBin/CairnMultiplayerMod.dll"    "$PayloadMod/mods/"
 Copy-Item "$ModBin/CairnMultiplayerShared.dll" "$PayloadMod/mods/"
+Copy-Item "$ModBin/Concentus.dll" "$PayloadMod/mods/"
+Copy-Item "$ModBin/NAudio.Core.dll" "$PayloadMod/mods/"
+Copy-Item "$ModBin/NAudio.Wasapi.dll" "$PayloadMod/mods/"
+Copy-Item "THIRD-PARTY-NOTICES.txt" "$PayloadMod/mods/"
 $ModZipPath = Join-Path $Dist $ModZipName
 if (Test-Path $ModZipPath)
 { Remove-Item -Force $ModZipPath
