@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: nuget
+    directories:
+      - /CairnMultiplayerShared
+      - /CairnMultiplayerShared.Tests
+      - /CairnMultiplayerMod
+      - /CairnMultiplayerMod.Tests
+      - /CairnMultiplayerMod.Generators
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      test-tooling:
+        patterns:
+          - Microsoft.NET.Test.Sdk
+          - xunit*
