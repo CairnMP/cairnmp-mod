@@ -177,7 +177,7 @@
   </ItemGroup>
 
   <!--
-    Copie automatiquement les DLL dans les dossiers Mods apres le build.
+    Copie les DLL dans les dossiers Mods uniquement avec -p:DeployMod=true (hors CI).
     Quand l'instance 2 existe (clonee via tools/clone-cairn.ps1), elle est
     aussi mise a jour pour que les deux processus Cairn chargent le rebuild.
   -->
@@ -186,7 +186,7 @@
     <ModDeployFiles Include="$(OutputPath)CairnMultiplayerShared.dll" />
   </ItemGroup>
 
-  <Target Name="CopyToMods" AfterTargets="Build">
+  <Target Name="CopyToMods" AfterTargets="Build" Condition="'$(DeployMod)' == 'true' and '$(CI)' != 'true'">
     <Copy SourceFiles="@(ModDeployFiles)" DestinationFolder="$(ModsDir)" />
     <WriteLinesToFile File="$(ModsDir)\.mod_version" Lines="dev" Overwrite="true" />
     <WriteLinesToFile File="$(ModsDir)\.mod_channel" Lines="stable" Overwrite="true" />

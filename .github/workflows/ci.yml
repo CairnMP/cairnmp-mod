@@ -1,0 +1,41 @@
+name: CI
+on:
+  pull_request:
+    branches: [develop, production]
+  push:
+    branches: [develop, production]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  shared-tests:
+    name: Shared protocol tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: |
+            10.0.x
+            6.0.x
+      - name: Test shared protocol (no game DLLs)
+        run: dotnet test CairnMultiplayerShared.Tests/CairnMultiplayerShared.Tests.csproj -c Release --nologo
+  generator-build:
+    name: Source generator build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Build source generator
+        run: dotnet build CairnMultiplayerMod.Generators/CairnMultiplayerMod.Generators.csproj -c Release --nologo

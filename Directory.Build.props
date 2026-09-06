@@ -13,12 +13,12 @@
     <!-- Racine du monorepo (un niveau au-dessus de mod/) -->
     <MonoRoot>$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), 'versions.json'))</MonoRoot>
 
-    <!-- DLLs MelonLoader : d'abord game-refs/ (versionné), sinon surcharge via env var -->
+    <!-- DLLs MelonLoader : d'abord game-refs/ (non versionné), sinon surcharge via env var -->
     <MelonLoaderRefsDir>$(MSBuildThisFileDirectory)game-refs\MelonLoader</MelonLoaderRefsDir>
     <MelonLoaderNet6Dir Condition="'$(MELON_LOADER_NET6_DIR)' != ''">$(MELON_LOADER_NET6_DIR)</MelonLoaderNet6Dir>
     <MelonLoaderNet6Dir Condition="'$(MelonLoaderNet6Dir)' == '' and Exists('$(MelonLoaderRefsDir)\MelonLoader.dll')">$(MelonLoaderRefsDir)</MelonLoaderNet6Dir>
 
-    <!-- Assemblies Il2Cpp : d'abord game-refs/ (versionné), sinon le dossier du jeu -->
+    <!-- Assemblies Il2Cpp : d'abord game-refs/ (non versionné), sinon le dossier du jeu -->
     <GameRefsDir>$(MSBuildThisFileDirectory)game-refs\Il2CppAssemblies</GameRefsDir>
     <Il2CppAssembliesDir Condition="Exists('$(GameRefsDir)\UnityEngine.CoreModule.dll')">$(GameRefsDir)</Il2CppAssembliesDir>
     <Il2CppAssembliesDir Condition="'$(Il2CppAssembliesDir)' == ''">$(LOCALAPPDATA)\CairnMultiplayerData\game\CairnLoader\Il2CppAssemblies</Il2CppAssembliesDir>
@@ -26,6 +26,8 @@
     <!-- Répertoire du jeu Cairn (pour le déploiement des mods) -->
     <CairnDir Condition="'$(CAIRN_DIR)' != ''">$(CAIRN_DIR)</CairnDir>
     <CairnDir Condition="'$(CairnDir)' == ''">$(LOCALAPPDATA)\CairnMultiplayerData\game</CairnDir>
+    <!-- Deploy only when explicitly requested by a local developer. -->
+    <DeployMod Condition="'$(DeployMod)' == ''">false</DeployMod>
     <ModsDir>$(CairnDir)\Mods</ModsDir>
 
     <!--

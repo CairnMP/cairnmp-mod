@@ -1,0 +1,32 @@
+name: Bug report
+description: Report a reproducible problem with CairnMP.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: "For vulnerabilities use SECURITY.md and report privately. Remove private information from logs; never attach game DLLs."
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Mod release or commit, Cairn version, MelonLoader version, and operating system.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include host/client role, player count, and other installed mods.
+    validations:
+      required: true
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs or screenshots
+      description: Relevant excerpts only. Remove tokens, IP addresses, player identifiers, and personal paths.
