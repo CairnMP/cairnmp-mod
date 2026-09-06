@@ -3,17 +3,60 @@
 All notable changes to CairnMP are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## Unreleased — audit corrections, 2026-09-05
+## [2.1.0] — 2026-09-06 (beta)
 
-- Protocol 13: feature-scoped contract identifiers and explicit bivouac presence. Older clients are incompatible.
-- Fix distant rope release, maintain rope safety during chat, and include awake campers in sleep consensus.
-- Deliver asynchronous feature callbacks on the game thread; release subscriptions, pending starts and clock state on shutdown.
-- Correct panel close state and clean up the primary UI before fallback.
-- End sessions on host ownership changes; refresh hand poses for late joiners.
-- Validate rope endpoints, bound piton creation and rope churn, attribute chat to authenticated players, and prevent repeated admission snapshots.
-- Bound session logs, deduplication, recurring feature errors and archive copies; preserve native save failures instead of suppressing them.
-- Pin SDK/C# and NuGet dependencies, add portable security/generator regressions, disable implicit deployment, and test release packaging with an explicit DLL list.
-- See `docs/corrections-audit-2026-09-05.md` for evidence and required native validation.
+> This beta uses protocol 13. Every player in a lobby must run CairnMP 2.1.0;
+> clients from the 1.x releases are not compatible.
+
+### Added
+
+- Experimental proximity voice chat with voice activation enabled by default,
+  push-to-talk, microphone mute, distance attenuation and stereo positioning.
+- A dedicated **CairnMP** page in the game's settings for choosing the input
+  device, adjusting voice sensitivity and volume, changing the push-to-talk key,
+  testing the microphone locally and muting individual players.
+- A feature framework with scoped network contracts and a real-time stream channel,
+  making multiplayer features easier to isolate and extend.
+- Shared Rider profiles for building, deploying, running and debugging the installed
+  game in one action.
+
+### Changed
+
+- Chat, pings, weather and time, sleeping, player appearance and hand poses now use
+  the new feature framework.
+- The multiplayer menu has been polished to better match Cairn's native navigation,
+  animations and visual language.
+- Voice device discovery now runs outside the game loop to avoid frame hitches while
+  playing or opening the settings page.
+- SDK, C# and NuGet dependencies are pinned, deployment is explicit, and release
+  packaging is covered by automated checks.
+
+### Fixed
+
+- Fixed releasing distant ropes, losing rope safety while chatting, and omitting
+  awake campers from the sleep consensus.
+- Fixed sessions remaining active after host ownership changes and hand poses not
+  refreshing for players who join late.
+- Fixed invalid rope endpoints, unbounded piton or rope churn, unauthenticated chat
+  attribution and repeated admission snapshots.
+- Fixed asynchronous feature callbacks reaching game objects from the wrong thread,
+  plus subscriptions and pending state surviving shutdown.
+- Fixed multiplayer panels retaining an incorrect close state or leaving remnants
+  of the primary UI after switching to the fallback interface.
+- Bounded session logs, duplicate tracking, recurring feature errors and archive
+  copies, while preserving native save failures instead of silently suppressing them.
+
+### Beta limitations
+
+- Proximity voice chat currently supports Windows through WASAPI. Linux/Proton and
+  macOS are not supported by this beta.
+- Voice chat does not yet include echo cancellation, noise suppression or wall
+  occlusion. Headphones are recommended when using voice activation.
+- The settings interface and local microphone path have been validated in game;
+  two-player voice quality and the complete multiplayer path still require broader
+  community testing.
+- See `docs/corrections-audit-2026-09-05.md` and `docs/proximity-voice.md` for the
+  detailed validation notes.
 
 ## [1.1.0] — 2026-08-02
 
