@@ -1,0 +1,13 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="CairnMP" type="RunExe" factoryName=".NET Executable">
+    <option name="EXE_PATH" value="$USER_HOME$/AppData/Local/CairnMultiplayerData/game/Cairn.exe" />
+    <option name="PROGRAM_PARAMETERS" value="--cairnloader.debug" />
+    <option name="WORKING_DIRECTORY" value="$USER_HOME$/AppData/Local/CairnMultiplayerData/game" />
+    <option name="PASS_PARENT_ENVS" value="1" />
+    <option name="USE_MONO" value="0" />
+    <option name="RUNTIME_TYPE" value="coreclr" />
+    <method v="2">
+      <option name="RunConfigurationTask" enabled="true" run_configuration_name="CairnMP - Build Debug" run_configuration_type="RunNativeExe" />
+    </method>
+  </configuration>
+</component>

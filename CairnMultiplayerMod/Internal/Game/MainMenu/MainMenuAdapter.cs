@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2CppTMPro;
+using Il2CppTheGameBakers.Cairn.UI;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
@@ -21,6 +22,8 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
     private readonly List<bool> _suspendedMenuStates = new();
 
     private GameObject _modeSelectContainer;
+    private GameObject _suspendedArrow;
+    private bool _suspendedArrowWasActive;
     private int _frameCounter;
     private int _notReadyWarnFrames;
     private bool _disposed;
@@ -48,6 +51,7 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
         if (!SceneRoles.IsMainMenu(sceneName)) return;
 
         _modeSelectContainer = null;
+        _suspendedArrow = null;
         _frameCounter = 0;
         _notReadyWarnFrames = 0;
         _suspendedMenuBehaviours.Clear();
@@ -88,6 +92,19 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
     {
         if (_modeSelectContainer != null) _modeSelectContainer.SetActive(false);
         SuspendMainMenuInput();
+        // The selection arrow is shared by the native menu and lives outside
+        // ModeSelect's button container. Hide it with the choices, not behind the panel.
+        if (_suspendedArrow == null && _modeSelectContainer != null)
+        {
+            var mode = _modeSelectContainer.GetComponentInParent<MainMenuModeSelectElement>();
+            var arrow = mode?.mainMenu?.BouncingArrow;
+            if (arrow != null)
+            {
+                _suspendedArrow = arrow.gameObject;
+                _suspendedArrowWasActive = _suspendedArrow.activeSelf;
+                _suspendedArrow.SetActive(false);
+            }
+        }
         InputInterop.BlockMainMenuActionMaps();
     }
 
@@ -97,6 +114,8 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
         InputInterop.RestoreMainMenuActionMaps();
         RestoreMainMenuInput();
         if (_modeSelectContainer != null) _modeSelectContainer.SetActive(true);
+        if (_suspendedArrow != null) _suspendedArrow.SetActive(_suspendedArrowWasActive);
+        _suspendedArrow = null;
     }
 
     internal void RestoreMainMenuInput()
@@ -245,6 +264,8 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
         private readonly Action _onClick;
         private GameObject _nativeButton;
         private TextMeshProUGUI _nativeLabel;
+        private MainMenuModeSelectElement _nativeMenu;
+        private Button _button;
 
         internal ButtonRegistration(MainMenuAdapter owner, string id, string label, Action onClick)
         {
@@ -276,8 +297,22 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
             label.text = Label;
             button.onClick.RemoveAllListeners();
             button.onClick.AddListener((UnityAction)(() => _owner?.OnButtonClicked(this)));
+            var menu = parent.GetComponentInParent<MainMenuModeSelectElement>();
+            if (menu == null)
+            {
+                UnityEngine.Object.Destroy(clone);
+                throw new InvalidOperationException("The native ModeSelect controller was not found.");
+            }
+            try { MainMenuButtonIntegration.Register(menu, template.GetComponent<Button>(), button); }
+            catch
+            {
+                UnityEngine.Object.Destroy(clone);
+                throw;
+            }
             _nativeButton = clone;
             _nativeLabel = label;
+            _nativeMenu = menu;
+            _button = button;
             ModLog.Info($"[GameApi:MainMenu] Added '{Id}' to the main menu.");
         }
 
@@ -303,21 +338,29 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
 
         internal void ForgetNativeButton()
         {
+            try { MainMenuButtonIntegration.Unregister(_nativeMenu, _button); }
+            catch (Exception exception)
+            {
+                ModLog.SuppressedException("main-menu.remove-native-animation", exception);
+            }
             _nativeButton = null;
             _nativeLabel = null;
+            _nativeMenu = null;
+            _button = null;
         }
 
         internal void DestroyNativeButton()
         {
+            var nativeButton = _nativeButton;
+            ForgetNativeButton();
             try
             {
-                if (_nativeButton != null) UnityEngine.Object.Destroy(_nativeButton);
+                if (nativeButton != null) UnityEngine.Object.Destroy(nativeButton);
             }
             catch (Exception ex)
             {
                 ModLog.Warning($"[GameApi:MainMenu] Failed to remove '{Id}': {ex.Message}");
             }
-            ForgetNativeButton();
         }
 
         internal void Deactivate() => _owner = null;

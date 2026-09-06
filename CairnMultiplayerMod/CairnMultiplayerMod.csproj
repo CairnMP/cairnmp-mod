@@ -189,6 +189,11 @@
   </ItemGroup>
 
   <Target Name="CopyToMods" AfterTargets="Build" Condition="'$(DeployMod)' == 'true'">
+    <!-- Keep symbols beside the deployed DLLs so Rider can resolve mod breakpoints. -->
+    <ItemGroup>
+      <ModDeployFiles Include="$(TargetDir)$(AssemblyName).pdb" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
+      <ModDeployFiles Include="$(TargetDir)CairnMultiplayerShared.pdb" Condition="Exists('$(TargetDir)CairnMultiplayerShared.pdb')" />
+    </ItemGroup>
     <Copy SourceFiles="@(ModDeployFiles)" DestinationFolder="$(ModsDir)" />
     <WriteLinesToFile File="$(ModsDir)\.mod_version" Lines="dev" Overwrite="true" />
     <WriteLinesToFile File="$(ModsDir)\.mod_channel" Lines="dev" Overwrite="true" />

@@ -195,6 +195,29 @@ If game types appear unresolved in the editor, generate the local reference
 assemblies first with `pwsh scripts/generate-il2cpp-refs.ps1`. These assemblies
 remain local and must not be committed.
 
+### Run and debug the installed game
+
+Select **CairnMP** in Rider's run configuration selector. The shared profiles in
+`.run/` build the mod in **Debug**, deploy its DLLs and matching PDBs to the local
+development installation, then launch `Cairn.exe` with `--cairnloader.debug`.
+
+- **Run** (`Shift+F10`, default Rider keymap): launch the game.
+- **Debug** (`Shift+F9`): launch with the **CoreCLR** debugger for the managed mod.
+- **CairnMP - Build Debug**: only compile and deploy, without launching the game.
+
+The game uses IL2CPP, but CairnLoader hosts the mod in **.NET 6**. Keep the profile
+runtime set to **.NET / .NET Core** (`RUNTIME_TYPE=coreclr`), not Auto, .NET Framework
+or Unity/Mono. The default runtime can start the game without binding C# breakpoints.
+CoreCLR debugging was verified at `Mod.OnInitializeMelon`, including local values.
+This does not restore the original C# sources of the IL2CPP game itself.
+
+Close the running game before rebuilding or switching between Run and Debug, and
+open Steam for multiplayer. The profiles assume the standard CairnMP installation
+under the current user's `AppData/Local/CairnMultiplayerData/game`, and the .NET SDK
+at `C:/Program Files/dotnet/dotnet.exe`. For a custom installation, update both the
+game profile's executable/working directory and the build profile's `CairnDir`
+MSBuild property so deployment and launch target the same directory.
+
 ## Reference assemblies
 
 The build references proprietary Cairn / Unity / MelonLoader assemblies that

@@ -15,7 +15,7 @@ internal static class SketchUiKit
     public static readonly Color PanelTint = Color.white;                       // the art already carries the midnight blue
     public static readonly Color FrameTint = new(1f, 1f, 0.96f, 1f);            // #FFFFF4 (outline tint)
     public static readonly Color TextCream = new(0.91f, 0.89f, 0.83f, 1f);
-    public static readonly Color TextDim = new(0.91f, 0.89f, 0.83f, 0.55f);
+    public static readonly Color TextDim = new(0.91f, 0.89f, 0.83f, 0.76f);
     public static readonly Color Accent = new(0.79f, 0.64f, 0.42f, 1f);      // piton gold
     public static readonly Color IconActive = Color.white;
     public static readonly Color IconIdle = new(1f, 1f, 1f, 0.45f);
@@ -135,6 +135,9 @@ internal static class SketchUiKit
         tmp.color = color;
         tmp.alignment = align;
         tmp.text = text;
+        tmp.richText = false;
+        tmp.enableWordWrapping = false;
+        tmp.overflowMode = TextOverflowModes.Ellipsis;
         tmp.raycastTarget = false;
         return tmp;
     }
@@ -148,7 +151,7 @@ internal static class SketchUiKit
         var root = Make("Field", parent);
         Stretch(root);
         // RowBg is a light sprite: tint it dark midnight blue for a legible inset field.
-        Sliced(root, GameUiAssetLibrary.RowBg, FieldBg, raycast: true);
+        var background = Sliced(root, GameUiAssetLibrary.RowBg, FieldBg, raycast: true);
 
         // Internal viewport (TMP_InputField requires a viewport to clip the text).
         var viewport = Make("Viewport", root.transform);
@@ -166,6 +169,7 @@ internal static class SketchUiKit
         textTmp.color = TextCream;
         textTmp.alignment = TextAlignmentOptions.Left;
         textTmp.raycastTarget = false;
+        textTmp.richText = false;
         textTmp.enableWordWrapping = false;
         textTmp.overflowMode = TextOverflowModes.Masking;
 
@@ -182,6 +186,7 @@ internal static class SketchUiKit
 
         var input = root.AddComponent<TMP_InputField>();
         input.textViewport = viewport.GetComponent<RectTransform>();
+        input.targetGraphic = background;
         input.textComponent = textTmp;
         input.placeholder = phTmp;
         input.characterLimit = characterLimit;
@@ -239,9 +244,9 @@ internal static class SketchUiKit
         var labelGo = Make("Label", row.transform);
         var lrt = labelGo.GetComponent<RectTransform>() ?? labelGo.AddComponent<RectTransform>();
         lrt.anchorMin = new Vector2(0f, 0f);
-        lrt.anchorMax = new Vector2(0.5f, 1f);
+        lrt.anchorMax = new Vector2(1f, 1f);
         lrt.offsetMin = new Vector2(22f, 0f);
-        lrt.offsetMax = Vector2.zero;
+        lrt.offsetMax = new Vector2(-cellWidth - 32f, 0f);
         Label(labelGo.transform, "Text", label, 19f, TextCream, TextAlignmentOptions.Left);
 
         var cell = Make("Cell", row.transform);
@@ -274,7 +279,7 @@ internal static class SketchUiKit
         return valTmp;
     }
 
-    /// <summary>Makes the GameObject clickable (invisible raycast Image if needed + Button with no transition).</summary>
+    /// <summary>Native artwork with consistent hover, selected, pressed and disabled feedback.</summary>
     public static Button MakeButton(GameObject go, UnityAction onClick)
     {
         var hit = go.GetComponent<Image>();
@@ -285,7 +290,16 @@ internal static class SketchUiKit
         }
         hit.raycastTarget = true;
         var btn = go.AddComponent<Button>();
-        btn.transition = Selectable.Transition.None;
+        btn.targetGraphic = hit;
+        btn.transition = Selectable.Transition.ColorTint;
+        var colors = btn.colors;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(1.12f, 1.09f, 0.98f, 1f);
+        colors.selectedColor = new Color(1.12f, 1.09f, 0.98f, 1f);
+        colors.pressedColor = new Color(0.77f, 0.73f, 0.64f, 1f);
+        colors.disabledColor = new Color(0.55f, 0.55f, 0.55f, 0.55f);
+        colors.fadeDuration = 0.1f;
+        btn.colors = colors;
         btn.onClick.AddListener(onClick);
         return btn;
     }

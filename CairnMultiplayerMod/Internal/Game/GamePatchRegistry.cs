@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game.Bivouac;
+using CairnMultiplayerMod.Internal.Game.MainMenu;
 using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Game.Roping;
 
@@ -30,6 +31,7 @@ internal static class GamePatchRegistry
         new("bivouac safety", BivouacDiagnostics.Install, BivouacDiagnostics.Uninstall),
         new("rope-team template", RopeTeamFallPatch.Install, RopeTeamFallPatch.Uninstall),
         new("multiplayer pause", MultiplayerPausePatch.Install, MultiplayerPausePatch.Uninstall),
+        new("main-menu buttons", MainMenuButtonIntegration.Install, MainMenuButtonIntegration.Uninstall),
         new("free-roam unlock", FreeRoamUnlockPatch.Install, FreeRoamUnlockPatch.Uninstall),
         new("savegame piton guard", SavegamePitonGuardPatch.Install, SavegamePitonGuardPatch.Uninstall),
     };
