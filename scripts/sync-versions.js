@@ -1,72 +1,27 @@
-#!/usr/bin/env node
-// Propage les versions de versions.json vers les fichiers source du mod.
-// Usage: node scripts/sync-versions.js
+import { readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { resolve, dirname } from 'node:path';
 
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const version = JSON.parse(readFileSync(resolve(root, 'versions.json'), 'utf8'));
+if (!/^\d+\.\d+\.\d+$/.test(version.mod) || !Number.isSafeInteger(version.protocol) || version.protocol < 1)
+  throw new Error('Invalid mod/protocol version');
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const root = resolve(__dirname, "..");
-
-const versions = JSON.parse(readFileSync(resolve(root, "versions.json"), "utf8"));
-
-let errors = 0;
-
-function patch(relPath, transform) {
-  const abs = resolve(root, relPath);
-  if (!existsSync(abs)) {
-    console.error(`  ERROR: file not found: ${relPath}`);
-    errors++;
-    return;
+function update(path, replacements) {
+  const full = resolve(root, path);
+  let text = readFileSync(full, 'utf8');
+  for (const [pattern, replacement] of replacements) {
+    if (!pattern.test(text)) throw new Error(`Version declaration not found in ${path}`);
+    text = text.replace(pattern, replacement);
   }
-  const before = readFileSync(abs, "utf8");
-  const after = transform(before);
-  if (before === after) {
-    console.log(`  (unchanged) ${relPath}`);
-    return;
-  }
-  writeFileSync(abs, after, "utf8");
-  console.log(`  updated     ${relPath}`);
+  if (process.argv.includes('--check')) {
+    if (text !== readFileSync(full, 'utf8')) throw new Error(`Version drift in ${path}`);
+  } else writeFileSync(full, text);
 }
-
-function patchRegex(relPath, regex, replacement) {
-  patch(relPath, (src) => {
-    if (!regex.test(src)) {
-      console.error(`  ERROR: pattern not found in ${relPath}`);
-      errors++;
-      return src;
-    }
-    return src.replace(regex, replacement);
-  });
-}
-
-// ── Mod (C#) ──────────────────────────────────────────────────────────────────
-console.log("\n[mod]");
-patchRegex(
-  "CairnMultiplayerMod/Bootstrap/Mod.cs",
-  /(\[assembly: MelonInfo\(typeof\([\w.]+\.Mod\), "Cairn Multiplayer Mod", )".*?"(, "CairnModTeam"\)\])/,
-  `$1"${versions.mod}"$2`
-);
-
-// ── Protocol version (C#) ─────────────────────────────────────────────────────
-console.log("\n[protocol]");
-patchRegex(
-  "CairnMultiplayerShared/Protocol.cs",
-  /public const int Version = \d+;/,
-  `public const int Version = ${versions.protocol};`
-);
-patchRegex(
-  "CairnMultiplayerShared/Protocol.cs",
-  /public const string GameVersion = ".*?";/,
-  `public const string GameVersion = "${versions.mod}";`
-);
-
-// ── Done ──────────────────────────────────────────────────────────────────────
-console.log();
-if (errors > 0) {
-  console.error(`Done with ${errors} error(s). Check output above.`);
-  process.exit(1);
-} else {
-  console.log("All versions synced successfully.");
-}
+update('CairnMultiplayerShared/Protocol.cs', [
+  [/public const int Version = \d+;/, `public const int Version = ${version.protocol};`],
+  [/public const string GameVersion = "[^"]+";/, `public const string GameVersion = "${version.mod}";`]
+]);
+update('CairnMultiplayerMod/Bootstrap/Mod.cs', [
+  [/(MelonInfo\(typeof\(CairnMultiplayerMod.Bootstrap.Mod\), "Cairn Multiplayer Mod", ")[^"]+(".*)/, `$1${version.mod}$2`]
+]);

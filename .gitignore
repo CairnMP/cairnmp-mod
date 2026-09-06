@@ -35,8 +35,9 @@ Thumbs.db
 # Dossier temporaire (outils de debug jetables)
 .tmp/
 
-# Scripts
-scripts/sync-versions.js
+# Local working documents and skill observations
+docs/local/
+skill-observations/
 
 # Local credentials and signing material
 .env

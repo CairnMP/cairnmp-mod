@@ -1,11 +1,47 @@
-# CairnMP
-
-> **Development branch:** `develop` contains ongoing work. Automated checks do
-> not establish in-game stability. Back up your saves and use matching mod/protocol
-> versions when testing with other players. Check the release notes before playing.
+# CairnMP — `next/feature-framework` branch
 
 [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) ·
 [Code of conduct](CODE_OF_CONDUCT.md)
+
+> ### ⚠️ Untested branch — do not use this for your regular sessions
+>
+> **Nothing here has been played yet.** The code builds cleanly and the automated
+> tests pass, but a green build proves very little for a mod like this one: the
+> parts that matter run inside the game, against IL2CPP objects and a live Steam
+> connection, and none of that is covered by a test suite.
+>
+> These changes are **hot off the keyboard**. They were written in one stretch and
+> committed as they went, without a single session played between them. Expect
+> rough edges. Expect things that worked on `develop` to be broken here.
+>
+> **What is most likely to misbehave:**
+>
+> - **Pings** — rebuilt on top of the new feature framework. They may not appear
+>   for other players, appear twice, or not appear at all.
+> - **Bivouacs** — the sync suspension was pulled out of the mod core into its own
+>   class. The behaviour is meant to be identical, but this is the code path behind
+>   the "one save then nothing" bug, so it deserves suspicion.
+> - **Anything networked** — the protocol moved to version 13. This branch **cannot
+>   play with a client running an older version**, in either direction.
+> - **The multiplayer panel** — the old Canvas implementation was removed. Only the
+>   in-game-styled panel remains, with the UI Toolkit fallback behind it.
+>
+> **If you try it anyway** — and you are very welcome to, that is how this gets
+> solid — please play with two clients, keep your `MelonLoader/Latest.log`, and
+> open an issue with what you did and what happened. A report saying "pings never
+> showed up for the host" is worth more than a hundred green builds. Bug reports on
+> this branch are genuinely useful; bug reports on `develop` are what keep the mod
+> stable for everyone else.
+>
+> **Where this is going.** This is not a side experiment — it is the direction the
+> mod is taking. Once it has been played, tested and fixed, it becomes the base
+> everything else is built on. The point of it is simple: **make CairnMP a mod
+> people can actually contribute to.** Adding a feature used to mean editing six
+> files spread across the protocol, the transport and the mod core, and
+> understanding all of them first. On this branch a feature is one file that
+> declares what it needs. See [Contributing a feature](#contributing-a-feature).
+>
+> Stable code lives on [`develop`](../../tree/develop). Use that one to play.
 
 ---
 
@@ -17,25 +53,29 @@ Features include roped climbing (belay), in-game chat and host commands, world
 pings, FreeRoam, and full synchronization of players, cosmetics, weather, lamps,
 pitons and time of day.
 
+Experimental [proximity voice](docs/proximity-voice.md) is available under
+**Settings → CairnMP**, with open-mic detection, push-to-talk, microphone selection
+and a local microphone test. Two-player voice validation is still pending.
+
 ## Contributing a feature
 
-A multiplayer feature is **one file**. It declares what it
+*(New on this branch.)* A multiplayer feature is **one file**. It declares what it
 sends over the network, what it does each frame and what it cleans up — nothing
 else in the codebase is touched. No packet ids, no serialization plumbing, no
 wiring in the mod core.
 
 Here is a complete, working example, start to finish. Save it as
-`CairnMultiplayerMod/Features/Wave/WaveFeature.cs`, build, and pressing **H**
+`CairnMultiplayerMod/Features/WaveFeature.cs`, build, and pressing **H**
 shows `<name> waves!` on every other player's screen for three seconds. Nothing
 below is hidden or abbreviated — this is the whole feature.
 
 ```csharp
 using System.IO;
 using CairnMultiplayer.Shared;
-using UnityEngine;
-using UnityEngine.InputSystem;
+using CairnMultiplayerMod.Framework;
+using CairnMultiplayerMod.GameApi;
 
-namespace CairnMultiplayerMod.Features.Wave;
+namespace CairnMultiplayerMod.Features;
 
 /// What travels over the network when someone waves.
 /// IPacket is the same contract the rest of the protocol uses: you write the
@@ -57,23 +97,21 @@ internal sealed class WaveFeature : MultiplayerFeature
     private const float BannerSeconds = 3f;
 
     private Broadcast<WaveSent> _wave;
-    private string _banner;
-    private float _hideBannerAt;
 
     // Called once at startup. Declare here, don't touch the game yet.
     protected internal override void OnRegister(FeatureBuilder feature)
     {
         _wave = feature.Broadcast<WaveSent>("sent", ShowWave);
         feature.EveryFrame(TickInput, FeaturePhase.Always);
-        feature.OnDrawHud(DrawBanner);
-        feature.OnSessionEnded(() => _banner = null);
+        feature.OnSessionEnded(() => Game.Hud.HideMessage("wave"));
     }
 
     private void TickInput()
     {
-        if (Keyboard.current?.hKey.wasPressedThisFrame != true) return;
+        if (KeyboardCaptured || !Game.Input.WasKeyPressed(GameKey.H)) return;
 
         // Goes to every other player. LocalPlayerName comes from the base class.
+        ShowWave(LocalPlayerId, new WaveSent { FromName = LocalPlayerName });
         _wave.Send(new WaveSent { FromName = LocalPlayerName });
     }
 
@@ -81,16 +119,7 @@ internal sealed class WaveFeature : MultiplayerFeature
     // effect locally when you send, if you want one.
     private void ShowWave(int fromPlayerId, WaveSent wave)
     {
-        _banner = $"{wave.FromName} waves!";
-        _hideBannerAt = Time.unscaledTime + BannerSeconds;
-    }
-
-    private void DrawBanner()
-    {
-        if (_banner == null) return;
-        if (Time.unscaledTime >= _hideBannerAt) { _banner = null; return; }
-
-        GUI.Label(new Rect(20f, 20f, 400f, 30f), _banner);
+        Game.Hud.ShowMessage("wave", $"{wave.FromName} waves!", BannerSeconds);
     }
 }
 ```
@@ -105,7 +134,9 @@ for you. (Curious what it produced? Look at `obj/generated/` after a build.)
 |---|---|---|
 | `Broadcast<T>` | everyone sees it, any player can send | pings, chat |
 | `HostState<T>` | the host owns it, and players joining later catch up automatically | weather, time of day |
-| `HostCommand<T>` | the client asks, the host accepts or refuses | roping up |
+| `HostCommand<T>` | the client asks, the host accepts or refuses | sleep requests, appearance changes |
+| `PerPlayerState<T>` | the host owns a value per player; late joiners receive the current values | appearance |
+| `Stream<T>` | transient updates with a bounded send rate | finger poses |
 
 Use `HostState` whenever a latecomer would otherwise miss something that is still
 true — a broadcast is gone the moment it is sent.
@@ -116,14 +147,15 @@ sync is active — for anything touching the world, since during a bivouac the g
 drives the pawn itself.
 
 **Where things live:** `Features/` is what the mod does, `Framework/` is what you
-write it with. Everything a feature is allowed to do is on `FeatureBuilder` — that
-one class is the whole surface to learn.
+write it with, and `GameApi/` is the safe façade toward Cairn. Unity, IL2CPP,
+Steamworks and Harmony stay under `Internal/`; build diagnostic `CMP003` rejects a
+feature that bypasses that boundary.
 
 A feature that throws is logged and isolated: it cannot take the other features,
 or the update loop, down with it.
 
-For a real one, read `Features/World/PingFeature.cs` — same shape, with its marker
-drawing split into a helper next to it.
+For a real one, read [`Features/PingFeature.cs`](CairnMultiplayerMod/Features/PingFeature.cs): input, world queries and HUD
+markers all go through `GameApi`, while its networking remains declared locally.
 
 ## Managed extension API
 
@@ -135,16 +167,63 @@ events without exposing Steam or raw packets. See
 
 ## Repository layout
 
-| Path | In `.slnx`? | Role |
+| Path | In `.sln`? | Role |
 |---|---|---|
 | `CairnMultiplayerMod/` | ✅ | MelonLoader mod loaded into Cairn |
-| `CairnMultiplayerMod/Features/` | ✅ | What the mod does — one folder per feature |
+| `CairnMultiplayerMod/Features/` | ✅ | What the mod does — one file per feature |
+| `CairnMultiplayerMod/Api/` | ✅ | Public managed extension contracts; namespace `CairnMultiplayer.Api` |
+| `CairnMultiplayerMod/Bootstrap/` | ✅ | Composition and startup wiring |
 | `CairnMultiplayerMod/Framework/` | ✅ | What you write a feature with (channels, lifecycle) |
+| `CairnMultiplayerMod/GameApi/` | ✅ | Safe, documented façade available to features |
+| `CairnMultiplayerMod/Internal/` | ✅ | Cairn, Unity, IL2CPP, Steam, Harmony and UI implementations |
 | `CairnMultiplayerMod.Generators/` | ✅ | Build-time generator listing the features (never ships) |
 | `CairnMultiplayerShared/` | ✅ | Shared network protocol (packets, constants) |
-| `CairnMultiplayerShared.Tests/` | ✅ | xUnit tests for the shared protocol |
-| `CairnMultiplayerMod.Tests/` | ✅ | xUnit tests for the framework and the extension API |
+| `CairnMultiplayer.Tests/` | ✅ | Portable protocol, architecture, generator, authority and diagnostics tests; no game DLLs required |
+| `CairnMultiplayerMod.Tests/` | ✅ | Framework, gameplay, panel and extension tests requiring game references |
+| `docs/` | — | Published architecture and API documentation; `docs/local/` is ignored |
+| `examples/` | — | Managed extension source example |
+| `scripts/` | — | Local checks, reference generation, version synchronization and packaging |
 | `game-refs/` | — | Il2Cpp + MelonLoader reference assemblies (**not committed** — provide your own, see below) |
+
+The dependency rules and inbound packet flow are documented in
+[`docs/architecture.md`](docs/architecture.md). Start with [CONTRIBUTING.md](CONTRIBUTING.md)
+for setup, verification and contribution conventions.
+
+## JetBrains Rider
+
+Open `CairnMultiplayer.sln` from the repository root in JetBrains Rider. It loads
+the mod, shared protocol, source generator and both test projects together, and
+exposes the main documentation files under the `Documentation` solution folder.
+Use Rider rather than IntelliJ IDEA: Rider is JetBrains' C#/.NET IDE and provides
+the syntax highlighting, code completion, navigation, refactoring and test runner
+needed by this project.
+
+If game types appear unresolved in the editor, generate the local reference
+assemblies first with `pwsh scripts/generate-il2cpp-refs.ps1`. These assemblies
+remain local and must not be committed.
+
+### Run and debug the installed game
+
+Select **CairnMP** in Rider's run configuration selector. The shared profiles in
+`.run/` build the mod in **Debug**, deploy its DLLs and matching PDBs to the local
+development installation, then launch `Cairn.exe` with `--cairnloader.debug`.
+
+- **Run** (`Shift+F10`, default Rider keymap): launch the game.
+- **Debug** (`Shift+F9`): launch with the **CoreCLR** debugger for the managed mod.
+- **CairnMP - Build Debug**: only compile and deploy, without launching the game.
+
+The game uses IL2CPP, but CairnLoader hosts the mod in **.NET 6**. Keep the profile
+runtime set to **.NET / .NET Core** (`RUNTIME_TYPE=coreclr`), not Auto, .NET Framework
+or Unity/Mono. The default runtime can start the game without binding C# breakpoints.
+CoreCLR debugging was verified at `Mod.OnInitializeMelon`, including local values.
+This does not restore the original C# sources of the IL2CPP game itself.
+
+Close the running game before rebuilding or switching between Run and Debug, and
+open Steam for multiplayer. The profiles assume the standard CairnMP installation
+under the current user's `AppData/Local/CairnMultiplayerData/game`, and the .NET SDK
+at `C:/Program Files/dotnet/dotnet.exe`. For a custom installation, update both the
+game profile's executable/working directory and the build profile's `CairnDir`
+MSBuild property so deployment and launch target the same directory.
 
 ## Reference assemblies
 
@@ -159,15 +238,38 @@ in one of two ways (resolved by `Directory.Build.props`):
 
 ## Build & test
 
+From a fresh clone without Cairn installed, run the portable suite:
+
 ```bash
-dotnet build CairnMultiplayer.slnx -c Release
-dotnet test  CairnMultiplayer.slnx -c Release
+dotnet restore CairnMultiplayer.Tests/CairnMultiplayer.Tests.csproj --locked-mode
+dotnet test CairnMultiplayer.Tests/CairnMultiplayer.Tests.csproj -c Release --no-restore
 ```
 
-Requires a .NET 10 SDK, the .NET 6 runtime for the current test targets, and the
-reference assemblies described above. See [CONTRIBUTING.md](CONTRIBUTING.md) for
-public CI checks that run without game DLLs. Builds do not install the mod;
-use `-p:DeployMod=true` with an explicit `CairnDir` to opt into local deployment.
+With the game references available, build and test the complete solution:
+
+```bash
+dotnet restore CairnMultiplayer.sln --locked-mode
+dotnet build CairnMultiplayer.sln -c Release --no-restore -p:DeployMod=false
+dotnet test CairnMultiplayer.sln -c Release --no-restore -p:DeployMod=false
+```
+
+Requires SDK 10.0.400 (global.json), the reference assemblies described above, and the .NET 6 runtime for the native mod tests. Portable tests run on .NET 10. Normal builds never deploy; use -p:DeployMod=true explicitly for a local development install (dev channel).
+
+GitHub Actions always runs the portable shared-protocol tests, the source-level
+architecture tests, generator regression tests and source-linked authority/diagnostic tests with locked NuGet dependencies. The full mod suite remains a local
+verification because Cairn's proprietary reference assemblies cannot be redistributed.
+
+A change of lobby owner ends the session; reconnect through a new lobby. All players must use protocol 13.
+
+## Local crash reports
+
+CairnMP never uploads diagnostic data. Recoverable problems are deduplicated into local
+session logs. If a fatal mod error occurs, multiplayer and all installed patches stop,
+the available logs are compressed in
+`UserData/CairnMultiplayer/Crashes/CairnMP-crash-*.zip`, and Cairn shows the exact path
+before closing cleanly on request or after 30 seconds. At most 10 session logs (20 MiB)
+and 5 crash archives (100 MiB) are retained; oversized source logs are tailed inside the
+archive so a runaway log cannot make crash handling unbounded.
 
 ## Package a release
 
@@ -184,7 +286,7 @@ assembly info and protocol constants with:
 node scripts/sync-versions.js
 ```
 
-`protocol` is bumped only when the packet layout changes incompatibly — the
+`protocol` is bumped when packet layouts, feature contract identifiers or their meanings change incompatibly — the
 handshake rejects clients whose protocol version does not match.
 
 ## License

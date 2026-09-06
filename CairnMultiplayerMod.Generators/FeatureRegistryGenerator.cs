@@ -19,8 +19,8 @@ public sealed class FeatureRegistryGenerator : IIncrementalGenerator
 
     private static readonly DiagnosticDescriptor NeedsParameterlessConstructor = new(
         id: "CMP001",
-        title: "A feature needs a parameterless constructor",
-        messageFormat: "'{0}' derives from MultiplayerFeature but has no parameterless constructor, so it cannot be registered automatically",
+        title: "A feature must be constructible by the registry",
+        messageFormat: "'{0}' must be non-generic and expose a parameterless constructor accessible from the registry",
         category: "CairnMP",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -42,6 +42,8 @@ public sealed class FeatureRegistryGenerator : IIncrementalGenerator
             .Where(static feature => feature is not null);
 
         context.RegisterSourceOutput(candidates.Collect(), Emit);
+
+        FeatureDependencyAnalyzer.Initialize(context);
     }
 
     private static FeatureCandidate Describe(GeneratorSyntaxContext context)
@@ -56,7 +58,7 @@ public sealed class FeatureRegistryGenerator : IIncrementalGenerator
         return new FeatureCandidate(
             symbol.ToDisplayString(),
             symbol.Name,
-            HasParameterlessConstructor(symbol),
+            !symbol.IsGenericType && HasParameterlessConstructor(symbol),
             symbol.ContainingType is not null,
             symbol.Locations.FirstOrDefault());
     }
@@ -74,13 +76,16 @@ public sealed class FeatureRegistryGenerator : IIncrementalGenerator
     private static bool HasParameterlessConstructor(INamedTypeSymbol symbol)
         => symbol.InstanceConstructors.Any(constructor =>
             constructor.Parameters.Length == 0 &&
-            constructor.DeclaredAccessibility != Accessibility.Private);
+            (constructor.DeclaredAccessibility == Accessibility.Public ||
+             constructor.DeclaredAccessibility == Accessibility.Internal ||
+             constructor.DeclaredAccessibility == Accessibility.ProtectedOrInternal));
 
     private static void Emit(SourceProductionContext context, ImmutableArray<FeatureCandidate> candidates)
     {
         var usable = new List<FeatureCandidate>();
-        foreach (var candidate in candidates.Distinct())
+        foreach (var candidatesForType in candidates.GroupBy(candidate => candidate.FullName))
         {
+            var candidate = candidatesForType.First();
             if (candidate.IsNested)
             {
                 context.ReportDiagnostic(Diagnostic.Create(MustNotBeNested, candidate.Location, candidate.Name));
@@ -136,7 +141,6 @@ public sealed class FeatureRegistryGenerator : IIncrementalGenerator
         internal bool IsNested { get; }
         internal Location Location { get; }
 
-        public override bool Equals(object obj) => obj is FeatureCandidate other && other.FullName == FullName;
-        public override int GetHashCode() => FullName.GetHashCode();
     }
+
 }

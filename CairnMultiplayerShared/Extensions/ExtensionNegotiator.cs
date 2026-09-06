@@ -161,7 +161,7 @@ public static class ExtensionNegotiator
                (maximum == null || peerVersion <= maximum);
     }
 
-    private static bool TryParseBound(string value, out Version version)
+    private static bool TryParseBound(string value, out Version? version)
     {
         version = null;
         return string.IsNullOrWhiteSpace(value) || Version.TryParse(value, out version);

@@ -6,8 +6,10 @@
     <RootNamespace>CairnMultiplayerMod</RootNamespace>
     <Nullable>disable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PlatformTarget>x64</PlatformTarget>
+    <DeployMod Condition="'$(DeployMod)' == ''">false</DeployMod>
 
-    <!-- Les mods MelonLoader ne doivent pas embarquer leurs dependances. -->
+    <!-- Copier les dependances gerees ; les assemblies du jeu restent Private=false. -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <GenerateDependencyFile>false</GenerateDependencyFile>
     <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
@@ -21,6 +23,18 @@
   </PropertyGroup>
 
   <!-- References MelonLoader -->
+  <ItemGroup>
+    <PackageReference Include="Concentus" Version="2.2.2" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+    <Reference Include="Il2CppTheGameBakers.TGBTools.UI.Runtime">
+      <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.TGBTools.UI.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppTheGameBakers.TGBTools.Localization.Runtime">
+      <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.TGBTools.Localization.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
   <ItemGroup>
     <Reference Include="MelonLoader">
       <HintPath>$(MelonLoaderNet6Dir)\MelonLoader.dll</HintPath>
@@ -177,19 +191,28 @@
   </ItemGroup>
 
   <!--
-    Copie les DLL dans les dossiers Mods uniquement avec -p:DeployMod=true (hors CI).
+    Copie automatiquement les DLL dans les dossiers Mods apres le build.
     Quand l'instance 2 existe (clonee via tools/clone-cairn.ps1), elle est
     aussi mise a jour pour que les deux processus Cairn chargent le rebuild.
   -->
   <ItemGroup>
     <ModDeployFiles Include="$(OutputPath)$(AssemblyName).dll" />
     <ModDeployFiles Include="$(OutputPath)CairnMultiplayerShared.dll" />
+    <ModDeployFiles Include="$(OutputPath)Concentus.dll" />
+    <ModDeployFiles Include="$(OutputPath)NAudio.Core.dll" />
+    <ModDeployFiles Include="$(OutputPath)NAudio.Wasapi.dll" />
+    <ModDeployFiles Include="$(MSBuildProjectDirectory)\..\THIRD-PARTY-NOTICES.txt" />
   </ItemGroup>
 
   <Target Name="CopyToMods" AfterTargets="Build" Condition="'$(DeployMod)' == 'true' and '$(CI)' != 'true'">
+    <!-- Keep symbols beside the deployed DLLs so Rider can resolve mod breakpoints. -->
+    <ItemGroup>
+      <ModDeployFiles Include="$(TargetDir)$(AssemblyName).pdb" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
+      <ModDeployFiles Include="$(TargetDir)CairnMultiplayerShared.pdb" Condition="Exists('$(TargetDir)CairnMultiplayerShared.pdb')" />
+    </ItemGroup>
     <Copy SourceFiles="@(ModDeployFiles)" DestinationFolder="$(ModsDir)" />
     <WriteLinesToFile File="$(ModsDir)\.mod_version" Lines="dev" Overwrite="true" />
-    <WriteLinesToFile File="$(ModsDir)\.mod_channel" Lines="stable" Overwrite="true" />
+    <WriteLinesToFile File="$(ModsDir)\.mod_channel" Lines="dev" Overwrite="true" />
     <Message Importance="high" Text="Mod deployed to $(ModsDir)" />
 
     <Copy
@@ -203,7 +226,7 @@
       Condition="Exists('$(CairnDir2)')" />
     <WriteLinesToFile
       File="$(ModsDir2)\.mod_channel"
-      Lines="stable"
+      Lines="dev"
       Overwrite="true"
       Condition="Exists('$(CairnDir2)')" />
     <Message

@@ -3,6 +3,61 @@
 All notable changes to CairnMP are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] — 2026-09-06 (beta)
+
+> This beta uses protocol 13. Every player in a lobby must run CairnMP 2.1.0;
+> clients from the 1.x releases are not compatible.
+
+### Added
+
+- Experimental proximity voice chat with voice activation enabled by default,
+  push-to-talk, microphone mute, distance attenuation and stereo positioning.
+- A dedicated **CairnMP** page in the game's settings for choosing the input
+  device, adjusting voice sensitivity and volume, changing the push-to-talk key,
+  testing the microphone locally and muting individual players.
+- A feature framework with scoped network contracts and a real-time stream channel,
+  making multiplayer features easier to isolate and extend.
+- Shared Rider profiles for building, deploying, running and debugging the installed
+  game in one action.
+
+### Changed
+
+- Chat, pings, weather and time, sleeping, player appearance and hand poses now use
+  the new feature framework.
+- The multiplayer menu has been polished to better match Cairn's native navigation,
+  animations and visual language.
+- Voice device discovery now runs outside the game loop to avoid frame hitches while
+  playing or opening the settings page.
+- SDK, C# and NuGet dependencies are pinned, deployment is explicit, and release
+  packaging is covered by automated checks.
+
+### Fixed
+
+- Fixed releasing distant ropes, losing rope safety while chatting, and omitting
+  awake campers from the sleep consensus.
+- Fixed sessions remaining active after host ownership changes and hand poses not
+  refreshing for players who join late.
+- Fixed invalid rope endpoints, unbounded piton or rope churn, unauthenticated chat
+  attribution and repeated admission snapshots.
+- Fixed asynchronous feature callbacks reaching game objects from the wrong thread,
+  plus subscriptions and pending state surviving shutdown.
+- Fixed multiplayer panels retaining an incorrect close state or leaving remnants
+  of the primary UI after switching to the fallback interface.
+- Bounded session logs, duplicate tracking, recurring feature errors and archive
+  copies, while preserving native save failures instead of silently suppressing them.
+
+### Beta limitations
+
+- Proximity voice chat currently supports Windows through WASAPI. Linux/Proton and
+  macOS are not supported by this beta.
+- Voice chat does not yet include echo cancellation, noise suppression or wall
+  occlusion. Headphones are recommended when using voice activation.
+- The settings interface and local microphone path have been validated in game;
+  two-player voice quality and the complete multiplayer path still require broader
+  community testing.
+- See `docs/corrections-audit-2026-09-05.md` and `docs/proximity-voice.md` for the
+  detailed validation notes.
+
 ## [1.1.0] — 2026-08-02
 
 Network protocol unchanged (still version 7), so `1.1.0` and `1.0.0` clients
@@ -29,10 +84,22 @@ can still play together.
   no longer report a stale state.
 
 ### Changed
-- Crash reports now carry a stable fingerprint and the tail of
-  `CairnLoader/Latest.log`. Previously every occurrence of a bug was filed as
-  a separate report with no log attached, which made most of them
-  untriageable.
+- **Crash diagnostics are now local-only.** CairnMP no longer uploads errors or
+  creates a machine identifier. A fatal mod error stops multiplayer safely,
+  bundles the available CairnMP, MelonLoader and Unity logs under
+  `UserData/CairnMultiplayer/Crashes`, displays that path, then closes Cairn
+  cleanly. The player alone decides whether to share the ZIP. Session logs and
+  archives now have count/size retention limits, and oversized logs are tailed.
+- Game-facing features now use the safe `GameApi` façade; Unity, IL2CPP, Steam
+  and Harmony implementations live under `Internal`, with source-level boundary
+  tests enforcing the dependency direction.
+- Runtime services no longer reach through `Mod.Instance`: state, networking and
+  Steam dependencies are supplied explicitly by the bootstrap composition root.
+- Harmony patches, exception hooks, Steam callbacks and pending operations now
+  have symmetric shutdown paths. Every Melon callback is protected by the fatal
+  error boundary.
+- Portable protocol and architecture checks now run in GitHub Actions without
+  requiring redistributable game assemblies.
 
 ## [1.0.0] — 2026-07-11
 
@@ -96,9 +163,9 @@ stays at version 6).
   states, and the current weather.
 
 ### Changed (internal)
-- Host-authoritative session refactor: pitons, lamps and weather are now owned by a
-  single transport-agnostic core (`SteamAuthoritativeSession`) instead of being handled
-  inline in the transport. No gameplay change; groundwork for future sync work.
+- Host-side piton authority is now owned by a transport-agnostic core
+  (`PitonAuthority`) instead of being handled inline in the Steam transport. No
+  gameplay change; groundwork for future sync work.
 - Removed the unused standalone LiteNetLib server — multiplayer is Steam relay only.
 
 ### Notes for testers

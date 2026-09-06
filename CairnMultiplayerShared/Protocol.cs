@@ -6,12 +6,13 @@ namespace CairnMultiplayer.Shared;
 /// </summary>
 public static class Protocol
 {
+    // 13: feature-scoped contract ids and explicit Bivouac presence for sleep consensus.
     // 12: ClientFeatureStream carries the sender's reliability flag, so the host relays a
     // stream the way it was declared instead of always relaying unreliably.
     // 11: every gameplay packet except the pose/frame streams now travels through the
     // feature framework, freeing ids 4, 10-14, 16, 69, 76-80 and 83. Real-time streams
     // share ids 19 and 89 whatever the feature.
-    public const int Version = 12;
+    public const int Version = 13;
     public const string ConnectionKey = "cairnmp";
     public const int DefaultPort = 14000;
 
@@ -19,7 +20,7 @@ public static class Protocol
     /// CairnMP client version sent to the API when creating a lobby.
     /// Matches the deployed launcher/mod version.
     /// </summary>
-    public const string GameVersion = "1.1.0";
+    public const string GameVersion = "2.1.0";
 
     /// <summary>Rate at which a client broadcasts the position and state of its local player.</summary>
     public const float PlayerStateUpdateIntervalSeconds = 1f / 30f; // 30 Hz
@@ -78,11 +79,12 @@ public static class Protocol
 /// </summary>
 public enum PlayerState : byte
 {
-    Unknown    = 0, // default, no state received yet
+    Unknown = 0, // default, no state received yet
     Connecting = 1, // socket connected, handshake not finished yet
-    InMenu     = 2, // main menu, not in a game
-    Loading    = 3, // scene transitions in progress, intro cinematic
-    InGame     = 4, // MC spawned, scenes stable -- ok to render ghosts
+    InMenu = 2, // main menu, not in a game
+    Loading = 3, // scene transitions in progress, intro cinematic
+    InGame = 4, // MC spawned, scenes stable -- ok to render ghosts
+    Bivouac = 5, // active participant, gameplay animation suspended; still votes on sleep
 }
 
 /// <summary>
@@ -96,19 +98,19 @@ public enum PacketId : byte
     ClientHandshake = 1,
     ClientDisconnect = 2,
     ClientPlayerState = 3,
-    // 4 was ClientChat — chat moved to the feature framework (Features/Chat/). Reserved.
+    // 4 was ClientChat — chat moved to ChatFeature. Reserved.
     ClientBoneState = 5,
     ClientPitonPlaced = 6,
     ClientPitonRemoved = 7,
     ClientPlayerFrame = 8,
     ClientClimbotFrame = 9,
-    // 10 was ClientWeatherState — weather is host-published state in Features/Weather/. Reserved.
-    // 11 was ClientLampState — appearance is per-player host state in Features/Players/Avatar/.
-    // 12 was ClientPingPlaced — pings moved to the feature framework (Features/World/).
+    // 10 was ClientWeatherState — weather is host-published state in WeatherFeature. Reserved.
+    // 11 was ClientLampState — appearance is per-player host state in AppearanceFeature.
+    // 12 was ClientPingPlaced — pings moved to PingFeature.
     // Left reserved on purpose: reusing the number would make an old client's ping look
     // like whatever packet takes its place.
-    // 13 was ClientHandPose — finger poses stream through Features/Players/Avatar/. Reserved.
-    // 14 was ClientSleepState — sleep is reported through Features/Clock/. Reserved.
+    // 13 was ClientHandPose — finger poses now stream through HandPoseFeature. Reserved.
+    // 14 was ClientSleepState — sleep is reported through ClockFeature. Reserved.
     ClientRopeClip = 15,
     // 16 was ClientCosmeticState — see the note on 11. Reserved, do not reuse.
     ClientExtensionManifest = 17,
@@ -134,7 +136,7 @@ public enum PacketId : byte
     // 77 was ServerLampState — see the note on 11. Reserved, do not reuse.
     // 78 was ServerPingPlaced — see the note on 12. Reserved, do not reuse.
     // 79 was ServerHandPose — see the note on 13. Reserved, do not reuse.
-    // 80 was ServerTimeState — time of day moved to Features/Clock/. Reserved.
+    // 80 was ServerTimeState — time of day moved to ClockFeature. Reserved.
     ServerTeleport = 81,
     ServerRopeClip = 82,
     // 83 was ServerCosmeticState — see the note on 11. Reserved, do not reuse.
@@ -154,11 +156,11 @@ public enum PacketId : byte
 /// </summary>
 public enum GameDifficulty : int
 {
-    Invalid  = 0,
-    Alpinist  = 1769420573,
-    Explorer  = 766328718,
-    FreeSolo  = -1944667143,
-    FreeRoam  = 418187680,
+    Invalid = 0,
+    Alpinist = 1769420573,
+    Explorer = 766328718,
+    FreeSolo = -1944667143,
+    FreeRoam = 418187680,
 }
 
 /// <summary>Outcome of a managed extension command handled by the host.</summary>

@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="CairnMP - Build Debug" type="RunNativeExe" factoryName="Native Executable">
+    <option name="EXE_PATH" value="C:/Program Files/dotnet/dotnet.exe" />
+    <option name="PROGRAM_PARAMETERS" value="build &quot;$PROJECT_DIR$/CairnMultiplayerMod/CairnMultiplayerMod.csproj&quot; --configuration Debug -p:DeployMod=true --nologo --verbosity minimal --tl:off" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <option name="PASS_PARENT_ENVS" value="1" />
+    <method v="2" />
+  </configuration>
+</component>

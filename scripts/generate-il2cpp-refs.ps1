@@ -94,5 +94,6 @@ Copy-Item -Force "$Il2CppDir\*.dll" $OutputDir
 $count = (Get-ChildItem "$OutputDir\*.dll").Count
 Write-Host ""
 Write-Host "  Done! $count assemblies copied to game-refs/Il2CppAssemblies/" -ForegroundColor Green
-Write-Host "  You can now commit these files and run package-mod.ps1." -ForegroundColor Green
+Write-Host "  These proprietary references stay local: do not commit them." -ForegroundColor DarkGray
+Write-Host "  You can now build the solution or run package-mod.ps1." -ForegroundColor Green
 Write-Host ""

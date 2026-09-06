@@ -1,4 +1,6 @@
 using CairnMultiplayer.Api;
+using CairnMultiplayerMod.GameApi;
+using CairnMultiplayerMod.Internal.Extensions;
 
 namespace CairnMultiplayerMod.Framework;
 
@@ -15,11 +17,11 @@ namespace CairnMultiplayerMod.Framework;
 ///
 ///     private Broadcast&lt;PingPlaced&gt; _placed;
 ///
-///     protected override void OnRegister(FeatureBuilder feature)
+///     protected internal override void OnRegister(FeatureBuilder feature)
 ///     {
 ///         _placed = feature.Broadcast&lt;PingPlaced&gt;("placed", ShowRemotePing);
 ///         feature.EveryFrame(TickInput, FeaturePhase.Always);
-///         feature.OnSessionEnded(PingMarkerManager.ClearAll);
+///         feature.OnSessionEnded(Game.World.ClearPings);
 ///     }
 /// }
 /// </code>
@@ -39,13 +41,20 @@ internal abstract class MultiplayerFeature
     /// </summary>
     protected internal abstract void OnRegister(FeatureBuilder feature);
 
-    // ── Session shortcuts, so a feature never has to reach through Mod.Instance ──
+    // ── Session shortcuts, so a feature never reaches through the composition root ──
 
     /// <summary>Our own player id in the current session.</summary>
     protected int LocalPlayerId => Session.LocalPlayer.Id;
 
     /// <summary>Our own display name (Steam persona).</summary>
     protected string LocalPlayerName => Session.LocalPlayer.Name;
+
+    protected string GetPlayerName(int playerId)
+    {
+        foreach (var player in Session.Players)
+            if (player.Id == playerId) return player.Name;
+        return $"Player{playerId}";
+    }
 
     /// <summary>True when this peer is the authoritative host.</summary>
     protected bool IsHost => Session.IsHost;
@@ -55,8 +64,16 @@ internal abstract class MultiplayerFeature
 
     /// <summary>True while a mod UI (the chat) is consuming key presses. Check it before
     /// reacting to a key, otherwise typing a message triggers your shortcut.</summary>
-    protected static bool KeyboardCaptured => FeatureInput.KeyboardCaptured;
+    protected bool KeyboardCaptured => Game.Input.IsKeyboardCaptured;
+
+    /// <summary>Safe access to Cairn, bound before <see cref="OnRegister"/> runs.</summary>
+    protected IGameApi Game { get; private set; } = UnavailableGameApi.Instance;
+
+    protected void LogInfo(string message) => FeatureLog.Info($"[Feature:{Id}] {message}");
+    protected void LogWarning(string message) => FeatureLog.Warn($"[Feature:{Id}] {message}");
 
     /// <summary>Set by the host at registration; tests can supply their own runtime.</summary>
-    internal Api.Internal.ExtensionRuntime Session { private get; set; } = MultiplayerApi.Runtime;
+    internal ExtensionRuntime Session { private get; set; } = MultiplayerApi.Runtime;
+
+    internal void BindGame(IGameApi game) => Game = game ?? UnavailableGameApi.Instance;
 }

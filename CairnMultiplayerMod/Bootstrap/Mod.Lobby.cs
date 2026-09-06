@@ -1,5 +1,10 @@
 using System;
 using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.Internal;
+using CairnMultiplayerMod.Internal.Game;
+using CairnMultiplayerMod.Internal.Game.Players;
+using CairnMultiplayerMod.Internal.Game.World;
+using CairnMultiplayerMod.Internal.Networking;
 using MelonLoader;
 
 namespace CairnMultiplayerMod.Bootstrap;
@@ -13,19 +18,19 @@ public partial class Mod
             _panel.SetStatus("Launch already in progress.", true);
             return;
         }
-        if (_lobby == null || !_lobby.IsInLobby)
+        if (!Lobby.IsInLobby)
         {
             _panel.SetStatus("Not connected to a lobby.", false);
             return;
         }
-        if (!_lobby.IsHost)
+        if (!Lobby.IsHost)
         {
             _panel.SetStatus("Only the host can start.", true);
             return;
         }
 
         _panel.SetStatus("Starting lobby...", true);
-        _lobby.BroadcastStart(BuildDefaultStartGame());
+        Lobby.BroadcastStart(BuildDefaultStartGame());
     }
 
     private static ServerStartGame BuildDefaultStartGame() => new()
@@ -50,7 +55,7 @@ public partial class Mod
 
         try
         {
-            var succeeded = await _lobby.CreateLobby(config);
+            var succeeded = await Lobby.CreateLobby(config);
             if (!succeeded)
                 FinishFailedConnection("Failed to create lobby.");
         }
@@ -74,7 +79,7 @@ public partial class Mod
         LoggerInstance.Msg("[Browse] Requesting Steam lobby list...");
         try
         {
-            var lobbies = await _lobby.RequestLobbyList();
+            var lobbies = await Lobby.RequestLobbyList();
             _panel.SetBrowserLobbies(lobbies);
         }
         catch (Exception exception)
@@ -91,7 +96,7 @@ public partial class Mod
         BeginConnecting("Joining lobby");
         try
         {
-            var succeeded = await _lobby.JoinById(lobbyId);
+            var succeeded = await Lobby.JoinById(lobbyId);
             if (!succeeded)
                 FinishFailedConnection("Failed to join lobby.");
         }
@@ -101,16 +106,16 @@ public partial class Mod
         }
     }
 
-    private async void OnJoinByCodeRequested(string playerName, string roomCode)
+    private async void OnJoinByCodeRequested(string roomCode)
     {
-        playerName = GetSteamPlayerName();
+        string playerName = GetSteamPlayerName();
         LoggerInstance.Msg($"Joining lobby '{roomCode}' as '{playerName}'...");
         ModConfig.PlayerName.Value = playerName;
         BeginConnecting($"Joining {roomCode}");
 
         try
         {
-            var succeeded = await _lobby.JoinByCode(roomCode);
+            var succeeded = await Lobby.JoinByCode(roomCode);
             if (!succeeded)
                 FinishFailedConnection($"Lobby {roomCode} not found.");
         }
@@ -145,9 +150,10 @@ public partial class Mod
 
     private void OnDisconnectRequested()
     {
-        _lobby?.Leave();
-        _network.Disconnect();
-        WeatherApi.ResetRemoteState();
+        StartGame.Cancel();
+        Lobby.Leave();
+        Network.Disconnect();
+        WeatherInterop.ResetRemoteState();
         RemotePlayerManager.ClearAll();
         PingMarkerManager.ClearAll();
         Bivouac.ForceResume();
@@ -157,7 +163,7 @@ public partial class Mod
 
     private string GetSteamPlayerName()
     {
-        var name = _lobby?.LocalPersonaName;
+        var name = Lobby.LocalPersonaName;
         if (!string.IsNullOrWhiteSpace(name))
             return name.Trim();
 

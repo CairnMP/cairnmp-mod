@@ -3,7 +3,7 @@
 # Compatible bash (git-bash sous Windows, native Linux/Mac).
 #
 # Usage : bash scripts/check.sh
-# Le hook .githooks/pre-push l'appelle automatiquement.
+# A lancer manuellement avant un push.
 
 set -euo pipefail
 
@@ -18,7 +18,9 @@ START=$SECONDS
 
 # ── Mod (.NET / xUnit) ───────────────────────────────────────────────────────
 step "mod: dotnet test"
-dotnet test CairnMultiplayer.slnx -c Release --nologo --verbosity minimal || fail "mod"
+dotnet restore CairnMultiplayer.sln --locked-mode || fail "restore"
+node scripts/sync-versions.js --check || fail "versions"
+dotnet test CairnMultiplayer.sln -c Release --no-restore -p:DeployMod=false --nologo --verbosity minimal || fail "mod"
 ok "mod"
 
 ELAPSED=$((SECONDS - START))

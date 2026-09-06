@@ -24,7 +24,7 @@ $Il2CppFound = $false
 if (Test-Path "$GameRefsDir\UnityEngine.CoreModule.dll")
 {
     $Il2CppFound = $true
-    Write-Host "  Il2Cpp assemblies: game-refs/ (versioned)" -ForegroundColor DarkGray
+    Write-Host "  Il2Cpp assemblies: game-refs/ (local, not redistributed)" -ForegroundColor DarkGray
 } elseif (Test-Path "$GameDir\UnityEngine.CoreModule.dll")
 {
     $Il2CppFound = $true
@@ -53,7 +53,7 @@ $MelonLoaderOk = (Test-Path "$MelonRefsDir\MelonLoader.dll") -and
 
 if ($MelonLoaderOk)
 {
-    Write-Host "  MelonLoader DLLs:  game-refs/MelonLoader/ (versioned)" -ForegroundColor DarkGray
+    Write-Host "  MelonLoader DLLs:  game-refs/MelonLoader/ (local, not redistributed)" -ForegroundColor DarkGray
 } elseif ($env:MELON_LOADER_NET6_DIR -and (Test-Path "$env:MELON_LOADER_NET6_DIR\MelonLoader.dll"))
 {
     Write-Host "  MelonLoader DLLs:  $env:MELON_LOADER_NET6_DIR (env override)" -ForegroundColor DarkGray
@@ -73,18 +73,20 @@ if ($MelonLoaderOk)
 Write-Host ""
 
 # 1. Synchronisation des versions
-Write-Host "[1/3] Syncing versions..." -ForegroundColor DarkGray
-node scripts/sync-versions.js
+Write-Host "[1/3] Checking versions..." -ForegroundColor DarkGray
+node scripts/sync-versions.js --check
 if ($LASTEXITCODE -ne 0)
 { throw "Version sync failed"
 }
 Write-Host ""
 
 # 2. Build du mod
-Write-Host "[2/3] Building mod..." -ForegroundColor DarkGray
-dotnet build CairnMultiplayer.slnx -c Release --nologo -v minimal
+Write-Host "[2/3] Building and testing..." -ForegroundColor DarkGray
+dotnet restore CairnMultiplayer.sln --locked-mode
+if ($LASTEXITCODE -ne 0) { throw "Locked restore failed" }
+dotnet test CairnMultiplayer.sln -c Release --no-restore -p:DeployMod=false --nologo -v minimal
 if ($LASTEXITCODE -ne 0)
-{ throw "Mod build failed"
+{ throw "Mod build or tests failed"
 }
 Write-Host ""
 
@@ -92,25 +94,30 @@ Write-Host ""
 Write-Host "[3/3] Packaging..." -ForegroundColor DarkGray
 New-Item -ItemType Directory -Force -Path $Dist | Out-Null
 
-$PayloadMod = Join-Path $Dist "payload-mod"
-if (Test-Path $PayloadMod)
-{ Remove-Item -Recurse -Force $PayloadMod
-}
+$PayloadMod = Join-Path $Dist ("payload-mod-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path "$PayloadMod/mods" | Out-Null
 
 $ModBin = "CairnMultiplayerMod/bin/Release/net6.0"
 Copy-Item "$ModBin/CairnMultiplayerMod.dll"    "$PayloadMod/mods/"
 Copy-Item "$ModBin/CairnMultiplayerShared.dll" "$PayloadMod/mods/"
-if (Test-Path "$ModBin/LiteNetLib.dll")
-{
-    Copy-Item "$ModBin/LiteNetLib.dll" "$PayloadMod/mods/"
-}
-
+Copy-Item "$ModBin/Concentus.dll" "$PayloadMod/mods/"
+Copy-Item "$ModBin/NAudio.Core.dll" "$PayloadMod/mods/"
+Copy-Item "$ModBin/NAudio.Wasapi.dll" "$PayloadMod/mods/"
+Copy-Item "THIRD-PARTY-NOTICES.txt" "$PayloadMod/mods/"
 $ModZipPath = Join-Path $Dist $ModZipName
 if (Test-Path $ModZipPath)
 { Remove-Item -Force $ModZipPath
 }
 Compress-Archive -Path "$PayloadMod/*" -DestinationPath $ModZipPath -CompressionLevel Optimal
+
+# Only remove the verified, unique staging directory created by this invocation.
+$ResolvedPayload = (Resolve-Path -LiteralPath $PayloadMod).Path
+$ResolvedDist = (Resolve-Path -LiteralPath $Dist).Path
+if ([IO.Path]::GetDirectoryName($ResolvedPayload) -ne $ResolvedDist -or
+    [IO.Path]::GetFileName($ResolvedPayload) -notmatch '^payload-mod-[0-9a-f]{32}$') {
+    throw "Unsafe staging cleanup path: $ResolvedPayload"
+}
+Remove-Item -LiteralPath $ResolvedPayload -Recurse -Force
 
 $ModSize   = (Get-Item $ModZipPath).Length
 $ModSHA256 = (Get-FileHash -Algorithm SHA256 $ModZipPath).Hash.ToLower()

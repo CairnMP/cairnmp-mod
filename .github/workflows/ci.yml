@@ -1,19 +1,22 @@
 name: CI
+
 on:
   pull_request:
     branches: [develop, production]
   push:
     branches: [develop, production]
   workflow_dispatch:
+
 permissions:
   contents: read
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
 jobs:
-  shared-tests:
-    name: Shared protocol tests
-    runs-on: ubuntu-22.04
+  portable-tests:
+    runs-on: windows-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -21,21 +24,13 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: |
-            10.0.x
-            6.0.x
-      - name: Test shared protocol (no game DLLs)
-        run: dotnet test CairnMultiplayerShared.Tests/CairnMultiplayerShared.Tests.csproj -c Release --nologo
-  generator-build:
-    name: Source generator build
-    runs-on: ubuntu-22.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+          global-json-file: global.json
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          persist-credentials: false
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: 10.0.x
-      - name: Build source generator
-        run: dotnet build CairnMultiplayerMod.Generators/CairnMultiplayerMod.Generators.csproj -c Release --nologo
+          node-version: 22
+      - name: Check version declarations
+        run: node scripts/sync-versions.js --check
+      - name: Restore locked dependencies
+        run: dotnet restore CairnMultiplayer.Tests/CairnMultiplayer.Tests.csproj --locked-mode
+      - name: Test
+        run: dotnet test CairnMultiplayer.Tests/CairnMultiplayer.Tests.csproj --configuration Release --no-restore -p:DeployMod=false
