@@ -38,3 +38,16 @@ Thumbs.db
 # Local working documents and skill observations
 docs/local/
 skill-observations/
+
+# Local credentials and signing material
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.key
+*.snk
+
+# Test output
+TestResults/
+**/TestResults/

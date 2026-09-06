@@ -4,6 +4,9 @@ Bug reports, feature suggestions, documentation fixes and code contributions are
 You can write issues and pull requests in English or French. You do not need to build the
 mod to report a problem.
 
+Follow the [code of conduct](CODE_OF_CONDUCT.md). Report vulnerabilities privately
+through [SECURITY.md](SECURITY.md), never as a public bug report.
+
 ## Report a bug or suggest an improvement
 
 1. Search [existing issues](https://github.com/CairnMP/cairnmp-mod/issues), including closed
@@ -86,6 +89,8 @@ move. Keep packet dispatch separate from deserialization and game integration.
 Preserve published extension namespaces, DLL names, preference categories, Harmony IDs and
 wire identifiers. Dependency changes must update the affected `packages.lock.json` files.
 Edit `versions.json` and run `node scripts/sync-versions.js` to synchronize version declarations.
+Workflows must use pinned action commit SHAs, minimum token permissions and GitHub-hosted
+runners for public contributions. Never run pull-request code with repository secrets.
 
 Stage explicit paths with `git add -- <paths>`; do not use `git add -A`. Working audits belong
 in ignored `docs/local/`. Never commit proprietary assemblies, game saves or player logs.

@@ -1,5 +1,8 @@
 # CairnMP — `next/feature-framework` branch
 
+[Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) ·
+[Code of conduct](CODE_OF_CONDUCT.md)
+
 > ### ⚠️ Untested branch — do not use this for your regular sessions
 >
 > **Nothing here has been played yet.** The code builds cleanly and the automated

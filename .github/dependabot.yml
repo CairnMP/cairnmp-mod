@@ -1,0 +1,40 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    groups:
+      # init and analyze must always use the same CodeQL Action version.
+      codeql:
+        patterns:
+          - "github/codeql-action/*"
+      codeql-security:
+        applies-to: security-updates
+        patterns:
+          - "github/codeql-action/*"
+      actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+  - package-ecosystem: nuget
+    directories:
+      - /CairnMultiplayerShared
+      - /CairnMultiplayerShared.Tests
+      - /CairnMultiplayerMod
+      - /CairnMultiplayerMod.Tests
+      - /CairnMultiplayerMod.Generators
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    groups:
+      # Major upgrades remain separate for explicit compatibility review.
+      nuget-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch

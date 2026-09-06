@@ -204,7 +204,7 @@
     <ModDeployFiles Include="$(MSBuildProjectDirectory)\..\THIRD-PARTY-NOTICES.txt" />
   </ItemGroup>
 
-  <Target Name="CopyToMods" AfterTargets="Build" Condition="'$(DeployMod)' == 'true'">
+  <Target Name="CopyToMods" AfterTargets="Build" Condition="'$(DeployMod)' == 'true' and '$(CI)' != 'true'">
     <!-- Keep symbols beside the deployed DLLs so Rider can resolve mod breakpoints. -->
     <ItemGroup>
       <ModDeployFiles Include="$(TargetDir)$(AssemblyName).pdb" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
