@@ -49,13 +49,45 @@ A multiplayer mod for the climbing game **Cairn**. It runs inside the game via
 MelonLoader (IL2CPP) and connects players over a host-authoritative **Steam relay**
 (P2P) — no dedicated server required.
 
-Features include roped climbing (belay), in-game chat and host commands, world
-pings, FreeRoam, and full synchronization of players, cosmetics, weather, lamps,
-pitons and time of day.
+Features include roped climbing (belay), in-game chat and host commands, nearby
+item sharing, world pings, FreeRoam, and full synchronization of players,
+cosmetics, weather, lamps, pitons and time of day.
 
 Experimental [proximity voice](docs/proximity-voice.md) is available under
 **Settings → CairnMP**, with open-mic detection, push-to-talk, microphone selection
 and a local microphone test. Two-player voice validation is still pending.
+
+### Chat
+
+Press **Enter** to talk to the session, **↑ / ↓** to browse what you already sent, and
+**Escape** to close (**F10** force-closes it if anything ever goes wrong). Your climber
+stays put while you type.
+
+**Tab** completes what is being typed and **Shift+Tab** cycles backwards: first the
+command name, then the players for the arguments a command declares as `<player>`
+(nicknames with spaces included). A bar above the input line lists the candidates and
+shows the usage of the command in progress, so nothing has to be memorised — `/help`
+still prints the full list. A command registered by a feature is completed like the
+built-in ones as soon as its usage string names its arguments.
+
+### Share items
+
+Item sharing is intentionally local and conservative. Select an ordinary consumable in
+Cairn's backpack: the native action bar adds **G — Give nearest** and **X — Drop**. Each
+press moves exactly one unit. The give hint stays dimmed when no eligible recipient is nearby.
+Both hints use Cairn's
+bottom-left input legend and are disabled while dragging an item or while the bag is busy.
+Giving requires both players to be active in the same area
+and within **3.5 metres**. Dropped items are owned by the host, visible to every player and
+can be picked up with **E** from within 1.6 metres. A full backpack returns the item to the
+ground instead of destroying or duplicating it.
+
+Quest items, containers, charms, unique objects and equipment with individual state are
+excluded. At most 32 shared items may exist on the ground in a session.
+
+The backpack is the only way to give or drop: the actions follow the selected stack, and
+there is no chat command for it. An item therefore always leaves the bag through the same
+path, on a stack you have in front of you.
 
 ## Contributing a feature
 
@@ -135,6 +167,7 @@ for you. (Curious what it produced? Look at `obj/generated/` after a build.)
 | `Broadcast<T>` | everyone sees it, any player can send | pings, chat |
 | `HostState<T>` | the host owns it, and players joining later catch up automatically | weather, time of day |
 | `HostCommand<T>` | the client asks, the host accepts or refuses | sleep requests, appearance changes |
+| `HostEvent<T>` | only the host emits a transient committed result | item delivery and receipt results |
 | `PerPlayerState<T>` | the host owns a value per player; late joiners receive the current values | appearance |
 | `Stream<T>` | transient updates with a bounded send rate | finger poses |
 

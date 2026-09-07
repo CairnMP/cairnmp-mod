@@ -6,7 +6,8 @@ namespace CairnMultiplayerMod.GameApi;
 internal sealed class GameApiFacade : IGameApi
 {
     internal GameApiFacade(IMainMenuApi mainMenu, IGameStateApi state, IGameTimeApi time,
-        IGameInputApi input, IGameHudApi hud, IChatApi chat, IClockApi clock, IPlayersApi players,
+        IGameInputApi input, IGameHudApi hud, IChatApi chat, IInventoryApi inventory,
+        IClockApi clock, IPlayersApi players,
         IWeatherApi weather, IWorldApi world, IVoiceApi voice = null)
     {
         MainMenu = mainMenu ?? throw new ArgumentNullException(nameof(mainMenu));
@@ -15,6 +16,7 @@ internal sealed class GameApiFacade : IGameApi
         Input = input ?? throw new ArgumentNullException(nameof(input));
         Hud = hud ?? throw new ArgumentNullException(nameof(hud));
         Chat = chat ?? throw new ArgumentNullException(nameof(chat));
+        Inventory = inventory ?? throw new ArgumentNullException(nameof(inventory));
         Clock = clock ?? throw new ArgumentNullException(nameof(clock));
         Players = players ?? throw new ArgumentNullException(nameof(players));
         Weather = weather ?? throw new ArgumentNullException(nameof(weather));
@@ -28,6 +30,7 @@ internal sealed class GameApiFacade : IGameApi
     public IGameInputApi Input { get; }
     public IGameHudApi Hud { get; }
     public IChatApi Chat { get; }
+    public IInventoryApi Inventory { get; }
     public IClockApi Clock { get; }
     public IPlayersApi Players { get; }
     public IWeatherApi Weather { get; }

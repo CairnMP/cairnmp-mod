@@ -18,7 +18,7 @@ using MelonLoader;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-[assembly: MelonInfo(typeof(CairnMultiplayerMod.Bootstrap.Mod), "Cairn Multiplayer Mod", "2.1.0", "CairnModTeam")]
+[assembly: MelonInfo(typeof(CairnMultiplayerMod.Bootstrap.Mod), "Cairn Multiplayer Mod", "2.2.0", "CairnModTeam")]
 [assembly: MelonGame("TheGameBakers", "Cairn")]
 
 namespace CairnMultiplayerMod.Bootstrap;
@@ -40,6 +40,7 @@ public partial class Mod : MelonMod
     private HudAdapter _hud;
     private IGameApi _game;
     private VoiceAdapter _voice;
+    private InventoryAdapter _inventory;
     private IGameRegistration _mainMenuButton;
     private readonly HashSet<string> _loadedScenes = new(StringComparer.Ordinal);
     private Key _connectKey;
@@ -151,6 +152,7 @@ public partial class Mod : MelonMod
         _mainMenu = new MainMenuAdapter();
         _hud = new HudAdapter();
         _voice = new VoiceAdapter(() => Network, () => LocalState == PlayerState.InGame);
+        _inventory = new InventoryAdapter();
         _game = new GameApiFacade(
             _mainMenu,
             new GameStateAdapter(() => LocalState),
@@ -158,8 +160,9 @@ public partial class Mod : MelonMod
             new GameInputAdapter(),
             _hud,
             new ChatAdapter(() => Network),
+            _inventory,
             new ClockAdapter(),
-            new PlayersAdapter(() => Network),
+            new PlayersAdapter(() => Network, _runtimeState),
             new WeatherAdapter(),
             new WorldAdapter(), _voice);
 

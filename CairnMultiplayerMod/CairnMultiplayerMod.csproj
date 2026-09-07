@@ -132,6 +132,10 @@
       <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.Cairn.Global.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Il2CppTheGameBakers.TGBTools.StringId.Generated.Runtime">
+      <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.TGBTools.StringId.Generated.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Il2CppTheGameBakers.Cairn.Managers">
       <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.Cairn.Managers.dll</HintPath>
       <Private>false</Private>

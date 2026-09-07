@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Game.World;
@@ -19,12 +20,15 @@ internal sealed class CommandRouter
     private readonly NetworkManager _network;
     private readonly Func<bool> _isHost;
     private readonly Action<string> _systemLine;
+    private readonly IReadOnlyDictionary<string, ChatCommandDefinition> _commands;
 
-    public CommandRouter(NetworkManager network, Func<bool> isHost, Action<string> systemLine)
+    public CommandRouter(NetworkManager network, Func<bool> isHost, Action<string> systemLine,
+        IReadOnlyDictionary<string, ChatCommandDefinition> commands = null)
     {
         _network = network;
         _isHost = isHost;
         _systemLine = systemLine;
+        _commands = commands;
     }
 
     /// <summary>
@@ -42,20 +46,77 @@ internal sealed class CommandRouter
             case "tp": HandleTp(cmd.ArgsText); break;
             case "bring": HandleBring(cmd.ArgsText); break;
             case "": _systemLine("Type /help for the list of commands."); break;
-            default: _systemLine($"Unknown command: /{cmd.Name}. Type /help."); break;
+            default:
+                if (_commands != null && _commands.TryGetValue(cmd.Name, out var command))
+                    command.Execute(cmd.ArgsText);
+                else
+                    _systemLine($"Unknown command: /{cmd.Name}. Type /help.");
+                break;
         }
         return true;
+    }
+
+    /// <summary>
+    /// Commands the local player can actually run right now: the built-ins (host-only
+    /// ones filtered out) plus the ones registered by the features. Single source for
+    /// /help AND for the chat completion, so the two can never drift apart.
+    /// </summary>
+    internal IReadOnlyList<ChatCommandInfo> AvailableCommands()
+    {
+        var available = new List<ChatCommandInfo>
+        {
+            new("help", "/help", "show this help"),
+        };
+        if (_isHost())
+        {
+            available.Add(new ChatCommandInfo("tp", "/tp <player>",
+                "teleport yourself to a player (they must be walking)"));
+            available.Add(new ChatCommandInfo("bring", "/bring <player>",
+                "teleport a player to you (you must be walking)"));
+        }
+        if (_commands != null)
+        {
+            foreach (var command in _commands.Values)
+                available.Add(new ChatCommandInfo(command.Name, command.Usage, command.Description));
+        }
+
+        // Alphabetical: /help lists them in a predictable order, and the Tab cycle keeps
+        // the same order from one keystroke to the next.
+        available.Sort(static (left, right) => string.CompareOrdinal(left.Name, right.Name));
+        return available;
+    }
+
+    /// <summary>
+    /// Completion candidates for a half-typed line, for the chat overlay: command names,
+    /// then the connected players for the arguments a command declares as &lt;player&gt;.
+    /// </summary>
+    internal ChatCompletionSet GetCompletions(string input)
+        => ChatCompletion.Complete(input, AvailableCommands(), RemotePlayerNames());
+
+    /// <summary>
+    /// Names of the remote players, sorted so the Tab cycle is stable (the roster is a
+    /// dictionary, whose enumeration order is not guaranteed). The local player is not
+    /// listed: every command that takes a &lt;player&gt; targets someone else.
+    /// </summary>
+    private IReadOnlyList<string> RemotePlayerNames()
+    {
+        var names = new List<string>();
+        var players = _network?.RemotePlayers;
+        if (players == null) return names;
+
+        foreach (var player in players.Values)
+        {
+            if (!string.IsNullOrWhiteSpace(player?.Name)) names.Add(player.Name);
+        }
+        names.Sort(StringComparer.OrdinalIgnoreCase);
+        return names;
     }
 
     private void HandleHelp()
     {
         _systemLine("Commands:");
-        _systemLine("  /help - show this help");
-        if (_isHost())
-        {
-            _systemLine("  /tp <player> - teleport yourself to a player (they must be walking)");
-            _systemLine("  /bring <player> - teleport a player to you (you must be walking)");
-        }
+        foreach (var command in AvailableCommands())
+            _systemLine($"  {command.Usage} - {command.Description}");
     }
 
     private void HandleTp(string targetName)
@@ -167,4 +228,20 @@ internal sealed class CommandRouter
         player = match;
         return true;
     }
+}
+
+internal sealed class ChatCommandDefinition
+{
+    internal ChatCommandDefinition(string name, string usage, string description, Action<string> execute)
+    {
+        Name = name;
+        Usage = usage;
+        Description = description;
+        Execute = execute;
+    }
+
+    internal string Name { get; }
+    internal string Usage { get; }
+    internal string Description { get; }
+    internal Action<string> Execute { get; }
 }

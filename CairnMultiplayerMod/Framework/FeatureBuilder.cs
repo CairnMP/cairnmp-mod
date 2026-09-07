@@ -92,6 +92,7 @@ internal sealed class FeatureBuilder
             MainMenu = new FeatureMainMenuApi(inner.MainMenu, own, featureId);
             Hud = new FeatureHudApi(inner.Hud, featureId);
             Chat = new FeatureChatApi(inner.Chat, own);
+            Inventory = new FeatureInventoryApi(inner.Inventory, own);
             State = inner.State;
             Time = inner.Time;
             Input = inner.Input;
@@ -108,6 +109,7 @@ internal sealed class FeatureBuilder
         public IGameInputApi Input { get; }
         public IGameHudApi Hud { get; }
         public IChatApi Chat { get; }
+        public IInventoryApi Inventory { get; }
         public IClockApi Clock { get; }
         public IPlayersApi Players { get; }
         public IWeatherApi Weather { get; }
@@ -165,11 +167,43 @@ internal sealed class FeatureBuilder
         public bool IsTyping => _inner.IsTyping;
         public IGameRegistration Configure(Action<string> send, Func<bool> isHost, Func<bool> canType)
             => _own(_inner.Configure(send, isHost, canType));
+        public IGameRegistration AddCommand(string name, string usage, string description, Action<string> execute)
+            => _own(_inner.AddCommand(name, usage, description, execute));
         public void AddRemoteLine(string fromName, string message) => _inner.AddRemoteLine(fromName, message);
         public void AddSystemLine(string text) => _inner.AddSystemLine(text);
         public void Tick() => _inner.Tick();
         public void Draw() => _inner.Draw();
         public void ForceClose() => _inner.ForceClose();
+    }
+
+    private sealed class FeatureInventoryApi : IInventoryApi
+    {
+        private readonly IInventoryApi _inner;
+        private readonly Func<IGameRegistration, IGameRegistration> _own;
+
+        internal FeatureInventoryApi(IInventoryApi inner,
+            Func<IGameRegistration, IGameRegistration> own)
+        { _inner = inner; _own = own; }
+
+        public bool TryGetSelectedShareableItem(out ShareableItem item)
+            => _inner.TryGetSelectedShareableItem(out item);
+        public IGameRegistration AddShareActions(Func<bool> canGive, Action<ShareableItem> give,
+            Func<bool> canDrop, Action<ShareableItem> drop)
+            => _own(_inner.AddShareActions(canGive, give, canDrop, drop));
+        public void SetGroundItems(IReadOnlyList<GroundItem> items) => _inner.SetGroundItems(items);
+        public void DrawGroundItems() => _inner.DrawGroundItems();
+        public uint SelectGroundItem(IReadOnlyList<GroundItem> nearbyItems)
+            => _inner.SelectGroundItem(nearbyItems);
+        public bool IsShareableDefinition(int definitionId)
+            => _inner.IsShareableDefinition(definitionId);
+        public bool CanAccept(int definitionId, int count, out string reason)
+            => _inner.CanAccept(definitionId, count, out reason);
+        public bool TryRemove(ushort uniqueId, int definitionId, int count, out string reason)
+            => _inner.TryRemove(uniqueId, definitionId, count, out reason);
+        public bool TryRemoveAny(int definitionId, int count, out string reason)
+            => _inner.TryRemoveAny(definitionId, count, out reason);
+        public bool TryAdd(int definitionId, int count, out string reason)
+            => _inner.TryAdd(definitionId, count, out reason);
     }
 
     internal IReadOnlyList<(FeaturePhase Phase, Action Tick)> Ticks => _ticks;
@@ -254,6 +288,15 @@ internal sealed class FeatureBuilder
             context => handler(new HostRequest<T>(context)), FeatureCodec.For<T>());
 
         return new HostCommand<T>(_runtime, command, $"{_featureId}.{id}");
+    }
+
+    /// <summary>Declares a transient event that only the authoritative host may emit.</summary>
+    public HostEvent<T> HostEvent<T>(string id, Action<int, T> onReceived) where T : IPacket, new()
+    {
+        if (onReceived == null) throw new ArgumentNullException(nameof(onReceived));
+        var multiplayerEvent = _extension.RegisterEvent($"{_featureId}.{id}", FeatureCodec.For<T>());
+        multiplayerEvent.Received += message => onReceived(message.SourcePlayerId, message.Payload);
+        return new HostEvent<T>(_runtime, _extension, multiplayerEvent, $"{_featureId}.{id}");
     }
 
     /// <summary>

@@ -169,7 +169,8 @@ public sealed class FeatureFrameworkTests : IDisposable
         {
             typeof(IGameApi), typeof(IGameRegistration), typeof(IMainMenuApi),
             typeof(IGameStateApi), typeof(IGameTimeApi), typeof(IGameInputApi),
-            typeof(IGameHudApi), typeof(IChatApi), typeof(IClockApi), typeof(IPlayersApi),
+            typeof(IGameHudApi), typeof(IChatApi), typeof(IInventoryApi), typeof(ShareableItem),
+            typeof(IClockApi), typeof(IPlayersApi), typeof(PlayerLocation),
             typeof(IWeatherApi), typeof(IWorldApi), typeof(WorldPosition),
         };
         var exposedTypes = contractTypes.SelectMany(TypesInPublicSignatures)
@@ -620,6 +621,7 @@ public sealed class FeatureFrameworkTests : IDisposable
         public IGameInputApi Input => UnavailableGameApi.Instance.Input;
         public IGameHudApi Hud => UnavailableGameApi.Instance.Hud;
         public IChatApi Chat => UnavailableGameApi.Instance.Chat;
+        public IInventoryApi Inventory => UnavailableGameApi.Instance.Inventory;
         public IClockApi Clock => UnavailableGameApi.Instance.Clock;
         public IPlayersApi Players => UnavailableGameApi.Instance.Players;
         public IWeatherApi Weather => UnavailableGameApi.Instance.Weather;

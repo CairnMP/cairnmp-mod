@@ -3,6 +3,46 @@
 All notable changes to CairnMP are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.2.0] — 2026-09-07 (beta)
+
+> This beta uses protocol 13. Every player in a lobby must run CairnMP
+> 2.2.0; other mod versions cannot join the same lobby.
+
+### Added
+
+- Chat completion: **Tab** completes the command being typed, then the player names of
+  the arguments it declares (**Shift+Tab** cycles backwards). A suggestion bar shows
+  the available candidates and the usage of the command in progress.
+- Native backpack actions for giving one unit of the selected consumable to the nearest
+  eligible player with **G**, or dropping it into the shared world with **X**.
+- Host-authoritative ground items that are synchronized for late joiners, limited to the
+  local scene and pickup range, and restored when the recipient's backpack is full.
+- A native-style **E** interaction carousel when several shared items occupy the same
+  place, using the inventory artwork for each item.
+
+### Changed
+
+- Chat rows and the input field now reserve enough vertical space for font descenders
+  and shadows, improving readability at every supported UI scale.
+- Item sharing remains deliberately conservative: quest items, equipment, containers,
+  charms and unique stateful objects cannot be transferred, and only 32 ground items
+  may exist in a session.
+
+### Fixed
+
+- Fixed dropped items being invisible or impossible to recover after leaving the
+  backpack.
+- Fixed missing ground-item icons, oversized world visuals and square interaction-key
+  prompts that did not match Cairn's interface.
+- Fixed a native crash when a second dropped item activated the interaction carousel.
+- Fixed the lower edge of chat letters and their shadow being clipped.
+
+### Beta notes
+
+- Item sharing needs broader two-player and late-join testing across streamed areas.
+- All players must use this exact beta because lobby admission checks the full mod
+  version even though the network protocol remains 13.
+
 ## [2.1.0] — 2026-09-06 (beta)
 
 > This beta uses protocol 13. Every player in a lobby must run CairnMP 2.1.0;

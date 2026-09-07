@@ -123,7 +123,9 @@ internal sealed class ClockAdapter : IClockApi
 
 internal sealed class PlayersAdapter : IPlayersApi
 {
+    private const double MaxLocationAgeSeconds = 2;
     private readonly Func<NetworkManager> _network;
+    private readonly RuntimeState _state;
     private readonly List<int> _sleepParticipants = new();
     private readonly List<int> _inGamePlayers = new();
 
@@ -141,8 +143,34 @@ internal sealed class PlayersAdapter : IPlayersApi
         }
     }
 
-    internal PlayersAdapter(Func<NetworkManager> network)
-        => _network = network ?? throw new ArgumentNullException(nameof(network));
+    internal PlayersAdapter(Func<NetworkManager> network, RuntimeState state)
+    {
+        _network = network ?? throw new ArgumentNullException(nameof(network));
+        _state = state ?? throw new ArgumentNullException(nameof(state));
+    }
+
+    public bool TryGetLocation(int playerId, out PlayerLocation location)
+    {
+        location = default;
+        var network = _network();
+        if (network == null) return false;
+        if (playerId == network.LocalPlayerId)
+        {
+            if (_state.LocalPlayerState != PlayerState.InGame
+                || !LocalPlayerInterop.TryGetPose(out var position, out _)) return false;
+            location = new PlayerLocation(position.x, position.y, position.z,
+                SceneRoles.ResolveNetworkScene(_state.CurrentScene, _state.LastGameplayScene),
+                _state.LocalPlayerState);
+            return true;
+        }
+
+        if (!network.RemotePlayers.TryGetValue(playerId, out var player) || player == null
+            || player.State != PlayerState.InGame || player.LastUpdateTime <= 0
+            || DateTime.UtcNow.Ticks / (double)TimeSpan.TicksPerSecond - player.LastUpdateTime
+                > MaxLocationAgeSeconds) return false;
+        location = new PlayerLocation(player.X, player.Y, player.Z, player.SceneName, player.State);
+        return true;
+    }
 
     public IReadOnlyList<int> RemotePlayersInGame
     {
@@ -258,6 +286,8 @@ internal sealed class ChatAdapter : IChatApi
     private readonly Func<NetworkManager> _network;
     private ChatController _controller;
     private ChatRegistration _registration;
+    private readonly Dictionary<string, ChatCommandDefinition> _commands =
+        new(StringComparer.OrdinalIgnoreCase);
 
     internal ChatAdapter(Func<NetworkManager> network)
         => _network = network ?? throw new ArgumentNullException(nameof(network));
@@ -272,9 +302,25 @@ internal sealed class ChatAdapter : IChatApi
         if (isHost == null) throw new ArgumentNullException(nameof(isHost));
         if (canType == null) throw new ArgumentNullException(nameof(canType));
 
-        var router = new CommandRouter(_network(), isHost, AddSystemLine);
+        var router = new CommandRouter(_network(), isHost, AddSystemLine, _commands);
         _controller = new ChatController(router, send, canType);
         return _registration = new ChatRegistration(this);
+    }
+
+    public IGameRegistration AddCommand(string name, string usage, string description, Action<string> execute)
+    {
+        name = (name ?? "").Trim().TrimStart('/').ToLowerInvariant();
+        if (name.Length == 0) throw new ArgumentException("A command name is required.", nameof(name));
+        if (name is "help" or "tp" or "bring")
+            throw new InvalidOperationException($"/{name} is a built-in command.");
+        if (execute == null) throw new ArgumentNullException(nameof(execute));
+        if (_commands.ContainsKey(name)) throw new InvalidOperationException($"/{name} is already registered.");
+
+        var definition = new ChatCommandDefinition(name,
+            string.IsNullOrWhiteSpace(usage) ? $"/{name}" : usage.Trim(),
+            description?.Trim() ?? "", execute);
+        _commands.Add(name, definition);
+        return new ChatCommandRegistration(this, definition);
     }
 
     public void AddRemoteLine(string fromName, string message) => _controller?.AddRemoteLine(fromName, message);
@@ -306,6 +352,33 @@ internal sealed class ChatAdapter : IChatApi
             if (owner == null) return;
             _owner = null;
             owner.Release(this);
+        }
+    }
+
+    private void RemoveCommand(ChatCommandDefinition definition)
+    {
+        if (definition != null && _commands.TryGetValue(definition.Name, out var current)
+            && ReferenceEquals(current, definition))
+            _commands.Remove(definition.Name);
+    }
+
+    private sealed class ChatCommandRegistration : IGameRegistration
+    {
+        private ChatAdapter _owner;
+        private readonly ChatCommandDefinition _definition;
+
+        internal ChatCommandRegistration(ChatAdapter owner, ChatCommandDefinition definition)
+        { _owner = owner; _definition = definition; }
+
+        public string Id => $"chat-command.{_definition.Name}";
+        public bool IsActive => _owner != null;
+
+        public void Dispose()
+        {
+            var owner = _owner;
+            if (owner == null) return;
+            _owner = null;
+            owner.RemoveCommand(_definition);
         }
     }
 }

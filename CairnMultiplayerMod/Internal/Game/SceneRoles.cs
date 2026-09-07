@@ -58,6 +58,20 @@ internal static class SceneRoles
         return true;
     }
 
+    /// <summary>Returns the stable gameplay scene used in network state. Cairn may load
+    /// audio, art and other additive scenes after the root; those callbacks must not make
+    /// players or world objects appear to have changed maps.</summary>
+    public static string ResolveNetworkScene(string currentScene, string lastGameplayScene)
+    {
+        if (!string.IsNullOrEmpty(lastGameplayScene)
+            && !IsGameplayRoot(currentScene)
+            && !IsMainMenuArea(currentScene)
+            && !IsLoading(currentScene))
+            return lastGameplayScene;
+
+        return currentScene ?? "";
+    }
+
     /// <summary>
     /// Loading this scene invalidates everything bound to the previous one: the IL2CPP
     /// caches, the sync timers and the remote ghosts. The world pings survive on purpose

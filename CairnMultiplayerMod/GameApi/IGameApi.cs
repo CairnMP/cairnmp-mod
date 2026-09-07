@@ -12,6 +12,7 @@ internal interface IGameApi
     IGameInputApi Input { get; }
     IGameHudApi Hud { get; }
     IChatApi Chat { get; }
+    IInventoryApi Inventory { get; }
     IClockApi Clock { get; }
     IPlayersApi Players { get; }
     IWeatherApi Weather { get; }

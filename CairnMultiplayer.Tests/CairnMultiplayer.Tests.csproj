@@ -12,6 +12,7 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
     <ProjectReference Include="../CairnMultiplayerShared/CairnMultiplayerShared.csproj" />
     <ProjectReference Include="../CairnMultiplayerMod.Generators/CairnMultiplayerMod.Generators.csproj" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Game/Chat/ChatCompletion.cs" Link="Production/ChatCompletion.cs" />
     <Compile Include="../CairnMultiplayerMod/Internal/Networking/Authoritative/PitonAuthority.cs" Link="Production/PitonAuthority.cs" />
     <Compile Include="../CairnMultiplayerMod/Internal/Networking/Authoritative/IAuthoritativeSink.cs" Link="Production/IAuthoritativeSink.cs" />
     <Compile Include="../CairnMultiplayerMod/Internal/Networking/Authoritative/PeerBudget.cs" Link="Production/PeerBudget.cs" />

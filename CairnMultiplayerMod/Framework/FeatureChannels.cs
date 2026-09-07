@@ -67,6 +67,8 @@ internal sealed class HostState<T> where T : IPacket, new()
     /// <summary>The value currently known on this peer, if one has been published yet.</summary>
     public bool TryGet(out T value) => _state.TryGet(out value);
 
+    internal ReplicatedState<T> Inner => _state;
+
     /// <summary>Publishes a new value. No-op with a warning when called off the host.</summary>
     public void Set(T value)
     {
@@ -196,6 +198,34 @@ internal sealed class HostCommand<T> where T : IPacket, new()
     }
 }
 
+/// <summary>A host-authoritative transient event, optionally staged inside a command.</summary>
+internal sealed class HostEvent<T> where T : IPacket, new()
+{
+    private readonly ExtensionRuntime _runtime;
+    private readonly MultiplayerExtension _extension;
+    private readonly MultiplayerEvent<T> _event;
+    private readonly string _label;
+
+    internal HostEvent(ExtensionRuntime runtime, MultiplayerExtension extension,
+        MultiplayerEvent<T> multiplayerEvent, string label)
+    {
+        _runtime = runtime;
+        _extension = extension;
+        _event = multiplayerEvent;
+        _label = label;
+    }
+
+    internal MultiplayerEvent<T> Inner => _event;
+
+    public void Send(T payload)
+    {
+        if (!_runtime.IsConnected || !_runtime.IsHost) return;
+        var result = _extension.Commit(context => context.Broadcast(_event, payload));
+        if (!result.Committed)
+            FeatureLog.Warn($"[Feature:{_label}] event refused: {result.Reason}");
+    }
+}
+
 /// <summary>What the host handler receives for a <see cref="HostCommand{T}"/>.</summary>
 internal readonly struct HostRequest<T>
 {
@@ -219,4 +249,15 @@ internal readonly struct HostRequest<T>
     /// </summary>
     public void Publish<TState>(PerPlayerState<TState> state, TState value) where TState : IPacket, new()
         => _context.SetForPlayer(state.Inner, FromPlayerId, value);
+
+    /// <summary>Publishes global host state in the same transaction as the command verdict.</summary>
+    public void Publish<TState>(HostState<TState> state, TState value) where TState : IPacket, new()
+        => _context.Set(state.Inner, value);
+
+    /// <summary>Emits a host event in the same transaction as the command verdict.</summary>
+    public void Emit<TEvent>(HostEvent<TEvent> hostEvent, TEvent payload) where TEvent : IPacket, new()
+        => _context.Broadcast(hostEvent.Inner, payload);
+
+    /// <summary>Runs a game-side action only after the command has committed.</summary>
+    public void AfterCommit(Action action) => _context.AfterCommit(action);
 }

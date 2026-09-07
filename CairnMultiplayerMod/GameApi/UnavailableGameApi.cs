@@ -18,6 +18,7 @@ internal sealed class UnavailableGameApi : IGameApi
     public IGameInputApi Input { get; } = new UnavailableInputApi();
     public IGameHudApi Hud { get; } = new UnavailableHudApi();
     public IChatApi Chat { get; } = new UnavailableChatApi();
+    public IInventoryApi Inventory { get; } = new UnavailableInventoryApi();
     public IClockApi Clock { get; } = new UnavailableClockApi();
     public IPlayersApi Players { get; } = new UnavailablePlayersApi();
     public IWeatherApi Weather { get; } = new UnavailableWeatherApi();
@@ -74,11 +75,34 @@ internal sealed class UnavailableGameApi : IGameApi
         public bool IsTyping => false;
         public IGameRegistration Configure(Action<string> send, Func<bool> isHost, Func<bool> canType)
             => new InactiveRegistration("chat-overlay");
+        public IGameRegistration AddCommand(string name, string usage, string description, Action<string> execute)
+            => new InactiveRegistration($"chat-command.{name}");
         public void AddRemoteLine(string fromName, string message) { }
         public void AddSystemLine(string text) { }
         public void Tick() { }
         public void Draw() { }
         public void ForceClose() { }
+    }
+
+    private sealed class UnavailableInventoryApi : IInventoryApi
+    {
+        public bool TryGetSelectedShareableItem(out ShareableItem item)
+        { item = default; return false; }
+        public IGameRegistration AddShareActions(Func<bool> canGive, Action<ShareableItem> give,
+            Func<bool> canDrop, Action<ShareableItem> drop)
+            => new InactiveRegistration("inventory.share-actions");
+        public void SetGroundItems(System.Collections.Generic.IReadOnlyList<GroundItem> items) { }
+        public void DrawGroundItems() { }
+        public uint SelectGroundItem(System.Collections.Generic.IReadOnlyList<GroundItem> nearbyItems) => 0;
+        public bool IsShareableDefinition(int definitionId) => false;
+        public bool CanAccept(int definitionId, int count, out string reason)
+        { reason = "Inventory is unavailable."; return false; }
+        public bool TryRemove(ushort uniqueId, int definitionId, int count, out string reason)
+        { reason = "Inventory is unavailable."; return false; }
+        public bool TryRemoveAny(int definitionId, int count, out string reason)
+        { reason = "Inventory is unavailable."; return false; }
+        public bool TryAdd(int definitionId, int count, out string reason)
+        { reason = "Inventory is unavailable."; return false; }
     }
 
     private sealed class UnavailableClockApi : IClockApi
@@ -96,6 +120,8 @@ internal sealed class UnavailableGameApi : IGameApi
         public System.Collections.Generic.IReadOnlyList<int> RemoteSleepParticipants => System.Array.Empty<int>();
         public System.Collections.Generic.IReadOnlyList<int> RemotePlayersInGame { get; }
             = Array.Empty<int>();
+        public bool TryGetLocation(int playerId, out PlayerLocation location)
+        { location = default; return false; }
         public bool TryCaptureHandPose(out byte[] packed) { packed = null; return false; }
         public bool TryCaptureAppearance(out int packed) { packed = 0; return false; }
         public bool TryCaptureCosmetics(out byte flags) { flags = 0; return false; }

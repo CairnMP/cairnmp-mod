@@ -249,14 +249,7 @@ internal sealed class PlayerStateBroadcaster
     private static int FrameVectorCount(float[] values) => values == null ? 0 : values.Length / 3;
 
     private string CurrentNetworkSceneName()
-    {
-        var currentScene = _state.CurrentScene;
-        var lastGameplayScene = _state.LastGameplayScene;
-        if (SceneRoles.IsBivouac(currentScene) && !string.IsNullOrEmpty(lastGameplayScene))
-            return lastGameplayScene;
-
-        return currentScene ?? "";
-    }
+        => SceneRoles.ResolveNetworkScene(_state.CurrentScene, _state.LastGameplayScene);
 
     /// <summary>
     /// Resets the per-episode sync state on a scene-bound reset point: local sync debug

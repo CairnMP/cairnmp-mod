@@ -7,7 +7,8 @@ namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>
 /// In-game IMGUI (OnGUI) chat: an overlay of recent messages at the bottom left + an
-/// input line. Enter opens/sends, Escape cancels. While typing, the game's gameplay
+/// input line. Enter opens/sends, Escape cancels, Tab completes commands and player
+/// names (see <see cref="ChatCompletion"/>). While typing, the game's gameplay
 /// inputs are frozen through <see cref="InputInterop"/> so that
 /// typing doesn't drive the climber.
 ///
@@ -31,6 +32,16 @@ internal sealed class ChatController
 
     private static readonly Color TextColor = Color.white;
     private static readonly Color SystemColor = new Color(1f, 0.85f, 0.4f, 1f);
+    private static readonly Color HintColor = new Color(0.7f, 0.78f, 0.86f, 1f);
+
+    // Hint length in characters. The panel keeps a constant width/font-size ratio
+    // (520/18) at every resolution, so a fixed character budget is enough and we avoid
+    // GUIStyle.CalcSize, which IL2CPP is free to strip like it stripped DoTextField.
+    private const int MaxHintChars = 56;
+
+    // Shown as soon as the overlay opens: the completion is only discoverable if
+    // something says it exists.
+    private const string EmptyInputHint = "Type / for commands, Tab to complete";
 
     // Base font size (at scale 1, ~1080p). Raised from the IMGUI default (~13) for
     // better readability. Then scaled by UiScale.
@@ -61,6 +72,15 @@ internal sealed class ChatController
     private readonly List<string> _history = new();
     private int _historyIndex = -1;
     private string _draft = "";
+
+    // Completion of the line being typed (commands, then player names). The set is
+    // recomputed lazily: _completionsDirty is raised by every edit, and Tab cycles
+    // through the set without invalidating it. _completionIndex == -1: nothing inserted
+    // yet, the suggestion bar shows the candidates without highlighting any.
+    private ChatCompletionSet _completions = ChatCompletionSet.Empty;
+    private int _completionIndex = -1;
+    private bool _completionsDirty = true;
+    private string _hint = "";
 
     public ChatController(CommandRouter router, Action<string> send, Func<bool> canChat)
     {
@@ -107,6 +127,8 @@ internal sealed class ChatController
     {
         _isOpen = false;
         _input = "";
+        InvalidateCompletions();
+        _hint = "";
         InputCaptureState.IsKeyboardCaptured = false;
     }
 
@@ -128,8 +150,12 @@ internal sealed class ChatController
             e.Use();
         }
 
+        if (_isOpen) EnsureCompletions();
+
         DrawLog();
-        if (_isOpen) DrawInput();
+        if (!_isOpen) return;
+        DrawInput();
+        DrawHint();
     }
 
     /// <summary>
@@ -153,25 +179,98 @@ internal sealed class ChatController
             case KeyCode.Backspace:
                 if (_input.Length > 0)
                     _input = _input.Substring(0, _input.Length - 1);
+                InvalidateCompletions();
+                e.Use();
+                return;
+            case KeyCode.Tab:
+                CycleCompletion(e.shift ? -1 : 1);
                 e.Use();
                 return;
             case KeyCode.UpArrow:
                 RecallOlder();
+                InvalidateCompletions();
                 e.Use();
                 return;
             case KeyCode.DownArrow:
                 RecallNewer();
+                InvalidateCompletions();
                 e.Use();
                 return;
         }
 
         // Printable character (e.character carries the typed character, accents included).
+        // Tab also arrives as a character event: char.IsControl filters it out, so it is
+        // never appended to the input.
         char c = e.character;
         if (c != '\0' && !char.IsControl(c) && _input.Length < MaxInputLength)
         {
             _input += c;
+            InvalidateCompletions();
             e.Use();
         }
+    }
+
+    /// <summary>
+    /// Tab (Shift+Tab backwards): inserts the next candidate for the line being typed.
+    /// The set stays alive between two Tabs so the cycle keeps going; a single candidate
+    /// invalidates it right away, so the following Tab moves on to the next argument
+    /// (/t then Tab gives "/tp ", Tab again lists the players).
+    /// </summary>
+    private void CycleCompletion(int direction)
+    {
+        EnsureCompletions();
+        if (_completions.Count == 0) return;
+
+        _completionIndex = _completionIndex < 0
+            ? (direction > 0 ? 0 : _completions.Count - 1)
+            : (_completionIndex + direction + _completions.Count) % _completions.Count;
+
+        var candidate = _completions.Candidates[_completionIndex].Input;
+        if (candidate.Length > MaxInputLength) return;
+
+        _input = candidate;
+        _historyIndex = -1;          // we left the history recall
+        _draft = "";
+        if (_completions.Count == 1) InvalidateCompletions();
+        else RefreshHint();
+    }
+
+    /// <summary>Marks the completion set stale: it is recomputed on the next use.</summary>
+    private void InvalidateCompletions()
+    {
+        _completionsDirty = true;
+        _completionIndex = -1;
+    }
+
+    /// <summary>
+    /// Recomputes the candidates for the current line if needed. Called from OnGUI and
+    /// from Tab, so it must never throw: a failure here would leave the overlay open and
+    /// the player's inputs frozen.
+    /// </summary>
+    private void EnsureCompletions()
+    {
+        if (!_completionsDirty) return;
+        _completionsDirty = false;
+        _completionIndex = -1;
+        try
+        {
+            _completions = _router.GetCompletions(_input);
+        }
+        catch (Exception ex)
+        {
+            _completions = ChatCompletionSet.Empty;
+            ModLog.Warning($"[Chat] completion failed: {ex.Message}");
+        }
+        RefreshHint();
+    }
+
+    /// <summary>Rebuilds the suggestion line (cached: OnGUI runs several times per frame).</summary>
+    private void RefreshHint()
+    {
+        if (!_isOpen) { _hint = ""; return; }
+        _hint = _input.Length == 0
+            ? EmptyInputHint
+            : ChatCompletion.BuildHint(_completions, _completionIndex, MaxHintChars);
     }
 
     /// <summary>Up arrow: recalls an older message from the history.</summary>
@@ -224,6 +323,7 @@ internal sealed class ChatController
         _input = "";
         _historyIndex = -1;
         _draft = "";
+        InvalidateCompletions();
         InputInterop.ReconcileGameplayInput(true);   // immediate (the per-frame reconcile follows)
     }
 
@@ -231,6 +331,8 @@ internal sealed class ChatController
     {
         _isOpen = false;
         _input = "";
+        InvalidateCompletions();
+        _hint = "";
         InputInterop.ReconcileGameplayInput(false);  // immediate; per-frame reconcile = safety net
     }
 
@@ -275,6 +377,10 @@ internal sealed class ChatController
         _labelStyle ??= new GUIStyle(GUI.skin.label);
         _labelStyle.richText = false;
         _labelStyle.fontSize = ScaledFontSize;
+        _labelStyle.alignment = TextAnchor.MiddleLeft;
+        // Some fonts draw their descenders (g, j, p, q, y) a little outside their
+        // advertised metrics. Let IMGUI render these pixels instead of clipping them.
+        _labelStyle.clipping = TextClipping.Overflow;
         return _labelStyle;
     }
 
@@ -283,10 +389,14 @@ internal sealed class ChatController
         float now = Time.unscaledTime;
         float scale = UiScale;
         var style = EnsureLabelStyle();
-        float lineHeight = 22f * scale;
-        float width = 520f * scale;
-        float x = Screen.width - width - 16f * scale;   // anchored at the bottom RIGHT
-        float bottom = Screen.height - (_isOpen ? 84f : 60f) * scale;
+        // Keep enough room for descenders and for the one-pixel drop shadow. The old
+        // 22 px row was too tight for an 18 px font and visibly cropped its baseline.
+        float lineHeight = (BaseFontSize + 8f) * scale;
+        float width = PanelWidth(scale);
+        float x = PanelX(scale);                        // anchored at the bottom RIGHT
+        // The suggestion bar slots in between the input and the log: the log moves up by
+        // exactly its height so the two never overlap.
+        float bottom = Screen.height - (_isOpen ? 84f : 60f) * scale - HintBand(scale);
 
         int shown = 0;
         for (int i = _lines.Count - 1; i >= 0 && shown < MaxVisibleLines; i--)
@@ -302,14 +412,42 @@ internal sealed class ChatController
         }
     }
 
+    // Shared geometry of the bottom-right panel (log, suggestion bar and input line all
+    // share the same column).
+    private static float PanelWidth(float scale) => 520f * scale;
+    private static float PanelX(float scale) => Screen.width - PanelWidth(scale) - 16f * scale;
+    private static float InputHeight(float scale) => (BaseFontSize + 14f) * scale;
+    private static float InputTop(float scale) => Screen.height - InputHeight(scale) - 28f * scale;
+    private static float HintHeight(float scale) => (BaseFontSize + 8f) * scale;
+
+    /// <summary>Vertical room the suggestion bar takes (0 when there is nothing to show).</summary>
+    private float HintBand(float scale)
+        => _isOpen && _hint.Length > 0 ? HintHeight(scale) + 2f * scale : 0f;
+
+    /// <summary>
+    /// Suggestion bar drawn just above the input: candidates to cycle through with Tab,
+    /// or the usage of the command being typed. A single GUI.Label, no text measuring:
+    /// GUIStyle.CalcSize is exactly the kind of method IL2CPP strips.
+    /// </summary>
+    private void DrawHint()
+    {
+        if (_hint.Length == 0) return;
+
+        float scale = UiScale;
+        float height = HintHeight(scale);
+        float y = InputTop(scale) - height - 2f * scale;
+        DrawShadowLabel(new Rect(PanelX(scale) + 4f * scale, y, PanelWidth(scale) - 8f * scale, height),
+            _hint, HintColor, EnsureLabelStyle());
+    }
+
     private void DrawInput()
     {
         float scale = UiScale;
         var style = EnsureLabelStyle();
-        float width = 520f * scale;
-        float x = Screen.width - width - 16f * scale;   // anchored at the bottom RIGHT
-        float height = (BaseFontSize + 10) * scale;
-        float y = Screen.height - height - 28f * scale;
+        float width = PanelWidth(scale);
+        float x = PanelX(scale);                        // anchored at the bottom RIGHT
+        float height = InputHeight(scale);
+        float y = InputTop(scale);
 
         var prev = GUI.color;
         GUI.color = new Color(0f, 0f, 0f, 0.6f);
@@ -319,7 +457,7 @@ internal sealed class ChatController
         // Manual rendering via GUI.Label (GUI.TextField is stripped under IL2CPP). The caret
         // blinks at ~2 Hz to signal active input.
         bool caretOn = ((int)(Time.unscaledTime * 2f) & 1) == 0;
-        GUI.Label(new Rect(x + 4f * scale, y + 2f * scale, width - 8f * scale, height),
+        GUI.Label(new Rect(x + 4f * scale, y, width - 8f * scale, height),
             "> " + (_input ?? "") + (caretOn ? "_" : ""), style);
         GUI.color = prev;
     }

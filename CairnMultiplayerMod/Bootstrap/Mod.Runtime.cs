@@ -151,6 +151,7 @@ public partial class Mod
     {
         _runtimeState.TimeSinceLastSceneLoad += Time.unscaledDeltaTime;
         _hud?.Tick();
+        _inventory?.Tick();
 
         // PANIC failsafe (F10): force-unblock the game's inputs whatever the state. Read
         // from the raw keyboard device (never affected by the block) and placed BEFORE any

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using CairnMultiplayer.Api;
 using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal.Extensions;
@@ -28,6 +29,7 @@ namespace CairnMultiplayerMod.Framework;
 /// </example>
 internal abstract class MultiplayerFeature
 {
+    private readonly List<FeaturePlayer> _players = new();
     /// <summary>
     /// Stable identifier, lowercase (letters, digits, '.', '-', '_'). It names the feature's
     /// messages on the wire, so renaming it breaks compatibility with older clients.
@@ -56,6 +58,17 @@ internal abstract class MultiplayerFeature
         return $"Player{playerId}";
     }
 
+    protected IReadOnlyList<FeaturePlayer> Players
+    {
+        get
+        {
+            _players.Clear();
+            foreach (var player in Session.Players)
+                _players.Add(new FeaturePlayer(player.Id, player.Name, player.IsLocal, player.IsHost));
+            return _players;
+        }
+    }
+
     /// <summary>True when this peer is the authoritative host.</summary>
     protected bool IsHost => Session.IsHost;
 
@@ -76,4 +89,14 @@ internal abstract class MultiplayerFeature
     internal ExtensionRuntime Session { private get; set; } = MultiplayerApi.Runtime;
 
     internal void BindGame(IGameApi game) => Game = game ?? UnavailableGameApi.Instance;
+}
+
+internal readonly struct FeaturePlayer
+{
+    internal FeaturePlayer(int id, string name, bool isLocal, bool isHost)
+    { Id = id; Name = name ?? ""; IsLocal = isLocal; IsHost = isHost; }
+    internal int Id { get; }
+    internal string Name { get; }
+    internal bool IsLocal { get; }
+    internal bool IsHost { get; }
 }
