@@ -293,9 +293,11 @@ internal static class RemotePlayerManager
                 RecolorGhostNetRopes(entry);
 
             // Drive the animation via the game's native SetFrame pipeline.
+            var frameRefused = false;
             if (entry.IsRealModel && entry.NrpComponent != null && HasFreshPlayerFrame(rp))
             {
-                NetplayAnimationInterop.CallNetplaySetFrame(entry.NrpComponent, rp.Id, rp.Name, rp.PlayerFrame);
+                var poseApplied = NetplayAnimationInterop.CallNetplaySetFrame(
+                    entry.NrpComponent, rp.Id, rp.Name, rp.PlayerFrame);
 
                 if (rp.HasClimbotFrame)
                 {
@@ -319,10 +321,18 @@ internal static class RemotePlayerManager
                     }
                 }
 
-                continue;
+                if (poseApplied) continue;
+                frameRefused = true;
+
+                // Neither the native SetFrame nor the direct bone write took the frame
+                // (native assertion, bone-count mismatch...). Falling through keeps the
+                // ghost where its owner actually is instead of leaving it frozen wherever
+                // the last accepted frame put it.
             }
 
-            ApplyRootPoseFallback(entry, rp);
+            ApplyRootPoseFallback(entry, rp, frameRefused
+                ? "the frame was refused by every apply path"
+                : "the player NetFrame is stale");
         }
 
         ApplyPendingLampStates(net);
@@ -497,7 +507,13 @@ internal static class RemotePlayerManager
         return now - rp.LastPlayerFrameTime <= PlayerFrameFreshSeconds;
     }
 
-    private static void ApplyRootPoseFallback(GhostEntry entry, RemotePlayer rp)
+    /// <summary>
+    /// Places the ghost from the position/yaw of the presence channel without touching its
+    /// bones — the rig therefore shows its bind pose (the "T-pose" of the bug reports).
+    /// <paramref name="reason"/> tells the two causes apart in the log: no fresh frame
+    /// arrived, or one arrived and no apply path would take it.
+    /// </summary>
+    private static void ApplyRootPoseFallback(GhostEntry entry, RemotePlayer rp, string reason)
     {
         entry.Root.transform.position = new Vector3(rp.X, rp.Y, rp.Z);
         entry.Root.transform.rotation = Quaternion.Euler(0f, rp.YawDeg, 0f);
@@ -505,7 +521,7 @@ internal static class RemotePlayerManager
         if (entry.IsRealModel && !entry.RootPoseFallbackLogged)
         {
             entry.RootPoseFallbackLogged = true;
-            ModLog.Warning($"[Ghost] Using root pose fallback for {rp.Id} ({rp.Name}) while player NetFrame is stale");
+            ModLog.Warning($"[Ghost] Using root pose fallback for {rp.Id} ({rp.Name}): {reason}");
         }
     }
 
