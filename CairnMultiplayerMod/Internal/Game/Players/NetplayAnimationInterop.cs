@@ -257,13 +257,14 @@ internal static unsafe class NetplayAnimationInterop
             int eulerCount = frameData.Eulers == null ? 0 : frameData.Eulers.Length / 3;
 
             // Expected invariant: the native frame = [world root] + [local relative bones],
-            // so positionCount == boneCount + 1. We no longer GUESS the offset: the old
-            // heuristic (offset 0 on mismatch) wrote the WORLD root into a LOCAL bone slot
-            // and shifted every bone by one -> clipping limbs. On a mismatch (different rig,
-            // cap at 128 bones...), we skip the frame rather than corrupt it.
-            // Capture caps the relative bones at 128; we align the apply side so a
-            // hypothetical rig >128 bones degrades to the first 128 instead of freezing.
-            int applyCount = Math.Min(boneCount, 128);
+            // so positionCount == boneCount + 1 — the very equality the native SetFrame
+            // asserts. We no longer GUESS the offset: the old heuristic (offset 0 on
+            // mismatch) wrote the WORLD root into a LOCAL bone slot and shifted every bone
+            // by one -> clipping limbs. On a mismatch (a genuinely different rig) we skip
+            // the frame rather than corrupt it.
+            // No 128-bone ceiling here: the capture side sends every bone or nothing, so
+            // clamping would only manufacture mismatches on rigs the native path handles.
+            int applyCount = boneCount;
             if (positionCount != applyCount + 1)
             {
                 if (!_directBoneFallbackMismatchLogged)

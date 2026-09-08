@@ -17,6 +17,8 @@ internal static unsafe class PawnCaptureInterop
     private static float _lastPlayerCaptureFailureLogAt;
     private static float _lastClimbotCaptureFailureLogAt;
     private static bool _localPlayerFallbackCaptureLogged;
+    private static bool _playerFrameTooLargeLogged;
+    private static bool _climbotFrameTooLargeLogged;
     // Last flags byte produced by a successful native capture (PawnState + PawnFlags, the
     // Player target being 0). The fallback capture replays it instead of claiming Walking:
     // those bits drive the target pose the remote rig resolves to (climb vs walk, secured),
@@ -45,6 +47,8 @@ internal static unsafe class PawnCaptureInterop
         _lastPlayerCaptureFailureLogAt = 0f;
         _lastClimbotCaptureFailureLogAt = 0f;
         _localPlayerFallbackCaptureLogged = false;
+        _playerFrameTooLargeLogged = false;
+        _climbotFrameTooLargeLogged = false;
         // Invalid (0) until the native capture tells us otherwise: announcing a stale
         // Walking would let a partner teleport onto a pawn whose state we do not know.
         _lastNativePlayerFlags = 0;
@@ -80,7 +84,8 @@ internal static unsafe class PawnCaptureInterop
                 if (frame != null && frame.isValid)
                 {
                     frameData = ToNetFrameData(frame);
-                    if (frameData.IsValid && frameData.Positions != null && frameData.Positions.Length > 0)
+                    if (frameData.IsValid && frameData.Positions != null && frameData.Positions.Length > 0
+                        && IsFrameSendable(frameData, "player", ref _playerFrameTooLargeLogged))
                     {
                         _lastNativePlayerFlags = (byte)(frameData.Flags & PlayerFlagsMask);
                         return true;
@@ -174,7 +179,8 @@ internal static unsafe class PawnCaptureInterop
                 return false;
 
             frameData = ToNetFrameData(frame);
-            return frameData.IsValid && frameData.Positions != null && frameData.Positions.Length > 0;
+            return frameData.IsValid && frameData.Positions != null && frameData.Positions.Length > 0
+                && IsFrameSendable(frameData, "climbot", ref _climbotFrameTooLargeLogged);
         }
         catch (Exception ex)
         {
@@ -202,7 +208,18 @@ internal static unsafe class PawnCaptureInterop
             var relatives = anchors.relatives;
             if (root == null || relatives == null || relatives.Length <= 0) return false;
 
-            int relativeCount = Math.Min(relatives.Length, 128);
+            // Every bone, no arbitrary cap: the receiving end asserts
+            // `positions.Length == anchors.relatives.Length + 1` (native SetFrame) and the
+            // mod's own bone fallback enforces the same invariant, so a truncated frame is
+            // not a degraded frame -- it is a frame nobody can apply. Past the protocol
+            // limit we send nothing rather than something unusable.
+            int relativeCount = relatives.Length;
+            if (relativeCount + 1 > Protocol.MaxFrameVectorCount)
+            {
+                LogFrameTooLarge("player", relativeCount + 1, ref _playerFrameTooLargeLogged);
+                return false;
+            }
+
             var positions = new float[(relativeCount + 1) * 3];
             var eulers = new float[(relativeCount + 1) * 3];
 
@@ -287,6 +304,27 @@ internal static unsafe class PawnCaptureInterop
             ModLog.SuppressedException("pawn.inspect-relative-anchors", exception);
             return false;
         }
+    }
+
+    /// <summary>
+    /// True if the frame fits the protocol. Serializing more than
+    /// <see cref="Protocol.MaxFrameVectorCount"/> vectors throws, and the throw would happen
+    /// inside the send path, so an oversized rig has to be caught here.
+    /// </summary>
+    private static bool IsFrameSendable(NetFrameData frameData, string target, ref bool logged)
+    {
+        int vectorCount = frameData.Positions == null ? 0 : frameData.Positions.Length / 3;
+        if (vectorCount <= Protocol.MaxFrameVectorCount) return true;
+
+        LogFrameTooLarge(target, vectorCount, ref logged);
+        return false;
+    }
+
+    private static void LogFrameTooLarge(string target, int vectorCount, ref bool logged)
+    {
+        if (logged) return;
+        logged = true;
+        ModLog.Error($"[PawnCapture] Local {target} NetFrame has {vectorCount} vectors, above the protocol limit of {Protocol.MaxFrameVectorCount} — poses cannot be replicated for this rig");
     }
 
     private static void BackOffCaptureRetry(ref float nextRetryAt, string target, string reason, ref float lastLogAt)

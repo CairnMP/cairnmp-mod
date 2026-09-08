@@ -10,7 +10,7 @@ public static class PacketValidation
 {
     private const float MaxAbsPosition = 100000f;
     private const float MaxAbsWind = 100000f;
-    private const int MaxFrameVectorCount = 512;
+    private const int MaxFrameVectorCount = Protocol.MaxFrameVectorCount;
 
     public static bool IsValidPose(float x, float y, float z, float yaw)
         => IsFinite(x) && IsFinite(y) && IsFinite(z) && IsFinite(yaw)

@@ -28,6 +28,14 @@ public static class Protocol
     /// <summary>Rate at which a client broadcasts local animation frames.</summary>
     public const float BoneStateUpdateIntervalSeconds = 1f / 30f; // 30 Hz
 
+    /// <summary>
+    /// Hard cap on the number of Vector3 entries a NetFrame may carry (root + one per bone).
+    /// Serialization throws above it and validation rejects the packet, so the capture side
+    /// checks against this value rather than truncating: a truncated frame breaks the native
+    /// `positions.Length == anchors.relatives.Length + 1` invariant on the receiving end.
+    /// </summary>
+    public const int MaxFrameVectorCount = 512;
+
     /// <summary>Rate at which the host broadcasts the authoritative weather.</summary>
     public const float WeatherStateUpdateIntervalSeconds = 0.5f; // 2 Hz
 

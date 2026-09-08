@@ -28,7 +28,7 @@ public interface IPacket
 public static class PacketCodec
 {
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: false);
-    private const int MaxFrameVectorCount = 512;
+    private const int MaxFrameVectorCount = Protocol.MaxFrameVectorCount;
     private const int MaxUInt16Length = ushort.MaxValue;
 
     /// <summary>Writes a string as [uint16 LE : byteCount][UTF-8 bytes].</summary>
