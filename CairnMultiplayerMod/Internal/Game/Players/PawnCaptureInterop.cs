@@ -56,7 +56,16 @@ internal static unsafe class PawnCaptureInterop
             try
             {
                 var frame = capture.CaptureFrame();
-                if (frame != null && frame.isValid && frame.PawnState != NetFrame.PawnStateType.Invalid)
+                // An Invalid PawnState is NOT a capture failure. The native
+                // NetplayPawnCapture.GetPlayerPawnState (VA 0x18315DBF0) only maps
+                // PawnControllerSwitcher.mode Walking -> Walking and Climbing -> Climbing;
+                // every other mode (None while transitioning, Flying, Hovering) falls through
+                // to Invalid, while the captured bones stay perfectly good. Rejecting those
+                // frames armed a 2s back-off and pushed the fallback capture instead, whose
+                // hardcoded flags claim "Walking" -- so a climber transitioning (secured fall,
+                // abseil, wall <-> ground) was replicated with the wrong target pose, or not
+                // at all once the frames went stale on the other side (root-pose T-pose).
+                if (frame != null && frame.isValid)
                 {
                     frameData = ToNetFrameData(frame);
                     if (frameData.IsValid && frameData.Positions != null && frameData.Positions.Length > 0)
