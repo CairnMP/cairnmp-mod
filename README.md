@@ -1,4 +1,4 @@
-# CairnMP — `Beta` branch
+# CairnMP 
 
 [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) ·
 [Code of conduct](CODE_OF_CONDUCT.md)
