@@ -1,47 +1,7 @@
-# CairnMP — `next/feature-framework` branch
+# CairnMP — `Beta` branch
 
 [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) ·
 [Code of conduct](CODE_OF_CONDUCT.md)
-
-> ### ⚠️ Untested branch — do not use this for your regular sessions
->
-> **Nothing here has been played yet.** The code builds cleanly and the automated
-> tests pass, but a green build proves very little for a mod like this one: the
-> parts that matter run inside the game, against IL2CPP objects and a live Steam
-> connection, and none of that is covered by a test suite.
->
-> These changes are **hot off the keyboard**. They were written in one stretch and
-> committed as they went, without a single session played between them. Expect
-> rough edges. Expect things that worked on `develop` to be broken here.
->
-> **What is most likely to misbehave:**
->
-> - **Pings** — rebuilt on top of the new feature framework. They may not appear
->   for other players, appear twice, or not appear at all.
-> - **Bivouacs** — the sync suspension was pulled out of the mod core into its own
->   class. The behaviour is meant to be identical, but this is the code path behind
->   the "one save then nothing" bug, so it deserves suspicion.
-> - **Anything networked** — the protocol moved to version 13. This branch **cannot
->   play with a client running an older version**, in either direction.
-> - **The multiplayer panel** — the old Canvas implementation was removed. Only the
->   in-game-styled panel remains, with the UI Toolkit fallback behind it.
->
-> **If you try it anyway** — and you are very welcome to, that is how this gets
-> solid — please play with two clients, keep your `MelonLoader/Latest.log`, and
-> open an issue with what you did and what happened. A report saying "pings never
-> showed up for the host" is worth more than a hundred green builds. Bug reports on
-> this branch are genuinely useful; bug reports on `develop` are what keep the mod
-> stable for everyone else.
->
-> **Where this is going.** This is not a side experiment — it is the direction the
-> mod is taking. Once it has been played, tested and fixed, it becomes the base
-> everything else is built on. The point of it is simple: **make CairnMP a mod
-> people can actually contribute to.** Adding a feature used to mean editing six
-> files spread across the protocol, the transport and the mod core, and
-> understanding all of them first. On this branch a feature is one file that
-> declares what it needs. See [Contributing a feature](#contributing-a-feature).
->
-> Stable code lives on [`develop`](../../tree/develop). Use that one to play.
 
 ---
 
