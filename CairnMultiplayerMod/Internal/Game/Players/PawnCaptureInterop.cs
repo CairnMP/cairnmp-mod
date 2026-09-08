@@ -17,11 +17,20 @@ internal static unsafe class PawnCaptureInterop
     private static float _lastPlayerCaptureFailureLogAt;
     private static float _lastClimbotCaptureFailureLogAt;
     private static bool _localPlayerFallbackCaptureLogged;
+    // Last flags byte produced by a successful native capture (PawnState + PawnFlags, the
+    // Player target being 0). The fallback capture replays it instead of claiming Walking:
+    // those bits drive the target pose the remote rig resolves to (climb vs walk, secured),
+    // and they also gate remote teleports, which only accept a partner who is Walking.
+    private static byte _lastNativePlayerFlags;
     // Il2CppExceptions are heavy (stack traces marshalled from native).
     // If the native capture fails, we space out the retries so we don't tank
     // the frame when the pathology persists (player near a piton, bivouac, etc.).
     private const float CaptureRetryDelaySeconds = 2f;
     private const float CaptureFailureLogIntervalSeconds = 10f;
+    // PawnState (bits 0-2) + PawnFlags (bits 3-4). Bits 5-7 carry PawnTarget, which the
+    // native SetFrame asserts to be Player on a player frame; the capture already reports 0
+    // there, and masking keeps a stale target byte from ever reaching that assertion.
+    private const byte PlayerFlagsMask = 0x1F;
 
     /// <summary>Forgets the scene-bound pawn-capture references (called on scene reload):
     /// Cairn destroys then recreates these objects after a death/reload, and keeping the
@@ -36,6 +45,9 @@ internal static unsafe class PawnCaptureInterop
         _lastPlayerCaptureFailureLogAt = 0f;
         _lastClimbotCaptureFailureLogAt = 0f;
         _localPlayerFallbackCaptureLogged = false;
+        // Invalid (0) until the native capture tells us otherwise: announcing a stale
+        // Walking would let a partner teleport onto a pawn whose state we do not know.
+        _lastNativePlayerFlags = 0;
     }
 
     /// <summary>Captures the local player's native frame via the game's Netplay pipeline.</summary>
@@ -69,7 +81,10 @@ internal static unsafe class PawnCaptureInterop
                 {
                     frameData = ToNetFrameData(frame);
                     if (frameData.IsValid && frameData.Positions != null && frameData.Positions.Length > 0)
+                    {
+                        _lastNativePlayerFlags = (byte)(frameData.Flags & PlayerFlagsMask);
                         return true;
+                    }
                 }
 
                 BackOffCaptureRetry(ref _nextPlayerCaptureRetryAt, "player", "native frame is invalid", ref _lastPlayerCaptureFailureLogAt);
@@ -205,7 +220,7 @@ internal static unsafe class PawnCaptureInterop
             frameData = new NetFrameData
             {
                 IsValid = true,
-                Flags = 0x01,
+                Flags = _lastNativePlayerFlags,
                 Positions = positions,
                 Eulers = eulers,
             };
