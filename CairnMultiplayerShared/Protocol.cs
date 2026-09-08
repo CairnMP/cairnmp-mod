@@ -20,7 +20,7 @@ public static class Protocol
     /// CairnMP client version sent to the API when creating a lobby.
     /// Matches the deployed launcher/mod version.
     /// </summary>
-    public const string GameVersion = "2.2.0";
+    public const string GameVersion = "2.2.1";
 
     /// <summary>Rate at which a client broadcasts the position and state of its local player.</summary>
     public const float PlayerStateUpdateIntervalSeconds = 1f / 30f; // 30 Hz

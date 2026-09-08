@@ -3,6 +3,36 @@
 All notable changes to CairnMP are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.2.1] — 2026-09-08 (beta)
+
+> This beta still uses protocol 13, but lobby admission checks the full mod
+> version: every player must run CairnMP 2.2.1.
+
+### Fixed
+
+- Fixed remote climbers freezing in a T-pose, most often reported while two players
+  climb at the same time. Pose frames captured during a mode transition — a secured
+  fall, an abseil, moving between wall and ground — were discarded instead of sent,
+  and the partner stopped being animated within half a second.
+- Fixed a climber being replicated as walking with free hands whenever the native
+  capture was briefly unavailable. The same wrong state also opened the teleport
+  check, which is only supposed to accept a partner standing on the ground.
+- Fixed pose frames being truncated to 128 bones while the receiving side expected
+  every bone, a mismatch that left a remote player unanimated.
+- Fixed a ghost staying frozen wherever its last accepted frame left it when a pose
+  was refused; it now follows its owner's position, and the log tells the two causes
+  apart.
+
+### Changed
+
+- Completed the Roslyn 5.9 dependency update, which had left the lock files behind:
+  release checks could no longer restore and a third of the test suite did not build.
+
+### Beta notes
+
+- These pose fixes come from reading the game's own capture and replication code;
+  they still need two-player validation while roped and climbing simultaneously.
+
 ## [2.2.0] — 2026-09-07 (beta)
 
 > This beta uses protocol 13. Every player in a lobby must run CairnMP
