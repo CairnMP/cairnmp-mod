@@ -1,64 +1,85 @@
 # Contributing to CairnMP
 
-Bug reports, feature suggestions, documentation fixes and code contributions are welcome.
-You can write issues and pull requests in English or French. You do not need to build the
-mod to report a problem.
+Thank you for helping improve CairnMP. Bug reports, feature proposals,
+documentation fixes, tests, and code contributions are welcome in **English or
+French**.
 
-Follow the [code of conduct](CODE_OF_CONDUCT.md). Report vulnerabilities privately
-through [SECURITY.md](SECURITY.md), never as a public bug report.
+> [!IMPORTANT]
+> Follow the [Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities
+> privately through the [Security Policy](SECURITY.md)—never in a public issue.
 
-## Report a bug or suggest an improvement
+## Contents
 
-1. Search [existing issues](https://github.com/CairnMP/cairnmp-mod/issues), including closed
-   ones. Add new reproduction details to an existing report when it describes the same bug.
-2. Select [New issue](https://github.com/CairnMP/cairnmp-mod/issues/new/choose) and choose the
-   bug report, feature request or question template. Keep one topic per issue.
-3. Give it a specific title, such as `Client pings disappear after leaving a bivouac`.
-   Describe the steps, expected result and actual result. If you cannot reproduce it
-   consistently, explain what happened and how often you have seen it.
-4. Include the CairnMP version/channel on each client, game and loader versions if known,
-   number of players, host/client role, operating system and other installed mods.
-5. Attach relevant log excerpts, screenshots or a short recording if available. Review
-   attachments for personal paths, identifiers and private chat before sharing them.
-   Do not upload game DLLs or your entire game folder. Logs are helpful, not mandatory.
+- [Before you start](#before-you-start)
+- [Report a bug](#report-a-bug)
+- [Suggest an improvement](#suggest-an-improvement)
+- [Set up development](#set-up-development)
+- [Run the checks](#run-the-checks)
+- [Prepare a pull request](#prepare-a-pull-request)
+- [Keep changes reviewable](#keep-changes-reviewable)
 
-For a feature request, explain the player problem and an example of the desired behavior.
-Mention any workaround you use today. For larger changes, discuss the approach in an issue
-before spending time on an implementation.
+## Before you start
 
-## Open a pull request
+| Your contribution | What you need |
+| --- | --- |
+| Bug report or feature proposal | No local build required |
+| Documentation-only change | Repository checkout |
+| Portable protocol or architecture change | .NET SDK pinned by `global.json` |
+| Mod or gameplay change | Local Cairn references and .NET 6 runtime |
+| Native gameplay validation | Two clients and distinct Steam identities |
 
-1. Fork the repository if you do not have write access, then create a branch in your fork
-   for one change, such as `fix/bivouac-pings` or `docs/setup`.
-2. Start from the branch your change targets. Stable fixes normally target `develop`;
-   changes using the new feature framework target `next/feature-framework` while that work
-   remains separate. Check the PR's **base branch** explicitly and avoid unrelated commits.
-3. Make the change and update relevant documentation. Add regression coverage for behavior
-   changes where practical; documentation-only changes do not require a game installation.
-4. Run the applicable checks below. Record the commands and results, and explain anything
-   you could not test. For gameplay changes, include host/client results from two-player
-   testing when available. CI currently checks the portable suite, not the full mod or game.
-5. Commit explicit paths, push your branch, then use **Compare & pull request** on GitHub.
-   Fill in the PR template: problem, resulting behavior, related issue, verification and
-   any compatibility impact. Use `Fixes #123` only if the PR fully resolves that issue;
-   otherwise write `Related to #123`.
-6. Open a **draft PR** if implementation or validation is unfinished. Check the diff for
-   accidental files, address CI failures and respond to review comments. Further commits
-   pushed to the same branch update the existing PR.
+For a substantial feature, open an issue before investing in implementation.
+This confirms scope and avoids duplicated work.
 
-A good PR title describes the result: `Fix client pings after bivouac`, rather than
-`Various fixes`. Screenshots help reviewers assess visible UI changes.
+## Report a bug
 
-## Set up a development environment
+1. Search [open and closed issues](https://github.com/CairnMP/cairnmp-mod/issues).
+2. If the problem already exists, add new reproduction details there.
+3. Otherwise, [open a new issue](https://github.com/CairnMP/cairnmp-mod/issues/new/choose)
+   and keep it focused on one problem.
+4. Use a specific title, such as `Client pings disappear after leaving a
+   bivouac`.
+5. Describe the reproduction steps, expected result, and actual result.
 
-Use the SDK pinned in `global.json`. Open `CairnMultiplayer.sln` in Rider for C# navigation
-and semantic refactoring. Read [the architecture](docs/architecture.md) before changing
-layer dependencies, and [the feature example](README.md#contributing-a-feature) to add
-gameplay behavior.
+Include as much of this context as you can:
 
-## Run checks
+- CairnMP version and release channel on every client;
+- Cairn and MelonLoader versions;
+- player count and whether the affected player was host or client;
+- operating system and other installed mods;
+- frequency, if the issue is intermittent;
+- relevant log excerpts, screenshots, or a short recording.
 
-Without a game installation:
+> [!CAUTION]
+> Review attachments for private chat, identifiers, usernames, and local paths.
+> Never upload game DLLs, saves containing private data, or the entire game
+> directory. Logs help, but are not mandatory.
+
+## Suggest an improvement
+
+Describe the player or contributor problem first, then give an example of the
+desired behavior. Mention any workaround you currently use and identify who
+benefits from the change.
+
+## Set up development
+
+1. Install the SDK pinned in [`global.json`](global.json).
+2. Open `CairnMultiplayer.sln` in JetBrains Rider.
+3. Read the [architecture guide](docs/architecture.md) before changing layer
+   dependencies.
+4. Read the [feature example](README.md#add-a-feature) before adding gameplay
+   behavior.
+5. For mod changes, provide the local
+   [reference assemblies](README.md#reference-assemblies).
+
+The [managed extension example](examples/ManagedExtensionExample/) demonstrates
+the public API. It is a source example, not a project in the solution.
+
+## Run the checks
+
+### Portable checks
+
+These commands work without Cairn installed:
 
 ```bash
 dotnet restore CairnMultiplayer.Tests/CairnMultiplayer.Tests.csproj --locked-mode
@@ -66,36 +87,88 @@ dotnet test CairnMultiplayer.Tests/CairnMultiplayer.Tests.csproj -c Release --no
 node scripts/sync-versions.js --check
 ```
 
-For changes to the mod, provide your own [reference assemblies](README.md#reference-assemblies)
-and the .NET 6 runtime, then run `bash scripts/check.sh` (Git Bash on Windows). It restores
-locked dependencies, checks versions and runs the complete solution's tests in Release.
-Normal builds never deploy. Only `-p:DeployMod=true` installs a development build.
+### Complete solution
 
-Test gameplay changes with two clients as well: automated checks cannot exercise live Steam
-sessions or native IL2CPP behavior. Describe the scenario, expected behavior and result in
-your pull request, including any checks you could not run.
+For mod changes, provide your own game references and the .NET 6 runtime, then run
+the project check script from Git Bash on Windows:
 
-## Keep changes easy to review
+```bash
+bash scripts/check.sh
+```
 
-Put feature declarations directly in `CairnMultiplayerMod/Features/`. Use `FeatureBuilder`
-and `GameApi`; CMP003 prevents features from reaching into internal implementation code.
-Keep domain folders for groups of at least three files, subject to the architectural
-boundaries documented above. Use descriptive filenames for smaller groups.
+The script restores locked dependencies, checks version synchronization, and
+runs the complete solution in Release mode. Normal builds never deploy. Only
+`-p:DeployMod=true` installs a development build.
 
-Use `git mv` for tracked file moves and Rider's semantic refactorings for namespaces and
-symbols. Update source-path architecture checks in the same commit as the corresponding
-move. Keep packet dispatch separate from deserialization and game integration.
+### Gameplay checks
 
-Preserve published extension namespaces, DLL names, preference categories, Harmony IDs and
-wire identifiers. Dependency changes must update the affected `packages.lock.json` files.
-Edit `versions.json` and run `node scripts/sync-versions.js` to synchronize version declarations.
-Workflows must use pinned action commit SHAs, minimum token permissions and GitHub-hosted
-runners for public contributions. Never run pull-request code with repository secrets.
+Automated tests cannot exercise live Steam sessions or native IL2CPP behavior.
+Test gameplay changes with two clients when possible, then document:
 
-Stage explicit paths with `git add -- <paths>`; do not use `git add -A`. Working audits belong
-in ignored `docs/local/`. Never commit proprietary assemblies, game saves or player logs.
-For bug reports, include mod versions, reproduction steps, host/client roles and relevant
-log excerpts after reviewing them for private information.
+- the scenario;
+- expected behavior;
+- observed result;
+- host and client roles;
+- checks you could not run.
 
-The [managed extension example](examples/ManagedExtensionExample/) illustrates the public
-API; it is currently a source example, not a project included in the solution.
+## Prepare a pull request
+
+1. Fork the repository if you do not have write access.
+2. Branch from the target branch—normally `develop`—with one focused change.
+   Examples: `fix/bivouac-pings` or `docs/setup`.
+3. Implement the change, update documentation, and add regression coverage when
+   practical.
+4. Run the applicable checks and record their results.
+5. Review your own diff for unrelated or private files.
+6. Commit explicit paths, push your branch, and open a pull request against the
+   intended base branch.
+7. Complete the pull-request template, including compatibility impact and
+   verification.
+
+Use `Fixes #123` only when the pull request fully resolves that issue; otherwise
+use `Related to #123`. Open a **draft pull request** if implementation or
+validation is incomplete.
+
+A good title describes the result—`Fix client pings after bivouac`—rather than the
+activity—`Various fixes`.
+
+## Keep changes reviewable
+
+### Source structure
+
+- Put feature declarations directly in `CairnMultiplayerMod/Features/`.
+- Use `FeatureBuilder` and `GameApi`; diagnostic `CMP003` prevents features from
+  reaching internal implementation code.
+- Create domain folders only for groups of at least three files.
+- Keep packet dispatch separate from deserialization and game integration.
+- Use `git mv` for tracked file moves and semantic refactoring for symbols and
+  namespaces.
+- Update source-path architecture tests in the same commit as a move.
+
+### Compatibility contracts
+
+Preserve published extension namespaces, DLL names, preference categories,
+Harmony IDs, and wire identifiers unless the change intentionally includes a
+documented compatibility break.
+
+When versions change:
+
+1. edit `versions.json`;
+2. run `node scripts/sync-versions.js`;
+3. commit every synchronized declaration.
+
+Dependency updates must include the affected `packages.lock.json` files.
+
+### Repository safety
+
+- Pin GitHub Actions to full commit SHAs and grant minimum token permissions.
+- Use GitHub-hosted runners for public contributions.
+- Never run pull-request code with repository secrets.
+- Stage explicit paths with `git add -- <paths>`; avoid `git add -A`.
+- Keep working audits under ignored `docs/local/`.
+- Never commit proprietary assemblies, game saves, player logs, or credentials.
+
+---
+
+Questions are welcome through the repository’s
+[issue templates](https://github.com/CairnMP/cairnmp-mod/issues/new/choose).

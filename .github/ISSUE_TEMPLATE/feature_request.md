@@ -1,23 +1,41 @@
 ---
 name: Feature request
-about: Suggest a gameplay feature or an improvement to CairnMP.
-title: ""
+about: Suggest a gameplay feature or CairnMP improvement
+title: "[Feature]: "
 labels: ""
 assignees: ""
 ---
 
-<!-- English or French is welcome. Search existing suggestions first. One idea per issue. -->
+<!--
+English and French are welcome. Search existing suggestions first and keep one
+idea per issue. You do not need to propose an implementation.
+-->
 
-## What problem would this solve?
+## Problem
 
-Describe the player situation or limitation, and who is affected.
+<!-- What player or contributor problem would this solve, and who is affected? -->
 
 ## Desired behavior
 
-Give a concrete example of how this should work, including host/client behavior if relevant.
+<!-- Give a concrete example, including host/client behavior when relevant. -->
 
 ## Alternatives or current workaround
 
-## Additional context (optional)
+<!-- How do you handle this today? -->
 
-<!-- Mockups, screenshots or examples are welcome. You do not need to propose an implementation. -->
+## Multiplayer considerations
+
+<!--
+If relevant, describe authority, late joining, disconnects, incompatible versions,
+or what players without the feature should experience.
+-->
+
+## Additional context
+
+<!-- Mockups, screenshots, and links to related issues are welcome. -->
+
+## Checklist
+
+- [ ] I searched existing feature requests.
+- [ ] This issue describes one focused idea.
+- [ ] I explained the problem before proposing a solution.

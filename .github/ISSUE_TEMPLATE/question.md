@@ -1,20 +1,37 @@
 ---
 name: Question or documentation help
-about: Ask about setup, usage or contributing, or flag unclear documentation.
-title: ""
+about: Ask about setup, usage, contributing, or unclear documentation
+title: "[Question]: "
 labels: ""
 assignees: ""
 ---
 
-<!-- English or French is welcome. Read the README and search existing issues first. -->
+<!--
+English and French are welcome. Read the README and search existing issues before
+submitting. Remove private information from screenshots and logs.
+-->
 
-## What are you trying to do?
+## Goal
 
-## Your question or the unclear instruction
+<!-- What are you trying to achieve? -->
 
-<!-- Link to the documentation section if applicable. -->
+## Question or unclear instruction
 
-## What have you tried?
+<!-- Link to the relevant documentation heading when possible. -->
 
-<!-- Include any error message, relevant version/channel and operating system.
-Remove private information from screenshots or logs. -->
+## What I tried
+
+<!-- List the steps already attempted and the result of each one. -->
+
+## Environment
+
+| Detail | Value |
+| --- | --- |
+| CairnMP version or branch | |
+| Operating system | |
+| Relevant tool or IDE version | |
+| Documentation link | |
+
+## Additional context
+
+<!-- Add reviewed error output, screenshots, or a minimal example if useful. -->

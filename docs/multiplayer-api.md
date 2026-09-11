@@ -1,15 +1,28 @@
-# CairnMP managed extension API
+# CairnMP Managed Extension API
 
-`CairnMultiplayer.Api` lets another MelonLoader mod participate in a CairnMP session
-without using Steam, handling peers, or defining CairnMP packets. All commands go through
-the authoritative host.
+`CairnMultiplayer.Api` lets another MelonLoader mod participate in a CairnMP
+session without accessing Steam, managing peers, or defining CairnMP packets.
+Every command is handled by the authoritative host.
 
-The public API version is `MultiplayerApi.Version == 1`. It is independent from the mod
-version and the wire protocol version.
+> [!NOTE]
+> The public API version is `MultiplayerApi.Version == 1`. It is independent of
+> both the CairnMP release version and the wire-protocol version.
+
+## Contents
+
+- [Register an extension](#register-an-extension)
+- [Choose the right primitive](#choose-the-right-primitive)
+- [Send authoritative commands](#send-authoritative-commands)
+- [Replicate state](#replicate-state)
+- [Publish transient events](#publish-transient-events)
+- [Understand transactions](#understand-transactions)
+- [Serialize payloads](#serialize-payloads)
+- [Observe sessions and players](#observe-sessions-and-players)
+- [Safety defaults](#safety-defaults)
 
 ## Register an extension
 
-Register during the other mod's initialization, before hosting or joining a lobby:
+Register during your mod’s initialization, before hosting or joining a lobby:
 
 ```csharp
 using CairnMultiplayer.Api;
@@ -24,19 +37,29 @@ var extension = MultiplayerApi.RegisterExtension(new ExtensionRegistration(
 });
 ```
 
-Extension ids must be globally unique, lowercase, and 3-64 characters long. Use a reverse
-domain-style id. A duplicate registration is rejected immediately.
+Extension IDs must be globally unique, lowercase, and between 3 and 64
+characters. Prefer a reverse-domain ID.
 
-- `Optional`: players without a mutually compatible version may join; the extension is
-  disabled only for those players.
-- `Required`: the host rejects a player when the extension is absent or incompatible.
+| Requirement | Admission behavior |
+| --- | --- |
+| `Optional` | Incompatible or missing peers may join; the extension is disabled only for them. |
+| `Required` | The host rejects a peer when the extension is missing or incompatible. |
 
-Both peers' compatibility ranges are checked. The host tells every admitted client which
-extensions are enabled for each player.
+Both peers’ compatibility ranges are evaluated. The host tells every admitted
+client which extensions are enabled for each player. Duplicate registration is
+rejected immediately.
 
-## Authoritative commands
+## Choose the right primitive
 
-A command is a client intention handled only by the host:
+| Primitive | Use it when… | Retained for late joiners? |
+| --- | --- | ---: |
+| Command | A client wants the host to validate and commit an intention. | No |
+| State | The current value must remain available and be replayed. | Yes |
+| Event | Peers need a one-off animation, notification, or effect. | No |
+
+## Send authoritative commands
+
+A command represents client intent and is handled only by the host:
 
 ```csharp
 var score = extension.RegisterState<int>("score");
@@ -44,7 +67,7 @@ var scored = extension.RegisterEvent<int>("scored");
 
 var addScore = extension.RegisterCommand<int>("add-score", context =>
 {
-    if (context.Request < 1 || context.Request > 10)
+    if (context.Request is < 1 or > 10)
     {
         context.Reject("Score increment must be between 1 and 10.");
         return;
@@ -60,19 +83,20 @@ if (!result.Committed)
     Log(result.Reason);
 ```
 
-The sender never selects another client. CairnMP sends the request to the host, invokes the
-registered handler on the game thread, and routes committed effects only to compatible peers.
+The sender never chooses another client. CairnMP routes the request to the host,
+runs the handler on the game thread, and publishes committed effects only to
+compatible peers.
 
-The host may also originate an atomic update directly:
+The host can originate an atomic update directly:
 
 ```csharp
 if (MultiplayerApi.IsHost)
     extension.Commit(context => context.Set(score, 0));
 ```
 
-## Replicated state
+## Replicate state
 
-Replicated state is retained by the host and replayed automatically to late joiners:
+State is retained by the host and replayed automatically to late joiners:
 
 ```csharp
 score.Changed += change =>
@@ -82,71 +106,87 @@ score.Changed += change =>
 };
 ```
 
-`context.Set(state, value)` writes global state. `SetForPlayer` writes state scoped to one
-CairnMP player id. Player-scoped state is removed automatically when that player leaves.
+- `context.Set(state, value)` writes global state.
+- `context.SetForPlayer(...)` writes state scoped to one CairnMP player ID.
+- Player-scoped state is removed automatically when that player leaves.
+- Clients read their latest local copy through `TryGet` or `TryGetForPlayer`.
 
-Only an authoritative command handler may mutate state. Clients can read its latest local
-copy through `TryGet` or `TryGetForPlayer`.
+Only an authoritative command handler may mutate state.
 
-## Transient events
+## Publish transient events
 
-Events are not retained and are appropriate for one-off effects such as an animation or
-notification:
+Events are not retained. Use them for effects that a late joiner does not need to
+replay:
 
 ```csharp
 scored.Received += message =>
     Log($"Player {message.SourcePlayerId} scored {message.Payload}");
 ```
 
-Use replicated state whenever a player joining later needs to know the current value.
+Use replicated state instead whenever a player joining later must know the
+current value.
 
-## Transaction and abort guarantees
+## Understand transactions
 
-State changes and events requested through `HostCommandContext` are staged. CairnMP publishes
-nothing until the handler returns successfully. Calling `Reject`, throwing an exception, or
-failing payload validation discards all staged managed effects.
+Changes requested through `HostCommandContext` are staged. CairnMP publishes
+nothing until the handler returns successfully.
 
-An arbitrary Unity or CairnAPI mutation cannot be rolled back generically. Schedule it with
-`context.AfterCommit` so it runs only after managed validation and commit:
+The transaction is discarded when:
+
+- the handler calls `Reject`;
+- the handler throws;
+- payload validation fails.
+
+Unity or CairnAPI mutations cannot be rolled back generically. Schedule them
+after the managed commit:
 
 ```csharp
 context.AfterCommit(() => CairnAPI.Banner.Show("Goal complete!", 3f));
 ```
 
-An exception in this post-commit action is isolated and logged. It cannot undo already committed
-state. After three consecutive failures, CairnMP disables only the faulty extension for the
-remainder of the session.
+An exception in a post-commit action is isolated and logged, but cannot undo
+already committed state. After three consecutive failures, CairnMP disables only
+the faulty extension for the remainder of the session.
 
-## Serialization
+## Serialize payloads
 
-Payloads use `PayloadCodec<T>.Json` by default. DTOs should have stable public properties. A mod
-may provide a custom codec when it needs a compact format or explicit schema migration:
+Payloads use `PayloadCodec<T>.Json` by default. DTOs should expose stable public
+properties. Use a custom codec for compact formats or explicit schema migration:
 
 ```csharp
 var codec = new PayloadCodec<MyPayload>(Serialize, Deserialize);
 var command = extension.RegisterCommand("custom", Handle, codec);
 ```
 
-The managed payload limit is 48 KiB. CairnMP rejects larger payloads before dispatch.
+> [!IMPORTANT]
+> Managed payloads are limited to **48 KiB**. CairnMP rejects larger payloads
+> before dispatch.
 
-## Session and players
+## Observe sessions and players
 
-The static facade exposes:
+The static façade exposes:
 
-- `MultiplayerApi.IsConnected` and `IsHost`;
-- `LocalPlayer` and `Players`;
-- `SessionReady` and `SessionEnded`;
-- `PlayerJoined` and `PlayerLeft`;
-- `ExtensionDisabled`.
+| Member | Purpose |
+| --- | --- |
+| `IsConnected`, `IsHost` | Inspect local session role and connectivity. |
+| `LocalPlayer`, `Players` | Read the local player and current roster. |
+| `SessionReady`, `SessionEnded` | Observe session lifecycle. |
+| `PlayerJoined`, `PlayerLeft` | Observe roster changes. |
+| `ExtensionDisabled` | React when an extension is isolated. |
 
-Use `extension.IsEnabledForPlayer(playerId)` before presenting a feature that requires another
-player to run the same optional extension.
+Before presenting functionality that depends on an optional extension, call
+`extension.IsEnabledForPlayer(playerId)`.
 
 ## Safety defaults
 
 - All extension traffic is reliable and host-authoritative.
-- A command times out locally after 10 seconds without a host response.
-- A player may issue at most 120 calls to the same extension command per 10 seconds.
-- Unknown commands and disabled extensions are rejected without terminating the session.
-- Exceptions are isolated from CairnMP and other extensions.
-- Raw Steam ids, peers, packet writers, and transport objects are never public API.
+- Commands time out locally after 10 seconds without a host response.
+- A player may issue at most 120 calls to the same extension command per 10
+  seconds.
+- Unknown commands and disabled extensions are rejected without ending the
+  session.
+- Exceptions are isolated from CairnMP and from other extensions.
+- Raw Steam IDs, peers, packet writers, and transport objects are not exposed.
+
+See the [managed extension example](../examples/ManagedExtensionExample/) for a
+complete source example.

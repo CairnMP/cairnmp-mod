@@ -1,7 +1,35 @@
 # Changelog
 
-All notable changes to CairnMP are documented here.
-This project adheres to [Semantic Versioning](https://semver.org/).
+All notable CairnMP changes are documented here. Releases follow
+[Semantic Versioning](https://semver.org/) and use the categories **Added**,
+**Changed**, **Fixed**, and **Removed** where applicable.
+
+> [!IMPORTANT]
+> Beta releases may require every lobby member to run the exact same mod version,
+> even when the wire-protocol number is unchanged. Read the compatibility note
+> for the release you install.
+
+## Releases
+
+| Version | Date | Channel | Highlights |
+| --- | --- | --- | --- |
+| [2.2.3](#223--2026-09-11-beta) | 2026-09-11 | Beta | Pause-menu audio fix |
+| [2.2.2](#222--2026-09-11-beta) | 2026-09-11 | Beta | Proximity voice settings |
+| [2.2.1](#221--2026-09-08-beta) | 2026-09-08 | Beta | Remote pose reliability |
+| [2.2.0](#220--2026-09-07-beta) | 2026-09-07 | Beta | Item sharing and chat completion |
+| [2.1.0](#210--2026-09-06-beta) | 2026-09-06 | Beta | Voice chat and feature framework |
+| [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
+| [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
+| [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.2.3] — 2026-09-11 (beta)
+
+### Fixed
+
+- Fixed opening the pause menu with Start or Escape muting all in-game audio until
+  entering a bivouac during a multiplayer session.
 
 ## [2.2.2] — 2026-09-11 (beta)
 
@@ -131,8 +159,8 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - The settings interface and local microphone path have been validated in game;
   two-player voice quality and the complete multiplayer path still require broader
   community testing.
-- See `docs/corrections-audit-2026-09-05.md` and `docs/proximity-voice.md` for the
-  detailed validation notes.
+- See the [proximity voice guide](docs/proximity-voice.md) for implementation and
+  validation notes.
 
 ## [1.1.0] — 2026-08-02
 
@@ -140,6 +168,7 @@ Network protocol unchanged (still version 7), so `1.1.0` and `1.0.0` clients
 can still play together.
 
 ### Added
+
 - **Extension API** — other mods can now register their own state, events and
   commands and have them synchronized across a session, without touching
   CairnMP's own networking. Handlers run in a transaction: a rejected or
@@ -151,6 +180,7 @@ can still play together.
   requiring a rebuild. Thanks [@nullbrik](https://github.com/nullbrik).
 
 ### Fixed
+
 - The **Multiplayer button** no longer shows "Story" while opening the
   multiplayer panel.
 - **Roping** — a partner unclipping now cleans up the native belay properly,
@@ -160,6 +190,7 @@ can still play together.
   no longer report a stale state.
 
 ### Changed
+
 - **Crash diagnostics are now local-only.** CairnMP no longer uploads errors or
   creates a machine identifier. A fatal mod error stops multiplayer safely,
   bundles the available CairnMP, MelonLoader and Unity logs under
@@ -184,6 +215,7 @@ single supported version. No protocol change from `0.1.37` (network protocol
 stays at version 6).
 
 ### Added
+
 - **Rope up with a partner (belay)** — press **E** near a climber to clip a rope
   between you; on a wall you're truly belayed (fall → hang, rappel with **S**,
   climb back with **W**) instead of dying.
@@ -199,6 +231,7 @@ stays at version 6).
 - **Save options from the lobby** — opens Cairn's normal save menu when hosting.
 
 ### Synchronized
+
 - Weather, time of day (host-authoritative), player lamps, pitons (with
   host-assigned authoritative IDs), hand/finger poses, and cosmetics (outfits,
   hoods, glow sticks, glowing gloves).
@@ -206,6 +239,7 @@ stays at version 6).
 - Joining mid-session now receives existing world state (pitons, lamps, weather).
 
 ### Fixed
+
 - Multiplayer saving is fully reliable: correct slot when hosting, multiple saves
   per session, bivouac saves no longer silently break, and a bad piton can never
   abort the save.
@@ -219,6 +253,7 @@ stays at version 6).
 ## [0.1.37] — 2026-07-09 (beta)
 
 ### Fixed
+
 - **Multiplayer saves no longer fail after clipping into another player's piton.**
   Clipping onto a remote player's piton could throw `NullReferenceException` in
   `Piton.WriteToSavegame` and abort the **entire** save (`Save FAILED`), losing
@@ -234,17 +269,20 @@ stays at version 6).
   from 1 (which made two players' pitons overwrite each other).
 
 ### Improved
+
 - **Joining mid-session now syncs existing world state.** A player who joins an
   in-progress game now correctly receives already-placed pitons, other players' lamp
   states, and the current weather.
 
 ### Changed (internal)
+
 - Host-side piton authority is now owned by a transport-agnostic core
   (`PitonAuthority`) instead of being handled inline in the Steam transport. No
   gameplay change; groundwork for future sync work.
 - Removed the unused standalone LiteNetLib server — multiplayer is Steam relay only.
 
 ### Notes for testers
+
 - Both players must run the **same** `CairnMultiplayerMod.dll` (0.1.37) for the save
   fix to protect both sides.
 - If the save guard ever triggers, it now logs a visible warning

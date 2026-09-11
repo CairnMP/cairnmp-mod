@@ -1,50 +1,93 @@
-# Security policy
+# Security Policy
+
+> [!IMPORTANT]
+> Do **not** disclose vulnerabilities, exploit code, credentials, or unredacted
+> crash logs in public issues or pull requests.
+
+## Quick links
+
+- [Report a vulnerability privately](https://github.com/CairnMP/cairnmp-mod/security/advisories/new)
+- [Maintainer security setup](docs/maintainer-security.md)
+- [Supported versions](#supported-versions)
+- [Security scope](#scope-and-trust-boundaries)
 
 ## Reporting a vulnerability
 
-Do not disclose vulnerabilities, exploit code, credentials, or unredacted crash
-logs in public issues or pull requests.
+Use GitHub’s private vulnerability reporting when the repository displays
+**Report a vulnerability**. If that option is unavailable, email
+**[contact@yutho.fr](mailto:contact@yutho.fr)** with the subject
+`CairnMP security report`.
 
-Use [GitHub private vulnerability reporting](https://github.com/CairnMP/cairnmp-mod/security/advisories/new)
-when the repository offers **Report a vulnerability**. If that option is not
-available, contact the maintainer privately at **contact@yutho.fr** with the
-subject `CairnMP security report`. Never send passwords or live tokens.
+Include the following information when possible:
 
-Include the affected version/commit, Cairn and MelonLoader versions, impact,
-reproduction steps in a session you control, and a minimal proof of concept.
-Redact player identifiers, IP addresses, local usernames, and session details.
-Coordinate public disclosure with the maintainer after a fix is available.
-This is a volunteer project; no response deadline or bug bounty is promised.
+- affected CairnMP version or commit;
+- Cairn and MelonLoader versions;
+- expected security impact;
+- reproduction steps from a session you own or are authorized to test;
+- a minimal proof of concept;
+- any suggested mitigation.
+
+Before sending a report, redact player identifiers, IP addresses, local
+usernames, private chat, and session details. Never send passwords or live
+tokens.
+
+> [!NOTE]
+> CairnMP is a volunteer project. No response deadline or bug bounty is
+> promised. Please coordinate public disclosure with the maintainer after a fix
+> is available.
 
 ## Supported versions
 
-Security fixes target the latest published mod release and the current default
-branch, `develop`. Older releases and experimental branches do not receive
-separate backports. Development builds are not a stability guarantee.
+| Version | Security support |
+| --- | --- |
+| Latest published release | ✅ Supported |
+| Current `develop` branch | ✅ Supported |
+| Older releases | ❌ No separate backports |
+| Experimental branches | ❌ No stability or support guarantee |
 
 ## Scope and trust boundaries
 
-Relevant issues include unauthorized host actions, malicious packet handling,
-resource exhaustion, unsafe file access, arbitrary code execution, and exposure
-of player data or credentials. Only test installations and sessions you own or
-have explicit permission to test; do not disrupt public lobbies.
+Security-relevant reports include:
 
-Treat every peer and every network payload as untrusted. Validate sender identity,
-host authority, lengths, counts, numeric ranges, and session state before applying
-an effect. Bound memory allocation, message rates, queues, and parsing work.
-Never deserialize network data into arbitrary executable types.
+- unauthorized host actions;
+- malicious or malformed packet handling;
+- unbounded memory, CPU, queue, or parsing work;
+- unsafe file access or arbitrary code execution;
+- exposure of player data, private logs, or credentials.
 
-Managed extensions and mods execute locally with the game's permissions; they
-are **not sandboxed**. Install only code you trust. Steam relay transport does not
-make a peer's messages trustworthy. Back up saves before testing development builds.
+Only test installations and sessions that you own or have explicit permission
+to test. Do not disrupt public lobbies.
+
+### Required network assumptions
+
+Treat every peer and every network payload as untrusted:
+
+- validate sender identity and host authority;
+- validate lengths, counts, numeric ranges, and session state;
+- bound allocations, message rates, queues, and parsing work;
+- never deserialize network data into arbitrary executable types.
+
+Steam relay transport does **not** make peer messages trustworthy.
+
+### Local mods and extensions
+
+Managed extensions and mods run locally with the game’s permissions; they are
+**not sandboxed**. Install only code you trust, and back up saves before testing
+development builds.
 
 ## Dependencies and releases
 
-The mod currently targets .NET 6 for loader compatibility. This is a legacy
+CairnMP currently targets .NET 6 for loader compatibility. This is a legacy
 runtime constraint, not a claim of current runtime security support. Review the
-loader/runtime upgrade path before changing the target framework.
+loader and runtime upgrade path before changing the target framework.
 
-Review dependency and GitHub Action updates before merging. Never publish game
-reference assemblies, credentials, private logs, or builds from unreviewed pull
-requests. See [maintainer setup](docs/maintainer-security.md) for GitHub controls
-that must be enabled separately from this file.
+Before merging or publishing a release:
+
+- review dependency and GitHub Actions updates;
+- build only from reviewed commits;
+- exclude proprietary game references, credentials, and private logs;
+- never reuse untrusted pull-request artifacts in a privileged release job.
+
+Repository administrators should also apply the controls documented in the
+[maintainer security guide](docs/maintainer-security.md); repository files alone
+cannot enable those settings.

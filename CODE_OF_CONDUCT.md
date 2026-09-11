@@ -1,19 +1,52 @@
-# Community code of conduct
+# CairnMP Community Code of Conduct
 
-CairnMP welcomes contributors and players of all backgrounds and experience levels.
-Be respectful, patient, and constructive. Critique the work, explain your reasoning,
-and respect other people's time and privacy.
+> CairnMP is committed to a welcoming, respectful, and constructive community
+> for players and contributors of every background and experience level.
 
-Harassment, threats, discriminatory abuse, sexual harassment, doxxing, spam, and
-sharing private information without consent are unacceptable. These expectations
-apply to issues, pull requests, reviews, and official project community spaces.
+## Our standards
 
-Report misconduct privately to **contact@yutho.fr**. Include relevant links and
-context; avoid reposting private material publicly. Reports will be handled as
-privately as practical, with information shared only as needed to investigate.
+We expect everyone participating in project spaces to:
 
-Maintainers may edit or remove harmful content, warn participants, restrict
-participation temporarily, or ban participants for severe or repeated violations.
-Actions should be proportionate to the behavior and its impact. A participant may
-request reconsideration privately through the same contact with additional context.
-Maintainers are expected to follow these rules too.
+- treat others with respect, patience, and empathy;
+- critique ideas and work—not people;
+- explain feedback constructively and in good faith;
+- respect other people’s time, boundaries, and privacy;
+- help keep discussions focused and inclusive.
+
+The following behavior is unacceptable:
+
+- harassment, threats, or intimidation;
+- discriminatory or sexualized language and conduct;
+- doxxing or sharing private information without consent;
+- spam, deliberate disruption, or sustained bad-faith participation;
+- retaliation against anyone who reports a concern.
+
+These standards apply to issues, pull requests, code reviews, and every official
+CairnMP community space.
+
+## Reporting a concern
+
+Report misconduct privately to **[contact@yutho.fr](mailto:contact@yutho.fr)**.
+
+Please include relevant links and enough context to understand what happened.
+Do not repost private or harmful material publicly. Reports will be handled as
+confidentially as practical, and information will be shared only when needed to
+investigate or respond.
+
+## Enforcement
+
+Maintainers may take any proportionate action needed to protect the community,
+including:
+
+1. editing or removing harmful content;
+2. issuing a private or public warning;
+3. temporarily restricting participation;
+4. permanently banning a participant after severe or repeated violations.
+
+A participant may request reconsideration by emailing
+**[contact@yutho.fr](mailto:contact@yutho.fr)** with additional context.
+Maintainers are subject to the same standards as every other participant.
+
+---
+
+Thank you for helping make CairnMP a safe and useful place to collaborate.

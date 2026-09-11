@@ -1,8 +1,21 @@
 # Architecture
 
-CairnMP separates stable contributor code from game and transport integration.
-Dependencies flow inward through contracts; lower-level code never leaks engine types into
-features or public extensions.
+CairnMP separates contributor-facing code from game and transport integration.
+Dependencies flow through stable contracts; engine types never leak into features
+or public extensions.
+
+## Contents
+
+- [Dependency map](#dependency-map)
+- [Layer responsibilities](#layer-responsibilities)
+- [Inbound packet flow](#inbound-packet-flow)
+- [Enforced boundaries](#enforced-boundaries)
+- [Build and deployment](#build-and-deployment)
+- [Folder conventions](#folder-conventions)
+- [Naming conventions](#naming-conventions)
+- [Fatal errors and privacy](#fatal-errors-and-privacy)
+
+## Dependency map
 
 ```text
 External mods ──> CairnMultiplayer.Api ──> Internal/Extensions
@@ -12,118 +25,146 @@ Features ──────> Framework ─────────────�
    └──────────> GameApi <──── Internal/Game adapters
 
 Bootstrap ──> Framework + GameApi + Internal
-Internal/Networking ──> CairnMultiplayerShared + Internal/Extensions + Internal/Diagnostics
+Internal/Networking ──> CairnMultiplayerShared
+                     + Internal/Extensions
+                     + Internal/Diagnostics
 ```
 
-## Project responsibilities
+> [!IMPORTANT]
+> `Features` may use `Framework` and `GameApi`. It must never depend directly on
+> Unity, IL2CPP, Steam, Harmony, MelonLoader, `Bootstrap`, or `Internal`.
 
-- `CairnMultiplayerShared` owns serialized packets, protocol constants and pure validation.
-  It has no dependency on the mod, Unity, Steam or IL2CPP.
-- `CairnMultiplayer.Api` is the public managed extension surface. Its public signatures expose
-  only managed contract types.
-- `Framework` owns feature lifecycle and typed multiplayer channels.
-- `GameApi` is the safe in-mod façade for game operations. It exposes no engine or transport
-  types.
-- `Features` contains feature declarations only. A feature talks to Cairn through `GameApi`
-  and declares networking through `FeatureBuilder`.
-- `Internal` contains every implementation coupled to Unity, IL2CPP, Steam, Harmony or Cairn.
-  No type declared there is public.
-- `Bootstrap` is the composition root. It creates adapters and services, wires callbacks and
-  drives their lifecycle.
+## Layer responsibilities
 
-## Inbound network flow
+| Layer | Responsibility | Must not expose |
+| --- | --- | --- |
+| `CairnMultiplayerShared` | Packets, protocol constants, and pure validation | Mod, Unity, Steam, or IL2CPP dependencies |
+| `CairnMultiplayer.Api` | Public managed extension contracts | Engine or transport types |
+| `Framework` | Feature lifecycle and typed multiplayer channels | Native implementation details |
+| `GameApi` | Safe in-mod façade for game operations | Engine or transport types |
+| `Features` | Declarative multiplayer capabilities | Direct infrastructure access |
+| `Internal` | Unity, IL2CPP, Steam, Harmony, and Cairn implementations | Public types |
+| `Bootstrap` | Composition, callback wiring, and lifecycle ownership | Service-locator access from runtime services |
+
+## Inbound packet flow
 
 ```text
 Steam callback
-    -> NetworkManager transport pump
-    -> NetworkManager.PacketDispatch
-        -> extension packets
-        -> session packets
-        -> player packets
-        -> world packets
-    -> events/adapters/features
+    ↓
+NetworkManager transport pump
+    ↓
+NetworkManager.PacketDispatch
+    ├── extension packets
+    ├── session packets
+    ├── player packets
+    └── world packets
+    ↓
+events / adapters / features
 ```
 
-`PacketValidation` lives in the shared protocol project. Both client and authoritative-host
-paths must call it before accepting untrusted positions, frames, bones, weather or pitons.
-Transport code routes bytes; domain-specific partial files apply the resulting packet.
-Networking reports game-facing actions as events consumed by `Bootstrap`; it does not call
-Unity, `GameApi`, game adapters or UI implementations directly.
+`PacketValidation` belongs to the shared protocol project. Both clients and the
+authoritative host must call it before accepting untrusted positions, frames,
+bones, weather, or pitons.
 
-## Enforced rules
+Transport code routes bytes. Domain-specific partial files deserialize and apply
+packets. Networking reports game-facing actions as events consumed by `Bootstrap`;
+it never calls Unity, `GameApi`, game adapters, or UI implementations directly.
 
-- `CMP003` rejects feature references to `Internal`, `Bootstrap`, Unity, IL2CPP, Steam,
-  Harmony, MelonLoader and the lower-level managed extension API.
-- Architecture tests reject engine imports outside `Internal`/`Bootstrap`, unsafe `GameApi`
-  dependencies, bootstrap service-locator access, asymmetric patch lifecycles,
-  non-feature files under `Features`, and public types under `Internal`.
-- Dependencies are explicit at each source file; no project-wide infrastructure import
-  hides the direction of coupling.
+## Enforced boundaries
+
+The build and architecture tests enforce these rules:
+
+- diagnostic `CMP003` rejects feature references to `Internal`, `Bootstrap`,
+  Unity, IL2CPP, Steam, Harmony, MelonLoader, and the lower-level extension API;
+- engine imports are rejected outside `Internal` and `Bootstrap`;
+- unsafe `GameApi` dependencies and bootstrap service-locator access are rejected;
+- patch lifecycles must install and uninstall symmetrically;
+- every file under `Features` must declare a feature;
+- types declared under `Internal` must not be public;
+- dependencies stay explicit in each source file—no project-wide infrastructure
+  import may hide coupling direction.
 
 ## Build and deployment
 
-Normal builds never deploy: `DeployMod` defaults to `false`. Set `-p:DeployMod=true`
-explicitly to install a development build into the local game. Automated checks also
-pass `DeployMod=false`; the mod test project passes it through its project reference.
+Normal builds never deploy. `DeployMod` defaults to `false`; set
+`-p:DeployMod=true` only when intentionally installing a development build into
+the local game.
 
-`CairnMultiplayer.sln` is the only solution. `CairnMultiplayer.Tests` runs on .NET 10
-without game assemblies and owns the protocol, architecture, generator and source-linked
-authority/diagnostic suites. `CairnMultiplayerMod.Tests` runs on .NET 6 and requires the
-proprietary references. CI runs the portable project with locked dependencies.
+| Project | Runtime | Game references | Primary coverage |
+| --- | ---: | ---: | --- |
+| `CairnMultiplayer.Tests` | .NET 10 | Not required | Protocol, architecture, generator, authority, diagnostics |
+| `CairnMultiplayerMod.Tests` | .NET 6 | Required | Framework, gameplay, panels, extensions |
 
-## Folder and naming conventions
+`CairnMultiplayer.sln` is the only solution. CI runs the portable project with
+locked dependencies. Automated checks also pass `DeployMod=false`, and the mod
+test project forwards that property to its project reference.
 
-A domain folder exists only when it contains at least three source files. Smaller groups
-live in their parent; filenames carry the domain. Keep the architectural layers above
-separate even when a layer is small. In particular, `Internal/Extensions` remains its own
-boundary for the managed extension runtime. `Internal/Polyfills.cs` keeps its required
-`System.Runtime.CompilerServices` namespace.
+## Folder conventions
 
-Features live directly in `Features/`, in namespace `CairnMultiplayerMod.Features`.
-Their implementations live under `Internal/Game`, with larger domains such as `Players`,
-`Roping`, `Bivouac`, `MainMenu` and `World` retaining folders. Small domains are identified
-by filenames such as `ChatController.cs`, `TimeInterop.cs` and `WeatherInterop.cs`.
-All `NetworkManager` partials live together under `Internal/Networking`; packet dispatch
-stays separate from deserialization and packet application.
+- Create a domain folder only when it contains at least three source files.
+- Keep architectural layers separate even when a layer is small.
+- Keep `Internal/Extensions` as the managed extension runtime boundary.
+- Keep `Internal/Polyfills.cs` in its required
+  `System.Runtime.CompilerServices` namespace.
+- Place features directly in `Features/` under
+  `CairnMultiplayerMod.Features`.
+- Place native implementations under `Internal/Game`; larger domains such as
+  `Players`, `Roping`, `Bivouac`, `MainMenu`, and `World` may retain folders.
+- Keep all `NetworkManager` partials under `Internal/Networking`.
+- Separate packet dispatch, deserialization, and packet application.
 
-Use these suffixes when naming new code:
+For smaller domains, make the filename carry the responsibility—for example,
+`ChatController.cs`, `TimeInterop.cs`, or `WeatherInterop.cs`.
+
+## Naming conventions
 
 | Suffix | Responsibility |
-|---|---|
-| `Feature` | Declarative gameplay capability using Framework and GameApi |
+| --- | --- |
+| `Feature` | Declarative gameplay capability using `Framework` and `GameApi` |
 | `Interop` | Access to native game or engine APIs |
-| `Adapter` | Implements a managed contract over integration code |
-| `Patch` | Installs and uninstalls a Harmony behavior change |
-| `Diagnostics` | Observes and reports behavior without concealing failures |
-| `Controller` | Coordinates interactions for one gameplay or UI domain |
-| `Manager` | Owns a collection of entities or a subsystem's resources |
-| `Broadcaster` | Captures and publishes recurring state updates |
-| `Service` | Provides a cohesive capability used by multiple callers |
-| `Flow` | Sequences a process through multiple stages |
-| `Gate` | Decides whether another operation may proceed |
+| `Adapter` | Managed contract implemented over integration code |
+| `Patch` | Installable and removable Harmony behavior change |
+| `Diagnostics` | Observation and reporting without concealing failures |
+| `Controller` | Coordination for one gameplay or UI domain |
+| `Manager` | Ownership of a collection or subsystem resources |
+| `Broadcaster` | Capture and publication of recurring state |
+| `Service` | Cohesive capability shared by multiple callers |
+| `Flow` | A process sequenced through multiple stages |
+| `Gate` | A decision about whether an operation may proceed |
 
-Existing names are not a reason for mass renaming. Preserve `AssemblyName`, `MelonInfo`,
-preference category names, Harmony IDs, protocol IDs and the public namespace
-`CairnMultiplayer.Api`: these are compatibility contracts with installed clients and extensions.
+> [!CAUTION]
+> Do not mass-rename compatibility contracts. Preserve `AssemblyName`,
+> `MelonInfo`, preference categories, Harmony IDs, protocol IDs, and the public
+> namespace `CairnMultiplayer.Api`.
 
 ## Fatal errors and privacy
 
-Diagnostics are local-only. The diagnostic layer has no HTTP client, telemetry endpoint,
-machine hash or automatic upload path. Recoverable exceptions are deduplicated into a local
-session log and do not stop the mod.
+Diagnostics are local-only. The diagnostics layer contains no HTTP client,
+telemetry endpoint, machine hash, or automatic upload path. Recoverable
+exceptions are deduplicated into a local session log and do not stop the mod.
 
-An exception explicitly classified as fatal follows one controlled path:
+Fatal errors follow one controlled path:
 
 ```text
 fatal exception
-    -> stop feature, UI, Steam and network activity
-    -> create UserData/CairnMultiplayer/Crashes/CairnMP-crash-*.zip
-    -> show the archive path in an in-game crash screen
-    -> close Cairn on request or after 30 seconds
+    ↓
+stop feature, UI, Steam, and network activity
+    ↓
+create UserData/CairnMultiplayer/Crashes/CairnMP-crash-*.zip
+    ↓
+show the local archive path in game
+    ↓
+close Cairn on request or after 30 seconds
 ```
 
-The ZIP contains a readable crash report, a privacy notice and bounded tails of the available
-CairnMP, MelonLoader and Unity logs. It stays on the player's computer until the player
-chooses to share it. Storage is bounded to 10 session logs / 20 MiB and 5 crash archives /
-100 MiB. Architecture tests prevent network APIs and machine identifiers from being added
+The archive contains a readable report, a privacy notice, and bounded tails of
+available CairnMP, MelonLoader, and Unity logs. It stays on the player’s computer
+until they choose to share it.
+
+| Local diagnostic data | Retention limit |
+| --- | ---: |
+| Session logs | 10 files / 20 MiB |
+| Crash archives | 5 files / 100 MiB |
+
+Architecture tests prevent network APIs and machine identifiers from being added
 under `Internal/Diagnostics`.

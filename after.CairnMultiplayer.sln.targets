@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <PackageOnSolutionBuild Condition="'$(PackageOnSolutionBuild)' == ''">true</PackageOnSolutionBuild>
+  </PropertyGroup>
+
+  <Target Name="PackageCairnModAfterSolutionBuild"
+          AfterTargets="Build"
+          Condition="'$(PackageOnSolutionBuild)' == 'true'">
+    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildThisFileDirectory)scripts\package-mod.ps1&quot; -SkipBuild -Configuration &quot;$(Configuration)&quot;" />
+  </Target>
+</Project>

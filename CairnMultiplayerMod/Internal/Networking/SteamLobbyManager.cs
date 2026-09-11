@@ -485,6 +485,7 @@ namespace CairnMultiplayerMod.Internal.Networking
             catch (Exception ex) { ModLog.Warning($"[SteamLobby] RunCallbacks failed: {ex.Message}"); }
 
             CheckOperationTimeouts(dt);
+            PumpLobbyRegistry(dt);
         }
 
         public void Dispose()
@@ -763,6 +764,7 @@ namespace CairnMultiplayerMod.Internal.Networking
 
         private void ResetLobbyState()
         {
+            StopLobbyRegistry();
             CurrentLobbyId = default;
             CurrentRoomCode = "";
             CurrentLobbyName = "";

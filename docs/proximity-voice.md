@@ -1,72 +1,133 @@
-# Proximity voice (experimental)
+# Proximity Voice
 
-Open **Settings → CairnMP**, from the main menu or the pause menu. The page uses
-Cairn's native settings fields, scrolling, navigation and reset controls.
+> [!WARNING]
+> Proximity voice is experimental. It currently supports Windows through WASAPI;
+> Linux, Proton, and macOS are not supported.
 
-- **Voice mode:** open microphone with level-based voice detection by default;
-  push-to-talk and microphone mute are available. Muting your microphone does not
-  mute incoming voices.
-- **Microphone:** Windows communications default or a named input device. Devices are refreshed
-  every five seconds on a worker thread. An unplugged selected device stays selected and stops capture;
-  it does not silently switch to a different microphone.
-- **Detection threshold:** -40 dB by default, adjustable from -60 to -10 dB.
-  A lower value picks up quieter speech, but also more background noise. This first
-  version uses an RMS gate, not speech classification, echo cancellation or noise suppression.
-- **Push-to-talk key:** V by default, configurable in the dropdown.
-- **Voice volume:** 0–200%, default 100%.
-- **Test microphone:** plays the selected microphone locally. No test audio is sent
-  over the network. Closing the page stops the test. Headphones avoid feedback.
-- **Mute a player:** individual mute toggles appear for players present when the
-  page opens. These are temporary and clear on scene/session reset or player leave.
+Open **Settings → CairnMP** from the main menu or pause menu. The page uses
+Cairn’s native settings fields, scrolling, navigation, and reset controls.
 
-Preferences persist in the loader preferences under `CairnMP.Voice`. Capture is
-stopped outside gameplay, when muted, on loss of application focus, on scene reset
-and on disconnect. The explicit local test can capture while the settings page is
-open. Transmission is suspended while the CairnMP settings page is open.
+## At a glance
 
-Voices attenuate with distance from the local climber, becoming inaudible at 30 m.
-Left/right direction follows the camera. Only remote climbers with an available
-in-game avatar are played. No wall occlusion or elevation/HRTF filtering is applied.
+| Setting | Default | Details |
+| --- | ---: | --- |
+| Voice mode | Voice activation | Push-to-talk and microphone mute are also available. |
+| Microphone | Windows communications default | A named input device can be selected. |
+| Detection threshold | −40 dB | Adjustable from −60 to −10 dB. |
+| Push-to-talk key | `V` | Configurable from the settings dropdown. |
+| Voice volume | 100% | Adjustable from 0% to 200%. |
+| Maximum audible distance | 30 m | Volume decreases with distance. |
 
-## Implementation
+## Using voice chat
 
-`VoiceFeature` declares an unreliable `voice.opus-v1` feature stream and delegates
-capture/playback to `Game.Voice`. Cairn disables Unity Audio for Wwise, so the mod uses
-Windows shared-mode WASAPI through NAudio.Wasapi 2.2.1. Capture is converted by Windows to
-24 kHz mono PCM, encoded into 20 ms Opus frames at 24 kbit/s using Concentus 2.2.2, and
-relayed through the existing Steam host. Each packet carries burst and sequence
-identifiers. Payloads are bounded to 400 bytes, below the gameplay transport's
-reliable fallback threshold. Receivers gate playback by proximity; the host currently
-relays to all admitted peers. Proximity is an audio effect, not a confidentiality boundary.
+### Voice modes
 
-The gate retains 60 ms of audio before activation and 250 ms after the signal falls
-below the threshold. A 60 ms packet reorder buffer and bounded PCM queue absorb
-jitter without accumulating stale conversation after a stall. Loss uses Opus packet
-loss concealment. Audio callbacks only read the synchronized PCM buffer; scene
-access and codec operations stay on the Unity main thread. WASAPI input and output
-callbacks only touch managed, synchronized sample buffers. Device selection stores
-the stable endpoint ID; friendly names are only labels. Output uses Windows' default
-render device. Native Linux/macOS audio backends are not implemented; Proton is unverified.
+- **Voice activation** opens the microphone when the input level crosses the
+  configured threshold.
+- **Push-to-talk** transmits only while the selected key is held.
+- **Microphone mute** stops outgoing voice without muting other players.
 
-Deploy/package `Concentus.dll`, `NAudio.Core.dll`, `NAudio.Wasapi.dll` and
-`THIRD-PARTY-NOTICES.txt` with the two mod DLLs.
-The build and packaging scripts include these automatically. Both players should
-use the same build to test voice; older builds have no handler for this stream.
+The first implementation uses an RMS level gate. It does not provide speech
+classification, echo cancellation, or noise suppression.
 
-## Verification
+### Choosing a microphone
 
-Automated tests cover frame validation, an audible Opus round trip, packet loss,
-reordering, sequence wrap, bounded backlog and voice gate release. These tests do
-not prove microphone/audio device interoperability or Steam latency.
+Select the Windows communications default or a named input device. Devices are
+refreshed every five seconds on a worker thread.
 
-An in-game main-menu probe verified the native tab, field binding, mode persistence
-after reopening, microphone dropdown labels, stable device selection, Windows PCM
-capture, output consumption, local-test isolation and capture stopping on close.
-This does not establish audible quality or a two-player end-to-end connection.
+> [!NOTE]
+> If a selected device is unplugged, CairnMP preserves the selection and stops
+> capture. It never switches silently to another microphone.
 
-Before release, test with two Steam accounts: host→guest and guest→host, simultaneous
-speech, walking beyond 30 m and back, changing microphone during play, unplug/replug,
-voice activation in a noisy room, push-to-talk while typing, focus loss, pause menu,
-scene changes, leaving/rejoining and a third late joiner. Listen for missing word
-beginnings, clicks and accumulated delay. Validate the pause-menu page separately
-from the main-menu page.
+### Testing and muting
+
+- **Test microphone** plays the selected input locally. Nothing is transmitted.
+  Closing the page stops the test; headphones are recommended to avoid feedback.
+- **Mute a player** temporarily silences an individual player listed when the
+  page opens. These mutes clear after a scene or session reset, or when the player
+  leaves.
+
+Preferences are stored under `CairnMP.Voice`. Normal capture stops outside
+gameplay, when muted, after focus loss, on scene reset, and on disconnect. The
+explicit local test may capture while the settings page is open, but network
+transmission remains suspended there.
+
+## Spatial audio behavior
+
+Remote voices become inaudible at **30 metres**. Stereo direction follows the
+camera, and audio is played only when the remote climber has an available in-game
+avatar.
+
+There is currently no wall occlusion, elevation filter, or HRTF processing.
+Proximity is an audio effect—not a confidentiality boundary. The host currently
+relays voice packets to every admitted peer.
+
+## Technical design
+
+`VoiceFeature` declares the unreliable `voice.opus-v1` stream and delegates
+capture and playback to `Game.Voice`.
+
+| Component | Implementation |
+| --- | --- |
+| Audio backend | Windows shared-mode WASAPI through NAudio.Wasapi 2.2.1 |
+| Capture format | 24 kHz, mono PCM |
+| Codec | Opus through Concentus 2.2.2 |
+| Frame duration | 20 ms |
+| Target bitrate | 24 kbit/s |
+| Maximum payload | 400 bytes |
+| Pre-roll | 60 ms |
+| Gate release | 250 ms |
+| Reorder buffer | 60 ms |
+
+Each packet carries burst and sequence identifiers. Receivers use a bounded PCM
+queue and Opus packet-loss concealment so stalls do not accumulate stale audio.
+Audio callbacks only access synchronized managed sample buffers; scene access and
+codec work remain on Unity’s main thread. Device preferences store stable endpoint
+IDs, while friendly names are display labels only. Playback uses Windows’ default
+render device.
+
+Release packages must include:
+
+- `CairnMultiplayerMod.dll`;
+- `CairnMultiplayerShared.dll`;
+- `Concentus.dll`;
+- `NAudio.Core.dll`;
+- `NAudio.Wasapi.dll`;
+- `THIRD-PARTY-NOTICES.txt`.
+
+The build and packaging scripts include these files automatically.
+
+## Verification status
+
+### Automated coverage
+
+Automated tests cover:
+
+- frame validation and audible Opus round trips;
+- packet loss, reordering, and sequence wrap;
+- bounded backlog behavior;
+- voice-gate release.
+
+These checks do not prove device interoperability, audible quality, or real Steam
+latency.
+
+### In-game coverage
+
+An in-game main-menu probe verified native settings integration, persistence,
+microphone labels, stable device selection, Windows capture, output consumption,
+local-test isolation, and capture shutdown when the page closes.
+
+### Release checklist
+
+- [ ] Test host → guest and guest → host with two Steam accounts.
+- [ ] Test simultaneous speech and movement beyond 30 m and back.
+- [ ] Change the microphone during play, then unplug and reconnect it.
+- [ ] Test voice activation in a noisy room.
+- [ ] Use push-to-talk while typing in chat.
+- [ ] Test focus loss, pause menu, scene changes, and leave/rejoin.
+- [ ] Add a third player as a late joiner.
+- [ ] Listen for clipped word beginnings, clicks, and accumulated delay.
+- [ ] Validate the pause-menu page separately from the main-menu page.
+
+Both players should use the same CairnMP build; older builds do not handle this
+stream.

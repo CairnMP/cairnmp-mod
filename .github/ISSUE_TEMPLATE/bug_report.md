@@ -1,47 +1,68 @@
 ---
 name: Bug report
-about: Report a crash, broken multiplayer behavior or another reproducible problem.
-title: ""
+about: Report a crash or reproducible CairnMP problem
+title: "[Bug]: "
 labels: ""
 assignees: ""
 ---
 
-<!-- English or French is welcome. Search existing issues first. One bug per report.
-Fill in what you know; write "unknown" or "not tested" where appropriate. -->
+<!--
+English and French are welcome.
 
-## What happened?
+Before submitting:
+- Search open and closed issues.
+- Keep one problem per report.
+- Remove private information from logs and screenshots.
+- Write "Unknown" or "Not tested" when information is unavailable.
+-->
 
-Describe the problem and which players were affected.
+## Summary
 
-## Steps to reproduce
+<!-- What happened, and which player(s) were affected? -->
 
-1. Host ...
-2. Client ...
-3. ...
+## Reproduction steps
 
-## Expected and actual behavior
+1. Host …
+2. Client …
+3. Observe …
 
-**Expected:**
+## Expected behavior
 
-**Actual:**
+<!-- What should have happened? -->
+
+## Actual behavior
+
+<!-- What happened instead? Include the exact error text when available. -->
 
 ## Environment
 
-- CairnMP version and channel/branch (host and clients):
-- Cairn version:
-- Loader version, if known:
-- Operating system:
-- Number of players; were you host or client?:
-- Other installed mods:
-- Frequency (every time, sometimes, once):
-- Did it work in an earlier version? If so, which?:
+| Detail | Value |
+| --- | --- |
+| CairnMP version and channel — host | |
+| CairnMP version and channel — client(s) | |
+| Cairn version | |
+| MelonLoader version | |
+| Operating system | |
+| Player count | |
+| Your role | Host / Client |
+| Other installed mods | |
+| Frequency | Every time / Sometimes / Once |
+| Last known working version | |
 
-## Logs or screenshots (optional)
+## Evidence
 
-<!-- Relevant MelonLoader/Latest.log excerpts, a reviewed crash report, screenshots or
-a short recording can help. Remove private information before attaching anything.
-Do not upload proprietary DLLs, your entire game folder or unreviewed player logs. -->
+<!--
+Attach only relevant MelonLoader/Latest.log excerpts, reviewed crash reports,
+screenshots, or short recordings. Never upload proprietary DLLs, the full game
+directory, or unreviewed player logs.
+-->
 
 ## Additional context or workaround
 
-<!-- For example: whether reconnecting helps, or whether only one client is affected. -->
+<!-- For example: does reconnecting help, or is only one client affected? -->
+
+## Checklist
+
+- [ ] I searched existing open and closed issues.
+- [ ] I removed private chat, usernames, identifiers, and sensitive local paths.
+- [ ] I did not attach proprietary game files.

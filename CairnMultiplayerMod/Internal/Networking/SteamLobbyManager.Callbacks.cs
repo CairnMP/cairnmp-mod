@@ -97,6 +97,8 @@ namespace CairnMultiplayerMod.Internal.Networking
             RebuildMembers();
             ModLog.Info($"[SteamLobby] Entered lobby {lobbyId.m_SteamID} (host? {IsHost}, members={_members.Count}).");
 
+            StartLobbyRegistry();
+
             OnLobbyEntered?.Invoke(lobbyId);
             OnMembersChanged?.Invoke();
             TryHandleStartSignal();
@@ -248,6 +250,7 @@ namespace CairnMultiplayerMod.Internal.Networking
         {
             if (!IsInLobby || evt.m_ulSteamIDLobby != CurrentLobbyId.m_SteamID) return;
             RebuildMembers();
+            RequestLobbyHeartbeat();
             OnMembersChanged?.Invoke();
         }
 
@@ -257,6 +260,7 @@ namespace CairnMultiplayerMod.Internal.Networking
             // When a member updates their LobbyMemberData (e.g. name changed) we
             // can refresh the list to reflect nickname changes.
             RebuildMembers();
+            RequestLobbyHeartbeat();
             OnMembersChanged?.Invoke();
             TryHandleStartSignal();
         }
