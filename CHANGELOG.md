@@ -3,6 +3,12 @@
 All notable changes to CairnMP are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.2.2] — 2026-09-11 (beta)
+
+### Added
+
+- Added a settings system for proximity voice chat.
+
 ## [2.2.1] — 2026-09-08 (beta)
 
 > This beta still uses protocol 13, but lobby admission checks the full mod
