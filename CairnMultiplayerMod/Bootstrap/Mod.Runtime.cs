@@ -30,7 +30,7 @@ public partial class Mod
 
         // FreeRoam unlock: active ONLY at the MainMenu (forcing the flag during boot
         // or in game sends the game onto an unready FreeRoam init path -> black screen).
-        FreeRoamUnlockPatch.SetActive(isMainMenu);
+        FreeRoamUnlockPatch.SetActive(isMainMenu && _multiplayerModeActive);
 
         if (!isMainMenu)
             _panel.DestroyResources();
@@ -150,8 +150,11 @@ public partial class Mod
     private void TickMod()
     {
         _runtimeState.TimeSinceLastSceneLoad += Time.unscaledDeltaTime;
-        _hud?.Tick();
-        _inventory?.Tick();
+        if (_multiplayerModeActive)
+        {
+            _hud?.Tick();
+            _inventory?.Tick();
+        }
 
         // PANIC failsafe (F10): force-unblock the game's inputs whatever the state. Read
         // from the raw keyboard device (never affected by the block) and placed BEFORE any
@@ -174,6 +177,7 @@ public partial class Mod
             _mainMenu.Tick();
             // Unlock FreeRoam: force the tweakable field as soon as it's loaded (no-op
             // once it succeeds). Complements the Harmony postfix on the public property.
+            FreeRoamUnlockPatch.SetActive(_multiplayerModeActive);
             FreeRoamUnlockPatch.TryForceTweakableField();
             // Unhide the FreeRoam mode in the difficulty list (isHidden=false).
             FreeRoamUnlockPatch.TryUnhideDifficulty();
@@ -194,14 +198,17 @@ public partial class Mod
 
         // Name toggle (N) — placed BEFORE the bivouac/photo suspension return so it stays
         // reachable in photo mode (where gameplay is suspended).
-        if (!chatTyping) TickNameToggleInput();
+        if (_multiplayerModeActive && !chatTyping) TickNameToggleInput();
 
         // Injection of the "N" row into the native photo-mode legend. The clone is
         // instantiated under an inactive parent, stripped of its non-visual components to
         // prevent duplicated input handlers from blocking the game, and injected only while
         // photo mode is open.
-        try { PhotoModeNamesRow.Tick(); }
-        catch (Exception ex) { LoggerInstance.Error($"[PhotoNames] tick failed: {ex.Message}"); }
+        if (_multiplayerModeActive)
+        {
+            try { PhotoModeNamesRow.Tick(); }
+            catch (Exception ex) { LoggerInstance.Error($"[PhotoNames] tick failed: {ex.Message}"); }
+        }
 
         // During a bivouac, Cairn itself drives the pawn, the camera and the taping
         // hands. The mod only keeps a minimal network presence.
@@ -342,7 +349,8 @@ public partial class Mod
     {
         _panel?.OnGUI();
         Features?.DrawHud();
-        _hud?.Draw();
+        if (_multiplayerModeActive)
+            _hud?.Draw();
     }
 
     /// <summary>Adapts the displayed status while we wait for the Steam round-trip for

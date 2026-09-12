@@ -18,7 +18,7 @@ using MelonLoader;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-[assembly: MelonInfo(typeof(CairnMultiplayerMod.Bootstrap.Mod), "Cairn Multiplayer Mod", "2.2.3", "CairnModTeam")]
+[assembly: MelonInfo(typeof(CairnMultiplayerMod.Bootstrap.Mod), "Cairn Multiplayer Mod", "2.2.4", "CairnModTeam")]
 [assembly: MelonGame("TheGameBakers", "Cairn")]
 
 namespace CairnMultiplayerMod.Bootstrap;
@@ -47,6 +47,7 @@ public partial class Mod : MelonMod
     private Key _disconnectKey;
     private bool _runtimeStopped;
     private bool _quitIssued;
+    private bool _multiplayerModeActive;
 
     // Tracks the progress of lobby creation/join so the status message can evolve while
     // we wait on the Steam round-trip (cf. TickConnectingStatus).
@@ -122,7 +123,10 @@ public partial class Mod : MelonMod
     /// </summary>
     private void RegisterFeatures()
     {
-        Features = new FeatureHost(game: _game, networkProvider: () => Network);
+        Features = new FeatureHost(
+            game: _game,
+            networkProvider: () => Network,
+            isActive: () => _multiplayerModeActive);
         try
         {
             Features.RegisterAll(FeatureRegistry.CreateAll(), new Version(Protocol.GameVersion));
@@ -149,7 +153,7 @@ public partial class Mod : MelonMod
         Network = new NetworkManager(RopeLinkState.Links);
         Lobby = new SteamLobbyManager();
         _panel = MultiplayerPanelFactory.Create(Lobby);
-        _mainMenu = new MainMenuAdapter();
+        _mainMenu = new MainMenuAdapter(OnStoryModeSelected);
         _hud = new HudAdapter();
         _voice = new VoiceAdapter(() => Network, () => LocalState == PlayerState.InGame);
         _inventory = new InventoryAdapter();
@@ -204,6 +208,7 @@ public partial class Mod : MelonMod
         }
         Lobby.OnLobbyLeft += () =>
         {
+            SetMultiplayerModeActive(false);
             StartGame.Cancel();
             RopeInterop.ClearRemotePitons();
             Network.Disconnect();
@@ -211,7 +216,6 @@ public partial class Mod : MelonMod
             RemotePlayerManager.ClearAll();
             Rope.ClearLinks();
             Bivouac.ForceResume();
-            Features.NotifySessionEnded();
             _panel.SetStatus("Disconnected", false);
         };
         Lobby.OnMembersChanged += () =>
@@ -245,7 +249,7 @@ public partial class Mod : MelonMod
         Network.OnHandshakeAck += () =>
         {
             _panel.SetStatus($"Connected to {Network.ServerName} (id={Network.LocalPlayerId})", true);
-            Features.NotifySessionStarted();
+            SetMultiplayerModeActive(true);
         };
         Network.OnFeatureStream += (fromPlayerId, channel, payload) =>
             Features.DispatchStream(fromPlayerId, channel, payload);
@@ -253,12 +257,12 @@ public partial class Mod : MelonMod
             _panel.SetStatus($"Rejected: {reason}", false);
         Network.OnDisconnected += _ =>
         {
+            SetMultiplayerModeActive(false);
             StartGame.Cancel();
             RopeInterop.ClearRemotePitons();
             WeatherInterop.ResetRemoteState();
             Rope.ClearLinks();
             Bivouac.ForceResume();
-            Features.NotifySessionEnded();
         };
         Network.OnPlayerJoined += (id, name) =>
         {

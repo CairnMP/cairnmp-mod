@@ -38,6 +38,7 @@ internal static unsafe class FreeRoamUnlockPatch
         if (!active)
         {
             TrySetFreeRoamTweakableField(false);
+            RestoreFreeRoamModeHidden();
             _freeRoamFieldForced = false;        // can re-force on the next menu pass
             _freeRoamDifficultyUnhidden = false; // same for unhiding the mode
         }
@@ -215,6 +216,33 @@ internal static unsafe class FreeRoamUnlockPatch
         }
     }
 
+    /// <summary>Restores the retail Story menu when multiplayer mode is left.</summary>
+    private static void RestoreFreeRoamModeHidden()
+    {
+        try
+        {
+            if (!Il2Cpp.TweakableBase<Il2Cpp.DifficultyTweakables>.IsReady) return;
+
+            var modes = Il2Cpp.TweakableBase<Il2Cpp.DifficultyTweakables>.Instance?.modes;
+            if (modes == null) return;
+
+            for (var index = 0; index < modes.Length; index++)
+            {
+                var mode = modes[index];
+                if (mode == null ||
+                    mode.difficulty != Il2Cpp.DifficultyTweakables.SelectedDifficulty.FreeRoam)
+                    continue;
+
+                mode.isHidden = true;
+                modes[index] = mode;
+            }
+        }
+        catch (Exception exception)
+        {
+            ModLog.Warning($"[FreeRoam] Could not restore the vanilla Story menu: {exception.Message}");
+        }
+    }
+
     /// <summary>Writes <c>enableFreeRoamFeature = value</c> on the tweakable instance if
     /// it is loaded. Returns true if the write took place.</summary>
     private static bool TrySetFreeRoamTweakableField(bool value)
@@ -254,6 +282,8 @@ internal static unsafe class FreeRoamUnlockPatch
         //   2. the FreeRoam mode unhidden (isHidden = false).
         internal static void InitializeButtonsPrefix()
         {
+            if (!_freeRoamUnlockActive) return;
+
             bool fieldSet = TrySetFreeRoamTweakableField(true);
             ApplyFreeRoamModeVisible(out bool found, out int changed, out int total, out bool stillHidden);
             if (!_initButtonsPrefixLogged)

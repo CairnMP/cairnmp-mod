@@ -20,13 +20,21 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
     private readonly HashSet<string> _registeredIds = new(StringComparer.Ordinal);
     private readonly List<MonoBehaviour> _suspendedMenuBehaviours = new();
     private readonly List<bool> _suspendedMenuStates = new();
+    private readonly UnityAction _onStorySelected;
 
     private GameObject _modeSelectContainer;
+    private Button _storyButton;
     private GameObject _suspendedArrow;
     private bool _suspendedArrowWasActive;
     private int _frameCounter;
     private int _notReadyWarnFrames;
     private bool _disposed;
+
+    internal MainMenuAdapter(Action onStorySelected = null)
+    {
+        if (onStorySelected != null)
+            _onStorySelected = (UnityAction)(() => onStorySelected());
+    }
 
     public IGameRegistration AddButton(string id, string label, Action onClick)
     {
@@ -50,6 +58,7 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
     {
         if (!SceneRoles.IsMainMenu(sceneName)) return;
 
+        DetachStoryListener();
         _modeSelectContainer = null;
         _suspendedArrow = null;
         _frameCounter = 0;
@@ -161,6 +170,8 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
             return;
         }
 
+        AttachStoryListener(template.GetComponent<Button>());
+
         _modeSelectContainer = container.gameObject;
         var siblingIndex = template.GetSiblingIndex() + 1;
         for (var i = 0; i < _registrations.Count; i++)
@@ -170,6 +181,27 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
                 registration.Attach(template, container, siblingIndex);
             registration.SetSiblingIndex(siblingIndex++);
         }
+    }
+
+    private void AttachStoryListener(Button storyButton)
+    {
+        if (_onStorySelected == null || storyButton == null || storyButton == _storyButton) return;
+        DetachStoryListener();
+        storyButton.onClick.AddListener(_onStorySelected);
+        _storyButton = storyButton;
+    }
+
+    private void DetachStoryListener()
+    {
+        if (_storyButton != null && _onStorySelected != null)
+        {
+            try { _storyButton.onClick.RemoveListener(_onStorySelected); }
+            catch (Exception exception)
+            {
+                ModLog.SuppressedException("main-menu.remove-story-listener", exception);
+            }
+        }
+        _storyButton = null;
     }
 
     private void OnButtonClicked(ButtonRegistration registration)
@@ -246,6 +278,7 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
     public void Dispose()
     {
         if (_disposed) return;
+        DetachStoryListener();
         RestoreNativeMenu();
         for (var i = _registrations.Count - 1; i >= 0; i--)
         {

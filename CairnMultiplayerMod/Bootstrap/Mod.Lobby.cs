@@ -150,6 +150,7 @@ public partial class Mod
 
     private void OnDisconnectRequested()
     {
+        SetMultiplayerModeActive(false);
         StartGame.Cancel();
         Lobby.Leave();
         Network.Disconnect();
@@ -159,6 +160,36 @@ public partial class Mod
         Bivouac.ForceResume();
         _panel.SetStatus("Disconnected", false);
         LoggerInstance.Msg("Left lobby.");
+    }
+
+    /// <summary>The native Story choice is an explicit opt-out from CairnMP gameplay.
+    /// Leave any lobby before Cairn opens the solo save flow, and keep every feature
+    /// dormant until a new multiplayer handshake succeeds.</summary>
+    private void OnStoryModeSelected()
+    {
+        var wasInMultiplayer = _multiplayerModeActive || Lobby.IsInLobby || Network.IsConnected;
+        OnDisconnectRequested();
+        _panel.Hide();
+        _mainMenu.RestoreNativeMenu();
+        if (wasInMultiplayer)
+            LoggerInstance.Msg("[CairnMP] Story selected — multiplayer features disabled for vanilla play.");
+    }
+
+    private void SetMultiplayerModeActive(bool active)
+    {
+        if (_multiplayerModeActive == active) return;
+
+        _multiplayerModeActive = active;
+        if (active)
+        {
+            Features?.NotifySessionStarted();
+            return;
+        }
+
+        FreeRoamUnlockPatch.SetActive(false);
+        Features?.NotifySessionEnded();
+        _hud?.Clear();
+        PingMarkerManager.ClearAll();
     }
 
     private string GetSteamPlayerName()

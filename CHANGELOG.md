@@ -13,6 +13,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.2.4](#224--2026-09-12-beta) | 2026-09-12 | Beta | Vanilla Story-mode isolation |
 | [2.2.3](#223--2026-09-11-beta) | 2026-09-11 | Beta | Pause-menu audio fix |
 | [2.2.2](#222--2026-09-11-beta) | 2026-09-11 | Beta | Proximity voice settings |
 | [2.2.1](#221--2026-09-08-beta) | 2026-09-08 | Beta | Remote pose reliability |
@@ -23,6 +24,22 @@ All notable CairnMP changes are documented here. Releases follow
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
 
 ---
+
+## [2.2.4] — 2026-09-12 (beta)
+
+### Changed
+
+- Selecting the native **Story** mode now leaves any active lobby and disables
+  CairnMP gameplay features until a new multiplayer handshake succeeds.
+- Feature ticks, overlays, inventory integration, photo-mode additions and local
+  multiplayer shortcuts stay dormant during vanilla Story play.
+- The experimental FreeRoam unlock is now limited to multiplayer mode and its menu
+  state is restored when returning to Story.
+
+### Fixed
+
+- Fixed local multiplayer behavior such as pings remaining available after entering
+  a single-player Story game.
 
 ## [2.2.3] — 2026-09-11 (beta)
 

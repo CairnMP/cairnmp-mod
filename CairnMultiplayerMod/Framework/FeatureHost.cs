@@ -24,6 +24,7 @@ internal sealed class FeatureHost : IDisposable
     private readonly ExtensionRuntime _runtime;
     private readonly IGameApi _game;
     private readonly Func<NetworkManager> _networkProvider;
+    private readonly Func<bool> _isActive;
     private readonly FeatureStreamRouter _streams = new();
     private readonly List<Registered> _features = new();
 
@@ -31,11 +32,13 @@ internal sealed class FeatureHost : IDisposable
     internal FeatureHost(
         ExtensionRuntime runtime = null,
         IGameApi game = null,
-        Func<NetworkManager> networkProvider = null)
+        Func<NetworkManager> networkProvider = null,
+        Func<bool> isActive = null)
     {
         _runtime = runtime ?? MultiplayerApi.Runtime;
         _game = game ?? UnavailableGameApi.Instance;
         _networkProvider = networkProvider ?? (() => null);
+        _isActive = isActive ?? (() => true);
     }
 
     /// <summary>Routes incoming real-time payloads to the features that declared them.</summary>
@@ -94,6 +97,8 @@ internal sealed class FeatureHost : IDisposable
     /// <summary>Runs the per-frame work declared for <paramref name="phase"/>.</summary>
     internal void Tick(FeaturePhase phase)
     {
+        if (!_isActive()) return;
+
         foreach (var registered in _features)
         {
             var ticks = registered.Builder.Ticks;
@@ -112,7 +117,11 @@ internal sealed class FeatureHost : IDisposable
     internal void NotifySceneReset() => Dispatch(builder => builder.SceneResetHandlers, "scene-reset");
 
     /// <summary>Lets the features draw. Called from OnGUI.</summary>
-    internal void DrawHud() => Dispatch(builder => builder.DrawHudHandlers, "draw-hud");
+    internal void DrawHud()
+    {
+        if (!_isActive()) return;
+        Dispatch(builder => builder.DrawHudHandlers, "draw-hud");
+    }
 
     private void Dispatch(Func<FeatureBuilder, IReadOnlyList<Action>> select, string what)
     {

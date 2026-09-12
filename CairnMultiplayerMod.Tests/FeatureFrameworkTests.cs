@@ -204,6 +204,31 @@ public sealed class FeatureFrameworkTests : IDisposable
     }
 
     [Fact]
+    public void TicksAreDormantWhenTheMultiplayerModeIsInactive()
+    {
+        var active = false;
+        var ticks = 0;
+        var draws = 0;
+        var host = new FeatureHost(NewRuntime(out _), isActive: () => active);
+        host.RegisterAll(new MultiplayerFeature[]
+        {
+            new TickingFeature(() => ticks++, null),
+            new DrawingFeature(() => draws++),
+        }, new Version(1, 0, 0));
+
+        host.Tick(FeaturePhase.Always);
+        host.DrawHud();
+        Assert.Equal(0, ticks);
+        Assert.Equal(0, draws);
+
+        active = true;
+        host.Tick(FeaturePhase.Always);
+        host.DrawHud();
+        Assert.Equal(1, ticks);
+        Assert.Equal(1, draws);
+    }
+
+    [Fact]
     public void AFeatureThrowingInItsTickNeitherStopsTheOthersNorItself()
     {
         var healthyTicks = 0;
@@ -588,6 +613,18 @@ public sealed class FeatureFrameworkTests : IDisposable
             if (_always != null) feature.EveryFrame(_always, FeaturePhase.Always);
             if (_gameplay != null) feature.EveryFrame(_gameplay, FeaturePhase.Gameplay);
         }
+    }
+
+    private sealed class DrawingFeature : MultiplayerFeature
+    {
+        private readonly Action _draw;
+
+        internal DrawingFeature(Action draw) => _draw = draw;
+
+        public override string Id => "drawing";
+
+        protected internal override void OnRegister(FeatureBuilder feature)
+            => feature.OnDrawHud(_draw);
     }
 
     private sealed class MenuFeature : MultiplayerFeature
