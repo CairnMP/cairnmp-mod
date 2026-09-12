@@ -13,6 +13,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.2.5](#225--2026-09-12-beta) | 2026-09-12 | Beta | Website lobby joins |
 | [2.2.4](#224--2026-09-12-beta) | 2026-09-12 | Beta | Vanilla Story-mode isolation |
 | [2.2.3](#223--2026-09-11-beta) | 2026-09-11 | Beta | Pause-menu audio fix |
 | [2.2.2](#222--2026-09-11-beta) | 2026-09-11 | Beta | Proximity voice settings |
@@ -22,6 +23,21 @@ All notable CairnMP changes are documented here. Releases follow
 | [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
 | [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.2.5] — 2026-09-12 (beta)
+
+### Added
+
+- Community websites can now send players to a public CairnMP lobby through the
+  launcher’s `cairnmp://join/<SteamLobbyID>` link. Steam carries the join request
+  into Cairn, including when the game is not already running.
+
+### Compatibility
+
+- The wire protocol remains **13**. As with every beta release, lobby admission
+  checks the full mod version, so all players in a lobby must use CairnMP 2.2.5.
 
 ---
 
