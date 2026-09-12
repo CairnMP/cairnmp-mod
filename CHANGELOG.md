@@ -41,6 +41,11 @@ All notable CairnMP changes are documented here. Releases follow
 - Fixed local multiplayer behavior such as pings remaining available after entering
   a single-player Story game.
 
+### Removed
+
+- Removed the obsolete repository-security setup guide now that branch protection
+  is managed and enforced directly through GitHub.
+
 ## [2.2.3] — 2026-09-11 (beta)
 
 ### Fixed

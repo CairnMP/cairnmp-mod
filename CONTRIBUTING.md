@@ -125,6 +125,10 @@ Test gameplay changes with two clients when possible, then document:
 7. Complete the pull-request template, including compatibility impact and
    verification.
 
+The shared branches are protected on GitHub. Submit changes through a pull
+request and satisfy the checks and review requirements reported by GitHub before
+merging.
+
 Use `Fixes #123` only when the pull request fully resolves that issue; otherwise
 use `Related to #123`. Open a **draft pull request** if implementation or
 validation is incomplete.

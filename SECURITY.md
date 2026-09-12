@@ -7,7 +7,6 @@
 ## Quick links
 
 - [Report a vulnerability privately](https://github.com/CairnMP/cairnmp-mod/security/advisories/new)
-- [Maintainer security setup](docs/maintainer-security.md)
 - [Supported versions](#supported-versions)
 - [Security scope](#scope-and-trust-boundaries)
 
@@ -84,10 +83,11 @@ loader and runtime upgrade path before changing the target framework.
 Before merging or publishing a release:
 
 - review dependency and GitHub Actions updates;
-- build only from reviewed commits;
+- build only from reviewed commits on protected branches;
 - exclude proprietary game references, credentials, and private logs;
 - never reuse untrusted pull-request artifacts in a privileged release job.
 
-Repository administrators should also apply the controls documented in the
-[maintainer security guide](docs/maintainer-security.md); repository files alone
-cannot enable those settings.
+Branch protection, required checks, review requirements, security features, and
+release permissions are administered directly through GitHub. Their live GitHub
+configuration is authoritative and should be reviewed periodically by repository
+administrators.
