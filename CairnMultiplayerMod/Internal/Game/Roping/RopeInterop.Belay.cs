@@ -1,337 +1,269 @@
 using System;
-using System.Collections.Generic;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2Cpp;
+using Il2CppTheGameBakers.Cairn.Netplay;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
 namespace CairnMultiplayerMod.Internal.Game.Roping;
 
-/// <summary>
-/// Rope-team belaying between players — system borrowed from Episure (NATIVE rope, no separate
-/// cosmetic rope). Principle:
-///
-/// 1. We capture a piton TEMPLATE (first Piton in the scene). We CLONE it
-///    (Object.Instantiate) for each roped partner — Instantiate does NOT play the placement
-///    sound (unlike Lifeline.AddPiton, which spammed "clack" sounds).
-/// 2. The anchor piton is made kinematic + non-pickable, then TELEPORTED onto the partner's
-///    harness every frame (the piton follows the partner).
-/// 3. We attach the LOCAL lifeline's rope to that piton via Lifeline.AttachToPiton (only
-///    once). The native rope thus becomes both the visual AND the belay: if the player falls,
-///    the lifeline catches them natively (suspension, no death/drain).
-///
-/// The system is SYMMETRIC: each client attaches ITS OWN rope to a piton placed on the
-/// partner. Both players therefore see a rope, without sharing anything over the network (the
-/// positions are already synchronized). No more need for a cosmetic rope (RopeLinkRenderer).
-/// </summary>
+/// <summary>A dedicated native rope connects two harness holders. No synthetic pitons.</summary>
 internal static unsafe partial class RopeInterop
 {
-    /// <summary>Template cloned for each anchor. Captured by PatchPitonTemplate (Awake) or scan.</summary>
-    private static GameObject _pitonTemplate;
-    private static int _lastPitonScanFrame;
+    private static RopeBindingSession _ropeSession;
+    private static NativeRopeBinding _ropeBinding;
+    private static int _ropePartner = -1;
+    public static bool HasRopeTeamAnchors => _ropeSession != null;
+    public static bool IsNativeBelayEngaged => _ropeSession?.State == RopeBindingState.Attached;
 
-    /// <summary>One anchor (cloned piton) per roped partner.</summary>
-    private static readonly Dictionary<int, GameObject> _ropeAnchors = new();
-
-    /// <summary>Partners whose local lifeline rope has already been clipped in (AttachToPiton done).</summary>
-    private static readonly HashSet<int> _ropeAnchorsAttached = new();
-
-    /// <summary>True while at least one rope-team anchor is active (RopeTeamFallPatch safety net).</summary>
-    private static bool _belayEngaged;
-    public static bool IsNativeBelayEngaged => _belayEngaged;
-
-    /// <summary>
-    /// We inject the local climbot rope into Lifeline.securingRope only when the lifeline has
-    /// no rope. Remember that ownership so unclip can restore the vanilla "no securing rope"
-    /// state instead of leaving the lifeline half-attached to the coop rope.
-    /// </summary>
-    private static bool _securingRopeInjectedByRopeTeam;
-    private static LogicalRope _injectedSecuringRope;
-
-    /// <summary>True if at least one rope-team anchor is placed (used by TickRopeTeam).</summary>
-    public static bool HasRopeTeamAnchors => _ropeAnchors.Count > 0;
-
-    /// <summary>Captures a piton template (called from the Piton.Awake patch).</summary>
-    public static void CapturePitonTemplate(Piton candidate)
+    public static bool UpdateRopeTeamAnchor(int partnerId, Harness partner)
     {
-        if (_pitonTemplate != null || candidate == null) return;
         try
         {
-            _pitonTemplate = candidate.gameObject;
-            ModLog.Debug("[RopeTeam] Piton template captured (Awake).");
-        }
-        catch (Exception exception) { ModLog.SuppressedException("rope.capture-piton-template", exception); }
-    }
-
-    /// <summary>Piton template; throttled scene scan as a fallback if Awake captured nothing.</summary>
-    private static GameObject ResolvePitonTemplate()
-    {
-        if (_pitonTemplate != null) return _pitonTemplate;
-        if (_lastPitonScanFrame != 0 && Time.frameCount - _lastPitonScanFrame < 30) return null;
-        _lastPitonScanFrame = Time.frameCount;
-        try
-        {
-            var all = Resources.FindObjectsOfTypeAll<Piton>();
-            if (all != null && all.Length > 0 && all[0] != null)
+            if (!RopeTeamFallPatch.IsInstalled) return false;
+            var local = ResolveLocalHarness();
+            if (local == null || partner == null) { ReleaseAllAnchors(); return true; }
+            if (_ropeBinding != null && (_ropePartner != partnerId || !_ropeBinding.Matches(local, partner)))
+                ReleaseAllAnchors();
+            if (_ropeSession == null)
             {
-                _pitonTemplate = all[0].gameObject;
-                ModLog.Debug($"[RopeTeam] Piton template captured via scan ('{_pitonTemplate.name}').");
+                var lifeline = local.PersonalLifeline;
+                if (lifeline == null || lifeline.pawn == null) return true;
+                var source = lifeline.securingRope;
+                if (source == null)
+                {
+                    var climbot = ResolveLocalClimbot();
+                    source = climbot != null ? climbot.GetRope() : null;
+                }
+                if (source == null || source.ropePartPrefab == null) return true;
+                if (!TryGetHarnessAttachPosition(local, out var a) || !TryGetHarnessAttachPosition(partner, out var b)) return true;
+                var length = source.MaxLengthMeters;
+                // Inactive companion ropes may not have initialized their maximum yet.
+                if (!float.IsFinite(length) || length <= 0) length = SharedRopeGamemode.SettingsType.Default.ropeLengthMeters;
+                if (!RopeAttachmentPolicy.CanReach(length, Vector3.Distance(a, b))) return false;
+                _ropeBinding = new NativeRopeBinding(local, partner, lifeline, source, length);
+                _ropePartner = partnerId;
+                _ropeSession = new RopeBindingSession(_ropeBinding, Time.realtimeSinceStartupAsDouble);
             }
-        }
-        catch (Exception ex) { ModLog.Warning($"[RopeTeam] piton template scan failed: {ex.Message}"); }
-        return _pitonTemplate;
-    }
-
-    /// <summary>
-    /// Maintains the rope anchor toward <paramref name="partnerId"/>: creates it if needed (clone of
-    /// the template), clips the local lifeline rope onto it once, then MOVES it onto the
-    /// partner's harness every frame. Call every frame while the link is active.
-    /// </summary>
-    public static void UpdateRopeTeamAnchor(int partnerId, Vector3 partnerAnchorPos)
-    {
-        try
-        {
-            // Create the anchor on the first call (clone of the template -> no placement sound).
-            if (!_ropeAnchors.TryGetValue(partnerId, out var anchor) || anchor == null)
-            {
-                var template = ResolvePitonTemplate();
-                if (template == null) return;   // no template yet -> we retry later
-                anchor = SpawnAnchorPiton(template, partnerAnchorPos);
-                if (anchor == null) return;
-                _ropeAnchors[partnerId] = anchor;
-                _belayEngaged = true;
-                ModLog.Debug($"[RopeTeam] Rope anchor spawned for partner {partnerId}.");
-            }
-
-            // Follow the partner: piton + quickdraw endpoint rigidbodies (the Obi rope
-            // pinned on the piton's collider follows -> mobile anchor).
-            MoveAnchorPiton(anchor, partnerAnchorPos);
-
-            // Clip the local lifeline rope into the anchor (only once). If the attach
-            // hasn't taken yet (robot rope not available, etc.), we retry the next frame.
-            if (!_ropeAnchorsAttached.Contains(partnerId) && TryAttachLifelineToAnchor(anchor))
-            {
-                _ropeAnchorsAttached.Add(partnerId);
-                ModLog.Debug($"[RopeTeam] Clipped local lifeline into anchor for partner {partnerId}.");
-            }
-        }
-        catch (Exception ex) { ModLog.Warning($"[RopeTeam] anchor update failed: {ex.Message}"); }
-    }
-
-    private static GameObject SpawnAnchorPiton(GameObject template, Vector3 pos)
-    {
-        var go = Object.Instantiate(template, pos, Quaternion.identity);
-        Object.DontDestroyOnLoad(go);
-        var piton = go.GetComponent<Piton>();
-        if (piton != null)
-        {
-            // Non-pickable anchor (cf. Episure: *(sbyte*)(Piton+32)=0 == canBePickedUp=false).
-            try { piton.canBePickedUp = false; }
-            catch (Exception exception) { ModLog.SuppressedException("rope.disable-anchor-pickup", exception); }
-            // Kinematic: the anchor follows the imposed position without falling or being pulled by tension.
-            SetKinematic(piton.RigidBody);
-            SetKinematic(piton.quickdrawBeginRigidBody);
-            SetKinematic(piton.quickdrawEndRigidBody);
-        }
-        // The anchor is only a mechanical attach point for the rope: we hide its visual
-        // (piton mesh + quickdraw) so we don't leave a piton floating in the void at the
-        // partner's side. The Piton component, its rigidbodies and colliders stay active -> the
-        // rope attaches to it and keeps following. The coop rope (lifeline.securingRope) is a
-        // separate object, so it stays visible.
-        HideAnchorRenderers(go);
-        return go;
-    }
-
-    /// <summary>Disables all Renderers on the anchor clone (piton visual invisible).</summary>
-    private static void HideAnchorRenderers(GameObject go)
-    {
-        try
-        {
-            var renderers = go.GetComponentsInChildren<Renderer>(true);
-            if (renderers == null) return;
-            for (int i = 0; i < renderers.Length; i++)
-                if (renderers[i] != null) renderers[i].enabled = false;
-        }
-        catch (Exception ex) { ModLog.Warning($"[RopeTeam] hide anchor renderers failed: {ex.Message}"); }
-    }
-
-    private static void SetKinematic(Rigidbody rb)
-    {
-        try { if (rb != null) rb.isKinematic = true; }
-        catch (Exception exception) { ModLog.SuppressedException("rope.make-anchor-kinematic", exception); }
-    }
-
-    private static void MoveAnchorPiton(GameObject anchor, Vector3 pos)
-    {
-        anchor.transform.position = pos;
-        var piton = anchor.GetComponent<Piton>();
-        if (piton == null) return;
-        try { if (piton.quickdrawBeginRigidBody != null) piton.quickdrawBeginRigidBody.transform.position = pos; }
-        catch (Exception exception) { ModLog.SuppressedException("rope.move-quickdraw-begin", exception); }
-        try { if (piton.quickdrawEndRigidBody != null) piton.quickdrawEndRigidBody.transform.position = pos; }
-        catch (Exception exception) { ModLog.SuppressedException("rope.move-quickdraw-end", exception); }
-    }
-
-    private static bool TryAttachLifelineToAnchor(GameObject anchor)
-    {
-        var harness = ResolveLocalHarness();
-        var lifeline = harness != null ? harness.lifeline : null;
-        if (lifeline == null) return false;
-        var pawn = lifeline.pawn;
-        if (pawn == null) return false;
-        var piton = anchor.GetComponent<Piton>();
-        if (piton == null) return false;
-
-        // The native rope (securingRope) must exist for AttachToPiton to have something to
-        // clip. At rest it is null -> we INJECT the robot companion's rope
-        // (Il2CppTheGameBakers.Cairn.RobotPawnController.GetRope()) into the lifeline, exactly like Episure. Internal
-        // throttle (ResolveLocalClimbot) -> no spam if the rope is not available yet.
-        if (lifeline.securingRope == null && !TryInjectSecuringRope(lifeline))
+            if (_ropeSession.Tick(Time.realtimeSinceStartupAsDouble)) return true;
+            ReleaseAllAnchors();
             return false;
-
-        try
-        {
-            lifeline.AttachToPiton(piton, pawn, true);
-            return true;
         }
         catch (Exception ex)
         {
-            ModLog.Warning($"[RopeTeam] AttachToPiton failed: {ex.Message}");
+            ModLog.Warning("[RopeTeam] Direct harness attachment failed: " + ex.Message);
+            ReleaseAllAnchors();
             return false;
         }
+    }
+
+    // Native FixedUpdate prefix, before the rope simulation.
+    internal static bool BeforeRopePhysics(LogicalRope rope)
+    {
+        if (_ropeBinding?.Owns(rope) != true) return true;
+        if (!IsNativeBelayEngaged) return false;
+        try { if (_ropeBinding.Maintain()) return true; }
+        catch (Exception ex) { ModLog.Warning("[RopeTeam] Physics attachment lost: " + ex.Message); }
+        ReleaseAllAnchors();
+        return false; // Never enter native physics after disposing its attachments.
+    }
+    internal static bool ProvidesBelay(Lifeline lifeline)
+        => IsNativeBelayEngaged && _ropeBinding?.Owns(lifeline) == true && _ropeBinding.CanProvideBelay;
+    internal static bool BeginPersonalRopeOperation(Lifeline lifeline)
+        => _ropeBinding?.BeginPersonalOperation(lifeline) == true;
+    internal static void EndPersonalRopeOperation(Lifeline lifeline)
+        => _ropeBinding?.EndPersonalOperation(lifeline);
+
+    public static void ReleaseAllAnchors()
+    {
+        var session = _ropeSession;
+        _ropeSession = null; _ropeBinding = null; _ropePartner = -1;
+        session?.Dispose();
     }
 
     private static Il2CppTheGameBakers.Cairn.RobotPawnController _localClimbotCached;
     private static int _lastClimbotSearchFrame;
-
-    /// <summary>
-    /// Injects the robot companion's rope (Il2CppTheGameBakers.Cairn.RobotPawnController.GetRope()) as the lifeline's
-    /// securingRope if it is empty (borrowed from Episure: write to the securingRope field). Returns
-    /// true if the lifeline now has a rope.
-    /// </summary>
-    private static bool TryInjectSecuringRope(Lifeline lifeline)
-    {
-        var climbot = ResolveLocalClimbot();
-        if (climbot == null) return false;
-
-        LogicalRope rope = null;
-        try { rope = climbot.GetRope(); }
-        catch (Exception exception) { ModLog.SuppressedException("rope.resolve-climbot-rope", exception); }
-        if (rope == null) return false;
-
-        try
-        {
-            var go = rope.gameObject;
-            if (go != null) go.SetActive(true);
-            lifeline.securingRope = rope;
-            _injectedSecuringRope = rope;
-            _securingRopeInjectedByRopeTeam = true;
-            ModLog.Debug("[RopeTeam] Injected climbot rope into lifeline.securingRope.");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            ModLog.Warning($"[RopeTeam] securingRope inject failed: {ex.Message}");
-            return false;
-        }
-    }
-
-    /// <summary>Finds (and caches) the local Il2CppTheGameBakers.Cairn.RobotPawnController. Remote robots are
-    /// NetplayRemoteClimbot (a different type) -> FindObjectsOfType only returns the local one.</summary>
     private static Il2CppTheGameBakers.Cairn.RobotPawnController ResolveLocalClimbot()
     {
         if (_localClimbotCached != null) return _localClimbotCached;
         if (_lastClimbotSearchFrame != 0 && Time.frameCount - _lastClimbotSearchFrame < 30) return null;
         _lastClimbotSearchFrame = Time.frameCount;
-        try
-        {
-            var all = Object.FindObjectsOfType<Il2CppTheGameBakers.Cairn.RobotPawnController>();
-            if (all != null)
-                for (int i = 0; i < all.Length; i++)
-                    if (all[i] != null) { _localClimbotCached = all[i]; ModLog.Debug("[RopeTeam] Local climbot resolved."); break; }
-        }
-        catch (Exception ex) { ModLog.Warning($"[RopeTeam] climbot search failed: {ex.Message}"); }
-        return _localClimbotCached;
+        var all = Object.FindObjectsOfType<Il2CppTheGameBakers.Cairn.RobotPawnController>();
+        if (all != null) foreach (var robot in all) if (robot != null) return _localClimbotCached = robot;
+        return null;
     }
 
-    /// <summary>Removes ALL rope-team anchors (disconnect / scene change).</summary>
-    public static void ReleaseAllAnchors()
+    private sealed class NativeRopeBinding : IRopeBinding
     {
-        if (_ropeAnchors.Count == 0)
+        private readonly Harness _local, _partner;
+        private readonly Lifeline _lifeline;
+        private LogicalRope _personalRope;
+        private readonly LogicalRope _source;
+        private readonly float _length;
+        private GameObject _root;
+        private LogicalRope _rope;
+        private LogicalRopePart _part;
+        private int _createdFrame, _personalOperationDepth;
+        private Vector3 _lastLocal, _lastPartner;
+        private bool _attached, _disposed;
+
+        internal NativeRopeBinding(Harness local, Harness partner, Lifeline lifeline, LogicalRope source, float length)
         {
-            _belayEngaged = false;
-            _ropeAnchorsAttached.Clear();
-            RestoreInjectedSecuringRopeIfUnused();
-            return;
+            _local = local; _partner = partner; _lifeline = lifeline;
+            _personalRope = lifeline.securingRope; _source = source; _length = length;
         }
-        foreach (var kv in _ropeAnchors)
-            DestroyAnchor(kv.Value);
-        _ropeAnchors.Clear();
-        _ropeAnchorsAttached.Clear();
-        _belayEngaged = false;
-        RestoreInjectedSecuringRopeIfUnused();
-        ModLog.Debug("[RopeTeam] All rope anchors released.");
-    }
+        internal bool Matches(Harness local, Harness partner)
+            => _local != null && _partner != null && _local.Pointer == local.Pointer && _partner.Pointer == partner.Pointer;
+        internal bool Owns(LogicalRope rope) => _rope != null && rope != null && _rope.Pointer == rope.Pointer;
+        internal bool Owns(Lifeline lifeline) => _lifeline != null && lifeline != null && _lifeline.Pointer == lifeline.Pointer;
+        internal bool HasBothAttachments => !_disposed && _attached && _rope != null && _local != null && _partner != null
+            && _rope.IsAttached(_local.Cast<IRopeHolder>()) && _rope.IsAttached(_partner.Cast<IRopeHolder>());
+        internal bool CanProvideBelay => _personalOperationDepth == 0 && HasBothAttachments;
 
-    private static void DestroyAnchor(GameObject anchor)
-    {
-        if (anchor == null) return;
-        bool detachedViaLifeline = false;
-        try
+        public bool IsReady
         {
-            // Preferred path: ask Lifeline to detach the piton. This updates the native
-            // lifeline/rope bookkeeping; destroying the clone directly can leave stale
-            // belay state behind and lock the pawn on the next climb.
-            var piton = anchor.GetComponent<Piton>();
-            if (piton != null && piton.Pointer != IntPtr.Zero)
-                detachedViaLifeline = TryDetachPitonViaLifeline(piton.Pointer);
-
-            // Fallback only: better than leaving the anchor alive if the native method is
-            // unavailable, but the Lifeline path above is the cleanup we rely on.
-            if (!detachedViaLifeline && piton != null)
+            get
             {
-                try { piton.Detach(); }
-                catch (Exception exception) { ModLog.SuppressedException("rope.detach-anchor-piton", exception); }
+                if (_root == null) Create();
+                // Awake/Start and Obi actor loading must finish before creating pins.
+                return Time.frameCount > _createdFrame && _rope != null && _part != null
+                    && _part.obiRope != null && _part.obiRope.isLoaded && _part.pinConstraintHandler != null;
             }
         }
-        catch (Exception ex)
+
+        private void Create()
         {
-            ModLog.Warning($"[RopeTeam] anchor detach failed: {ex.Message}");
-        }
+            _root = new GameObject("CairnMP.DirectRope");
+            _root.SetActive(false);
+            var solver = _source.ropeParts != null && _source.ropeParts.Count > 0
+                ? _source.ropeParts[0]?.obiRope?.solver : null;
+            _root.transform.SetParent(solver != null ? solver.transform : _source.transform.parent, false);
+            _rope = _root.AddComponent<LogicalRope>();
+            _rope.enabled = false;
+            _rope.intializeOnEnable = false;
+            _rope.ropePartPrefab = _source.ropePartPrefab;
+            _rope.minimalNewDistAfterSplit = _source.minimalNewDistAfterSplit;
+            _rope.minimalRemainingDistAfterAttach = _source.minimalRemainingDistAfterAttach;
+            _rope.minStretchingScale = _source.minStretchingScale;
+            _rope.slackGlobalFactorUser = _source.slackGlobalFactorUser;
+            _rope.slackMinOnAttachedPart = _source.slackMinOnAttachedPart;
+            _rope.slackOnAttachedPart = _source.slackOnAttachedPart;
+            _rope.slackUpdateSpeed = _source.slackUpdateSpeed;
+            _rope.compensateBadSimulationStrength = _source.compensateBadSimulationStrength;
+            _rope.compensateBadSimulationActive = _source.compensateBadSimulationActive;
+            _rope.category = _source.category;
+            _rope.masks = _source.masks;
+            _rope.MaxLengthMeters = _length;
 
-        if (!detachedViaLifeline)
-        {
-            try { Object.Destroy(anchor); }
-            catch (Exception exception) { ModLog.SuppressedException("rope.destroy-anchor", exception); }
-        }
-    }
-
-    private static void RestoreInjectedSecuringRopeIfUnused()
-    {
-        if (!_securingRopeInjectedByRopeTeam)
-            return;
-
-        try
-        {
-            var harness = ResolveLocalHarness();
-            var lifeline = harness != null ? harness.lifeline : null;
-            var current = lifeline != null ? lifeline.securingRope : null;
-
-            if (current != null && _injectedSecuringRope != null &&
-                current.Pointer == _injectedSecuringRope.Pointer)
+            // Clone only a segment prefab, never a live rope's holder list or particles.
+            var segment = Object.Instantiate(_source.ropePartPrefab.gameObject, _root.transform);
+            _part = segment.GetComponent<LogicalRopePart>();
+            _rope.ropeParts.Clear();
+            _rope.ropeParts.Add(_part);
+            var sourceLine = _source.GetComponent<LineRenderer>() ?? _source.ropePartPrefab.GetComponent<LineRenderer>();
+            if (sourceLine != null)
             {
-                lifeline.securingRope = null;
-                ModLog.Debug("[RopeTeam] Restored lifeline.securingRope after coop unclip.");
+                var line = _root.AddComponent<LineRenderer>();
+                line.sharedMaterial = sourceLine.sharedMaterial;
+                line.widthMultiplier = sourceLine.widthMultiplier;
+                line.widthCurve = sourceLine.widthCurve;
+                line.colorGradient = sourceLine.colorGradient;
+                line.useWorldSpace = true;
+                line.positionCount = 0;
+                var renderer = _root.AddComponent<LogicalRopeRenderer>();
+                renderer.lineRenderer = line;
+            }
+            segment.SetActive(true);
+            _root.SetActive(true);
+            _createdFrame = Time.frameCount;
+        }
+
+        public bool Attach()
+        {
+            SynchronizePartnerAttachment();
+            if (_local == null || _partner == null || _lifeline == null
+                || !TryGetHarnessAttachPosition(_local, out _lastLocal)
+                || !TryGetHarnessAttachPosition(_partner, out _lastPartner)
+                || !RopeAttachmentPolicy.CanReach(_length, Vector3.Distance(_lastLocal, _lastPartner))) return false;
+            _rope.ForceInitialize();
+            if (!_rope.IsInitialized) return false;
+            _part.pinConstraintHandler.DetachAll();
+            // Native SharedRopeGamemode uses these same endpoint sides.
+            _rope.AttachTo(_local.Cast<IRopeHolder>(), RopeSide.End, true);
+            _rope.AttachTo(_partner.Cast<IRopeHolder>(), RopeSide.Begin, true);
+            _rope.MaxLengthMeters = _length;
+            _rope.SetLength(_length, false);
+            _rope.SetCollisionsFilter(_source.category, _source.masks);
+            _rope.TeleportOnAttachPoints();
+            _rope.SetVisible(true);
+            _rope.SyncRenderer();
+            _attached = true;
+            if (!HasBothAttachments) return false;
+            _lifeline.securingRope = _rope;
+            _rope.enabled = true;
+            ModLog.Info("[RopeTeam] Direct harness rope attached (no piton), max=" + _length);
+            return true;
+        }
+
+        public bool Maintain()
+        {
+            SynchronizePartnerAttachment();
+            if (!HasBothAttachments || !TryGetHarnessAttachPosition(_local, out var local)
+                || !TryGetHarnessAttachPosition(_partner, out var partner)) return false;
+            // Teleports must not drag solver particles across the world.
+            if (Vector3.Distance(local, _lastLocal) > 5 || Vector3.Distance(partner, _lastPartner) > 5) return false;
+            _lastLocal = local; _lastPartner = partner;
+            return true;
+        }
+
+        private void SynchronizePartnerAttachment()
+        {
+            // A remote harness can have physics disabled while its skeleton is animated.
+            // Pins must follow that native skeleton marker, not a stale physics transform.
+            if (_partner == null || _partner.IsActivePhysics()) return;
+            var marker = _partner.skeletonAttachPointRoot;
+            var collider = _partner.GetAttachEnd();
+            if (marker == null || collider == null) return;
+            collider.transform.SetPositionAndRotation(marker.position, marker.rotation);
+            var body = collider.GetComponent<Rigidbody>();
+            if (body != null) { body.position = marker.position; body.rotation = marker.rotation; }
+        }
+
+        internal bool BeginPersonalOperation(Lifeline lifeline)
+        {
+            if (!Owns(lifeline) || !_attached || _disposed) return false;
+            if (_personalOperationDepth == 0) _lifeline.securingRope = _personalRope;
+            _personalOperationDepth++;
+            return true;
+        }
+        internal void EndPersonalOperation(Lifeline lifeline)
+        {
+            if (!Owns(lifeline) || _personalOperationDepth <= 0) return;
+            if (--_personalOperationDepth == 0)
+            {
+                _personalRope = _lifeline.securingRope;
+                if (!_disposed && _attached) _lifeline.securingRope = _rope;
             }
         }
-        catch (Exception ex)
+
+        public void Dispose()
         {
-            ModLog.Warning($"[RopeTeam] securingRope restore failed: {ex.Message}");
-        }
-        finally
-        {
-            _securingRopeInjectedByRopeTeam = false;
-            _injectedSecuringRope = null;
+            if (_disposed) return;
+            _disposed = true; _attached = false;
+            try
+            {
+                if (_lifeline != null && _rope != null && _lifeline.securingRope != null
+                    && _lifeline.securingRope.Pointer == _rope.Pointer)
+                    _lifeline.securingRope = _personalRope;
+            }
+            catch (Exception ex) { ModLog.Warning("[RopeTeam] Personal rope restoration failed: " + ex.Message); }
+            try { if (_rope != null && _rope.IsInitialized) _rope.DetachAll(); }
+            catch (Exception ex) { ModLog.Warning("[RopeTeam] Native detach failed: " + ex.Message); }
+            finally
+            {
+                if (_root != null) { _root.SetActive(false); Object.Destroy(_root); }
+                _root = null; _rope = null;
+            }
         }
     }
 }

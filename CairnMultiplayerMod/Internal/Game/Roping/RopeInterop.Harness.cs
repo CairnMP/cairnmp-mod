@@ -58,14 +58,14 @@ internal static unsafe partial class RopeInterop
         try
         {
             pos = harness.GetAttachPosition();
-            if (pos != Vector3.zero) return true;
+            if (float.IsFinite(pos.x) && float.IsFinite(pos.y) && float.IsFinite(pos.z) && pos != Vector3.zero) return true;
 
             // Fallback: the skeleton attach root follows the pose even without physics.
             var root = harness.skeletonAttachPointRoot;
             if (root != null)
             {
                 pos = root.position;
-                return pos != Vector3.zero;
+                return float.IsFinite(pos.x) && float.IsFinite(pos.y) && float.IsFinite(pos.z) && pos != Vector3.zero;
             }
             return false;
         }

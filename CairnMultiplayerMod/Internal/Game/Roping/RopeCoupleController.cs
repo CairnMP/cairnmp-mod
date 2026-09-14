@@ -11,9 +11,8 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 
 /// <summary>
 /// Co-op roping, ticked every frame: the E input (re)toggles the link intent
-/// (ClientRopeClip, relayed by the host), then we maintain the NATIVE rope team (the
-/// local lifeline's rope clipped to a mobile piton placed on the partner, a system
-/// carried over from Episure, cf. RopeInterop.UpdateRopeTeamAnchor).
+/// (ClientRopeClip, relayed by the host), then maintains a dedicated native rope
+/// attached directly to the two harnesses.
 /// </summary>
 internal sealed class RopeCoupleController
 {
@@ -40,7 +39,7 @@ internal sealed class RopeCoupleController
         // Roping safety: ALWAYS runs (even outside InGame) to guarantee the teardown of
         // links/anchors in as many situations as possible (death, game over, menu,
         // disconnect, loading, bivouac, partner left).
-        TickRopeSafety();
+        if (!TickRopeSafety()) return;
 
         if (_state.LocalPlayerState != PlayerState.InGame)
             return;
@@ -62,7 +61,7 @@ internal sealed class RopeCoupleController
     /// each side cleans up its own state: no need to detect the remote death here.
     /// Note: the MP pause is NOT a hard case (the scene stays a gameplay scene, not MainMenu).
     /// </summary>
-    private void TickRopeSafety()
+    private bool TickRopeSafety()
     {
         bool connected = _network.IsConnected && _network.IsHandshakeComplete;
         bool inGame = _state.LocalPlayerState == PlayerState.InGame;
@@ -87,7 +86,7 @@ internal sealed class RopeCoupleController
                     : "returned to main menu";
                 TearDownAllLocalRopeLinks(reason);
             }
-            return;
+            return false;
         }
 
         // Left the dangerous state -> re-arm the broadcast for the next episode.
@@ -97,6 +96,7 @@ internal sealed class RopeCoupleController
         // anchors so we don't leave a rope pinned to an object being destroyed.
         if (!inGame && RopeInterop.HasRopeTeamAnchors)
             RopeInterop.ReleaseAllAnchors();
+        return inGame;
     }
 
     /// <summary>
@@ -206,25 +206,29 @@ internal sealed class RopeCoupleController
     }
 
     /// <summary>
-    /// NATIVE rope team (Episure system), every frame. As long as a partner is roped, we
-    /// maintain an anchor (cloned piton, without the placement sound) placed on the partner's
-    /// harness and clip the local lifeline's rope to it (UpdateRopeTeamAnchor). The native rope
-    /// then serves both as a VISUAL (both clients see their own rope, it's symmetric) and as a
-    /// BELAY (a fall is caught natively: hanging, no death or drain). Without a partner, we
-    /// release it. Everything comes from already-synchronized positions -> nothing new to send.
+    /// Maintains the native harness-to-harness rope while both players are available.
+    /// Existing pose packets supply its endpoints; no synthetic pitons are announced.
     /// </summary>
     private void TickRopeTeam()
     {
         int self = _network.LocalPlayerId;
         int partner = RopeLinkState.PartnerOf(self);
 
-        if (partner < 0 || !RemotePlayerManager.TryGetGhostHarnessAttachPosition(partner, out var partnerAnchor))
+        if (partner < 0 || !_network.RemotePlayers.TryGetValue(partner, out var remote)
+            || remote == null || remote.State != PlayerState.InGame
+            || !RemotePlayerManager.TryGetGhostHarness(partner, out var partnerAnchor))
         {
             if (RopeInterop.HasRopeTeamAnchors) RopeInterop.ReleaseAllAnchors();
             return;
         }
 
-        RopeInterop.UpdateRopeTeamAnchor(partner, partnerAnchor);
+        if (!RopeInterop.UpdateRopeTeamAnchor(partner, partnerAnchor))
+        {
+            _network.SendRopeClip(partner, false);
+            RopeLinkState.Apply(self, partner, false);
+            RopeInterop.ReleaseAllAnchors();
+            ModLog.Warning("[RopeCouple] Rope attachment was refused; the link has been released.");
+        }
     }
 
     /// <summary>Clears all rope links + their ropes (disconnect / return to menu).</summary>

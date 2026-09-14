@@ -47,4 +47,14 @@ internal sealed class VoiceSampleBuffer
         }
     }
     internal void Clear() { lock (_sync) { _read = 0; _count = 0; } }
+    internal void KeepLatest(int count)
+    {
+        if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+        lock (_sync)
+        {
+            var discard = Math.Max(0, _count - count);
+            _read = (_read + discard) % _samples.Length;
+            _count -= discard;
+        }
+    }
 }

@@ -13,6 +13,10 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.2.9](#229--2026-09-13-beta) | 2026-09-13 | Beta | Smooth voice distance and direct harness ropes |
+| [2.2.8](#228--2026-09-13-beta) | 2026-09-13 | Beta | Louder, clearer proximity voice |
+| [2.2.7](#227--2026-09-13-beta) | 2026-09-13 | Beta | Steam lobby-result retrieval regression |
+| [2.2.6](#226--2026-09-13-beta) | 2026-09-13 | Beta | Lobby browser, voice and rope fixes |
 | [2.2.5](#225--2026-09-12-beta) | 2026-09-12 | Beta | Website lobby joins |
 | [2.2.4](#224--2026-09-12-beta) | 2026-09-12 | Beta | Vanilla Story-mode isolation |
 | [2.2.3](#223--2026-09-11-beta) | 2026-09-11 | Beta | Pause-menu audio fix |
@@ -23,6 +27,119 @@ All notable CairnMP changes are documented here. Releases follow
 | [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
 | [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.2.9] — 2026-09-13 (beta)
+
+### Changed
+
+- Remote voice volume and direction now transition smoothly on the audio thread.
+  A gentle distance-dependent low-pass filter softens distant speech, and a
+  one-second decoder grace period avoids repeated resets around 30 m.
+- Cooperative ropes now use a dedicated native rope attached directly to both
+  harnesses, with no synthetic piton. Personal piton operations use the personal
+  rope, which is restored when the cooperative attachment ends.
+
+### Fixed
+
+- Piton discovery now compares native identities and drains batched additions
+  and removals, excluding remote spawns even when allocation precedes an error.
+- Direct rope initialization is bounded, partial attachments are cleaned up,
+  and destroyed endpoints or teleports stop the native simulation safely.
+- Inactive remote harness physics follows its animated skeleton attach marker
+  before cooperative rope simulation.
+
+### Compatibility and verification
+
+- Version **2.2.9** retains protocol **13** and the `voice.opus-v2` stream.
+  All lobby members must use the same mod version.
+- Automated tests cover distance DSP, native-binding lifecycle and piton identity
+  discovery. Native calls were checked against the installed game's metadata and
+  disassembly. Two-account in-game listening, fall arrest, alignment and save/load
+  verification remain pending; see [direct-rope verification](docs/direct-rope.md).
+
+---
+
+## [2.2.8] — 2026-09-13 (beta)
+
+### Added
+
+- Added optional microphone enhancement, enabled by default, with an 80 Hz
+  high-pass filter, automatic gain, voice compression, and a -1 dBFS limiter.
+- The local microphone test now reports raw and processed levels plus automatic
+  gain, making threshold and input-quality setup easier.
+
+### Changed
+
+- Voice capture and Opus playback now use 48 kHz mono, 20 ms frames, 32 kbit/s
+  variable bitrate, voice tuning, and codec complexity 8.
+- Proximity volume stays full through 5 m, fades gently to 55% at 20 m and 40%
+  at 25 m, then reaches silence at 30 m. Centered voices no longer lose 3 dB.
+- Incoming voice volume can now be adjusted from 0% to 300%; existing 100%
+  preferences retain the same neutral value.
+- The negotiated voice stream is now `voice.opus-v2`. Final mixed voice output
+  is limited to prevent clipping when several players speak simultaneously.
+
+### Compatibility
+
+- The wire protocol remains **13**, but every lobby member must use CairnMP
+  2.2.8 because the negotiated voice stream and codec configuration changed.
+
+### Verification
+
+- All 241 automated tests pass. Coverage validates microphone processing, exact proximity points,
+  stereo compensation, 48 kHz Opus frames, the 400-byte payload limit, and the
+  final multi-speaker limiter. Two-player audible quality remains an in-game
+  release check.
+
+---
+
+## [2.2.7] — 2026-09-13 (beta)
+
+### Fixed
+
+- Fixed the 2.2.6 lobby-search regression reporting "Steam could not retrieve the
+  lobby search results." Searches now capture their result through manual dispatch
+  before Steamworks.NET consumes it, then process the copied result during the
+  mod update. No generic lobby-count delegate is used.
+- Search failures now distinguish completion failures from result-read failures
+  and include the affected API call identifier.
+
+### Compatibility
+
+- The wire protocol remains **13**. Every lobby member must use CairnMP 2.2.7.
+
+### Verification
+
+- All 226 automated tests pass, including single-consumption ordering and cancelled
+  search coverage. A read-only probe against the installed Steam DLL successfully
+  retrieved an empty lobby result through the new native call sequence. In-game
+  verification of the dispatcher hook remains pending.
+
+---
+
+## [2.2.6] — 2026-09-13 (beta)
+
+### Fixed
+
+- Lobby searches now read the result of their specific Steam API call, reject
+  invalid result counts, and update the browser on Unity's main thread.
+- Proximity voice uses recent network positions when a remote harness is
+  unavailable and preserves the newest captured audio after slow frames or
+  large microphone batches. Settings refresh failures no longer interrupt capture.
+- Shared ropes wait for native initialization before attaching, reject invalid
+  or unreachable anchors, and release links after a refused attachment. Moving
+  an anchor preserves the quickdraw geometry; unsafe player states prevent attachment.
+
+### Compatibility
+
+- The wire protocol remains **13**. Every lobby member must use CairnMP 2.2.6.
+
+### Verification
+
+- All 223 automated tests pass. Two-player in-game verification of the reported
+  crashes and bidirectional voice remains pending.
 
 ---
 

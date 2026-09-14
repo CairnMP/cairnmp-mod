@@ -5,65 +5,63 @@ using Il2Cpp;
 
 namespace CairnMultiplayerMod.Internal.Game.Roping;
 
-/// <summary>
-/// Captures a piton template for the rope team (system carried over from Episure). We patch
-/// Piton.Awake to remember the first instantiated piton as the template to clone
-/// (RopeInterop.UpdateRopeTeamAnchor). This is more reliable and cheaper than a
-/// Resources.FindObjectsOfTypeAll every frame (which remains the fallback in RopeInterop.Belay).
-///
-/// The old approach (AddPiton + cosmetic rope + anti-respawn patch) has been replaced:
-/// the lifeline's NATIVE rope, clipped onto a mobile piton placed at the partner, serves
-/// both as the visual and as the belay (see RopeInterop.Belay). No more cosmetic rope, no more
-/// repeated "clack", and fall arrest is handled natively.
-/// </summary>
-internal static unsafe class RopeTeamFallPatch
+/// <summary>Scopes direct-rope physics, belay eligibility and personal piton operations.</summary>
+internal static class RopeTeamFallPatch
 {
-    private static readonly HarmonyLib.Harmony RopeTeamHarmony = new("CairnMultiplayerMod.RopeTeam");
-    private static bool _ropeTeamPatchInstalled;
-    private static bool _ropeTeamPatchFailed;
+    private static readonly HarmonyLib.Harmony Harmony = new("CairnMultiplayerMod.RopeTeam");
+    private static bool _installed;
+    internal static bool IsInstalled => _installed;
 
     public static void Install()
     {
-        if (_ropeTeamPatchInstalled || _ropeTeamPatchFailed) return;
-
+        if (_installed) return;
         try
         {
-            var awake = AccessTools.Method(typeof(Piton), "Awake");
-            var postfix = typeof(RopeTeamFallPatch).GetMethod(
-                nameof(PitonAwakePostfix),
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-
-            if (awake == null || postfix == null)
-            {
-                _ropeTeamPatchFailed = true;
-                ModLog.Warning("[RopeTeam] Piton.Awake / postfix not found — template capture via scan only.");
-                return;
-            }
-
-            RopeTeamHarmony.Patch(awake, postfix: new HarmonyMethod(postfix));
-            _ropeTeamPatchInstalled = true;
-            ModLog.Debug("[RopeTeam] Piton template capture installed (Piton.Awake).");
+            Harmony.Patch(AccessTools.Method(typeof(LogicalRope), nameof(LogicalRope.FixedUpdate)),
+                prefix: new HarmonyMethod(typeof(RopeTeamFallPatch), nameof(BeforePhysics)));
+            Harmony.Patch(AccessTools.Method(typeof(Lifeline), nameof(Lifeline.IsSecured)),
+                postfix: new HarmonyMethod(typeof(RopeTeamFallPatch), nameof(AfterIsSecured)));
+            foreach (var name in new[] { "AddPiton", "AttachToPiton", "DetachPiton", "RemovePiton" })
+                foreach (var method in AccessTools.GetDeclaredMethods(typeof(Lifeline)))
+                    if (method.Name == name)
+                        Harmony.Patch(method,
+                            prefix: new HarmonyMethod(typeof(RopeTeamFallPatch), nameof(BeforePersonalOperation)),
+                            finalizer: new HarmonyMethod(typeof(RopeTeamFallPatch), nameof(AfterPersonalOperation)));
+            _installed = true;
         }
         catch (Exception ex)
         {
-            _ropeTeamPatchFailed = true;
-            ModLog.Warning($"[RopeTeam] template patch install failed: {ex.Message}");
+            Harmony.UnpatchSelf();
+            ModLog.Warning("[RopeTeam] Direct-rope hooks unavailable: " + ex.Message);
         }
     }
 
     public static void Uninstall()
     {
-        try { RopeTeamHarmony.UnpatchSelf(); }
-        finally
-        {
-            _ropeTeamPatchInstalled = false;
-            _ropeTeamPatchFailed = false;
-        }
+        RopeInterop.ReleaseAllAnchors();
+        Harmony.UnpatchSelf();
+        _installed = false;
     }
 
-    /// <summary>Remembers the first instantiated piton as the rope-team template.</summary>
-    private static void PitonAwakePostfix(Piton __instance)
+    private static bool BeforePhysics(LogicalRope __instance) => RopeInterop.BeforeRopePhysics(__instance);
+
+    private static void AfterIsSecured(Lifeline __instance, int minimumAnchorPoint, ref bool __result)
     {
-        RopeInterop.CapturePitonTemplate(__instance);
+        // A verified partner provides one anchor, not unlimited protection or extra pitons.
+        if (!__result && minimumAnchorPoint == 1 && RopeInterop.ProvidesBelay(__instance)) __result = true;
+    }
+    private static void BeforePersonalOperation(Lifeline __instance, out bool __state)
+        => __state = RopeInterop.BeginPersonalRopeOperation(__instance);
+
+    private static Exception AfterPersonalOperation(Lifeline __instance, bool __state, Exception __exception)
+    {
+        try { if (__state) RopeInterop.EndPersonalRopeOperation(__instance); }
+        catch (Exception ex)
+        {
+            ModLog.Warning("[RopeTeam] Could not restore rope after piton operation: " + ex.Message);
+            RopeInterop.ReleaseAllAnchors();
+            return __exception ?? ex;
+        }
+        return __exception;
     }
 }

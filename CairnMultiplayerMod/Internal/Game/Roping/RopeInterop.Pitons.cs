@@ -11,10 +11,9 @@ internal static unsafe partial class RopeInterop
 {
     private static MonoBehaviour _lifelineCached;
     private static int _lastLifelineSearchFrame;
-    private static int _lastKnownPitonCount;
-    private static uint _nextPitonNetId = 1;
-    private static int _remotePitonsAdded; // how many pitons we spawned via AddPiton (to ignore during detection)
-    private static readonly Dictionary<IntPtr, uint> _localPitonIdsByPointer = new();
+    private static readonly PitonIdentityTracker _pitonIdentities = new();
+    private static bool _spawningRemotePiton;
+    private static HashSet<IntPtr> _beforeRemoteSpawn;
     private static readonly Dictionary<uint, GameObject> _remotePitonsByNetId = new();
     // IL2CPP pointer of the Piton component — used to call Lifeline.DetachPiton
     // which cleanly removes the piton from the rope and destroys the visual (vs. just
@@ -40,9 +39,9 @@ internal static unsafe partial class RopeInterop
         // native removal through references belonging to the previous scene here.
         _lifelineCached = null;
         _lastLifelineSearchFrame = 0;
-        _lastKnownPitonCount = 0;
-        _remotePitonsAdded = 0;
-        _localPitonIdsByPointer.Clear();
+        _pitonIdentities.Clear();
+        _beforeRemoteSpawn = null;
+        _spawningRemotePiton = false;
         _remotePitonsByNetId.Clear();
         _remotePitonPointersByNetId.Clear();
         _remotePitonSpawnAttempts.Clear();
@@ -76,59 +75,9 @@ internal static unsafe partial class RopeInterop
 
         try
         {
-            var klass = IL2CPP.il2cpp_object_get_class(lifeline.Pointer);
-            var field = IL2CPP.GetIl2CppField(klass, "<PlacedPitons>k__BackingField");
-            if (field == IntPtr.Zero)
-                field = IL2CPP.GetIl2CppField(klass, "PlacedPitons");
-            if (field == IntPtr.Zero) return false;
-
-            int offset = (int)IL2CPP.il2cpp_field_get_offset(field);
-            IntPtr listPtr = *(IntPtr*)((byte*)lifeline.Pointer + offset);
-            if (listPtr == IntPtr.Zero) return false;
-
-            // Il2Cpp List<T> has _size at a known offset. We read it.
-            // List<T> layout: [klass, monitor, _items (array ptr), _size (int), _version (int)]
-            // _items is at offset 2*IntPtr.Size, _size at 2*IntPtr.Size + IntPtr.Size
-            int sizeOffset = 3 * IntPtr.Size;
-            int currentCount = *(int*)((byte*)listPtr + sizeOffset);
-
-            if (currentCount <= _lastKnownPitonCount)
-            {
-                _lastKnownPitonCount = currentCount;
-                return false;
-            }
-
-            // Check whether this increase is caused by a remote spawn we did
-            // ourselves. If so, we just update the counter and move on.
-            int newPitons = currentCount - _lastKnownPitonCount;
-            if (_remotePitonsAdded >= newPitons)
-            {
-                _remotePitonsAdded -= newPitons;
-                _lastKnownPitonCount = currentCount;
-                return false;
-            }
-            _remotePitonsAdded = 0;
-
-            // New LOCAL piton(s) added. Read the last one from the _items array.
-            _lastKnownPitonCount = currentCount;
-            IntPtr itemsArrayPtr = *(IntPtr*)((byte*)listPtr + 2 * IntPtr.Size);
-            if (itemsArrayPtr == IntPtr.Zero) return false;
-
-            // The items array is an Il2CppArray of PlacedPitonData references.
-            int headerSize = 4 * IntPtr.Size;
-            IntPtr lastItemPtr = *(IntPtr*)((byte*)itemsArrayPtr + headerSize + (currentCount - 1) * IntPtr.Size);
-            if (lastItemPtr == IntPtr.Zero) return false;
-
-            // PlacedPitonData has a Piton field (first backing field).
-            var pdKlass = IL2CPP.il2cpp_object_get_class(lastItemPtr);
-            var pitonField = IL2CPP.GetIl2CppField(pdKlass, "<Piton>k__BackingField");
-            if (pitonField == IntPtr.Zero)
-                pitonField = IL2CPP.GetIl2CppField(pdKlass, "piton");
-            if (pitonField == IntPtr.Zero) return false;
-
-            int pitonOffset = (int)IL2CPP.il2cpp_field_get_offset(pitonField);
-            IntPtr pitonPtr = *(IntPtr*)((byte*)lastItemPtr + pitonOffset);
-            if (pitonPtr == IntPtr.Zero) return false;
+            if (_spawningRemotePiton || !TryCollectCurrentPitonPointers(out var current)) return false;
+            if (!CompleteRemoteSpawnDiscovery(current)) return false;
+            if (!_pitonIdentities.TryFindNew(current, out var pitonPtr)) return false;
 
             // Read the Piton MonoBehaviour's transform for the position/rotation.
             // The pointer can be stale (destroyed entry still in the list after
@@ -177,8 +126,7 @@ internal static unsafe partial class RopeInterop
             }
             itemId = readItemId;
 
-            netId = _nextPitonNetId++;
-            _localPitonIdsByPointer[pitonPtr] = netId;
+            netId = _pitonIdentities.Announce(pitonPtr);
             ModLog.Debug($"[Piton] Local piton #{netId} detected @ ({position.x:F1},{position.y:F1},{position.z:F1}) quality={quality} hp={hp} itemId={itemId}");
             return true;
         }
@@ -202,24 +150,13 @@ internal static unsafe partial class RopeInterop
     public static bool CheckForRemovedPiton(out uint netId)
     {
         netId = 0;
-        if (_localPitonIdsByPointer.Count == 0)
-            return false;
 
         try
         {
             if (!TryCollectCurrentPitonPointers(out var currentPointers))
                 return false;
 
-            foreach (var kv in new List<KeyValuePair<IntPtr, uint>>(_localPitonIdsByPointer))
-            {
-                if (currentPointers.Contains(kv.Key))
-                    continue;
-
-                _localPitonIdsByPointer.Remove(kv.Key);
-                netId = kv.Value;
-                ModLog.Debug($"[Piton] Local piton #{netId} removed -> sending ClientPitonRemoved");
-                return true;
-            }
+            return _pitonIdentities.TryRemoveMissing(currentPointers, out netId);
         }
         catch (Exception ex)
         {
@@ -292,12 +229,18 @@ internal static unsafe partial class RopeInterop
             args[4] = (IntPtr)(&pitonItemId);        // InventoryItemStringId (struct = int)
             args[5] = IntPtr.Zero;                   // ClimbingSetting = null
 
-            // Mark that we're about to add a piton ourselves so that
-            // CheckForNewPiton ignores the resulting counter increase.
-            _remotePitonsAdded++;
-
+            // Capture identities even if native code allocates and then throws.
+            if (_spawningRemotePiton || !TryCollectCurrentPitonPointers(out var before)) return false;
+            if (!CompleteRemoteSpawnDiscovery(before)) return false;
+            _beforeRemoteSpawn = before;
+            _spawningRemotePiton = true;
             IntPtr exception = IntPtr.Zero;
-            IL2CPP.il2cpp_runtime_invoke(method, lifeline.Pointer, (void**)args, ref exception);
+            try { IL2CPP.il2cpp_runtime_invoke(method, lifeline.Pointer, (void**)args, ref exception); }
+            finally
+            {
+                _spawningRemotePiton = false;
+                if (TryCollectCurrentPitonPointers(out var after)) CompleteRemoteSpawnDiscovery(after);
+            }
 
             if (exception != IntPtr.Zero)
             {
@@ -358,6 +301,7 @@ internal static unsafe partial class RopeInterop
             || pointer == IntPtr.Zero || !TryDetachPitonViaLifeline(pointer))
             return false;
         _remotePitonPointersByNetId.Remove(netId);
+        _pitonIdentities.ForgetRemote(pointer);
         _remotePitonsByNetId.Remove(netId);
         _remotePitonSpawnAttempts.Remove(netId);
         ModLog.Debug($"[Piton] Detached remote piton #{netId} via Lifeline.DetachPiton");
@@ -525,6 +469,16 @@ internal static unsafe partial class RopeInterop
         return _lifelineUpdateSettingMethod;
     }
 
+    private static bool CompleteRemoteSpawnDiscovery(HashSet<IntPtr> current)
+    {
+        if (_spawningRemotePiton) return false;
+        if (_beforeRemoteSpawn == null) return true;
+        foreach (var pointer in current)
+            if (!_beforeRemoteSpawn.Contains(pointer)) _pitonIdentities.MarkRemote(pointer);
+        _beforeRemoteSpawn = null;
+        return true;
+    }
+
     private static bool TryGetLastPitonPointer(out IntPtr pitonPtr)
     {
         pitonPtr = IntPtr.Zero;
@@ -546,7 +500,7 @@ internal static unsafe partial class RopeInterop
         for (int i = 0; i < count; i++)
         {
             IntPtr placedDataPtr = *(IntPtr*)((byte*)itemsArrayPtr + headerSize + i * IntPtr.Size);
-            if (TryReadPitonPointer(placedDataPtr, out var pitonPtr))
+            if (TryReadPitonPointer(placedDataPtr, out var pitonPtr) && new Il2Cpp.Piton(pitonPtr) != null)
                 pointers.Add(pitonPtr);
         }
 

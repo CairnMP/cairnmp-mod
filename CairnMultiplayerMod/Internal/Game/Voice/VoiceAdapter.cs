@@ -16,11 +16,12 @@ namespace CairnMultiplayerMod.Internal.Game.Voice;
 
 internal sealed class VoiceAdapter : IVoiceApi, IDisposable
 {
-    internal const int SampleRate = 24000, FrameSamples = 480;
+    internal const int SampleRate = 48000, FrameSamples = 960;
     internal const float MaxDistance = 30f;
     private readonly Func<NetworkManager> _network;
     private readonly Func<bool> _inGame;
     private readonly VoiceActivityGate _gate = new();
+    private readonly VoiceProcessor _processor = new();
     private readonly Dictionary<int, VoicePlayback> _speakers = new();
     private readonly HashSet<int> _mutedPlayers = new();
     private readonly Queue<(uint Burst, uint Sequence, byte[] Data)> _outgoing = new();
@@ -43,6 +44,9 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
     internal bool TestMicrophone { get; set; }
     internal bool IsTransmitting { get; private set; }
     internal float LevelDb => _gate.LevelDb;
+    internal float InputLevelDb => _processor.InputLevelDb;
+    internal float ProcessedLevelDb => _processor.OutputLevelDb;
+    internal float ProcessingGainDb => _processor.GainDb;
     internal bool IsCapturing => _microphone?.IsRunning == true;
     internal long CapturedSamples => _microphone?.CapturedSamples ?? 0;
     internal long RenderedSamples => _output?.RenderedSamples ?? 0;
@@ -90,7 +94,8 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
                 return (devices, defaultId);
             });
         }
-        _settings.Tick();
+        try { _settings.Tick(); }
+        catch (Exception ex) { ModLog.SuppressedException("voice.settings-tick", ex); }
         var inGame = connected && _inGame() && _network()?.IsHandshakeComplete == true;
         var wantsCapture = Application.isFocused && (TestMicrophone || (inGame && VoicePreferences.CurrentMode != VoiceMode.Muted));
         var requested = VoicePreferences.Microphone.Value ?? "";
@@ -135,9 +140,10 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
         _microphone = new WindowsVoiceCapture(id);
         _lastPoll = now;
         _encoder ??= OpusCodecFactory.CreateEncoder(SampleRate, 1, OpusApplication.OPUS_APPLICATION_VOIP);
-        _encoder.Bitrate = 24000;
-        _encoder.Complexity = 5;
+        _encoder.Bitrate = 32000;
+        _encoder.Complexity = 8;
         _encoder.UseVBR = true;
+        _encoder.SignalType = OpusSignal.OPUS_SIGNAL_VOICE;
         Status = "Microphone ready";
     }
 
@@ -146,7 +152,9 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
         if (!_microphone.IsRunning) { StopCapture(); Status = "Microphone stopped — retrying"; return; }
         if (now - _lastPoll > .2 || _microphone.BufferedSamples > FrameSamples * 5)
         {
-            _microphone.Clear();
+            // A slow frame or a driver delivering >100 ms batches used to erase
+            // every captured sample before encoding. Keep the newest live audio.
+            _microphone.KeepLatest(FrameSamples * 5);
             ClearPreRoll();
             _gate.Reset();
             _wasSending = false;
@@ -157,11 +165,12 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
             && Keyboard.current[key].isPressed && !InputCaptureState.IsKeyboardCaptured;
         for (var frame = 0; frame < 5 && _microphone.TryRead(_frame); frame++)
         {
-            var active = _gate.Process(_frame, VoicePreferences.SafeThreshold);
+            _processor.Process(_frame, VoicePreferences.EnhanceMicrophone.Value);
+            var active = _gate.ProcessLevel(_processor.DetectionLevelDb, VoicePreferences.SafeThreshold);
             var send = maySend && (VoicePreferences.CurrentMode == VoiceMode.VoiceActivity ? active : VoicePreferences.CurrentMode == VoiceMode.PushToTalk && ptt);
             if (TestMicrophone && EnsureOutput(now))
             {
-                if (_monitor == null) { _monitor = new VoicePlayback { Volume = .75f }; _output.Add(_monitor); }
+                if (_monitor == null) { _monitor = new VoicePlayback { Volume = 1 }; _output.Add(_monitor); }
                 _monitor.WriteLocal(_frame);
             }
             if (send)
@@ -208,13 +217,14 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
     }
     public void Receive(int playerId, uint burst, uint sequence, byte[] opus)
     {
-        if (_mutedPlayers.Contains(playerId) || opus == null || opus.Length == 0 || opus.Length > 400 || VoicePreferences.SafeVolume <= 0 || !TryGetSpeaker(playerId, out _, out _)) return;
+        if (_mutedPlayers.Contains(playerId) || opus == null || opus.Length == 0 || opus.Length > 400 || VoicePreferences.SafeVolume <= 0 || !TryGetSpeaker(playerId, out _, out var distance)) return;
+        if (distance >= MaxDistance && !_speakers.ContainsKey(playerId)) return;
         var now = Time.realtimeSinceStartupAsDouble;
         if (!EnsureOutput(now)) return;
         if (!_speakers.TryGetValue(playerId, out var speaker))
         {
             if (_speakers.Count >= 8) return;
-            speaker = new VoicePlayback();
+            speaker = new VoicePlayback(spatialized: true);
             _speakers.Add(playerId, speaker);
             _output.Add(speaker);
         }
@@ -224,11 +234,18 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
     {
         position = default; distance = 0;
         var network = _network();
-        if (!_inGame() || network?.IsHandshakeComplete != true || !network.RemotePlayers.TryGetValue(id, out var remote) || remote.State != PlayerState.InGame ||
-            !LocalPlayerInterop.TryGetPose(out var local, out _) ||
-            !RemotePlayerManager.TryGetGhostHarnessAttachPosition(id, out position)) return false;
+        if (!_inGame() || network?.IsHandshakeComplete != true || !network.RemotePlayers.TryGetValue(id, out var remote) || remote == null || remote.State != PlayerState.InGame ||
+            !LocalPlayerInterop.TryGetPose(out var local, out _)) return false;
+        // Audio only needs a known position, not the native climbing harness. A
+        // fallback avatar or a temporarily missing harness must not mute a peer.
+        if (!RemotePlayerManager.TryGetGhostHarnessAttachPosition(id, out position))
+        {
+            if (!VoiceSpatialPolicy.HasRecentPose(remote.LastUpdateTime,
+                    DateTime.UtcNow.Ticks / (double)TimeSpan.TicksPerSecond)) return false;
+            position = new Vector3(remote.X, remote.Y, remote.Z);
+        }
         distance = Vector3.Distance(local, position);
-        return float.IsFinite(distance) && distance < MaxDistance;
+        return float.IsFinite(distance);
     }
     private void UpdateSpeakers(bool inGame, double now)
     {
@@ -238,10 +255,11 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
         foreach (var id in _speakerIds)
         {
             var speaker = _speakers[id];
-            if (!inGame || now - speaker.LastReceived > 1 || !TryGetSpeaker(id, out var position, out var distance))
+            if (!inGame || VoicePreferences.SafeVolume <= 0 || now - speaker.LastReceived > 1 || !TryGetSpeaker(id, out var position, out var distance))
             { StopSpeaker(id); continue; }
-            var attenuation = Mathf.Clamp01(1 - Math.Max(0, distance - 2) / (MaxDistance - 2));
-            speaker.Volume = VoicePreferences.SafeVolume * attenuation * attenuation;
+            if (!speaker.UpdateRange(distance < MaxDistance, now)) { StopSpeaker(id); continue; }
+            speaker.Volume = VoicePreferences.SafeVolume * VoiceSpatialPolicy.Attenuation(distance);
+            speaker.Cutoff = VoiceSpatialPolicy.Cutoff(distance);
             var camera = Camera.main;
             speaker.Pan = camera == null ? 0 : Vector3.Dot(camera.transform.right, (position - camera.transform.position).normalized) * .85f;
             speaker.Tick(now);
@@ -261,6 +279,7 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
         var capture = _microphone;
         _microphone = null;
         _gate.Reset();
+        _processor.Reset();
         _outgoing.Clear(); ClearPreRoll(); _wasSending = false; IsTransmitting = false;
         capture?.Dispose();
     }

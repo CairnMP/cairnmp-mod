@@ -40,7 +40,7 @@ internal sealed class VoiceFeature : MultiplayerFeature
 
     protected internal override void OnRegister(FeatureBuilder feature)
     {
-        _frames = feature.Stream<VoiceFrame>("opus-v1", (player, frame) =>
+        _frames = feature.Stream<VoiceFrame>("opus-v2", (player, frame) =>
             Game.Voice.Receive(player, frame.Burst, frame.Sequence, frame.Opus));
         feature.EveryFrame(Tick, FeaturePhase.Always);
         feature.OnSessionEnded(Game.Voice.Reset);

@@ -29,7 +29,7 @@ internal static class GamePatchRegistry
     {
         new("netplay frame", NetplaySetFramePatch.Install, NetplaySetFramePatch.Uninstall),
         new("bivouac safety", BivouacDiagnostics.Install, BivouacDiagnostics.Uninstall),
-        new("rope-team template", RopeTeamFallPatch.Install, RopeTeamFallPatch.Uninstall),
+        new("direct rope team", RopeTeamFallPatch.Install, RopeTeamFallPatch.Uninstall),
         new("multiplayer pause", MultiplayerPausePatch.Install, MultiplayerPausePatch.Uninstall),
         new("main-menu buttons", MainMenuButtonIntegration.Install, MainMenuButtonIntegration.Uninstall),
         new("free-roam unlock", FreeRoamUnlockPatch.Install, FreeRoamUnlockPatch.Uninstall),

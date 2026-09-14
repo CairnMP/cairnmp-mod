@@ -77,7 +77,7 @@ internal sealed class VoiceSettingsIntegration : IDisposable
         {
             _nextMeter = Time.realtimeSinceStartupAsDouble + .2;
             _status.Info = new FieldLabel(_voice.TestMicrophone
-                ? $"{_voice.Status} | Level: {_voice.LevelDb:F0} dB | {(_voice.LevelDb >= VoicePreferences.SafeThreshold ? "Voice detected" : "Below threshold")}" : _voice.Status);
+                ? $"{_voice.Status} | Raw: {_voice.InputLevelDb:F0} dB | Processed: {_voice.ProcessedLevelDb:F0} dB | Auto gain: {_voice.ProcessingGainDb:+0;-0;0} dB | {(_voice.LevelDb >= VoicePreferences.SafeThreshold ? "Voice detected" : "Below threshold")}" : _voice.Status);
             foreach (var binding in _bindings)
                 if (binding.Menu != null && binding.Menu.currentSettingsPageButton == binding.Button)
                 {
@@ -244,9 +244,11 @@ internal sealed class VoiceSettingsIntegration : IDisposable
             new FieldSlider(new FieldLabel("Detection threshold (dB)"), -60, -10, true, VoicePreferences.SafeThreshold,
                 (FieldSlider.OnValueChangedDelegate)(new Action<float,float>((_, value) => { VoicePreferences.ThresholdDb.Value = value; VoicePreferences.Save(); })), new Il2CppSystem.Nullable<float>(-40)),
             new FieldInfo("Lower threshold = more sensitive. Quiet sounds may also activate the microphone."),
+            new FieldToggle(new FieldLabel("Microphone enhancement"), VoicePreferences.EnhanceMicrophone.Value,
+                (Il2CppSystem.Action<bool>)(new Action<bool>(value => { VoicePreferences.EnhanceMicrophone.Value = value; VoicePreferences.Save(); })), new Il2CppSystem.Nullable<bool>(true)),
             new FieldListDropdown(new FieldLabel("Push-to-talk key"), Labels(keys.Select(k => k.ToString()).ToArray()), Math.Max(0, Array.IndexOf(keys, currentKey)),
                 (FieldList.OnValueChangedDelegate)(new Action<int,int>((_, value) => { if (value >= 0 && value < keys.Length) { VoicePreferences.PushToTalkKey.Value = keys[value].ToString(); VoicePreferences.Save(); } })), new Il2CppSystem.Nullable<int>(Array.IndexOf(keys, Key.V))),
-            new FieldSlider(new FieldLabel("Voice volume (%)"), 0, 200, true, VoicePreferences.SafeVolume * 100,
+            new FieldSlider(new FieldLabel("Voice volume (%)"), 0, 300, true, VoicePreferences.SafeVolume * 100,
                 (FieldSlider.OnValueChangedDelegate)(new Action<float,float>((_, value) => { VoicePreferences.Volume.Value = value / 100; VoicePreferences.Save(); })), new Il2CppSystem.Nullable<float>(100)),
             new FieldToggle(new FieldLabel("Test microphone (local playback)"), false,
                 (Il2CppSystem.Action<bool>)(new Action<bool>(value => _voice.TestMicrophone = value)), new Il2CppSystem.Nullable<bool>(false)),

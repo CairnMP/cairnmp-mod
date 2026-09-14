@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Internal;
 using CairnMultiplayerMod.Internal.Game;
@@ -74,14 +76,32 @@ public partial class Mod
     };
 
     /// <summary>Browser: calls SteamMatchmaking.RequestLobbyList and pushes the result to the UI.</summary>
-    private async void OnBrowseRequested()
+    private Task<List<LobbyEntry>> _browserRequest;
+
+    private void OnBrowseRequested()
     {
+        if (_browserRequest != null) return;
         LoggerInstance.Msg("[Browse] Requesting Steam lobby list...");
         try
         {
-            var lobbies = await Lobby.RequestLobbyList();
-            _panel.SetBrowserLobbies(lobbies);
+            _browserRequest = Lobby.RequestLobbyList();
         }
+        catch (Exception exception)
+        {
+            LoggerInstance.Error($"[Browse] Failed: {exception}");
+            _panel.SetBrowserLobbies(Array.Empty<LobbyEntry>());
+        }
+    }
+
+    private void CompleteBrowserRequest()
+    {
+        if (_browserRequest?.IsCompleted != true) return;
+        var request = _browserRequest;
+        _browserRequest = null;
+        // MelonLoader need not provide a Unity SynchronizationContext. An await
+        // continuation can run on a worker and crash native UI creation/destruction.
+        // Consume the result from OnUpdate, which always owns the Unity thread.
+        try { _panel.SetBrowserLobbies(request.GetAwaiter().GetResult()); }
         catch (Exception exception)
         {
             LoggerInstance.Error($"[Browse] Failed: {exception}");
@@ -186,7 +206,6 @@ public partial class Mod
             return;
         }
 
-        FreeRoamUnlockPatch.SetActive(false);
         Features?.NotifySessionEnded();
         _hud?.Clear();
         PingMarkerManager.ClearAll();

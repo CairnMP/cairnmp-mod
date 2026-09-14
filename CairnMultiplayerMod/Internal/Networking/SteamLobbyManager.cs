@@ -133,7 +133,6 @@ namespace CairnMultiplayerMod.Internal.Networking
 
         private Callback<LobbyCreated_t> _cbLobbyCreated;
         private Callback<LobbyEnter_t> _cbLobbyEnter;
-        private Callback<LobbyMatchList_t> _cbLobbyMatchList;
         private Callback<LobbyChatUpdate_t> _cbLobbyChatUpdate;
         private Callback<GameLobbyJoinRequested_t> _cbGameLobbyJoinRequested;
         private Callback<LobbyDataUpdate_t> _cbLobbyDataUpdate;
@@ -438,8 +437,6 @@ namespace CairnMultiplayerMod.Internal.Networking
                     DelegateSupport.ConvertDelegate<Callback<LobbyCreated_t>.DispatchDelegate>(new Action<LobbyCreated_t>(OnLobbyCreatedCb)));
                 _cbLobbyEnter = Callback<LobbyEnter_t>.Create(
                     DelegateSupport.ConvertDelegate<Callback<LobbyEnter_t>.DispatchDelegate>(new Action<LobbyEnter_t>(OnLobbyEnterCb)));
-                _cbLobbyMatchList = Callback<LobbyMatchList_t>.Create(
-                    DelegateSupport.ConvertDelegate<Callback<LobbyMatchList_t>.DispatchDelegate>(new Action<LobbyMatchList_t>(OnLobbyMatchListCb)));
                 _cbLobbyChatUpdate = Callback<LobbyChatUpdate_t>.Create(
                     DelegateSupport.ConvertDelegate<Callback<LobbyChatUpdate_t>.DispatchDelegate>(new Action<LobbyChatUpdate_t>(OnLobbyChatUpdateCb)));
                 _cbGameLobbyJoinRequested = Callback<GameLobbyJoinRequested_t>.Create(
@@ -462,6 +459,7 @@ namespace CairnMultiplayerMod.Internal.Networking
         /// set up its own Steam context before we try to attach to it.</summary>
         public void Pump(float dt = 0f)
         {
+            if (_disposed) return;
             // Deferred initialization: we keep retrying until the game has finished
             // starting up, then give up after InitMaxAttempts attempts.
             if (!_isInitialized)
@@ -484,6 +482,7 @@ namespace CairnMultiplayerMod.Internal.Networking
             try { SteamAPI.RunCallbacks(); }
             catch (Exception ex) { ModLog.Warning($"[SteamLobby] RunCallbacks failed: {ex.Message}"); }
 
+            PollLobbyListCall();
             CheckOperationTimeouts(dt);
             PumpLobbyRegistry(dt);
         }
@@ -492,6 +491,12 @@ namespace CairnMultiplayerMod.Internal.Networking
         {
             if (_disposed) return;
             _disposed = true;
+            if (ReferenceEquals(_listCallOwner, this)) _listCallOwner = null;
+            if (_listCallHookInstalled)
+            {
+                DisposeCallback("lobby-list-hook", () => _listCallHarmony.UnpatchSelf());
+                _listCallHookInstalled = false;
+            }
 
             if (IsInLobby)
             {
@@ -511,13 +516,11 @@ namespace CairnMultiplayerMod.Internal.Networking
 
             DisposeCallback("lobby-created", () => _cbLobbyCreated?.Dispose());
             DisposeCallback("lobby-enter", () => _cbLobbyEnter?.Dispose());
-            DisposeCallback("lobby-list", () => _cbLobbyMatchList?.Dispose());
             DisposeCallback("lobby-members", () => _cbLobbyChatUpdate?.Dispose());
             DisposeCallback("lobby-invite", () => _cbGameLobbyJoinRequested?.Dispose());
             DisposeCallback("lobby-data", () => _cbLobbyDataUpdate?.Dispose());
             _cbLobbyCreated = null;
             _cbLobbyEnter = null;
-            _cbLobbyMatchList = null;
             _cbLobbyChatUpdate = null;
             _cbGameLobbyJoinRequested = null;
             _cbLobbyDataUpdate = null;
@@ -666,7 +669,7 @@ namespace CairnMultiplayerMod.Internal.Networking
                 SteamMatchmaking.AddRequestLobbyListStringFilter(KeyVisibility, LobbyVisibility.Public.ToString(), ELobbyComparison.k_ELobbyComparisonEqual);
                 SteamMatchmaking.AddRequestLobbyListDistanceFilter(ELobbyDistanceFilter.k_ELobbyDistanceFilterWorldwide);
                 SteamMatchmaking.AddRequestLobbyListResultCountFilter(50);
-                SteamMatchmaking.RequestLobbyList();
+                StartLobbyListCall();
                 ModLog.Info("[SteamLobby] RequestLobbyList sent.");
             }
             catch (Exception ex)

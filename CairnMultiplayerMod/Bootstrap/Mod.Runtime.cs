@@ -28,9 +28,9 @@ public partial class Mod
 
         var isMainMenu = SceneRoles.IsMainMenu(sceneName);
 
-        // FreeRoam unlock: active ONLY at the MainMenu (forcing the flag during boot
-        // or in game sends the game onto an unready FreeRoam init path -> black screen).
-        FreeRoamUnlockPatch.SetActive(isMainMenu && _multiplayerModeActive);
+        // FreeRoam unlock: available to every player at the MainMenu. Forcing the flag
+        // during boot or in game sends Cairn onto an unready init path -> black screen.
+        FreeRoamUnlockPatch.SetActive(isMainMenu);
 
         if (!isMainMenu)
             _panel.DestroyResources();
@@ -177,7 +177,7 @@ public partial class Mod
             _mainMenu.Tick();
             // Unlock FreeRoam: force the tweakable field as soon as it's loaded (no-op
             // once it succeeds). Complements the Harmony postfix on the public property.
-            FreeRoamUnlockPatch.SetActive(_multiplayerModeActive);
+            FreeRoamUnlockPatch.SetActive(true);
             FreeRoamUnlockPatch.TryForceTweakableField();
             // Unhide the FreeRoam mode in the difficulty list (isHidden=false).
             FreeRoamUnlockPatch.TryUnhideDifficulty();
@@ -185,6 +185,7 @@ public partial class Mod
 
         // Pump the managed Steam callback queue (also handles deferred init).
         Lobby.Pump(Time.unscaledDeltaTime);
+        CompleteBrowserRequest();
 
         // Lock the gameplay layer before processing network packets.
         Bivouac.Update();
@@ -255,9 +256,8 @@ public partial class Mod
         TeleportInterop.TickSettle(LocalState == PlayerState.InGame);
 
         // Inter-player roping: clip detection (E) + maintenance of the NATIVE rope team.
-        // No more cosmetic rope: the lifeline's native rope (clipped to a mobile piton
-        // placed on the partner through the native rope-link system) provides both the
-        // visual rope and the belay.
+        // A dedicated native rope attaches to both harnesses and provides the visual
+        // rope and belay without creating pitons or changing personal rope topology.
         try
         {
             Rope.Tick(); // Input is gated inside; safety and anchor maintenance always run.

@@ -14,8 +14,9 @@ Cairn’s native settings fields, scrolling, navigation, and reset controls.
 | Voice mode | Voice activation | Push-to-talk and microphone mute are also available. |
 | Microphone | Windows communications default | A named input device can be selected. |
 | Detection threshold | −40 dB | Adjustable from −60 to −10 dB. |
+| Microphone enhancement | On | High-pass filtering, automatic gain, compression, and limiting. |
 | Push-to-talk key | `V` | Configurable from the settings dropdown. |
-| Voice volume | 100% | Adjustable from 0% to 200%. |
+| Voice volume | 100% | Adjustable from 0% to 300%. |
 | Maximum audible distance | 30 m | Volume decreases with distance. |
 
 ## Using voice chat
@@ -27,8 +28,10 @@ Cairn’s native settings fields, scrolling, navigation, and reset controls.
 - **Push-to-talk** transmits only while the selected key is held.
 - **Microphone mute** stops outgoing voice without muting other players.
 
-The first implementation uses an RMS level gate. It does not provide speech
-classification, echo cancellation, or noise suppression.
+Voice activation uses the level measured before automatic gain, so quiet
+background noise is not amplified into holding the gate open. Microphone
+enhancement can be disabled to send and monitor the finite raw samples. CairnMP
+does not provide speech classification, echo cancellation, or noise suppression.
 
 ### Choosing a microphone
 
@@ -41,8 +44,9 @@ refreshed every five seconds on a worker thread.
 
 ### Testing and muting
 
-- **Test microphone** plays the selected input locally. Nothing is transmitted.
-  Closing the page stops the test; headphones are recommended to avoid feedback.
+- **Test microphone** plays the processed input locally and displays raw level,
+  processed level, and automatic gain. Nothing is transmitted. Closing the page
+  stops the test; headphones are recommended to avoid feedback.
 - **Mute a player** temporarily silences an individual player listed when the
   page opens. These mutes clear after a scene or session reset, or when the player
   leaves.
@@ -55,8 +59,21 @@ transmission remains suspended there.
 ## Spatial audio behavior
 
 Remote voices become inaudible at **30 metres**. Stereo direction follows the
-camera, and audio is played only when the remote climber has an available in-game
-avatar.
+camera. If the native avatar harness is temporarily unavailable, audio uses the
+remote climber's last network position for up to two seconds while they remain in
+gameplay.
+
+Volume is 100% from 0–5 m, fades linearly to 55% at 20 m, to 40% at 25 m,
+then to silence at 30 m. Center compensation preserves the configured volume
+when a speaker is directly ahead, and a final mix limiter prevents simultaneous
+speakers from clipping.
+
+Volume, stereo direction and filter parameters change smoothly on the audio thread
+with a 100 ms time constant. A per-speaker low-pass filter progressively softens
+distant voices: 18 kHz through 5 m, down to 6 kHz at 30 m. No echo is added.
+At the range boundary, playback fades out and keeps its decoder for one second;
+stepping back into range during this interval does not restart the decoder.
+The local microphone test bypasses these distance effects.
 
 There is currently no wall occlusion, elevation filter, or HRTF processing.
 Proximity is an audio effect—not a confidentiality boundary. The host currently
@@ -64,16 +81,16 @@ relays voice packets to every admitted peer.
 
 ## Technical design
 
-`VoiceFeature` declares the unreliable `voice.opus-v1` stream and delegates
+`VoiceFeature` declares the unreliable `voice.opus-v2` stream and delegates
 capture and playback to `Game.Voice`.
 
 | Component | Implementation |
 | --- | --- |
 | Audio backend | Windows shared-mode WASAPI through NAudio.Wasapi 2.2.1 |
-| Capture format | 24 kHz, mono PCM |
+| Capture format | 48 kHz, mono PCM |
 | Codec | Opus through Concentus 2.2.2 |
 | Frame duration | 20 ms |
-| Target bitrate | 24 kbit/s |
+| Target bitrate | 32 kbit/s variable bitrate; voice signal; complexity 8 |
 | Maximum payload | 400 bytes |
 | Pre-roll | 60 ms |
 | Gate release | 250 ms |
@@ -106,7 +123,12 @@ Automated tests cover:
 - frame validation and audible Opus round trips;
 - packet loss, reordering, and sequence wrap;
 - bounded backlog behavior;
-- voice-gate release.
+- voice-gate release and pre-gain detection;
+- synthetic microphone enhancement and limiting;
+- exact proximity attenuation and stereo-center compensation;
+- block-size-independent distance transitions, high-frequency attenuation and
+  repeated crossings of the audible range boundary;
+- final mixed-output limiting.
 
 These checks do not prove device interoperability, audible quality, or real Steam
 latency.

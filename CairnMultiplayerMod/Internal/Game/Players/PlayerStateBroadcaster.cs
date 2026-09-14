@@ -79,8 +79,8 @@ internal sealed class PlayerStateBroadcaster
             // Check for newly placed pitons (a lower frequency is enough).
             if (_state.LocalPlayerState == PlayerState.InGame)
             {
-                if (RopeInterop.CheckForNewPiton(out var pitonId, out var pitonPos,
-                    out var pitonRot, out var pitonQuality, out var pitonHp, out var pitonItemId))
+                for (var discovered = 0; discovered < 32 && RopeInterop.CheckForNewPiton(out var pitonId, out var pitonPos,
+                    out var pitonRot, out var pitonQuality, out var pitonHp, out var pitonItemId); discovered++)
                 {
                     _network.SendPitonPlaced(new ClientPitonPlaced
                     {
@@ -98,7 +98,7 @@ internal sealed class PlayerStateBroadcaster
                     });
                 }
 
-                if (RopeInterop.CheckForRemovedPiton(out var removedPitonId))
+                for (var removed = 0; removed < 32 && RopeInterop.CheckForRemovedPiton(out var removedPitonId); removed++)
                 {
                     _network.SendPitonRemoved(removedPitonId);
                 }

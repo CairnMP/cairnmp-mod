@@ -49,6 +49,8 @@ internal static unsafe class TeleportInterop
         var go = LocalPlayerInterop.TryGetMCGameObject();
         if (go == null) return false;
 
+        Roping.RopeInterop.ReleaseAllAnchors();
+
         // Target zone different from the current zone? -> we do as the game does: a managed TRAVEL
         // (load the target zone + clean unload of the origin), then set the exact position once
         // the world is idle. Otherwise (same zone), direct instant teleport.

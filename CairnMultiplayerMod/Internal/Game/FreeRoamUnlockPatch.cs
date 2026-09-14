@@ -216,7 +216,7 @@ internal static unsafe class FreeRoamUnlockPatch
         }
     }
 
-    /// <summary>Restores the retail Story menu when multiplayer mode is left.</summary>
+    /// <summary>Restores the retail Story menu when leaving the main menu.</summary>
     private static void RestoreFreeRoamModeHidden()
     {
         try

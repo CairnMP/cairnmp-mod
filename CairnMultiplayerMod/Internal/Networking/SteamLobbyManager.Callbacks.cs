@@ -108,7 +108,7 @@ namespace CairnMultiplayerMod.Internal.Networking
             _pendingJoinLobbyId = default;
         }
 
-        private void OnLobbyMatchListCb(LobbyMatchList_t evt)
+        private void OnLobbyMatchListCb(uint lobbyCount)
         {
             // Case 1: we're waiting on a JoinByCode → chain JoinLobby on the first
             // result (or fail if empty).
@@ -116,7 +116,7 @@ namespace CairnMultiplayerMod.Internal.Networking
             {
                 var context = _pendingJoinCodeFallbackScan ? "JoinByCodeFallback" : "JoinByCode";
                 var maxResults = _pendingJoinCodeFallbackScan ? MaxLobbyBrowserResults : MaxJoinCodeResults;
-                var results = ReadLobbyListResults(maxResults, context, evt.m_nLobbiesMatching);
+                var results = ReadLobbyListResults(maxResults, context, lobbyCount);
                 var count = results.Count;
                 if (count == 0)
                 {
@@ -187,7 +187,7 @@ namespace CairnMultiplayerMod.Internal.Networking
             // Case 2: RequestLobbyList for the browser.
             if (_listTcs != null)
             {
-                var results = ReadLobbyListResults(MaxLobbyBrowserResults, "RequestLobbyList", evt.m_nLobbiesMatching);
+                var results = ReadLobbyListResults(MaxLobbyBrowserResults, "RequestLobbyList", lobbyCount);
                 var list = new List<LobbyEntry>(results.Count);
                 for (int i = 0; i < results.Count; i++)
                 {
@@ -216,14 +216,8 @@ namespace CairnMultiplayerMod.Internal.Networking
 
         private static List<CSteamID> ReadLobbyListResults(int maxResults, string context, uint callbackCount)
         {
-            // The IL2CPP wrapper for LobbyMatchList_t can report a corrupt count.
-            // So we read the Steam slots in a bounded way and stop at the first
-            // invalid ID once we've found at least one result.
-            var reported = unchecked((int)callbackCount);
-            if (reported < 0 || reported > maxResults)
-                ModLog.Warning($"[SteamLobby] {context} callback count looked invalid ({reported}); scanning up to {maxResults}.");
-
-            var scanLimit = reported >= 0 && reported <= maxResults ? reported : maxResults;
+            // Never probe slots beyond the count returned for this API call.
+            var scanLimit = LobbyListResultCount.Validate(callbackCount, maxResults);
             var results = new List<CSteamID>(Math.Max(0, scanLimit));
             for (int i = 0; i < scanLimit; i++)
             {
@@ -325,7 +319,7 @@ namespace CairnMultiplayerMod.Internal.Networking
                 SteamMatchmaking.AddRequestLobbyListStringFilter(KeyCode, _pendingJoinCode, ELobbyComparison.k_ELobbyComparisonEqual);
             SteamMatchmaking.AddRequestLobbyListDistanceFilter(ELobbyDistanceFilter.k_ELobbyDistanceFilterWorldwide);
             SteamMatchmaking.AddRequestLobbyListResultCountFilter(exactCodeFilter ? MaxJoinCodeResults : MaxLobbyBrowserResults);
-            SteamMatchmaking.RequestLobbyList();
+            StartLobbyListCall();
         }
 
         private bool TryStartJoinCodeFallbackSearch()
@@ -364,6 +358,8 @@ namespace CairnMultiplayerMod.Internal.Networking
         private void ClearOperationIfIdle()
         {
             if (HasPendingOperation()) return;
+            _lobbyListCall.Cancel();
+            _pendingJoinCode = null;
             _pendingOperationName = "";
             _pendingOperationElapsed = 0f;
         }

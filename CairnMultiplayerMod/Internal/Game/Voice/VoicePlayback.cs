@@ -14,9 +14,24 @@ internal sealed class VoicePlayback : IDisposable, ISampleProvider
     private float[] _audioScratch = Array.Empty<float>();
     private uint _burst;
     private bool _hasBurst;
+    private readonly VoiceDistanceProcessor _distance;
     internal volatile float Volume;
     internal volatile float Pan;
+    internal volatile float Cutoff = 18000;
+    private double _outOfRangeSince = double.NaN;
     internal double LastReceived { get; private set; }
+
+    internal VoicePlayback(bool spatialized = false)
+    {
+        if (spatialized) _distance = new VoiceDistanceProcessor();
+    }
+
+    internal bool UpdateRange(bool audible, double now)
+    {
+        if (audible) _outOfRangeSince = double.NaN;
+        else if (double.IsNaN(_outOfRangeSince)) _outOfRangeSince = now;
+        return double.IsNaN(_outOfRangeSince) || now - _outOfRangeSince < 1;
+    }
 
     public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(VoiceAdapter.SampleRate, 2);
     public int Read(float[] data, int offset, int count)
@@ -25,10 +40,14 @@ internal sealed class VoicePlayback : IDisposable, ISampleProvider
         var frames = count / 2;
         if (_audioScratch.Length != frames) _audioScratch = new float[frames];
         _pcm.Read(_audioScratch);
+        if (_distance != null)
+        {
+            _distance.Process(_audioScratch, data, offset, Volume, Pan, Cutoff);
+            if (count % 2 != 0) data[offset + count - 1] = 0;
+            return count;
+        }
         var volume = Volume;
-        var pan = Math.Clamp(Pan, -1, 1);
-        var left = volume * MathF.Sqrt((1 - pan) * .5f);
-        var right = volume * MathF.Sqrt((1 + pan) * .5f);
+        VoiceSpatialPolicy.PanGains(volume, Pan, out var left, out var right);
         for (var i = 0; i < frames; i++)
         {
             data[offset + i * 2] = _audioScratch[i] * left;

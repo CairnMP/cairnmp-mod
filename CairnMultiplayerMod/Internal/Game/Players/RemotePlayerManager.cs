@@ -219,12 +219,18 @@ internal static class RemotePlayerManager
     public static bool TryGetGhostHarnessAttachPosition(int playerId, out Vector3 pos)
     {
         pos = default;
+        return TryGetGhostHarness(playerId, out var harness) && RopeInterop.TryGetHarnessAttachPosition(harness, out pos);
+    }
+
+    internal static bool TryGetGhostHarness(int playerId, out Il2Cpp.Harness harness)
+    {
+        harness = null;
         if (!_ghosts.TryGetValue(playerId, out var entry)) return false;
         if (!entry.IsRealModel || entry.NrpComponent == null) return false;
         try
         {
-            var harness = entry.NrpComponent.Harness;
-            return harness != null && RopeInterop.TryGetHarnessAttachPosition(harness, out pos);
+            harness = entry.NrpComponent.Harness;
+            return harness != null;
         }
         catch (Exception exception)
         {

@@ -10,6 +10,7 @@ internal sealed class WindowsVoiceOutput : IDisposable, ISampleProvider
 {
     private readonly MixingSampleProvider _mixer = new(WaveFormat.CreateIeeeFloatWaveFormat(VoiceAdapter.SampleRate, 2)) { ReadFully = true };
     private readonly WasapiOut _output;
+    private readonly VoiceOutputLimiter _limiter = new();
     private long _renderedSamples;
     internal long RenderedSamples => Interlocked.Read(ref _renderedSamples);
     internal bool IsRunning => _output.PlaybackState == PlaybackState.Playing;
@@ -26,7 +27,7 @@ internal sealed class WindowsVoiceOutput : IDisposable, ISampleProvider
     {
         var read = _mixer.Read(buffer, offset, count);
         Interlocked.Add(ref _renderedSamples, read);
-        for (var i = offset; i < offset + read; i++) buffer[i] = Math.Clamp(buffer[i], -1, 1);
+        _limiter.Process(buffer, offset, read);
         return read;
     }
     public void Dispose() { _output.Stop(); _output.Dispose(); _mixer.RemoveAllMixerInputs(); }

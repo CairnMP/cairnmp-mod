@@ -11,7 +11,11 @@ internal sealed class VoiceActivityGate
     {
         double energy = 0;
         foreach (var sample in samples) energy += sample * sample;
-        LevelDb = (float)(10 * Math.Log10(Math.Max(1e-9, energy / Math.Max(1, samples.Length))));
+        return ProcessLevel((float)(10 * Math.Log10(Math.Max(1e-9, energy / Math.Max(1, samples.Length)))), thresholdDb);
+    }
+    internal bool ProcessLevel(float levelDb, float thresholdDb)
+    {
+        LevelDb = float.IsFinite(levelDb) ? levelDb : -90;
         if (LevelDb >= thresholdDb - (_releaseFrames > 0 ? 3 : 0)) _releaseFrames = 13;
         else if (_releaseFrames > 0) _releaseFrames--;
         return _releaseFrames > 0;

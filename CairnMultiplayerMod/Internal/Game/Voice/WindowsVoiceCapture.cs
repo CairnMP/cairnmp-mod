@@ -30,6 +30,11 @@ internal sealed class WindowsVoiceCapture : IDisposable
             using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications);
             defaultId = device.ID;
         }
+        else if (enumerator.HasDefaultAudioEndpoint(DataFlow.Capture, Role.Console))
+        {
+            using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console);
+            defaultId = device.ID;
+        }
         var devices = new List<VoiceDevice>();
         foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active))
         {
@@ -67,6 +72,7 @@ internal sealed class WindowsVoiceCapture : IDisposable
         return true;
     }
     internal void Clear() => _buffer.Clear();
+    internal void KeepLatest(int samples) => _buffer.KeepLatest(samples);
     public void Dispose()
     {
         _capture.DataAvailable -= OnData;
