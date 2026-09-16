@@ -2,10 +2,6 @@ using UnityEngine;
 
 namespace CairnMultiplayerMod.Internal.Game.Players;
 
-/// <summary>
-/// Builds a primitive humanoid (capsule for the body + sphere for the head + arms/legs)
-/// as a fallback visual for ghosts when the real Cairn model isn't available.
-/// </summary>
 internal static class PrimitiveHumanoidFactory
 {
     public static GameObject Build(int id, string name, Color color)

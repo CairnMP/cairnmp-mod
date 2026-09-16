@@ -1,43 +1,51 @@
-# Reference assemblies (proprietary game / MelonLoader DLLs — provide your own locally)
+# Proprietary game and loader reference assemblies. Provide these locally.
 game-refs/
 
-# .NET / C#
+# .NET build output
 **/bin/
 **/obj/
-**/*.user
-*.suo
-.vs/
 
-# Packaging
+# Test and coverage output
+**/TestResults/
+**/coverage/
+*.trx
+*.coverage
+*.coveragexml
+BenchmarkDotNet.Artifacts/
+
+# Packaging output
 dist/
 
-# Reference mod (debug, jetable)
-/episure
+# Node.js dependencies
+**/node_modules/
 
-# OS
+# IDE and editor state
+.vs/
+.idea/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+*.iml
+*.DotSettings.user
+
+# OS files and logs
 .DS_Store
 Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-*.iml
-.codex/
-.claude/
-.agents
-
-# Logs
 *.log
 
-# Brainstorming visual companion (maquettes jetables)
+# Local tooling, temporary work and private research notes
+.codex/
+.claude/
+.agents/
 .superpowers/
-
-# Dossier temporaire (outils de debug jetables)
 .tmp/
-
-# Local working documents and skill observations
+.cache/
 docs/local/
 skill-observations/
+cross-cutting-principles.md
 
 # Local credentials and signing material
 .env
@@ -47,7 +55,3 @@ skill-observations/
 *.p12
 *.key
 *.snk
-
-# Test output
-TestResults/
-**/TestResults/

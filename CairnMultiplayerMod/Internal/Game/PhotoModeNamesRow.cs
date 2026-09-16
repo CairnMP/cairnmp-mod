@@ -10,57 +10,50 @@ using Object = UnityEngine.Object;
 namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>
-/// Injects a "[N] Hide/Show player names" row into Cairn's native photo-mode
-/// legend (PhotoModeUI), by cloning the "Hide UI" row to match the game's style
-/// (keycap + label). The keycap becomes "N", the label follows the
-/// RemotePlayerManager.ShowNames state.
-///
-/// IMPORTANT: the rows live under an 'Inputs' container and carry
-/// InputAction/script components. Cloning them as-is DUPLICATES those handlers and
-/// BLOCKS the game's input. We work around this in two steps:
-///   1. instantiate the clone under an INACTIVE parent -> no OnEnable/script runs;
-///   2. REMOVE all non-visual components before activating the row.
-/// We also inject ONLY when photo mode is actually open (canvas visible), never at
-/// boot.
+/// Native legend rows carry input handlers, so clones stay inactive until those handlers are
+/// stripped; otherwise they contend with Cairn's photo controls.
 /// </summary>
 internal static class PhotoModeNamesRow
 {
+    private const int MissingUiRetryFrames = 300;
+    private static PhotoModeUI _ui;
     private static GameObject _row;
     private static TextMeshProUGUI _label;
     private static int _nextScanFrame;
     private static bool _lastShown;
     private static bool _injectFailedLogged;
 
-    /// <summary>Called every frame from Mod.OnUpdate (before the photo-suspension return).</summary>
     public static void Tick()
     {
-        // Row already in place (and UI still alive) -> just refresh the text.
         if (_row != null && _label != null)
         {
             UpdateLabel();
             return;
         }
 
-        // Throttle the search for PhotoModeUI (~2 Hz at 60 fps).
-        if (Time.frameCount < _nextScanFrame) return;
-        _nextScanFrame = Time.frameCount + 30;
-
-        PhotoModeUI ui = null;
-        try
+        if (_ui == null)
         {
-            var found = Object.FindObjectsOfType<PhotoModeUI>();
-            if (found != null && found.Length > 0) ui = found[0];
-        }
-        catch (Exception exception)
-        {
-            ModLog.SuppressedException("photo-mode.find-ui", exception);
-            return;
+            // PhotoModeUI is persistent and normally exists while hidden. Keep that instance
+            // instead of repeating a global scene scan until the player opens photo mode.
+            if (Time.frameCount < _nextScanFrame) return;
+            _nextScanFrame = Time.frameCount + MissingUiRetryFrames;
+
+            try
+            {
+                var found = Object.FindObjectsOfType<PhotoModeUI>();
+                if (found != null && found.Length > 0) _ui = found[0];
+            }
+            catch (Exception exception)
+            {
+                ModLog.SuppressedException("photo-mode.find-ui", exception);
+                return;
+            }
         }
 
-        if (ui == null) { Reset(); return; }
+        var ui = _ui;
+        if (ui == null) return;
 
-        // Gate: wait for photo mode to actually open (canvas visible) — definitely
-        // not at boot, where the persistent PhotoModeUI is present but hidden.
+        // PhotoModeUI also exists at boot while hidden and is not ready for injection then.
         if (!IsPhotoModeOpen(ui)) return;
 
         TryInject(ui);
@@ -70,6 +63,13 @@ internal static class PhotoModeNamesRow
     {
         _row = null;
         _label = null;
+    }
+
+    internal static void InvalidateNativeUiCache()
+    {
+        _ui = null;
+        _nextScanFrame = 0;
+        if (_row == null) _label = null;
     }
 
     private static bool IsPhotoModeOpen(PhotoModeUI ui)
@@ -93,23 +93,18 @@ internal static class PhotoModeNamesRow
         GameObject holder = null;
         try
         {
-            var template = ui.hideMenuTextMesh;          // "Hide UI" label (row F)
+            var template = ui.hideMenuTextMesh;
             if (template == null) return;
-            var rowT = template.transform.parent;         // the row (keycap + label)
+            var rowT = template.transform.parent;
             if (rowT == null) return;
-            var container = rowT.parent;                  // the rows' container ('Inputs')
+            var container = rowT.parent;
             if (container == null) return;
 
-            // Readiness: at boot (Splashscreens) the row exists but is NOT yet styled —
-            // the rounded-background sprite (and the keycap letter) are assigned later at
-            // runtime by the InputImageAction script. Cloning before that => a white square
-            // keycap. So we wait until at least one Image in the row has a sprite, then
-            // clone: Instantiate then captures the real rounded background, which survives
-            // the strip.
+            // InputImageAction assigns the keycap sprite after boot; cloning sooner leaves a
+            // white square after the script is stripped from the copy.
             if (!RowHasStyledKeycap(rowT)) return;
 
-            // Guard: a real row = keycap + label (≈1-2 TMP). Too many TMPs = we grabbed the
-            // whole panel -> bail out so we don't duplicate everything.
+            // An unexpected TMP count means the binding resolved the panel instead of one row.
             var templTmps = rowT.GetComponentsInChildren<TextMeshProUGUI>(true);
             if (templTmps == null || templTmps.Length > 4)
             {
@@ -122,25 +117,20 @@ internal static class PhotoModeNamesRow
                 return;
             }
 
-            // 1) Clone under an INACTIVE parent: the row's scripts never run (no
-            //    OnEnable), so no input handler is duplicated.
+            // Clone under an inactive parent so native input scripts never receive OnEnable.
             holder = new GameObject("CairnMP_RowHolder");
             holder.SetActive(false);
 
             GameObject clone = Object.Instantiate(rowT.gameObject, holder.transform);
             clone.name = "CairnMP_ToggleNamesRow";
 
-            // 2) Remove every non-visual component (scripts/InputAction) BEFORE activation.
+            // Duplicate native input handlers would contend with the original photo controls.
             StripNonVisualComponents(clone);
 
-            // 3) The keycap's gray rounded background is a sprite/tint applied AT RUNTIME by
-            //    the InputPrompt (which we just removed); without it the Image falls back to
-            //    a white square. So we copy the original row's runtime appearance
-            //    (sprite + color + material) onto the clone, index by index (identical
-            //    hierarchy). Same for the text colors.
+            // The stripped InputPrompt owns runtime styling, so copy its resolved appearance
+            // before activating the clone.
             CopyNativeVisuals(rowT.gameObject, clone);
 
-            // Identify the label (same name as the original) + the keycap (the other TMP).
             var tmps = clone.GetComponentsInChildren<TextMeshProUGUI>(true);
             TextMeshProUGUI label = null, keycap = null;
             string labelName = template.gameObject.name;
@@ -156,10 +146,9 @@ internal static class PhotoModeNamesRow
             if (keycap != null) keycap.text = "N";
             _label = label;
             _row = clone;
-            _lastShown = !RemotePlayerManager.ShowNames;   // force the first refresh
+            _lastShown = !RemotePlayerManager.ShowNames;
             UpdateLabel();
 
-            // Move the clone out of the holder into the real container (becomes active, no scripts).
             clone.transform.SetParent(container, false);
             clone.SetActive(true);
 
@@ -188,11 +177,6 @@ internal static class PhotoModeNamesRow
         }
     }
 
-    /// <summary>
-    /// Destroys every non-visual component of the clone and its children (scripts,
-    /// InputAction, etc.). We keep only what's strictly needed for rendering:
-    /// RectTransform, CanvasRenderer, TMP, Image/RawImage, layout components and visual effects.
-    /// </summary>
     private static void StripNonVisualComponents(GameObject root)
     {
         var transforms = root.GetComponentsInChildren<Transform>(true);
@@ -212,12 +196,7 @@ internal static class PhotoModeNamesRow
         }
     }
 
-    /// <summary>
-    /// Copies the runtime appearance (sprite, color, material, type) of the original
-    /// row onto the clone, Image by Image and TMP by TMP. Since the hierarchy is
-    /// identical (exact clone), index-based pairing is reliable. Restores the keycap's
-    /// gray rounded background that the InputPrompt used to provide at runtime.
-    /// </summary>
+    /// <summary>The stripped InputPrompt owns runtime styling, so its resolved visuals must be copied.</summary>
     private static void CopyNativeVisuals(GameObject template, GameObject clone)
     {
         try
@@ -256,10 +235,7 @@ internal static class PhotoModeNamesRow
         }
     }
 
-    /// <summary>
-    /// True if the row is styled (at least one Image with a sprite). Used to wait for
-    /// the input script to assign the rounded background before cloning.
-    /// </summary>
+    /// <summary>Cloning before InputPrompt assigns its sprite leaves a permanent white keycap.</summary>
     private static bool RowHasStyledKeycap(Transform row)
     {
         try
@@ -274,26 +250,21 @@ internal static class PhotoModeNamesRow
 
     private static bool IsVisualComponent(Component c)
     {
-        return c.TryCast<Transform>() != null            // RectTransform/Transform
+        return c.TryCast<Transform>() != null
             || c.TryCast<CanvasRenderer>() != null
             || c.TryCast<Canvas>() != null
             || c.TryCast<TextMeshProUGUI>() != null
             || c.TryCast<Image>() != null
             || c.TryCast<RawImage>() != null
             || c.TryCast<LayoutElement>() != null
-            || c.TryCast<HorizontalOrVerticalLayoutGroup>() != null  // base H/V layout
+            || c.TryCast<HorizontalOrVerticalLayoutGroup>() != null
             || c.TryCast<GridLayoutGroup>() != null
             || c.TryCast<ContentSizeFitter>() != null
             || c.TryCast<Mask>() != null
             || c.TryCast<RectMask2D>() != null
-            || c.TryCast<Shadow>() != null;              // Outline derives from Shadow
+            || c.TryCast<Shadow>() != null;
     }
 
-    /// <summary>
-    /// Positions the cloned row. With a LayoutGroup, we insert it after "Hide UI"
-    /// (the layout places it on its own). Without a layout, we compute the one-step
-    /// vertical offset and place the row below the last one ("Quit").
-    /// </summary>
     private static void PlaceRow(PhotoModeUI ui, GameObject clone, Transform rowT, Transform container)
     {
         var layout = container.GetComponent<LayoutGroup>();
@@ -314,7 +285,6 @@ internal static class PhotoModeNamesRow
         if (cloneRect == null || hideRect == null || resetRect == null || quitRect == null)
             return;
 
-        // delta = one step down (consecutive rows "Hide UI" -> "Reset").
         float delta = resetRect.anchoredPosition.y - hideRect.anchoredPosition.y;
         cloneRect.anchoredPosition = quitRect.anchoredPosition + new Vector2(0f, delta);
     }

@@ -10,26 +10,14 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Internal.Diagnostics;
 
 /// <summary>
-/// Records genuine engine/IL2CPP-interop exceptions in the local diagnostic log.
-///
-/// Two sources:
-/// - 2A: Harmony patch on Il2CppInterop.HarmonySupport.Il2CppDetourMethodPatcher.ReportException,
-///   which sees the exceptions from native->managed trampolines (our patches/callbacks that throw).
-/// - 2C: subscription to UnityEngine.Application.logMessageReceived, filtered to
-///   LogType.Exception whose condition/stack mentions our namespace (so we don't
-///   report base-game internal exceptions).
-///
-/// Anti-spam: a shared guard caps the number of distinct signatures per session.
+/// Trampoline and Unity exceptions travel through different channels, so both are hooked and
+/// share a namespace filter and flood cap.
 /// </summary>
 internal static class Il2CppExceptionCapture
 {
-    // Namespace marker: only Unity exceptions whose condition or stack mentions the
-    // mod are reported; all other exceptions are treated as base-game exceptions.
     private const string ModNamespaceMarker = "CairnMultiplayer";
 
-    // Shared 2A+2C guard: beyond this limit of distinct signatures, we stop
-    // reporting for the session (protects against a flood of varied signatures
-    // that per-signature deduplication wouldn't cover).
+    // Per-signature deduplication alone cannot bound a flood of varied failures.
     private const int MaxDistinctPerSession = 25;
 
     private static readonly object GateLock = new();
@@ -49,7 +37,6 @@ internal static class Il2CppExceptionCapture
         InstallUnityLogHook();
     }
 
-    // 2A — patch of the Il2CppInterop trampolines' exception reporter.
     private static void InstallTrampolinePatch()
     {
         try
@@ -84,8 +71,6 @@ internal static class Il2CppExceptionCapture
         }
     }
 
-    // Non-blocking prefix: observes the exception without altering the patcher's flow.
-    // __0 = the first parameter of ReportException(Exception).
     private static void OnTrampolineException(Exception __0)
     {
         if (__0 == null) return;
@@ -102,7 +87,6 @@ internal static class Il2CppExceptionCapture
         }
     }
 
-    // 2C — subscription to Unity logs (engine/MonoBehaviour/coroutine-side exceptions).
     private static void InstallUnityLogHook()
     {
         try
@@ -122,10 +106,8 @@ internal static class Il2CppExceptionCapture
     {
         try
         {
-            // Guard 1: only genuine exceptions (Error/Warning are too noisy).
             if (type != LogType.Exception) return;
 
-            // Guard 2: only what the mod caused (namespace filter).
             if (!ContainsModMarker(condition) && !ContainsModMarker(stackTrace)) return;
 
             var signature = $"UnityException\0{condition}";
@@ -142,8 +124,6 @@ internal static class Il2CppExceptionCapture
     private static bool ContainsModMarker(string s)
         => !string.IsNullOrEmpty(s) && s.Contains(ModNamespaceMarker, StringComparison.Ordinal);
 
-    // Shared 2A+2C guard: ignores an already-seen signature and caps the number
-    // of distinct signatures written to the local session log.
     private static bool PassesGate(string signature)
     {
         lock (GateLock)

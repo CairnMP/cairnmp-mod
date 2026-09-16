@@ -196,6 +196,57 @@ public sealed class ArchitectureBoundaryTests
         }
     }
 
+    [Fact]
+    public void CooperativeRopeSelectsNativeBelayButScopesPersonalPitonOperations()
+    {
+        var interop = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "RopeInterop.Belay.cs"));
+        var patch = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "RopeTeamFallPatch.cs"));
+
+        Assert.Contains("_lifeline.securingRope = _rope", interop, StringComparison.Ordinal);
+        Assert.Contains("_lifeline.securingRope = _personalRope", interop, StringComparison.Ordinal);
+        Assert.Contains("BeginPersonalRopeOperation", patch, StringComparison.Ordinal);
+        Assert.Contains("AfterPersonalOperation", patch, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReverseEngineeredInteropUsesGeneratedApisInsteadOfManualIl2CppLayouts()
+    {
+        var localPlayer = ReadGameSource("Players", "LocalPlayerInterop.cs");
+        var mainMenu = ReadGameSource("MainMenu", "MainMenuInterop.cs");
+        var time = ReadGameSource("TimeInterop.cs");
+        var lamp = ReadGameSource("Players", "LampInterop.cs");
+        var setFrame = ReadGameSource("Players", "NetplaySetFramePatch.cs");
+        var pitons = ReadGameSource("Roping", "RopeInterop.Pitons.cs");
+
+        Assert.Contains("PawnManager.Instance?.MCGameObject", localPlayer, StringComparison.Ordinal);
+        Assert.Contains("NativeMainMenu.ForceStepTransition", mainMenu, StringComparison.Ordinal);
+        Assert.Contains("PlayerStateFeedbacks.Instance", time, StringComparison.Ordinal);
+        Assert.Contains("lamp.SetMode(", lamp, StringComparison.Ordinal);
+        Assert.Contains("instance.currentFrame = frame", setFrame, StringComparison.Ordinal);
+        Assert.Contains("lifeline.AddPiton(", pitons, StringComparison.Ordinal);
+        Assert.Contains("lifeline.DetachPiton(", pitons, StringComparison.Ordinal);
+        Assert.Contains("PlacedPitons", pitons, StringComparison.Ordinal);
+
+        var combined = string.Concat(localPlayer, mainMenu, time, lamp, setFrame, pitons);
+        Assert.DoesNotContain("GetIl2CppField", combined, StringComparison.Ordinal);
+        Assert.DoesNotContain("il2cpp_field_get_offset", combined, StringComparison.Ordinal);
+        Assert.DoesNotContain("il2cpp_runtime_invoke", combined, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RemoteWeatherOverrideUsesCairnsNativeCleanupLifecycle()
+    {
+        var weather = ReadGameSource("WeatherInterop.cs");
+
+        Assert.Contains("forcedInifiniteStateDefOrigin", weather, StringComparison.Ordinal);
+        Assert.Contains("ForceInfiniteWeatherState(\n                null", weather, StringComparison.Ordinal);
+        Assert.Contains("DefineWeatherDefinitionsArray()", weather, StringComparison.Ordinal);
+        Assert.Contains("TriggerCurrentWeatherState()", weather, StringComparison.Ordinal);
+        Assert.Contains("WindOverride.NoOverride", weather, StringComparison.Ordinal);
+    }
+
     private static IEnumerable<string> SourceFilesUnder(string relativeDirectory)
     {
         var directory = Path.Combine(ProjectDirectory, relativeDirectory);
@@ -203,6 +254,10 @@ public sealed class ArchitectureBoundaryTests
             .Where(file => !file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar)
                            && !file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar));
     }
+
+    private static string ReadGameSource(params string[] relativePath)
+        => File.ReadAllText(relativePath.Aggregate(
+            Path.Combine(ProjectDirectory, "Internal", "Game"), Path.Combine));
 
     private static bool ContainsEngineUsing(string source)
     {

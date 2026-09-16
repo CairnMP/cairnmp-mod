@@ -53,7 +53,6 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
         return registration;
     }
 
-    /// <summary>Invalidates scene-bound objects while retaining logical registrations.</summary>
     internal void OnSceneLoaded(string sceneName)
     {
         if (!SceneRoles.IsMainMenu(sceneName)) return;
@@ -69,7 +68,6 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
             _registrations[i].ForgetNativeButton();
     }
 
-    /// <summary>Retries until Cairn has built the native menu, then maintains every label.</summary>
     internal void Tick()
     {
         if (_disposed || _registrations.Count == 0) return;
@@ -96,7 +94,6 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
         }
     }
 
-    /// <summary>Hides Cairn's native choices while a mod-owned panel is visible.</summary>
     internal void SuspendNativeMenu()
     {
         if (_modeSelectContainer != null) _modeSelectContainer.SetActive(false);
@@ -117,7 +114,6 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
         InputInterop.BlockMainMenuActionMaps();
     }
 
-    /// <summary>Restores Cairn's native choices after the mod-owned panel closes.</summary>
     internal void RestoreNativeMenu()
     {
         InputInterop.RestoreMainMenuActionMaps();

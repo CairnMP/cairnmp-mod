@@ -4,13 +4,8 @@ using CairnMultiplayerMod.Internal.Diagnostics;
 
 namespace CairnMultiplayerMod.Internal.Networking;
 
-/// <summary>Routes validated transport payloads to the matching network domain.</summary>
 internal sealed partial class NetworkManager
 {
-    /// <summary>
-    /// Dispatches a payload received from the transport. The first byte is the packet id;
-    /// the remaining bytes are the serialized packet body. Called on the Unity thread.
-    /// </summary>
     private void ProcessPacket(byte[] payload)
     {
         // An empty payload is the transport's internal disconnection marker.

@@ -18,7 +18,6 @@ namespace CairnMultiplayerMod.Framework;
 /// </summary>
 internal sealed class FeatureHost : IDisposable
 {
-    /// <summary>Reserved id of the extension carrying every built-in feature.</summary>
     internal const string CoreExtensionId = "cairnmp.core";
 
     private readonly ExtensionRuntime _runtime;
@@ -28,7 +27,6 @@ internal sealed class FeatureHost : IDisposable
     private readonly FeatureStreamRouter _streams = new();
     private readonly List<Registered> _features = new();
 
-    /// <summary>Uses the mod-wide runtime by default; tests pass their own.</summary>
     internal FeatureHost(
         ExtensionRuntime runtime = null,
         IGameApi game = null,
@@ -41,7 +39,6 @@ internal sealed class FeatureHost : IDisposable
         _isActive = isActive ?? (() => true);
     }
 
-    /// <summary>Routes incoming real-time payloads to the features that declared them.</summary>
     internal void DispatchStream(int fromPlayerId, ushort channel, byte[] payload)
         => _streams.Dispatch(fromPlayerId, channel, payload);
 
@@ -94,7 +91,6 @@ internal sealed class FeatureHost : IDisposable
         FeatureLog.Info($"[Features] {_features.Count} feature(s) registered.");
     }
 
-    /// <summary>Runs the per-frame work declared for <paramref name="phase"/>.</summary>
     internal void Tick(FeaturePhase phase)
     {
         if (!_isActive()) return;
@@ -116,7 +112,6 @@ internal sealed class FeatureHost : IDisposable
 
     internal void NotifySceneReset() => Dispatch(builder => builder.SceneResetHandlers, "scene-reset");
 
-    /// <summary>Lets the features draw. Called from OnGUI.</summary>
     internal void DrawHud()
     {
         if (!_isActive()) return;

@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace CairnMultiplayerMod.Internal.Game.Players;
 
-internal static unsafe class PawnCaptureInterop
+internal static class PawnCaptureInterop
 {
     private static NetplayPawnCapture _typedPawnCaptureCached;
     private static NetplayPawnCapture _typedClimbotCaptureCached;
@@ -34,9 +34,7 @@ internal static unsafe class PawnCaptureInterop
     // there, and masking keeps a stale target byte from ever reaching that assertion.
     private const byte PlayerFlagsMask = 0x1F;
 
-    /// <summary>Forgets the scene-bound pawn-capture references (called on scene reload):
-    /// Cairn destroys then recreates these objects after a death/reload, and keeping the
-    /// old pointers can crash on the first CaptureFrame.</summary>
+    /// <summary>Stale native pointers can crash the first capture after a death or reload.</summary>
     internal static void ResetCaches()
     {
         _typedPawnCaptureCached = null;
@@ -54,7 +52,6 @@ internal static unsafe class PawnCaptureInterop
         _lastNativePlayerFlags = 0;
     }
 
-    /// <summary>Captures the local player's native frame via the game's Netplay pipeline.</summary>
     public static bool TryCaptureLocalPlayerFrame(out NetFrameData frameData)
     {
         frameData = default;
@@ -106,11 +103,7 @@ internal static unsafe class PawnCaptureInterop
     private static float _lastPawnStateCheckTime;
     private static NetFrame.PawnStateType _lastPawnState = NetFrame.PawnStateType.Invalid;
 
-    /// <summary>
-    /// Current state of the local pawn (Climbing / Walking / Falling / Dead...), read via the
-    /// Netplay capture with throttling (~10 Hz) because belay reconciliation calls it
-    /// every frame. Invalid if unavailable.
-    /// </summary>
+    /// <summary>Throttled because belay reconciliation requests this native state every frame.</summary>
     public static NetFrame.PawnStateType GetLocalPawnState()
     {
         if (Time.unscaledTime - _lastPawnStateCheckTime < 0.1f)
@@ -122,10 +115,10 @@ internal static unsafe class PawnCaptureInterop
             var capture = TryGetTypedPawnCapture();
             if (capture == null) return _lastPawnState = NetFrame.PawnStateType.Invalid;
 
-            var frame = capture.CaptureFrame();
-            if (frame == null || !frame.isValid) return _lastPawnState = NetFrame.PawnStateType.Invalid;
-
-            return _lastPawnState = frame.PawnState;
+            // Cpp2IL confirms this is the state routine used by CaptureFrame itself.
+            // Calling it directly avoids allocating/copying every bone vector merely to
+            // answer the 10 Hz teleport/belay state query.
+            return _lastPawnState = capture.GetPlayerPawnState();
         }
         catch (Exception exception)
         {
@@ -134,15 +127,9 @@ internal static unsafe class PawnCaptureInterop
         }
     }
 
-    /// <summary>True if the local pawn is walking on the ground (Walking) — a safe basis for allowing a teleport.</summary>
+    /// <summary>Teleporting to a partner is safe only while Cairn reports a grounded walk state.</summary>
     public static bool IsLocalPlayerWalking() => GetLocalPawnState() == NetFrame.PawnStateType.Walking;
 
-    /// <summary>
-    /// Decodes the PawnState (Walking / Climbing / Falling / Dead) encoded in the `flags` byte
-    /// of a remote NetFrameData: we rebuild a native NetFrame and read its PawnState
-    /// getter (which derives from the flags bits). Invalid if the frame is absent/unreadable.
-    /// Used for teleport gating (we only teleport to a player who is WALKING).
-    /// </summary>
     public static NetFrame.PawnStateType GetPawnStateFromFrame(NetFrameData data)
     {
         if (!data.IsValid) return NetFrame.PawnStateType.Invalid;
@@ -158,7 +145,6 @@ internal static unsafe class PawnCaptureInterop
         }
     }
 
-    /// <summary>Captures the local climbot's native frame via the game's Netplay pipeline.</summary>
     public static bool TryCaptureLocalClimbotFrame(out NetFrameData frameData)
     {
         frameData = default;

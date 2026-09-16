@@ -9,7 +9,6 @@ internal enum LobbyVisibility
     Private,
 }
 
-/// <summary>Configuration submitted by the user when creating a lobby.</summary>
 internal sealed class HostConfig
 {
     public string PlayerName { get; init; } = "";
@@ -18,10 +17,9 @@ internal sealed class HostConfig
     public LobbyVisibility Visibility { get; init; } = LobbyVisibility.Public;
 }
 
-/// <summary>Entry shown in the public lobby browser.</summary>
 internal sealed class LobbyEntry
 {
-    public ulong LobbyId { get; init; }   // Steam lobby SteamID64; 0 if not Steam
+    public ulong LobbyId { get; init; }
     public string Name { get; init; } = "";
     public string HostName { get; init; } = "";
     public int PlayerCount { get; init; }

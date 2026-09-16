@@ -212,7 +212,6 @@ internal sealed class FeatureBuilder
     internal IReadOnlyList<Action> SceneResetHandlers => _onSceneReset;
     internal IReadOnlyList<Action> DrawHudHandlers => _onDrawHud;
 
-    // ── Network ───────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Declares a message every other player receives (ping, chat line...). Any player may
@@ -229,7 +228,7 @@ internal sealed class FeatureBuilder
         {
             // The host commits its own send locally, clients do not — filtering here keeps
             // both sides behaving identically.
-            if (message.SourcePlayerId == _runtime.LocalPlayer.Id) return;
+            if (message.SourcePlayerId == _runtime.LocalPlayerId) return;
             onReceived(message.SourcePlayerId, message.Payload);
         };
 
@@ -326,7 +325,6 @@ internal sealed class FeatureBuilder
         return new Stream<T>(_network(), channel, reliable);
     }
 
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     /// <summary>Runs <paramref name="tick"/> every frame during the given phase. Exceptions are
     /// caught and logged: one broken feature never stops the others.</summary>

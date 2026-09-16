@@ -110,6 +110,7 @@ mutes, volume control, and a local microphone test.
 | [Architecture](docs/architecture.md) | Developers | Layer boundaries, packet flow, and conventions |
 | [Managed extension API](docs/multiplayer-api.md) | Mod authors | Host-authoritative integration API |
 | [Proximity voice](docs/proximity-voice.md) | Players and testers | Settings, implementation, and validation |
+| [Performance diagnostics](docs/performance-diagnostics.md) | Developers and testers | Local frame captures and repeatable solo/multiplayer comparisons |
 | [Security policy](SECURITY.md) | Everyone | Private reporting and security scope |
 | [Changelog](CHANGELOG.md) | Everyone | Version history and compatibility notes |
 

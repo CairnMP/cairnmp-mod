@@ -6,10 +6,8 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Internal.UI.Sketch;
 
 /// <summary>
-/// Fetches and caches the game's "sketch" UI assets (photo-mode sprites + fonts), by name, from all
-/// sprites loaded in memory (FindObjectsOfTypeAll). The photo-mode sprites are confirmed loaded from
-/// the main menu onward (cf. de-risk dump: photomode-family=15).
-/// Falls back to a solid sprite when an asset is missing, so it never crashes or shows a blank panel.
+/// Runtime lookup avoids bundling copies of Cairn's UI assets; a solid fallback keeps the panel
+/// usable if a game update renames one of them.
 /// </summary>
 internal static class GameUiAssetLibrary
 {
@@ -29,9 +27,9 @@ internal static class GameUiAssetLibrary
     public const string IconSilhouette = "T_UI_PhotoModeIcons_silhouette";
     public const string IconEffects = "T_UI_PhotoModeIcons_effects";
     public const string IconSave = "T_UI_PhotoModeIcons_save";
-    public const string IconFriend = "FM_Preference_FriendGhost";   // friend silhouette (Join tab)
-    public const string IconPlayer = "FM_Preference_PlayerGhost";   // player silhouette (Browse tab)
-    public const string Button = "UI_Bivouac_Bouton";   // sketch button available from the menu on
+    public const string IconFriend = "FM_Preference_FriendGhost";
+    public const string IconPlayer = "FM_Preference_PlayerGhost";
+    public const string Button = "UI_Bivouac_Bouton";
     public const string White = "UI_White_1PX";
 
     private static readonly string[] Wanted =
@@ -47,7 +45,6 @@ internal static class GameUiAssetLibrary
     private static Sprite _fallback;
     private static bool _harvested;
 
-    /// <summary>Fetches the assets if not done yet (or if the cache has become invalid).</summary>
     public static void EnsureHarvested(bool force = false)
     {
         if (_harvested && !force && _sprites.TryGetValue(Frame, out var existing) && existing != null) return;
@@ -85,7 +82,6 @@ internal static class GameUiAssetLibrary
             $"textFont={(_textFont != null)} logoFont={(_logoFont != null)}");
     }
 
-    /// <summary>Game sprite by name, or a solid fallback sprite if not found.</summary>
     public static Sprite Get(string name)
     {
         EnsureHarvested();
@@ -95,10 +91,8 @@ internal static class GameUiAssetLibrary
 
     public static TMP_FontAsset TextFont { get { EnsureHarvested(); return _textFont; } }
 
-    /// <summary>The game's "logo" font if loaded, otherwise falls back to the text font.</summary>
     public static TMP_FontAsset LogoFont { get { EnsureHarvested(); return _logoFont != null ? _logoFont : _textFont; } }
 
-    /// <summary>The game's white sprite (UI_White_1PX) for solid fills and the fallback; generated if needed.</summary>
     public static Sprite Fallback
     {
         get

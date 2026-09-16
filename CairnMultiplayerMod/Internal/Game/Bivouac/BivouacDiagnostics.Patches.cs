@@ -201,13 +201,13 @@ internal static partial class BivouacDiagnostics
 
             TapingInitAttempted.Add(manager.Pointer);
             SafeLog("TapingInitRepair", () => $"before={DescribeTapingReadiness(manager)}");
-            TryInvokePrivate(manager, "Init");
+            manager.Init();
             SafeLog("TapingInitRepair", () => $"afterInit={DescribeTapingReadiness(manager)}");
 
             if (HasCriticalTapingReferences(manager))
                 return true;
 
-            TryInvokePrivate(manager, "FakeInit");
+            manager.FakeInit();
             SafeLog("TapingInitRepair", () => $"afterFakeInit={DescribeTapingReadiness(manager)}");
             return HasCriticalTapingReferences(manager);
         }
@@ -254,17 +254,8 @@ internal static partial class BivouacDiagnostics
 
             try
             {
-                var method = AccessTools.Method(typeof(TapingFingersManager), nameof(TapingFingersManager.SelectHand));
-                var handType = method?.GetParameters()[0].ParameterType;
-                var hand = GetFirstRealHandValue(handType);
-                if (method == null || hand == null)
-                {
-                    ModLog.Warning("[BivouacDebug] SelectHand reflection repair unavailable");
-                    return;
-                }
-
-                method.Invoke(manager, new[] { hand, 0 });
-                SafeLog("TapingPrepareSelection", () => $"handValue={hand} {DescribeTaping(manager)}");
+                manager.SelectHand(TapingFingersManager.Hand.Left, 0);
+                SafeLog("TapingPrepareSelection", () => $"handValue=Left {DescribeTaping(manager)}");
             }
             catch (Exception ex)
             {
@@ -282,24 +273,10 @@ internal static partial class BivouacDiagnostics
 
             try
             {
-                var setter = AccessTools.Property(typeof(TapingFingersManager), "CurrentModel")?.GetSetMethod(true);
-                if (setter == null)
-                    return false;
-
                 var models = manager.models;
-                if (models == null)
-                    return false;
+                if (models == null || models.Length <= 0 || models[0] == null) return false;
 
-                var modelsType = models.GetType();
-                var count = ResolveCount(modelsType, models);
-                if (count <= 0)
-                    return false;
-
-                var model = ResolveIndex(modelsType, models, 0);
-                if (model == null)
-                    return false;
-
-                setter.Invoke(manager, new[] { model });
+                manager.CurrentModel = models[0];
                 return GetCurrentModelSafe(manager) != null;
             }
             catch (Exception ex)
@@ -307,47 +284,6 @@ internal static partial class BivouacDiagnostics
                 SafeLog("TapingCurrentModelFailed", () => $"{ex.GetType().Name}:{GameInterop.FirstLine(ex.Message)}");
                 return false;
             }
-        }
-
-        private static int ResolveCount(Type modelsType, object models)
-        {
-            var countProp = modelsType.GetProperty("Count");
-            if (countProp != null)
-                return Convert.ToInt32(countProp.GetValue(models, null));
-
-            var lengthProp = modelsType.GetProperty("Length");
-            if (lengthProp != null)
-                return Convert.ToInt32(lengthProp.GetValue(models, null));
-
-            return 0;
-        }
-
-        private static object ResolveIndex(Type modelsType, object models, int index)
-        {
-            var indexed = modelsType.GetProperty("Item", new[] { typeof(int) })?.GetGetMethod();
-            if (indexed != null)
-                return indexed.Invoke(models, new object[] { index });
-
-            var get = modelsType.GetMethod("Get", new[] { typeof(int) });
-            if (get != null)
-                return get.Invoke(models, new object[] { index });
-
-            return null;
-        }
-
-        private static object GetFirstRealHandValue(Type handType)
-        {
-            if (handType == null || !handType.IsEnum)
-                return null;
-
-            foreach (var value in Enum.GetValues(handType))
-            {
-                var name = value.ToString();
-                if (!string.Equals(name, "None", StringComparison.OrdinalIgnoreCase))
-                    return value;
-            }
-
-            return null;
         }
 
         private static void RecoverFromFailedActivation(TapingFingersManager manager, Il2CppSystem.Action onExitCallback,
@@ -364,7 +300,7 @@ internal static partial class BivouacDiagnostics
 
             try
             {
-                TryInvokePrivate(manager, "Deactivate");
+                manager.Deactivate();
                 SetTransformActive(manager.visualsParent, false);
                 SetTransformActive(manager.armsOffsetForTransition, false);
                 SetCanvasGroupVisible(manager.inputPromptGroup, false);
@@ -407,26 +343,6 @@ internal static partial class BivouacDiagnostics
         private static bool ShouldLogEvent(string eventName)
         {
             return KeepLogEvent.Contains(eventName);
-        }
-
-        private static void TryInvokePrivate(TapingFingersManager manager, string methodName)
-        {
-            try
-            {
-                var method = AccessTools.Method(typeof(TapingFingersManager), methodName);
-                if (method == null)
-                {
-                    ModLog.Warning($"[BivouacDebug] {methodName} method not found");
-                    return;
-                }
-
-                method.Invoke(manager, null);
-                ModLog.Debug($"[BivouacDebug] {methodName} invoked for TapingFingersManager");
-            }
-            catch (Exception ex)
-            {
-                ModLog.Warning($"[BivouacDebug] {methodName} invoke failed: {ex.GetType().Name}:{GameInterop.FirstLine(ex.Message)}");
-            }
         }
 
         private static void InvokeExitCallback(Il2CppSystem.Action callback, string reason)

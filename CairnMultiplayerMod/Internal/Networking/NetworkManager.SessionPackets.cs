@@ -4,7 +4,6 @@ using CairnMultiplayerMod.Internal.Diagnostics;
 
 namespace CairnMultiplayerMod.Internal.Networking;
 
-/// <summary>Applies connection, roster and session-control packets.</summary>
 internal sealed partial class NetworkManager
 {
     private void HandleHandshakeAck(BinaryReader reader)

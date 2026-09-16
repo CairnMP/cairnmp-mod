@@ -7,29 +7,17 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Internal.Game.World;
 
 /// <summary>
-/// Detection of Cairn's native free camera (the "Display Route" button = aerial
-/// route view / Eagle Eye).
-///
-/// The state is broadcast by `GameEventManager`'s static events:
-///   OnEagleEye(bool)                       -> generic eagle eye view
-///   OnEagleEyePath(bool, RequestContext)   -> route view (Display Route)
-/// The bool indicates entry (true) or exit (false). We subscribe to both
-/// (plus the "Request" variants for diagnostics) and keep the active state.
-///
-/// We also keep the subscription to `FreeCam.OnFreeCamActivate/Deactivate` for the
-/// debug free-cam. "Freecam active" = union of all these signals.
-///
-/// Robustness: if a subscription fails, we log once and carry on; the ping just
-/// stays inactive, no exception propagates.
+/// Display Route, Eagle Eye and debug freecam emit separate native events, so their union defines
+/// whether camera-aimed actions are available.
 /// </summary>
 internal static unsafe class FreecamInterop
 {
     private static bool _freecamHooksInstalled;
     private static bool _freecamHooksFailed;
 
-    private static bool _freecamEventActive;   // FreeCam.OnFreeCamActivate/Deactivate
-    private static bool _eagleEyeActive;        // GameEventManager.OnEagleEye
-    private static bool _eagleEyePathActive;    // GameEventManager.OnEagleEyePath (Display Route)
+    private static bool _freecamEventActive;
+    private static bool _eagleEyeActive;
+    private static bool _eagleEyePathActive;
 
     private static bool _hasLastReportedFreecam;
     private static bool _lastReportedFreecam;
@@ -42,10 +30,6 @@ internal static unsafe class FreecamInterop
     private static Il2CppSystem.Action<bool, Il2Cpp.CameraManager.EagleEyeRequestContext> _eagleEyePathDelegate;
     private static Il2CppSystem.Action<bool, Il2Cpp.CameraManager.EagleEyeRequestContext> _eagleEyePathRequestDelegate;
 
-    /// <summary>
-    /// Indicates whether a free camera (Display Route / Eagle Eye, or debug free-cam)
-    /// is active. State driven by the native events.
-    /// </summary>
     public static bool TryIsActive(out bool active)
     {
         EnsureFreecamHooks();
@@ -121,23 +105,13 @@ internal static unsafe class FreecamInterop
     private static void OnNativeEagleEyePathRequest(bool on, Il2Cpp.CameraManager.EagleEyeRequestContext ctx)
         => ModLog.Debug($"[Freecam] OnRequestEagleEyePath({on}, {ctx})");
 
-    /// <summary>
-    /// Camera used for the ping raycast. In free view, Camera.main is the active
-    /// camera.
-    /// </summary>
     public static bool TryGetFreecamCamera(out Camera cam)
     {
         cam = Camera.main;
         return cam != null;
     }
 
-    /// <summary>
-    /// Computes the world point to ping in the camera's direction (screen center):
-    /// a raycast from the camera position forward. We ignore "trigger" colliders to
-    /// aim at solid rock and not the invisible gameplay volumes. With no hit, we
-    /// place it at a fixed distance (Protocol.DefaultPingDistance) in front of the
-    /// camera.
-    /// </summary>
+    /// <summary>Trigger colliders are ignored because invisible gameplay volumes are not useful targets.</summary>
     public static bool TryComputePingPoint(out Vector3 point)
     {
         point = default;

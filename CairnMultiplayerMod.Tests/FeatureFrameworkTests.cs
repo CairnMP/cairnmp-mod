@@ -14,11 +14,6 @@ using Xunit;
 
 namespace CairnMultiplayerMod.Tests;
 
-/// <summary>
-/// Exercises the feature framework without Unity. This is the point of routing feature logic
-/// through Framework/ instead of the networking layer: what a feature sends, receives and
-/// cleans up becomes assertable.
-/// </summary>
 public sealed class FeatureFrameworkTests : IDisposable
 {
     [Fact]
@@ -53,6 +48,17 @@ public sealed class FeatureFrameworkTests : IDisposable
     }
 
     [Fact]
+    public void LocalPlayerIdDoesNotMaterializeTheFullPlayerRecord()
+    {
+        var runtime = NewRuntime(out var bridge);
+        runtime.Attach(bridge);
+        var feature = new LocalPlayerIdFeature { Session = runtime };
+
+        Assert.Equal(1, feature.ReadLocalPlayerId());
+        Assert.Equal(0, bridge.LocalPlayerReads);
+    }
+
+    [Fact]
     public void DifferentFeaturesCanReuseAllLocalContractNames()
     {
         var runtime = NewRuntime(out _);
@@ -73,6 +79,13 @@ public sealed class FeatureFrameworkTests : IDisposable
         }
     }
 
+    private sealed class LocalPlayerIdFeature : MultiplayerFeature
+    {
+        public override string Id => "local-player-id";
+        protected internal override void OnRegister(FeatureBuilder feature) { }
+        internal int ReadLocalPlayerId() => LocalPlayerId;
+    }
+
     private readonly List<string> _warnings = new();
     private readonly List<string> _errors = new();
 
@@ -81,7 +94,6 @@ public sealed class FeatureFrameworkTests : IDisposable
 
     public void Dispose() => FeatureLog.SetSink(null, null, null);
 
-    // ── Registration ──────────────────────────────────────────────────────────
 
     [Fact]
     public void EveryFeatureGetsItsOnRegisterCalled()
@@ -182,7 +194,6 @@ public sealed class FeatureFrameworkTests : IDisposable
                 (type.Namespace ?? string.Empty).StartsWith(prefix, StringComparison.Ordinal)));
     }
 
-    // ── Ticks and phases ──────────────────────────────────────────────────────
 
     [Fact]
     public void ATickOnlyRunsInThePhaseItAskedFor()
@@ -239,12 +250,11 @@ public sealed class FeatureFrameworkTests : IDisposable
         host.Tick(FeaturePhase.Always);
         host.Tick(FeaturePhase.Always);
 
-        Assert.Equal(2, healthyTicks);            // the healthy one kept running
-        Assert.Single(_errors);                 // repeated frame failures are rate limited
+        Assert.Equal(2, healthyTicks);
+        Assert.Single(_errors);
         Assert.Contains("aaa-broken", _errors[0]);
     }
 
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     [Fact]
     public void SessionAndSceneCallbacksReachTheFeature()
@@ -260,7 +270,6 @@ public sealed class FeatureFrameworkTests : IDisposable
         Assert.Equal(new[] { "started", "scene", "ended" }, events);
     }
 
-    // ── Network channels ──────────────────────────────────────────────────────
 
     [Fact]
     public void BroadcastFromAClientIsRelayedToEveryoneByTheHost()
@@ -270,7 +279,6 @@ public sealed class FeatureFrameworkTests : IDisposable
         new FeatureHost(runtime).RegisterAll(new MultiplayerFeature[] { feature }, new Version(1, 0, 0));
         runtime.Attach(bridge);
 
-        // Player 2 asks the host to broadcast a ping.
         var result = runtime.ExecuteHostCommand(2, CommandPacket("ping", "placed", new Point(1f, 2f, 3f)));
 
         Assert.True(result.Committed);
@@ -292,7 +300,6 @@ public sealed class FeatureFrameworkTests : IDisposable
 
         Assert.Empty(feature.Received);
 
-        // A different player's broadcast does reach us.
         runtime.ExecuteHostCommand(2, CommandPacket("ping", "placed", new Point(7f, 8f, 9f)));
 
         Assert.Single(feature.Received);
@@ -309,7 +316,7 @@ public sealed class FeatureFrameworkTests : IDisposable
 
         feature.Publish(new Point(0.5f, 0f, 0f));
 
-        Assert.Single(bridge.States);                       // sent on the wire for latecomers
+        Assert.Single(bridge.States);
         Assert.True(feature.Current.TryGet(out var value));
         Assert.Equal(0.5f, value.X);
         Assert.Single(feature.Changes);
@@ -389,7 +396,6 @@ public sealed class FeatureFrameworkTests : IDisposable
         Assert.Contains(_errors, error => error.Contains("boom"));
     }
 
-    // ── Real-time streams ─────────────────────────────────────────────────────
 
     [Fact]
     public void AStreamPayloadReachesTheFeatureThatDeclaredIt()
@@ -411,7 +417,6 @@ public sealed class FeatureFrameworkTests : IDisposable
         var router = new FeatureStreamRouter();
         router.Register("known.stream", (_, _) => { });
 
-        // A peer on a newer build streaming something we have never heard of.
         router.Dispatch(2, 0xBEEF, new byte[] { 9 });
     }
 
@@ -448,9 +453,6 @@ public sealed class FeatureFrameworkTests : IDisposable
         Assert.NotEqual(0, FeatureStreamRouter.Hash(""));
     }
 
-    // ── Feature message encoding ──────────────────────────────────────────────
-    // Ported from the protocol tests when these packets moved into features: the wire
-    // format still has to survive a round trip, it is just declared elsewhere now.
 
     [Theory]
     [InlineData(true)]
@@ -537,7 +539,6 @@ public sealed class FeatureFrameworkTests : IDisposable
                 yield return nested;
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static FeatureHost HostWith(params MultiplayerFeature[] features)
     {
@@ -567,7 +568,6 @@ public sealed class FeatureFrameworkTests : IDisposable
         };
     }
 
-    /// <summary>Minimal feature message — same serialization contract as the rest of the protocol.</summary>
     public sealed class Point : IPacket
     {
         public Point() { }
@@ -762,7 +762,16 @@ public sealed class FeatureFrameworkTests : IDisposable
 
         public bool IsConnected => true;
         public bool IsHost => _isHost;
-        public MultiplayerPlayer LocalPlayer => new(1, "Host", isLocal: true, isHost: _isHost);
+        public int LocalPlayerId => 1;
+        public int LocalPlayerReads { get; private set; }
+        public MultiplayerPlayer LocalPlayer
+        {
+            get
+            {
+                LocalPlayerReads++;
+                return new MultiplayerPlayer(1, "Host", isLocal: true, isHost: _isHost);
+            }
+        }
         public IReadOnlyList<MultiplayerPlayer> Players => new[] { LocalPlayer };
         public List<ServerExtensionEvent> Events { get; } = new();
         public List<ServerExtensionState> States { get; } = new();

@@ -8,19 +8,8 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Internal.Game.Players;
 
 /// <summary>
-/// Syncs the character's cosmetics between players.
-///
-/// Vanilla netplay transmits neither the glowing gloves (GlowingGloves) nor the outfit:
-/// the ghost is a clone of NetplayClimberPrefab by default, so it shows the base look.
-/// Here we read the local cosmetic state (for now: glowing gloves active) as a bit
-/// field, and reapply it on the ghost.
-///
-/// Glowing gloves: the Cairn `GlowingGloves` component (on the MC) carries two
-/// GameObjects `leftLight`/`rightLight` (the actual glow) + a `mainRenderer` (the mesh),
-/// managed automatically from the inventory. The ghost does NOT have this component -> we
-/// attach two fallback Lights to the ghost's hand bones (LeftHand/RightHand via the
-/// humanoid Animator, with a bone-name fallback like FingerInterop). We don't reproduce the
-/// mesh (skeleton rebind is too fragile): the glow on the hands is enough to fix the bug.
+/// Native ghosts omit outfit and glove state; fallback hand lights avoid the fragile skeleton
+/// rebind required to reproduce the glove mesh.
 /// </summary>
 internal static unsafe class CosmeticInterop
 {
@@ -31,17 +20,12 @@ internal static unsafe class CosmeticInterop
     private static bool _cosmeticWarningLogged;
     private static bool _ghostHandDumpDone;
 
-    // Glove glow template, read once from the local GlowingGloves (otherwise
-    // default cyan values). Used to make the ghost's glow match.
+    // Read native values because Cairn's configured glove glow is not always the default cyan.
     private static bool _glowTemplateRead;
     private static Color _glowColor = new(0.45f, 0.85f, 1f);
     private static float _glowIntensity = 2.5f;
     private static float _glowRange = 1.6f;
 
-    /// <summary>
-    /// Reads the local cosmetic state as a bit field (see Protocol.CosmeticFlag*).
-    /// Returns false if the local MC is unavailable.
-    /// </summary>
     public static bool TryGetLocalCosmetics(out byte flags)
     {
         flags = 0;
@@ -94,17 +78,12 @@ internal static unsafe class CosmeticInterop
         _ghostStickRest.Remove(go.Pointer);
     }
 
-    /// <summary>Forgets every per-ghost cosmetic cache (disconnect / scene reload).</summary>
     public static void ResetGhostCosmeticCaches()
     {
         _ghostGloveRigs.Clear();
         _ghostStickRest.Clear();
     }
 
-    /// <summary>
-    /// Enables/disables the glove glow on a ghost by attaching (or removing) two
-    /// fallback Lights to the hand bones. Idempotent. Returns false on failure.
-    /// </summary>
     public static bool SetGhostGlowingGloves(NetplayRemotePlayer ghost, bool on)
     {
         if (ghost == null || ghost.Pointer == IntPtr.Zero) return false;
@@ -145,7 +124,7 @@ internal static unsafe class CosmeticInterop
         var existing = hand.Find(GhostGloveLightName);
         if (on)
         {
-            if (existing != null) return true; // already in place
+            if (existing != null) return true;
 
             var lightGo = new GameObject(GhostGloveLightName);
             lightGo.transform.SetParent(hand, worldPositionStays: false);
@@ -179,12 +158,7 @@ internal static unsafe class CosmeticInterop
         return gloves;
     }
 
-    /// <summary>
-    /// True if the gloves are actually shown on the local player. We read the state APPLIED by
-    /// the game: the glove mesh GameObject (mainRenderer) is active only when they are
-    /// equipped/out. (ShouldBeVisible() doesn't work: it returns true for merely owning them
-    /// in the inventory, so every player sharing the save appeared to be wearing gloves.)
-    /// </summary>
+    /// <summary><c>ShouldBeVisible</c> reports ownership, so visibility must come from the applied mesh state.</summary>
     private static bool AreGlovesVisible(GlowingGloves gloves)
     {
         try
@@ -218,10 +192,6 @@ internal static unsafe class CosmeticInterop
         catch (Exception exception) { ModLog.SuppressedException("cosmetics.capture-glow-template", exception); }
     }
 
-    /// <summary>
-    /// Resolves the ghost's hand bones: humanoid Animator first, name-based fallback
-    /// if the rig is generic (see FingerInterop, Cairn's rig isn't always humanoid).
-    /// </summary>
     private static bool TryGetGhostHandBones(GameObject go, out Transform left, out Transform right)
     {
         left = null;
@@ -272,8 +242,6 @@ internal static unsafe class CosmeticInterop
         catch (Exception exception) { ModLog.SuppressedException("cosmetics.apply-ghost-appearance", exception); }
     }
 
-    /// <summary>Logs once the hand-like transforms under the ghost, to diagnose
-    /// when resolution fails in-game.</summary>
     private static void DumpGhostHandCandidates(GameObject go)
     {
         if (_ghostHandDumpDone) return;
@@ -318,7 +286,6 @@ internal static unsafe class CosmeticInterop
         return null;
     }
 
-    // ---- Gloves: clone the native rig + drive it from the ghost's body -------------------
     // The gloves have their OWN skeleton (rootBoneGloves='Armature', 165 bones named like the body)
     // and the native GlowingGloves.LateUpdate component copies the body -> this armature every frame.
     // The ghost prefab has none of that. So we clone the glove sub-tree (mesh + its armature,
@@ -329,12 +296,11 @@ internal static unsafe class CosmeticInterop
     private sealed class GhostGloveRig
     {
         public GameObject Clone;
-        public Transform[] GloveBones;   // bones of the cloned glove armature
-        public Transform[] BodyBones;    // matching ghost body bones (same index)
+        public Transform[] GloveBones;
+        public Transform[] BodyBones;
     }
     private static readonly System.Collections.Generic.Dictionary<IntPtr, GhostGloveRig> _ghostGloveRigs = new();
 
-    /// <summary>Creates (if needed) then shows/hides the glove rig on the ghost.</summary>
     public static bool SetGhostGloveMesh(NetplayRemotePlayer ghost, bool on)
     {
         if (ghost == null || ghost.Pointer == IntPtr.Zero) return false;
@@ -358,7 +324,6 @@ internal static unsafe class CosmeticInterop
             }
             if (!on) return true;
 
-            // Template: the local player's glove sub-tree (mesh GlowingGloves00.002 + Armature).
             var mc = LocalPlayerInterop.TryGetMCGameObject();
             var localGloves = mc != null ? TryGetLocalGlowingGloves(mc) : null;
             var srcRenderer = localGloves != null ? localGloves.mainRenderer : null;
@@ -377,7 +342,6 @@ internal static unsafe class CosmeticInterop
                 if (t != null && !map.ContainsKey(t.name)) map[t.name] = t;
             }
 
-            // Clone the sub-tree (mesh skinned on its own armature -> self-contained).
             var clone = UnityEngine.Object.Instantiate(innerGo);
             clone.name = GhostGloveMeshName;
             clone.transform.SetParent(go.transform, worldPositionStays: false);
@@ -388,7 +352,6 @@ internal static unsafe class CosmeticInterop
             foreach (var ggc in clone.GetComponentsInChildren<GlowingGloves>(true))
                 if (ggc != null) UnityEngine.Object.Destroy(ggc);
 
-            // Pair the cloned glove armature bones with the ghost's body bones (by name).
             var gloveBones = new System.Collections.Generic.List<Transform>();
             var bodyBones = new System.Collections.Generic.List<Transform>();
             var cloneTs = clone.GetComponentsInChildren<Transform>(true);
@@ -429,7 +392,6 @@ internal static unsafe class CosmeticInterop
         }
     }
 
-    /// <summary>Copies the pose of the ghost's body bones onto the glove armature (native bonesPairs).</summary>
     private static void PoseGloveRig(GhostGloveRig rig)
     {
         if (rig == null || rig.GloveBones == null) return;
@@ -443,7 +405,6 @@ internal static unsafe class CosmeticInterop
         }
     }
 
-    /// <summary>Call every frame: re-poses the active glove rigs onto the ghosts' bodies.</summary>
     public static void TickGhostGloveRigs()
     {
         if (_ghostGloveRigs.Count == 0) return;
@@ -452,7 +413,6 @@ internal static unsafe class CosmeticInterop
                 PoseGloveRig(rig);
     }
 
-    // ---- Stick: sync the position via the AavaLightStickAnchor's native mode ---------
     // The anchor's mode (LightStickMode) decides the stick's position on the LOCAL side:
     //   Locator (=1) = in hand, Default (=0) = stowed on the bag.
     // The ghost (stripped-down netplay prefab) does NOT have an AavaLightStickAnchor -> we can't
@@ -461,7 +421,7 @@ internal static unsafe class CosmeticInterop
     // bone (bn_Bag_Up, native stowed position) otherwise. The mode is carried PACKED in the lamp's
     // int (LampInterop) -> no new network packet.
 
-    private const int LightStickModeLocator = 1;   // LightStickMode.Locator = in hand
+    private const int LightStickModeLocator = 1;
 
     // Stick (bn_Stick) offset relative to loc_Stick when in hand: measured in-game (mode=Locator)
     // -> pos=(0, 0.62, 0), identity rotation. This is exactly what the native anchor does in
@@ -469,7 +429,6 @@ internal static unsafe class CosmeticInterop
     private static readonly Vector3 StickHandLocalPos = new(0f, 0.62f, 0f);
     private static readonly Quaternion StickHandLocalRot = Quaternion.identity;
 
-    /// <summary>Reads the local AavaLightStickAnchor's mode (LightStickMode as int), or false.</summary>
     public static bool TryGetLocalStickAnchorMode(out int mode)
     {
         mode = 0;
@@ -489,17 +448,10 @@ internal static unsafe class CosmeticInterop
         }
     }
 
-    // Rest (bag) state of each ghost's bn_Stick bone, captured before any move.
     private struct StickBoneRest { public Transform Parent; public Vector3 Pos; public Quaternion Rot; }
     private static readonly System.Collections.Generic.Dictionary<IntPtr, StickBoneRest> _ghostStickRest = new();
 
-    /// <summary>
-    /// Places the ghost's stick according to the received anchor mode. We move the bn_Stick BONE
-    /// (which carries the stick MESH — the AavaStickLight light is only the glow): hand = bn_Stick
-    /// on loc_Stick + measured offset, stowed = bn_Stick at its native pose. The light is parented
-    /// to bn_Stick (like the local player) to follow the mesh. bn_Stick isn't animated on the
-    /// ghost -> safe to reparent.
-    /// </summary>
+    /// <summary>The ghost lacks the native anchor component, so its unanimated stick bone is reparented.</summary>
     public static bool ApplyGhostStickByAnchorMode(NetplayRemotePlayer ghost, int anchorMode)
     {
         if (ghost == null || ghost.Pointer == IntPtr.Zero) return false;
@@ -558,7 +510,6 @@ internal static unsafe class CosmeticInterop
         }
     }
 
-    // ---- Outfit: mirror the local player's active meshes onto the ghost --------
     // The ghost (netplay prefab) has ALL its outfit meshes active at once (hood + no-hood +
     // no-harness + 2 bags + robot) -> visual overlap. The local player only enables the right
     // subset (via PawnSkinHandler). So we mirror the visible state of each mesh present on the
@@ -569,9 +520,8 @@ internal static unsafe class CosmeticInterop
         "NPC_Bot", "MC_Bag", "OBJ_Piolet", "MC_Body", "MC_Outfit",
         "MC_Outfit_NoHood", "MC_Outift_NoHarness", "MC_SmallBag", "OBJ_BloqueurPoulie",
     };
-    public const int OutfitBitsMask = (1 << 9) - 1;   // 9 meshes
+    public const int OutfitBitsMask = (1 << 9) - 1;
 
-    /// <summary>Visibility bitfield (active && renderer enabled) of the local outfit meshes.</summary>
     public static int GetLocalOutfitBits()
     {
         var mc = LocalPlayerInterop.TryGetMCGameObject();
@@ -596,7 +546,6 @@ internal static unsafe class CosmeticInterop
         return bits;
     }
 
-    /// <summary>Applies the outfit bitfield on the ghost: each mesh active/inactive like the local player.</summary>
     public static bool ApplyGhostOutfitBits(NetplayRemotePlayer ghost, int bits)
     {
         if (ghost == null || ghost.Pointer == IntPtr.Zero) return false;

@@ -2,26 +2,20 @@ using System;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2Cpp;
-using Il2CppInterop.Runtime;
+using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using Il2CppTheGameBakers.Cairn.Netplay;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 
 namespace CairnMultiplayerMod.Internal.Game.Players;
 
-internal static unsafe class NetplayAnimationInterop
+internal static class NetplayAnimationInterop
 {
-    private static MonoBehaviour _netplayManagerCached;
-    private static int _lastNetplayManagerSearchFrame;
     private static GameObject _climberPrefabCached;
     private static int _lastPrefabSearchFrame;
 
-    /// <summary>Forgets the scene-bound NetplayManager reference and climber prefab
-    /// (called on scene reload).</summary>
     internal static void ResetCaches()
     {
-        _netplayManagerCached = null;
-        _lastNetplayManagerSearchFrame = 0;
         _climberPrefabCached = null;
         _lastPrefabSearchFrame = 0;
     }
@@ -34,7 +28,7 @@ internal static unsafe class NetplayAnimationInterop
         if (frame - _lastPrefabSearchFrame < 120) return null;
         _lastPrefabSearchFrame = frame;
 
-        // Strategy 0: read the game-generated singleton directly.
+        // Cairn owns and loads this prefab through its NetplayManager singleton.
         try
         {
             var manager = MoSingleton<NetplayManager>.Instance;
@@ -51,58 +45,8 @@ internal static unsafe class NetplayAnimationInterop
             ModLog.Warning($"[NetplayAnim] NetplayManager singleton read failed: {ex.Message}");
         }
 
-        // Strategy 1: read NetplayManager.NetplayClimberPrefab.
-        var nm = GameInterop.FindMonoBehaviourByName("NetplayManager", ref _netplayManagerCached, ref _lastNetplayManagerSearchFrame);
-        if (nm != null)
-        {
-            try
-            {
-                var klass = IL2CPP.il2cpp_object_get_class(nm.Pointer);
-                var field = IL2CPP.GetIl2CppField(klass, "<NetplayClimberPrefab>k__BackingField");
-                if (field != IntPtr.Zero)
-                {
-                    int off = (int)IL2CPP.il2cpp_field_get_offset(field);
-                    IntPtr ptr = *(IntPtr*)((byte*)nm.Pointer + off);
-                    if (ptr != IntPtr.Zero)
-                    {
-                        _climberPrefabCached = new GameObject(ptr);
-                        ModLog.Debug("[NetplayAnim] NetplayClimberPrefab found via NetplayManager");
-                        return _climberPrefabCached;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                ModLog.Warning($"[NetplayAnim] NetplayClimberPrefab read failed: {ex.Message}");
-            }
-        }
-
-        // Strategy 2: scan all GameObjects to find the native prefab.
-        try
-        {
-            var all = Resources.FindObjectsOfTypeAll(Il2CppType.Of<GameObject>());
-            if (all != null)
-            {
-                for (int i = 0; i < all.Count; i++)
-                {
-                    var go = all[i].TryCast<GameObject>();
-                    if (go == null) continue;
-                    var name = go.name;
-                    if (name == "MC_Netplay_Player" || name.StartsWith("MC_Netplay_Player"))
-                    {
-                        _climberPrefabCached = go;
-                        ModLog.Debug($"[NetplayAnim] NetplayClimberPrefab found by name scan: '{name}'");
-                        return go;
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            ModLog.Warning($"[NetplayAnim] GameObject name scan failed: {ex.Message}");
-        }
-
-        // Strategy 3: load the prefab via the game's native Addressables.
+        // During early loading the singleton may not exist yet. Use the same addressable
+        // key as Cairn, then cache the result for the rest of the scene.
         try
         {
             var handle = Addressables.LoadAssetAsync<GameObject>(NetplayManager.ADDRESSABLE_NAME);
@@ -123,10 +67,8 @@ internal static unsafe class NetplayAnimationInterop
         return null;
     }
 
-    // ------------------------------------------------------------------
     // NetplayRemotePlayer.SetFrame -- calls the game's native animation and render
     // pipeline. The TGB shaders only update through this method.
-    // ------------------------------------------------------------------
 
     private static bool _directPlayerBoneFallbackLogged;
     private static bool _directClimbotBoneFallbackLogged;
@@ -135,9 +77,6 @@ internal static unsafe class NetplayAnimationInterop
     private static bool _nativePlayerSetFrameFailureLogged;
     private static bool _nativeClimbotSetFrameFailureLogged;
 
-    /// <summary>
-    /// Applies a native frame received from the network onto the remote player.
-    /// </summary>
     public static bool CallNetplaySetFrame(NetplayRemotePlayer player, int id, string playerName, NetFrameData frameData)
     {
         if (player == null || !frameData.IsValid) return false;
@@ -155,11 +94,6 @@ internal static unsafe class NetplayAnimationInterop
         }
     }
 
-    /// <summary>
-    /// Shows or hides the name plate (native `nameMesh` field, a TextMeshPro)
-    /// above a remote ghost. Used by the N toggle (photo mode). Toggles the mesh
-    /// GameObject — idempotent (only acts on an actual state change).
-    /// </summary>
     public static void SetGhostNameVisible(NetplayRemotePlayer player, bool visible)
     {
         if (player == null) return;
@@ -177,9 +111,6 @@ internal static unsafe class NetplayAnimationInterop
         }
     }
 
-    /// <summary>
-    /// Applies a native frame received from the network onto the remote climbot.
-    /// </summary>
     public static bool CallNetplayClimbotSetFrame(NetplayRemotePlayer player, int id, NetFrameData frameData)
     {
         if (player == null || !frameData.IsValid) return false;
@@ -211,36 +142,23 @@ internal static unsafe class NetplayAnimationInterop
         }
     }
 
-    /// <summary>
-    /// Reads LiveGhostAnchors.relatives from a NetplayRemotePlayer component.
-    /// </summary>
-    public static bool TryReadGhostBoneArray(MonoBehaviour nrpComponent, out IntPtr relativesArrayPtr, out int boneCount)
+    private static Il2CppReferenceArray<Transform> TryGetGhostBones(MonoBehaviour component)
     {
-        relativesArrayPtr = IntPtr.Zero;
-        boneCount = 0;
-        if (nrpComponent == null) return false;
+        if (component == null) return null;
 
         try
         {
-            var klass = IL2CPP.il2cpp_object_get_class(nrpComponent.Pointer);
-            var field = IL2CPP.GetIl2CppField(klass, "anchors");
-            if (field == IntPtr.Zero) return false;
-
-            int offset = (int)IL2CPP.il2cpp_field_get_offset(field);
-            byte* basePtr = (byte*)nrpComponent.Pointer + offset;
-            IntPtr relativesPtr = *(IntPtr*)(basePtr + IntPtr.Size);
-
-            if (relativesPtr == IntPtr.Zero) return false;
-
-            boneCount = *(int*)((byte*)relativesPtr + 3 * IntPtr.Size);
-            relativesArrayPtr = relativesPtr;
-            return true;
+            if (component is NetplayRemotePlayer player)
+                return player.anchors?.relatives;
+            if (component is NetplayRemoteClimbot climbot)
+                return climbot.anchors?.relatives;
         }
         catch (Exception ex)
         {
-            ModLog.Error($"[NetplayAnim] TryReadGhostBoneArray failed: {ex.Message}");
-            return false;
+            ModLog.Error($"[NetplayAnim] Ghost anchors read failed: {ex.Message}");
         }
+
+        return null;
     }
 
     private static bool ApplyNetFrameToGhostBones(MonoBehaviour component, NetFrameData frameData, string label, ref bool logged)
@@ -250,18 +168,16 @@ internal static unsafe class NetplayAnimationInterop
 
         try
         {
-            if (!TryReadGhostBoneArray(component, out var relativesArrayPtr, out int boneCount))
-                return false;
+            var relatives = TryGetGhostBones(component);
+            if (relatives == null) return false;
+            var boneCount = relatives.Length;
 
             int positionCount = frameData.Positions.Length / 3;
             int eulerCount = frameData.Eulers == null ? 0 : frameData.Eulers.Length / 3;
 
-            // Expected invariant: the native frame = [world root] + [local relative bones],
-            // so positionCount == boneCount + 1 — the very equality the native SetFrame
-            // asserts. We no longer GUESS the offset: the old heuristic (offset 0 on
-            // mismatch) wrote the WORLD root into a LOCAL bone slot and shifted every bone
-            // by one -> clipping limbs. On a mismatch (a genuinely different rig) we skip
-            // the frame rather than corrupt it.
+            // The native frame is [world root] + [local relative bones], so the native
+            // SetFrame requires positionCount == boneCount + 1. Guessing an offset on mismatch
+            // shifts every bone and clips limbs; skip a genuinely different rig instead.
             // No 128-bone ceiling here: the capture side sends every bone or nothing, so
             // clamping would only manufacture mismatches on rigs the native path handles.
             int applyCount = boneCount;
@@ -276,15 +192,12 @@ internal static unsafe class NetplayAnimationInterop
             }
 
             const int frameOffset = 1;
-            // World root (slot 0) applied as world position/eulerAngles.
             ApplyNetFrameRoot(component.transform, frameData, eulerCount);
-
-            int headerSize = 4 * IntPtr.Size;
 
             for (int i = 0; i < applyCount; i++)
             {
-                IntPtr transformPtr = *(IntPtr*)((byte*)relativesArrayPtr + headerSize + i * IntPtr.Size);
-                if (transformPtr == IntPtr.Zero) continue;
+                var t = relatives[i];
+                if (t == null) continue;
 
                 int frameIndex = i + frameOffset;
                 int pi = frameIndex * 3;
@@ -294,7 +207,6 @@ internal static unsafe class NetplayAnimationInterop
                     frameData.Positions[pi + 2]);
                 if (!IsFiniteVector(localPos)) continue; // reject NaN/Inf -> no limb flung to infinity
 
-                var t = new Transform(transformPtr);
                 t.localPosition = localPos;
 
                 if (frameIndex < eulerCount)

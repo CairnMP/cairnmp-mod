@@ -4,7 +4,6 @@ using CairnMultiplayerMod.Internal.Diagnostics;
 
 namespace CairnMultiplayerMod.Internal.Networking;
 
-/// <summary>Applies packets that produce world-side actions or feature notifications.</summary>
 internal sealed partial class NetworkManager
 {
     private void HandlePitonPlaced(BinaryReader reader)

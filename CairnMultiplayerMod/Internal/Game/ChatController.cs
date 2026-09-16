@@ -5,17 +5,6 @@ using UnityEngine;
 
 namespace CairnMultiplayerMod.Internal.Game;
 
-/// <summary>
-/// In-game IMGUI (OnGUI) chat: an overlay of recent messages at the bottom left + an
-/// input line. Enter opens/sends, Escape cancels, Tab completes commands and player
-/// names (see <see cref="ChatCompletion"/>). While typing, the game's gameplay
-/// inputs are frozen through <see cref="InputInterop"/> so that
-/// typing doesn't drive the climber.
-///
-/// Rendering and typing state only — sending and receiving belong to
-/// the chat feature, which hands this class a send callback. Commands go
-/// through the router.
-/// </summary>
 internal sealed class ChatController
 {
     private struct ChatLine
@@ -43,8 +32,6 @@ internal sealed class ChatController
     // something says it exists.
     private const string EmptyInputHint = "Type / for commands, Tab to complete";
 
-    // Base font size (at scale 1, ~1080p). Raised from the IMGUI default (~13) for
-    // better readability. Then scaled by UiScale.
     private const int BaseFontSize = 18;
 
     // UI scale proportional to the resolution (ref 1080p): the IMGUI chat reasons in
@@ -54,7 +41,6 @@ internal sealed class ChatController
     private static float UiScale => Mathf.Clamp(Screen.height / 1080f, 720f / 1080f, 2.5f);
     private static int ScaledFontSize => Mathf.RoundToInt(BaseFontSize * UiScale);
 
-    // Cached label style, fontSize refreshed every frame (resolution can change).
     private GUIStyle _labelStyle;
 
     private readonly CommandRouter _router;
@@ -65,18 +51,11 @@ internal sealed class ChatController
     private bool _isOpen;
     private string _input = "";
 
-    // History of sent messages (recall via up/down arrows, like a terminal).
-    // _historyIndex == -1: we're editing the current draft (_draft saves its value when
-    // we go back up through the history so we can return to it with Down).
     private const int MaxHistory = 50;
     private readonly List<string> _history = new();
     private int _historyIndex = -1;
     private string _draft = "";
 
-    // Completion of the line being typed (commands, then player names). The set is
-    // recomputed lazily: _completionsDirty is raised by every edit, and Tab cycles
-    // through the set without invalidating it. _completionIndex == -1: nothing inserted
-    // yet, the suggestion bar shows the candidates without highlighting any.
     private ChatCompletionSet _completions = ChatCompletionSet.Empty;
     private int _completionIndex = -1;
     private bool _completionsDirty = true;
@@ -91,11 +70,9 @@ internal sealed class ChatController
 
     public bool IsTyping => _isOpen;
 
-    /// <summary>Shows a line received from another player.</summary>
     public void AddRemoteLine(string fromName, string message)
         => AddLine($"{fromName}: {message}", system: false);
 
-    /// <summary>Adds a local system line (command feedback) — not broadcast.</summary>
     public void AddSystemLine(string text) => AddLine(text, system: true);
 
     private void AddLine(string text, bool system)
@@ -104,7 +81,6 @@ internal sealed class ChatController
         if (_lines.Count > MaxLines) _lines.RemoveAt(0);
     }
 
-    /// <summary>Called every frame from Mod.OnUpdate (Unity thread).</summary>
     public void Update()
     {
         if (_isOpen && !_canChat())
@@ -112,27 +88,17 @@ internal sealed class ChatController
             Close();
             return;
         }
-        // Reconcile EVERY frame: input blocked IFF the chat is open. _isOpen is the single
-        // source of truth. If one frame fails to resolve the InputManager, the next one
-        // retries -> a closed chat ALWAYS returns input (no more permanent block).
+        // Reconcile every frame so a temporarily missing InputManager does not strand input.
         InputInterop.ReconcileGameplayInput(_isOpen);
-        // Tell the other features to leave the keyboard alone while we type, otherwise
-        // typing a message fires their shortcuts.
         InputCaptureState.IsKeyboardCaptured = _isOpen;
     }
 
-    /// <summary>Forced close (panic failsafe): doesn't touch the network, just the UI state.
-    /// Unblocking inputs is done by the caller via InputInterop.ForceClearBlock.</summary>
+    /// <summary>Native menu transitions require the chat-owned block to be released immediately.</summary>
     public void ForceClose()
     {
-        _isOpen = false;
-        _input = "";
-        InvalidateCompletions();
-        _hint = "";
-        InputCaptureState.IsKeyboardCaptured = false;
+        Close();
     }
 
-    /// <summary>Called from Mod.OnGUI.</summary>
     public void OnGUI()
     {
         var e = Event.current;
@@ -210,12 +176,6 @@ internal sealed class ChatController
         }
     }
 
-    /// <summary>
-    /// Tab (Shift+Tab backwards): inserts the next candidate for the line being typed.
-    /// The set stays alive between two Tabs so the cycle keeps going; a single candidate
-    /// invalidates it right away, so the following Tab moves on to the next argument
-    /// (/t then Tab gives "/tp ", Tab again lists the players).
-    /// </summary>
     private void CycleCompletion(int direction)
     {
         EnsureCompletions();
@@ -235,7 +195,6 @@ internal sealed class ChatController
         else RefreshHint();
     }
 
-    /// <summary>Marks the completion set stale: it is recomputed on the next use.</summary>
     private void InvalidateCompletions()
     {
         _completionsDirty = true;
@@ -264,7 +223,6 @@ internal sealed class ChatController
         RefreshHint();
     }
 
-    /// <summary>Rebuilds the suggestion line (cached: OnGUI runs several times per frame).</summary>
     private void RefreshHint()
     {
         if (!_isOpen) { _hint = ""; return; }
@@ -273,7 +231,6 @@ internal sealed class ChatController
             : ChatCompletion.BuildHint(_completions, _completionIndex, MaxHintChars);
     }
 
-    /// <summary>Up arrow: recalls an older message from the history.</summary>
     private void RecallOlder()
     {
         if (_history.Count == 0) return;
@@ -289,7 +246,6 @@ internal sealed class ChatController
         _input = _history[_historyIndex];
     }
 
-    /// <summary>Down arrow: moves back toward more recent messages, then the current draft.</summary>
     private void RecallNewer()
     {
         if (_historyIndex == -1) return;      // already on the current draft
@@ -305,7 +261,6 @@ internal sealed class ChatController
         }
     }
 
-    /// <summary>Pushes a sent message onto the history (no consecutive duplicate).</summary>
     private void PushHistory(string text)
     {
         if (_history.Count == 0 || _history[_history.Count - 1] != text)
@@ -324,6 +279,7 @@ internal sealed class ChatController
         _historyIndex = -1;
         _draft = "";
         InvalidateCompletions();
+        InputCaptureState.IsKeyboardCaptured = true;
         InputInterop.ReconcileGameplayInput(true);   // immediate (the per-frame reconcile follows)
     }
 
@@ -333,15 +289,14 @@ internal sealed class ChatController
         _input = "";
         InvalidateCompletions();
         _hint = "";
+        InputCaptureState.IsKeyboardCaptured = false;
         InputInterop.ReconcileGameplayInput(false);  // immediate; per-frame reconcile = safety net
     }
 
     private void Submit()
     {
         var text = (_input ?? "").Trim();
-        // try/finally is CRUCIAL: if a command throws, Close() MUST still run, otherwise
-        // the chat stays open and the input freeze is never restored (player stuck). We
-        // always close, come what may.
+        // A command failure must not leave the chat's input block active.
         try
         {
             if (text.Length > 0)
@@ -360,7 +315,6 @@ internal sealed class ChatController
 
     private void DispatchSubmittedText(string text)
     {
-        // Record both messages and commands for arrow-key recall.
         PushHistory(text);
         if (_router.TryHandle(text)) return;
 
@@ -371,7 +325,6 @@ internal sealed class ChatController
         _send(text);
     }
 
-    /// <summary>Label style at the current scale (fontSize refreshed every frame).</summary>
     private GUIStyle EnsureLabelStyle()
     {
         _labelStyle ??= new GUIStyle(GUI.skin.label);
@@ -389,20 +342,16 @@ internal sealed class ChatController
         float now = Time.unscaledTime;
         float scale = UiScale;
         var style = EnsureLabelStyle();
-        // Keep enough room for descenders and for the one-pixel drop shadow. The old
-        // 22 px row was too tight for an 18 px font and visibly cropped its baseline.
+        // Leave room for descenders and the one-pixel drop shadow.
         float lineHeight = (BaseFontSize + 8f) * scale;
         float width = PanelWidth(scale);
         float x = PanelX(scale);                        // anchored at the bottom RIGHT
-        // The suggestion bar slots in between the input and the log: the log moves up by
-        // exactly its height so the two never overlap.
         float bottom = Screen.height - (_isOpen ? 84f : 60f) * scale - HintBand(scale);
 
         int shown = 0;
         for (int i = _lines.Count - 1; i >= 0 && shown < MaxVisibleLines; i--)
         {
             var line = _lines[i];
-            // When the chat is closed, we hide messages older than the fade.
             if (!_isOpen && now - line.ShownAt > FadeAfterSeconds) continue;
 
             float y = bottom - (shown + 1) * lineHeight;
@@ -412,15 +361,12 @@ internal sealed class ChatController
         }
     }
 
-    // Shared geometry of the bottom-right panel (log, suggestion bar and input line all
-    // share the same column).
     private static float PanelWidth(float scale) => 520f * scale;
     private static float PanelX(float scale) => Screen.width - PanelWidth(scale) - 16f * scale;
     private static float InputHeight(float scale) => (BaseFontSize + 14f) * scale;
     private static float InputTop(float scale) => Screen.height - InputHeight(scale) - 28f * scale;
     private static float HintHeight(float scale) => (BaseFontSize + 8f) * scale;
 
-    /// <summary>Vertical room the suggestion bar takes (0 when there is nothing to show).</summary>
     private float HintBand(float scale)
         => _isOpen && _hint.Length > 0 ? HintHeight(scale) + 2f * scale : 0f;
 
@@ -454,8 +400,7 @@ internal sealed class ChatController
         GUI.Box(new Rect(x - 2f * scale, y - 2f * scale, width + 4f * scale, height + 4f * scale), GUIContent.none);
         GUI.color = Color.white;
 
-        // Manual rendering via GUI.Label (GUI.TextField is stripped under IL2CPP). The caret
-        // blinks at ~2 Hz to signal active input.
+        // GUI.TextField is stripped under IL2CPP, so input is rendered manually.
         bool caretOn = ((int)(Time.unscaledTime * 2f) & 1) == 0;
         GUI.Label(new Rect(x + 4f * scale, y, width - 8f * scale, height),
             "> " + (_input ?? "") + (caretOn ? "_" : ""), style);

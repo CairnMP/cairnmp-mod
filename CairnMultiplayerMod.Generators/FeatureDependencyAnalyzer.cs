@@ -4,7 +4,6 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace CairnMultiplayerMod.Generators;
 
-/// <summary>Registers CMP003 checks for feature dependencies; shares the registry's generator pipeline.</summary>
 internal static class FeatureDependencyAnalyzer
 {
     private static readonly DiagnosticDescriptor ForbiddenFeatureDependency = new(

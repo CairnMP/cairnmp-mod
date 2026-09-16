@@ -2,7 +2,6 @@ using System;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2Cpp;
 using Il2CppTheGameBakers.Cairn;
-using UnityEngine;
 
 namespace CairnMultiplayerMod.Internal.Game
 {
@@ -25,25 +24,9 @@ namespace CairnMultiplayerMod.Internal.Game
     /// </summary>
     internal static class GameLifecycleService
     {
-        private static MonoBehaviour _globalGameManagerCached;
-        private static MonoBehaviour _bivouacManagerCached;
-        private static int _lastGlobalGameManagerSearchFrame;
-        private static int _lastBivouacManagerSearchFrame;
+        /// <summary>Kept as a lifecycle hook; native managers are read from their singletons.</summary>
+        internal static void ResetCaches() { }
 
-        /// <summary>Forgets the scene-bound native manager references (called on scene reload).</summary>
-        internal static void ResetCaches()
-        {
-            _globalGameManagerCached = null;
-            _bivouacManagerCached = null;
-            _lastGlobalGameManagerSearchFrame = 0;
-            _lastBivouacManagerSearchFrame = 0;
-        }
-
-        /// <summary>
-        /// Reads the global state exposed by the game. This is more reliable than the last
-        /// loaded Unity scene, because bivouac and taping use additive scenes
-        /// while keeping a valid MC.
-        /// </summary>
         internal static bool TryGetGameLifecycle(out CairnGameLifecycleState state, out string detail)
         {
             state = CairnGameLifecycleState.Unknown;
@@ -102,24 +85,11 @@ namespace CairnMultiplayerMod.Internal.Game
         }
 
         private static GlobalGameManager FindGlobalGameManager()
-        {
-            var comp = GameInterop.FindMonoBehaviourByName("GlobalGameManager", ref _globalGameManagerCached,
-                ref _lastGlobalGameManagerSearchFrame);
-            return comp?.TryCast<GlobalGameManager>();
-        }
+            => GlobalGameManager.Instance;
 
         internal static BivouacManager FindBivouacManager()
-        {
-            var comp = GameInterop.FindMonoBehaviourByName("BivouacManager", ref _bivouacManagerCached,
-                ref _lastBivouacManagerSearchFrame);
-            return comp?.TryCast<BivouacManager>();
-        }
+            => BivouacManager.Instance;
 
-        /// <summary>
-        /// True if the LOCAL player is in a bivouac (or in an enter/exit transition). Direct read
-        /// of the native state (BivouacManager) — used to forbid teleportation during
-        /// a bivouac. Safe no-op: false if the manager can't be found or on an exception.
-        /// </summary>
         internal static bool IsLocalInBivouac()
         {
             try

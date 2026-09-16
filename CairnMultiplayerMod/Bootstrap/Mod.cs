@@ -18,18 +18,15 @@ using MelonLoader;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-[assembly: MelonInfo(typeof(CairnMultiplayerMod.Bootstrap.Mod), "Cairn Multiplayer Mod", "2.2.9", "CairnModTeam")]
+[assembly: MelonInfo(typeof(CairnMultiplayerMod.Bootstrap.Mod), "Cairn Multiplayer Mod", "2.2.12", "CairnModTeam")]
 [assembly: MelonGame("TheGameBakers", "Cairn")]
 
 namespace CairnMultiplayerMod.Bootstrap;
 
 public partial class Mod : MelonMod
 {
-    /// <summary>Verbose diagnostic logs (scenes, native object resolution, etc.). OFF by
-    /// default to keep the console clean; set to true to debug.</summary>
     private static bool VerboseLogging { get; set; }
 
-    /// <summary>Diagnostic log: writes ONLY if VerboseLogging is enabled.</summary>
     private void LogDebug(string message)
     {
         if (VerboseLogging) LoggerInstance.Msg(message);
@@ -49,10 +46,8 @@ public partial class Mod : MelonMod
     private bool _quitIssued;
     private bool _multiplayerModeActive;
 
-    // Tracks the progress of lobby creation/join so the status message can evolve while
-    // we wait on the Steam round-trip (cf. TickConnectingStatus).
     private DateTime? _connectingStart;
-    private string _connectingVerb = "Creating lobby"; // "Creating lobby" | "Joining lobby"
+    private string _connectingVerb = "Creating lobby";
     private string _lastLobbyError;
 
     internal NetworkManager Network { get; private set; }
@@ -60,17 +55,13 @@ public partial class Mod : MelonMod
     private readonly RuntimeState _runtimeState = new();
     internal PlayerState LocalState => _runtimeState.LocalPlayerState;
 
-    // Per-feature sync components, constructed in OnInitializeMelon and ticked from OnUpdate.
     private PlayerStateBroadcaster Player { get; set; }
     internal RopeCoupleController Rope { get; private set; }
     private StartGameFlow StartGame { get; set; }
     private BivouacSyncGate Bivouac { get; set; }
 
-    /// <summary>Runs the self-registering features (see Framework/). Mod knows nothing about
-    /// them individually — adding one never touches this file.</summary>
     private FeatureHost Features { get; set; }
 
-    // Scene state read by the sync components (kept authoritative here, on the mod core).
     internal string CurrentScene => _runtimeState.CurrentScene;
     internal string LastGameplayScene => _runtimeState.LastGameplayScene;
 
@@ -116,11 +107,7 @@ public partial class Mod : MelonMod
         }
     }
 
-    /// <summary>
-    /// Hands the generated feature list to the host. Must happen before any lobby is joined:
-    /// the features declare their network contracts here, and those go into the manifest
-    /// peers negotiate on connection.
-    /// </summary>
+    /// <summary>Feature contracts must exist before the first peer manifest is negotiated.</summary>
     private void RegisterFeatures()
     {
         Features = new FeatureHost(
@@ -142,7 +129,9 @@ public partial class Mod : MelonMod
 
     private void InstallGamePatches()
     {
-        MultiplayerPausePatch.Configure(() => Network?.IsConnected == true);
+        MultiplayerPausePatch.Configure(
+            () => Network?.IsConnected == true,
+            () => _game?.Chat.ForceClose());
         GamePatchRegistry.InstallAll();
     }
 
@@ -170,8 +159,6 @@ public partial class Mod : MelonMod
             new WeatherAdapter(),
             new WorldAdapter(), _voice);
 
-        // Per-feature sync components share only their explicit dependencies and are
-        // ticked, in this exact order, from OnUpdate.
         Rope = new RopeCoupleController(Network, _runtimeState);
         Player = new PlayerStateBroadcaster(
             Network, _runtimeState, Rope.Reset, () => Bivouac?.BlocksGameplaySync() == true);
@@ -180,10 +167,6 @@ public partial class Mod : MelonMod
             Network, _panel, _runtimeState, ResetSyncTimers, ResetSceneBoundSyncState, SetLocalState);
     }
 
-    /// <summary>
-    /// Steam Matchmaking → UI wiring. The Steam callbacks are pumped by Cairn itself on
-    /// the Unity thread, so there's no marshalling to do.
-    /// </summary>
     private void WireLobbyEvents()
     {
         Lobby.OnLobbyEntered += _ =>
@@ -276,10 +259,8 @@ public partial class Mod : MelonMod
             RemotePlayerManager.OnPlayerLeft(id);
             RopeLinkState.RemovePlayer(id);
         };
-        // Roping: apply each authoritative clip/unclip to the global link state.
         Network.OnRopeClip += RopeLinkState.Apply;
 
-        // Piton sync: spawn the pitons placed by other players via Lifeline.AddPiton.
         Network.OnPitonPlaced += pkt =>
         {
             if (IsGameplaySyncSuspended())

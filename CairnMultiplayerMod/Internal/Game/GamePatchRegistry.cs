@@ -8,7 +8,6 @@ using CairnMultiplayerMod.Internal.Game.Roping;
 
 namespace CairnMultiplayerMod.Internal.Game;
 
-/// <summary>Owns the complete, symmetric lifecycle of CairnMP's Harmony patches.</summary>
 internal static class GamePatchRegistry
 {
     private sealed class PatchModule

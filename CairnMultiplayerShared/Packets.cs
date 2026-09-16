@@ -79,7 +79,6 @@ public static class PacketCodec
     /// </summary>
     public static byte[] Frame(PacketId id, IPacket packet)
     {
-        // Encode the payload (id + fields)
         using var payload = new MemoryStream();
         using (var pw = new BinaryWriter(payload, Utf8, leaveOpen: true))
         {
@@ -90,7 +89,6 @@ public static class PacketCodec
         if (payloadBytes.Length > MaxUInt16Length)
             throw new InvalidDataException($"Packet payload too large: {payloadBytes.Length} bytes");
 
-        // Build the final frame with the length prefix
         using var frame = new MemoryStream(payloadBytes.Length + 2);
         using var fw = new BinaryWriter(frame, Utf8, leaveOpen: true);
         fw.Write((ushort)payloadBytes.Length);
@@ -220,7 +218,6 @@ public struct WeatherSyncData
     }
 }
 
-// ---- Client -> Server -------------------------------------------------------
 
 public struct ClientHandshake : IPacket
 {
@@ -357,7 +354,6 @@ public struct ClientRopeClip : IPacket
     public void Deserialize(BinaryReader r) { TargetPlayerId = r.ReadInt32(); Clip = r.ReadBoolean(); }
 }
 
-// ---- Server -> Client -------------------------------------------------------
 
 public struct ServerHandshakeAck : IPacket
 {

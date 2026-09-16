@@ -13,6 +13,9 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.2.12](#2212--2026-09-16-beta) | 2026-09-16 | Beta | RE-verified native integration |
+| [2.2.11](#2211--2026-09-16-beta) | 2026-09-16 | Beta | Native cooperative-rope lifecycle fixes |
+| [2.2.10](#2210--2026-09-15-beta) | 2026-09-15 | Beta | Profiler-guided performance and rope fixes |
 | [2.2.9](#229--2026-09-13-beta) | 2026-09-13 | Beta | Smooth voice distance and direct harness ropes |
 | [2.2.8](#228--2026-09-13-beta) | 2026-09-13 | Beta | Louder, clearer proximity voice |
 | [2.2.7](#227--2026-09-13-beta) | 2026-09-13 | Beta | Steam lobby-result retrieval regression |
@@ -27,6 +30,89 @@ All notable CairnMP changes are documented here. Releases follow
 | [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
 | [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.2.12] — 2026-09-16 (beta)
+
+### Changed
+
+- Game integration now uses the generated Cairn APIs confirmed by Cpp2IL for
+  managers, local-player state, lamps, remote animation frames, pitons and the
+  main-menu transition. Manual IL2CPP offsets, runtime overload discovery and
+  broad object scans were removed from these paths.
+- Remote pitons now use the native `AddPiton` overload that receives the local
+  climbing controller, so Cairn assigns their climbing setting during creation.
+
+### Fixed
+
+- Opening Cairn's pause menu while the multiplayer chat is active now closes the
+  chat and releases its input capture before the native pause context is pushed.
+  This prevents lost game audio and restores bivouac and world interactions after
+  leaving the menu.
+- The multiplayer pause menu now keeps the local player in the network gameplay
+  state. Cairn's world time and physics continue, and pose snapshots remain visible
+  to other players instead of freezing or hiding the paused player remotely.
+- Disconnecting now releases NetPlay-owned weather and wind through Cairn's
+  native cleanup sequence, and day/night synchronization uses the native freeze
+  lifecycle so visual setups refresh correctly.
+
+### Compatibility and verification
+
+- Version **2.2.12** retains protocol **13**. All lobby members must use the same
+  mod version.
+- The migrated native paths are protected by architecture tests and the full
+  managed suite. Two-account in-game acceptance remains required for native
+  physics, save, weather and animation validation.
+
+---
+
+## [2.2.11] — 2026-09-16 (beta)
+
+### Fixed
+
+- Cooperative ropes now initialize their native rope-part collection explicitly,
+  preventing a newly created `LogicalRope` from failing before its first segment
+  can be registered.
+- Rope length changes now use Cairn's deferred `RequestSetLength` path, keeping
+  Obi simulation updates on the native fixed-update lifecycle.
+- While two players are attached, Cairn's lifeline selects the cooperative rope
+  for fall-distance and suspension logic. Personal-rope piton operations still
+  run against the personal rope, which is restored when the link ends.
+### Compatibility and verification
+
+- Version **2.2.11** retains protocol **13**. All lobby members must use the same
+  mod version.
+- The rope lifecycle was checked against Cpp2IL output for Cairn's shared-rope
+  mode, then covered by the managed architecture tests. Two-account in-game
+  acceptance remains required for final physics validation.
+
+---
+
+## [2.2.10] — 2026-09-15 (beta)
+
+### Changed
+
+- Inventory and photo-mode UI discovery now caches native interface objects instead
+  of repeatedly scanning every loaded object while those interfaces are hidden. The
+  caches refresh after scene resets and retain a bounded recovery search for UI that
+  appears later, removing the two periodic scans identified by profiling.
+- Per-frame item-sharing checks now read the local player id directly instead of
+  building a full player record and querying the Steam persona name. This removes
+  the 17 ms native call identified in a UI-freeze profile.
+
+### Fixed
+
+- Cooperative ropes no longer replace the local lifeline's personal rope. This
+  keeps Cairn's off-belay and rappel interactions responsive and prevents stale
+  extra rope registrations after a partner detaches or leaves.
+
+### Compatibility and verification
+
+- Version **2.2.10** retains protocol **13**. All lobby members must use the same
+  mod version.
+- Automated tests cover the cached UI discovery, direct local-player-id access,
+  and cooperative-rope ownership and cleanup paths.
 
 ---
 

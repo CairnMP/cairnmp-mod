@@ -2,7 +2,6 @@ using System;
 
 namespace CairnMultiplayerMod.GameApi;
 
-/// <summary>Composes the safe game services exposed to features.</summary>
 internal sealed class GameApiFacade : IGameApi
 {
     internal GameApiFacade(IMainMenuApi mainMenu, IGameStateApi state, IGameTimeApi time,

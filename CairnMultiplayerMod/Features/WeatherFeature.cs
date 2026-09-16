@@ -17,11 +17,7 @@ internal sealed class WeatherState : IPacket
     public void Deserialize(BinaryReader reader) => Data.Deserialize(reader);
 }
 
-/// <summary>
-/// Global weather sync. The host publishes what its own game is running; everyone else
-/// applies it. Being host state rather than a broadcast, a player joining mid-session now
-/// gets the current weather on arrival instead of waiting for the next tick.
-/// </summary>
+/// <summary>Host state gives late joiners the current weather without waiting for another capture.</summary>
 internal sealed class WeatherFeature : MultiplayerFeature
 {
     public override string Id => "weather";

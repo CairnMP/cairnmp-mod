@@ -75,7 +75,6 @@ internal sealed class BivouacSyncGate
         _setLocalState = setLocalState ?? throw new ArgumentNullException(nameof(setLocalState));
     }
 
-    /// <summary>True while the mod is holding the gameplay sync back for a bivouac.</summary>
     public bool IsSuspended => _suspended;
 
     /// <summary>
@@ -86,7 +85,7 @@ internal sealed class BivouacSyncGate
     public bool BlocksGameplaySync()
         => _network?.IsConnected == true && (_suspended || ShouldSuspend());
 
-    /// <summary>Reconciles the gate with the game state. Runs before the network pump.</summary>
+    /// <summary>Runs before the network pump so packets cannot cross a stale bivouac boundary.</summary>
     public void Update()
     {
         UpdateSuspension();
@@ -94,7 +93,6 @@ internal sealed class BivouacSyncGate
         UpdateDeferredPatchResume();
     }
 
-    /// <summary>Heartbeat snapshot, logged while the gate holds the sync back.</summary>
     public void TickSuspendedLog()
     {
         if (Time.unscaledTime < _nextDebugLogAt)
@@ -104,10 +102,6 @@ internal sealed class BivouacSyncGate
         LogPhase("heartbeat");
     }
 
-    /// <summary>
-    /// Snapshot of the recovery window armed on exit, to verify the sync comes back.
-    /// No-op outside that window.
-    /// </summary>
     public void TickRecoveryLog()
     {
         if (_recoveryWatchUntil <= 0f)
@@ -321,10 +315,6 @@ internal sealed class BivouacSyncGate
         ModLog.Info("[State] Netplay SetFrame patch resumed after bivouac (save-seal grace elapsed)");
     }
 
-    /// <summary>
-    /// One-line snapshot of everything that matters to diagnose a bivouac desync after
-    /// the fact: local and remote lifecycle states, ghost count, patch state.
-    /// </summary>
     public void LogPhase(string phase)
     {
         var elapsed = _suspendedSince > 0f
@@ -344,8 +334,6 @@ internal sealed class BivouacSyncGate
             BivouacDiagnostics.BuildBivouacDebugSnapshot());
     }
 
-    /// <summary>Lifecycle state of each known remote player: if one side stays at Loading
-    /// after exiting, its ghosts never reappear.</summary>
     private string DescribeRemoteStates()
     {
         if (_network == null)

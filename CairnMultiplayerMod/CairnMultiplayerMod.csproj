@@ -9,7 +9,6 @@
     <PlatformTarget>x64</PlatformTarget>
     <DeployMod Condition="'$(DeployMod)' == ''">false</DeployMod>
 
-    <!-- Copier les dependances gerees ; les assemblies du jeu restent Private=false. -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <GenerateDependencyFile>false</GenerateDependencyFile>
     <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
@@ -22,7 +21,6 @@
     <CompilerGeneratedFilesOutputPath>obj/generated</CompilerGeneratedFilesOutputPath>
   </PropertyGroup>
 
-  <!-- References MelonLoader -->
   <ItemGroup>
     <PackageReference Include="Concentus" Version="2.2.2" />
     <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
@@ -50,7 +48,6 @@
     </Reference>
   </ItemGroup>
 
-  <!-- Assemblies Unity Il2Cpp generes -->
   <ItemGroup>
     <Reference Include="Il2Cppmscorlib">
       <HintPath>$(Il2CppAssembliesDir)\Il2Cppmscorlib.dll</HintPath>
@@ -126,7 +123,6 @@
     </Reference>
   </ItemGroup>
 
-  <!-- Assemblies specifiques au jeu -->
   <ItemGroup>
     <Reference Include="Il2CppTheGameBakers.Cairn.Global">
       <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.Cairn.Global.dll</HintPath>
@@ -156,29 +152,24 @@
       <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.Cairn.Graphics.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <!-- Tweakables natifs (TweakableBase<T>, FreeRoamTweakables) — deblocage FreeRoam. -->
     <Reference Include="Il2CppTheGameBakers.Cairn.Tweakables">
       <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.Cairn.Tweakables.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <!-- Mode photo natif de Cairn (injection d'une ligne de legende pour le toggle N). -->
     <Reference Include="Il2CppTheGameBakers.TGBTools.PhotoMode.Runtime">
       <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.TGBTools.PhotoMode.Runtime.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <!-- Obi Rope (physique de corde native) — sonde belay + corde physique entre joueurs. -->
     <Reference Include="Il2CppObi">
       <HintPath>$(Il2CppAssembliesDir)\Il2CppObi.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <!-- Binding Steamworks.NET embarque par Cairn (matchmaking + relay SDR + overlay amis). -->
     <Reference Include="Il2Cppcom.rlabrecque.steamworks.net">
       <HintPath>$(Il2CppAssembliesDir)\Il2Cppcom.rlabrecque.steamworks.net.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
 
-  <!-- Protocole de paquets partage par le mod et les tests. -->
   <ItemGroup>
     <ProjectReference Include="..\CairnMultiplayerShared\CairnMultiplayerShared.csproj" />
   </ItemGroup>

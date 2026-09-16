@@ -24,12 +24,9 @@ internal static class SceneRoles
     public static bool IsMainMenu(string sceneName)
         => string.Equals(sceneName, MainMenuScene, StringComparison.Ordinal);
 
-    /// <summary>Anywhere in the main-menu area, backdrops included
-    /// ("MainMenu", "MainMenuBackgroundsBase"...).</summary>
     public static bool IsMainMenuArea(string sceneName)
         => sceneName != null && sceneName.StartsWith(MainMenuScene, StringComparison.Ordinal);
 
-    /// <summary>The transition scenes shown between two gameplay roots.</summary>
     public static bool IsLoading(string sceneName)
         => string.Equals(sceneName, LoadingScene, StringComparison.Ordinal)
         || string.Equals(sceneName, CommonBaseScene, StringComparison.Ordinal);
@@ -39,8 +36,6 @@ internal static class SceneRoles
     public static bool IsBivouac(string sceneName)
         => string.Equals(sceneName, BivouacScene, StringComparison.Ordinal);
 
-    /// <summary>A gameplay root scene (named "1_...", "2_..."), as opposed to the
-    /// additive layers Cairn streams on top of it.</summary>
     public static bool IsGameplayRoot(string sceneName)
     {
         if (string.IsNullOrEmpty(sceneName) || !char.IsDigit(sceneName[0]))

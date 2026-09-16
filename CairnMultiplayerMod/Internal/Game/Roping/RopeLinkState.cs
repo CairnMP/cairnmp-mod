@@ -24,7 +24,6 @@ internal static class RopeLinkState
 
     public static int Count => _links.Count;
 
-    /// <summary>Adds (clip=true) or removes (clip=false) the link between a and b.</summary>
     public static void Apply(int a, int b, bool clip)
     {
         if (a == b) return;
@@ -37,17 +36,14 @@ internal static class RopeLinkState
         else _links.Remove(k);
     }
 
-    /// <summary>Enumerates the active links as (a, b).</summary>
     public static IEnumerable<(int a, int b)> Links()
     {
         foreach (var k in _links)
             yield return (High(k), Low(k));
     }
 
-    /// <summary>True if a and b are roped together.</summary>
     public static bool IsLinked(int a, int b) => a != b && _links.Contains(Key(a, b));
 
-    /// <summary>First rope partner of <paramref name="playerId"/>, or -1.</summary>
     public static int PartnerOf(int playerId)
     {
         foreach (var k in _links)
@@ -59,7 +55,6 @@ internal static class RopeLinkState
         return -1;
     }
 
-    /// <summary>Removes all links involving <paramref name="playerId"/> (a player leaving).</summary>
     public static void RemovePlayer(int playerId)
     {
         _links.RemoveWhere(k => High(k) == playerId || Low(k) == playerId);

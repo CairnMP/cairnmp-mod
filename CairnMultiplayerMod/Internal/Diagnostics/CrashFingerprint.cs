@@ -13,22 +13,14 @@ namespace CairnMultiplayerMod.Internal.Diagnostics;
 /// </summary>
 internal static class CrashFingerprint
 {
-    /// <summary>Namespace marker identifying a frame belonging to the mod.</summary>
     private const string OwnCodeMarker = "CairnMultiplayer";
 
-    /// <summary>Matches `at Namespace.Type.Method(` in a .NET stack trace.</summary>
     private static readonly Regex FramePattern = new(
         @"\bat\s+([A-Za-z_][A-Za-z0-9_.`+<>\[\]]*)\s*\(",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    /// <summary>Keeps the fingerprint compact for filenames and support tools.</summary>
     private const int MaxLength = 255;
 
-    /// <summary>
-    /// Builds a fingerprint of the form `mod:kind:context:ExceptionType:Frame`.
-    /// Empty segments are dropped. Returns an empty string when there is
-    /// nothing stable to key on.
-    /// </summary>
     public static string Build(string kind, string contextLabel, string exceptionType, string stackTrace)
     {
         var frame = ExtractSignificantFrame(stackTrace);

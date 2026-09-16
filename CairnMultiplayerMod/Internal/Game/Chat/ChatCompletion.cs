@@ -4,10 +4,7 @@ using System.Collections.Generic;
 namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>
-/// A command the chat can complete. <see cref="Usage"/> is the string the command
-/// already advertises to /help ("/wave &lt;player&gt; &lt;emote&gt;"): the completion
-/// engine reads its placeholders to know which argument is a player name, so a feature
-/// gets argument completion for free just by naming its arguments.
+/// Completion derives arguments from the same usage string shown by help so the two cannot drift.
 /// </summary>
 internal readonly struct ChatCommandInfo
 {
@@ -23,7 +20,6 @@ internal readonly struct ChatCommandInfo
     public string Description { get; }
 }
 
-/// <summary>One completion candidate: the whole input line it produces, plus its labels.</summary>
 internal readonly struct ChatCompletionCandidate
 {
     public ChatCompletionCandidate(string input, string label, string detail)
@@ -33,21 +29,13 @@ internal readonly struct ChatCompletionCandidate
         Detail = detail ?? "";
     }
 
-    /// <summary>Full replacement for the input line (completion always edits its tail).</summary>
     public string Input { get; }
 
-    /// <summary>Short form shown in the suggestion bar ("/tp", "Alice").</summary>
     public string Label { get; }
 
-    /// <summary>Usage + description, shown when the candidate is the only match.</summary>
     public string Detail { get; }
 }
 
-/// <summary>
-/// What the engine found for one input line: the candidates to cycle through, and the
-/// usage reminder of the command being typed (shown when there is nothing to cycle,
-/// for instance while typing an item name).
-/// </summary>
 internal sealed class ChatCompletionSet
 {
     public static readonly ChatCompletionSet Empty =
@@ -64,23 +52,12 @@ internal sealed class ChatCompletionSet
     public int Count => Candidates.Count;
 }
 
-/// <summary>
-/// Pure completion engine for the chat input (no Unity, no game state, so it is unit
-/// tested). It completes command names ("/t" gives "/tp ") and player names in the
-/// arguments a command declares as &lt;player&gt;. Anything else - plain messages, free
-/// text arguments - returns no candidate: the caller then only shows the usage reminder.
-/// </summary>
 internal static class ChatCompletion
 {
-    /// <summary>Placeholder name that means "complete with the connected players".</summary>
     private const string PlayerPlaceholder = "player";
 
     private static readonly char[] Space = { ' ' };
 
-    /// <summary>
-    /// Computes the candidates for <paramref name="input"/> as typed (completion always
-    /// applies to the end of the line - the overlay has no movable caret).
-    /// </summary>
     public static ChatCompletionSet Complete(string input, IReadOnlyList<ChatCommandInfo> commands,
         IReadOnlyList<string> playerNames)
     {
@@ -95,7 +72,6 @@ internal static class ChatCompletion
                 commands, playerNames);
     }
 
-    /// <summary>"/gi" gives every command starting with "gi", in the order received.</summary>
     private static ChatCompletionSet CompleteCommandName(string typed,
         IReadOnlyList<ChatCommandInfo> commands)
     {
@@ -120,11 +96,6 @@ internal static class ChatCompletion
         return new ChatCompletionSet(candidates, "");
     }
 
-    /// <summary>
-    /// "/tp Ali" gives the players whose name starts with "Ali". The argument being typed
-    /// is matched against the command usage placeholders; only &lt;player&gt; completes.
-    /// The last placeholder swallows the rest of the line, so nicknames with spaces work.
-    /// </summary>
     private static ChatCompletionSet CompleteArgument(string name, string rest,
         IReadOnlyList<ChatCommandInfo> commands, IReadOnlyList<string> playerNames)
     {
@@ -199,11 +170,6 @@ internal static class ChatCompletion
     private static string Describe(ChatCommandInfo command)
         => command.Description.Length == 0 ? command.Usage : command.Usage + " - " + command.Description;
 
-    /// <summary>
-    /// Argument names read from a usage string: "/wave &lt;player&gt; &lt;emote&gt; [count]"
-    /// gives player, emote, count. Anything that is not bracketed is ignored (the leading
-    /// "/wave", a literal keyword...).
-    /// </summary>
     private static List<string> Placeholders(string usage)
     {
         var placeholders = new List<string>();
@@ -218,12 +184,6 @@ internal static class ChatCompletion
         return placeholders;
     }
 
-    /// <summary>
-    /// One line of help for the suggestion bar, at most <paramref name="maxChars"/> long:
-    /// the full usage when a single candidate matches, otherwise the labels to cycle
-    /// through with the selected one bracketed. The window scrolls to keep the selection
-    /// visible when the list is longer than the bar.
-    /// </summary>
     public static string BuildHint(ChatCompletionSet set, int selectedIndex, int maxChars)
     {
         if (set == null || set.Count == 0) return Truncate(set?.Usage ?? "", maxChars);
@@ -250,7 +210,6 @@ internal static class ChatCompletion
                 end++;
             }
 
-            // Slide the window right until the selected candidate is inside it.
             if (selectedIndex >= end) continue;
 
             if (start > 0) text = "< " + text;

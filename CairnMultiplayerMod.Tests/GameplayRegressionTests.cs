@@ -45,11 +45,6 @@ public sealed class GameplayRegressionTests
         Assert.NotEqual(CommandStatus.Committed, result.Status);
     }
 
-    /// <summary>
-    /// Giving only exists as a native backpack action: out of range the action is greyed
-    /// out, and forcing it anyway (the recipient walked away between the hint and the key
-    /// press) must not take the item out of the bag.
-    /// </summary>
     [Fact]
     public void NativeGiveActionGivesNothingWhenNobodyIsCloseEnough()
     {
@@ -64,7 +59,6 @@ public sealed class GameplayRegressionTests
             line => line.Contains("No player is close enough", StringComparison.Ordinal));
     }
 
-    /// <summary>The host arbitrates the distance too: a client can never forge proximity.</summary>
     [Fact]
     public void HostRejectsAnOfferBetweenPlayersTooFarApart()
     {
@@ -253,6 +247,7 @@ public sealed class GameplayRegressionTests
     {
         public bool IsConnected => true;
         public bool IsHost => true;
+        public int LocalPlayerId => 1;
         public MultiplayerPlayer LocalPlayer => new(1, "Host", true, true);
         public IReadOnlyList<MultiplayerPlayer> Players => new[] { LocalPlayer, new MultiplayerPlayer(2, "Guest", false, false) };
         public bool IsExtensionEnabled(string extensionId, int playerId) => true;
@@ -377,7 +372,6 @@ public sealed class GameplayRegressionTests
         internal bool CanGive => _canGive();
         internal void TriggerGive()
         { Assert.True(_canGive()); Assert.True(TryGetSelectedShareableItem(out var item)); _give(item); }
-        /// <summary>Fires the give action without checking it is offered (out-of-range race).</summary>
         internal void TriggerGiveUnchecked()
         { Assert.True(TryGetSelectedShareableItem(out var item)); _give(item); }
         internal void TriggerDrop()

@@ -6,10 +6,6 @@ using UnityEngine;
 
 namespace CairnMultiplayerMod.Internal.Game.Players;
 
-/// <summary>
-/// Handles periodic broadcasting of the local player state, the local lifecycle-state
-/// machine, piton checks and the ghost lifecycle. Ticked every frame from OnUpdate().
-/// </summary>
 internal sealed class PlayerStateBroadcaster
 {
     private readonly NetworkManager _network;
@@ -39,20 +35,14 @@ internal sealed class PlayerStateBroadcaster
             ?? throw new System.ArgumentNullException(nameof(isGameplaySyncSuspended));
     }
 
-    /// <summary>Resets the state/bone broadcast cadence timers (on a scene reload / bivouac
-    /// boundary).</summary>
     internal void ResetTimers()
     {
         _stateTickTimer = 0f;
         _boneTickTimer = 0f;
     }
 
-    /// <summary>
-    /// Periodic broadcast of the local player state + sync of remote ghosts.
-    /// </summary>
     internal void Tick()
     {
-        // Periodic broadcast of the local player state + sync of remote ghosts.
         if (_network.IsHandshakeComplete)
         {
             if (_isGameplaySyncSuspended())
@@ -76,7 +66,6 @@ internal sealed class PlayerStateBroadcaster
             }
 
 
-            // Check for newly placed pitons (a lower frequency is enough).
             if (_state.LocalPlayerState == PlayerState.InGame)
             {
                 for (var discovered = 0; discovered < 32 && RopeInterop.CheckForNewPiton(out var pitonId, out var pitonPos,
@@ -104,23 +93,17 @@ internal sealed class PlayerStateBroadcaster
                 }
             }
 
-            // Ghost lifecycle: spawn early, keep them alive across transitions,
-            // then drive the transforms from the latest packets.
             RemotePlayerManager.Reconcile(_network, _state.LocalPlayerState);
             RemotePlayerManager.UpdateAll(_network, _state.LocalPlayerState);
         }
         else
         {
-            // Disconnected — remove any leftover ghosts.
             if (_state.LocalPlayerState == PlayerState.Unknown)
                 RemotePlayerManager.ClearAll();
         }
     }
 
-    /// <summary>
-    /// Keeps a minimal network presence during the bivouac without touching the
-    /// original gameplay graph (no MC, NetFrame, weather, pitons, ghosts).
-    /// </summary>
+    /// <summary>Cairn owns the gameplay graph during bivouac, so only lifecycle presence is safe.</summary>
     internal void TickSuspendedNetworkPresence()
     {
         _boneTickTimer = 0f;
@@ -133,11 +116,6 @@ internal sealed class PlayerStateBroadcaster
         _network.SendPlayerState(0f, 0f, 0f, 0f, CurrentNetworkSceneName(), PlayerState.Bivouac);
     }
 
-    /// <summary>
-    /// Sends the local player's body position + the current lifecycle state.
-    /// Prefers the real MC transform via PawnManager.MCGameObject; falls back to
-    /// Camera.main until the MC has been instantiated.
-    /// </summary>
     private void SendLocalPlayerState()
     {
         if (_state.LocalPlayerState != PlayerState.InGame)
@@ -159,15 +137,9 @@ internal sealed class PlayerStateBroadcaster
     }
 
     /// <summary>
-    /// Determines the current lifecycle state from the available signals
-    /// (connection, handshake, scene, MC appearance, scene stability).
+    /// Delays <c>InGame</c> until the scene graph settles because touching addressable ghost
+    /// prefabs during a transition can crash Cairn.
     /// </summary>
-    /// <remarks>
-    /// The `InGame` state is gated on ~1 second of scene stability after the MC is
-    /// resolved. This is the critical rule: we never spawn or despawn ghosts during
-    /// scene transitions, because that's when Cairn's Addressables pipeline crashes
-    /// when we touch NetplayClimberPrefab instances.
-    /// </remarks>
     internal PlayerState ComputeLocalState()
     {
         if (!_network.IsConnected)
@@ -186,11 +158,10 @@ internal sealed class PlayerStateBroadcaster
 
         if (GameLifecycleService.TryGetGameLifecycle(out var lifecycle, out _))
         {
-            if (lifecycle == CairnGameLifecycleState.Menu)
-                return PlayerState.InMenu;
-
-            if (lifecycle != CairnGameLifecycleState.InGame)
-                return PlayerState.Loading;
+            var networkState = MapLifecycleForNetwork(
+                lifecycle, MultiplayerPausePatch.IsPauseMenuActive);
+            if (networkState != PlayerState.InGame)
+                return networkState;
         }
         else if (SceneRoles.IsBivouac(currentScene))
         {
@@ -211,8 +182,22 @@ internal sealed class PlayerStateBroadcaster
     }
 
     /// <summary>
-    /// Captures and sends the local native Netplay frames at animation rate.
+    /// Cairn temporarily pushes GlobalGameManager.GameState.Menu for the in-game pause
+    /// overlay. In multiplayer the native pause requests are suppressed, so this remains
+    /// live gameplay for networking: physics advances and pose snapshots must continue.
+    /// A real menu transition still advertises InMenu and all other non-gameplay states
+    /// stay behind the loading boundary.
     /// </summary>
+    internal static PlayerState MapLifecycleForNetwork(
+        CairnGameLifecycleState lifecycle, bool pauseMenuActive)
+    {
+        if (lifecycle == CairnGameLifecycleState.InGame)
+            return PlayerState.InGame;
+        if (lifecycle == CairnGameLifecycleState.Menu)
+            return pauseMenuActive ? PlayerState.InGame : PlayerState.InMenu;
+        return PlayerState.Loading;
+    }
+
     private void SendLocalNetFrames()
     {
         if (_state.LocalPlayerState != PlayerState.InGame) return;
@@ -251,11 +236,6 @@ internal sealed class PlayerStateBroadcaster
     private string CurrentNetworkSceneName()
         => SceneRoles.ResolveNetworkScene(_state.CurrentScene, _state.LastGameplayScene);
 
-    /// <summary>
-    /// Resets the per-episode sync state on a scene-bound reset point: local sync debug
-    /// flags, the hand-pose poll cache, and the rope sub-state. Features reset their own
-    /// through OnSceneReset.
-    /// </summary>
     internal void ResetSyncState()
     {
         _debugLoggedFirstPlayerFrameCapture = false;

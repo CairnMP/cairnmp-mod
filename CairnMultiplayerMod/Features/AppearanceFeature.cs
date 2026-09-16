@@ -27,16 +27,7 @@ internal sealed class CosmeticState : IPacket
     public void Deserialize(BinaryReader reader) => Flags = reader.ReadByte();
 }
 
-/// <summary>
-/// Keeps every player's appearance in sync: lamp, stick, outfit and glowing gloves.
-///
-/// Both are per-player host state, so a player joining mid-session sees everyone dressed
-/// correctly straight away — before, they saw default ghosts until each climber happened to
-/// change something.
-///
-/// The values are still handed to RemotePlayer, which is where RemotePlayerManager reads
-/// them when it dresses a ghost. Untangling that is a separate job from this migration.
-/// </summary>
+/// <summary>Per-player host state lets late joiners receive every climber's current appearance.</summary>
 internal sealed class AppearanceFeature : MultiplayerFeature
 {
     public override string Id => "appearance";
@@ -70,7 +61,6 @@ internal sealed class AppearanceFeature : MultiplayerFeature
         feature.OnSessionEnded(ResetLocalTracking);
     }
 
-    /// <summary>Polls the local look and reports it only when it actually changes.</summary>
     private void TickAppearance()
     {
         if (!Game.State.IsLocalPlayerInGame) return;

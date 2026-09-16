@@ -75,7 +75,6 @@ public partial class Mod
         Visibility = config.Visibility,
     };
 
-    /// <summary>Browser: calls SteamMatchmaking.RequestLobbyList and pushes the result to the UI.</summary>
     private Task<List<LobbyEntry>> _browserRequest;
 
     private void OnBrowseRequested()
@@ -109,7 +108,6 @@ public partial class Mod
         }
     }
 
-    /// <summary>Join via SteamID64 (browser or Steam invite).</summary>
     private async void OnJoinByLobbyIdRequested(ulong lobbyId)
     {
         LoggerInstance.Msg($"[Browse] Joining lobby {lobbyId}...");
@@ -159,7 +157,6 @@ public partial class Mod
         _panel.SetStatus($"Failed: {exception.Message}", false);
     }
 
-    /// <summary>Starts progress tracking and sets the first status.</summary>
     private void BeginConnecting(string verb)
     {
         _connectingVerb = verb;

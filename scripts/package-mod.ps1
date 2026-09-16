@@ -1,5 +1,3 @@
-# scripts/package-mod.ps1 — Build du mod CairnMultiplayer et packaging en ZIP :
-#   ../CairnMP-packages/cairnmp-mod-{version}.zip  — mod DLLs, hors du depot Git
 param(
     [string]$OutputDirectory,
     [ValidateSet("Debug", "Release")]
@@ -31,7 +29,6 @@ Write-Host "  mod v$ModVersion"
 Write-Host ""
 
 if (-not $SkipBuild) {
-    # Vérification préalable : les assemblies Il2Cpp doivent exister
     $GameRefsDir = Join-Path $Root "game-refs/Il2CppAssemblies"
     $GameDir     = "$env:LOCALAPPDATA\CairnMultiplayerData\game\CairnLoader\Il2CppAssemblies"
 
@@ -41,7 +38,6 @@ if (-not $SkipBuild) {
         throw "Missing Il2Cpp assemblies; run scripts/generate-il2cpp-refs.ps1"
     }
 
-    # Vérification préalable : les DLLs MelonLoader doivent exister
     $MelonRefsDir  = Join-Path $Root "game-refs/MelonLoader"
     $MelonLoaderOk = ((Test-Path "$MelonRefsDir\MelonLoader.dll") -and
                       (Test-Path "$MelonRefsDir\Il2CppInterop.Runtime.dll") -and
@@ -53,7 +49,6 @@ if (-not $SkipBuild) {
     }
 }
 
-# 1. Synchronisation des versions
 $StepCount = if ($SkipBuild) { 2 } else { 3 }
 Write-Host "[1/$StepCount] Checking versions..." -ForegroundColor DarkGray
 node scripts/sync-versions.js --check
@@ -62,7 +57,6 @@ if ($LASTEXITCODE -ne 0)
 }
 Write-Host ""
 
-# 2. Build du mod, sauf quand le script est appele apres un build de solution
 if (-not $SkipBuild) {
     Write-Host "[2/3] Building and testing..." -ForegroundColor DarkGray
     dotnet restore CairnMultiplayer.sln --locked-mode
@@ -73,7 +67,6 @@ if (-not $SkipBuild) {
     Write-Host ""
 }
 
-# 3. Packaging
 $PackageStep = if ($SkipBuild) { 2 } else { 3 }
 Write-Host "[$PackageStep/$StepCount] Packaging..." -ForegroundColor DarkGray
 New-Item -ItemType Directory -Force -Path $Dist | Out-Null

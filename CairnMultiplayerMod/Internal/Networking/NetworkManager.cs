@@ -6,12 +6,8 @@ using CairnMultiplayerMod.Internal.Diagnostics;
 namespace CairnMultiplayerMod.Internal.Networking
 {
     /// <summary>
-    /// The client's session with the other players: connection state, the roster of remote
-    /// players, and one Send method per kind of state we replicate.
-    ///
-    /// Transport is Steam P2P (see NetworkManager.Transport.cs), which delivers
-    /// packets on the Unity thread — Steam callbacks are pumped by Cairn's own main loop — so
-    /// the handlers can touch Unity objects directly.
+    /// Steam callbacks are pumped by Cairn's main loop, so packet handlers intentionally execute
+    /// on the Unity thread and may touch native objects directly.
     /// </summary>
     internal sealed partial class NetworkManager : IDisposable
     {
@@ -21,11 +17,8 @@ namespace CairnMultiplayerMod.Internal.Networking
         public string ServerName { get; private set; }
         public string LastError { get; private set; }
 
-        // Identifier of the current lobby, set after creation via the API.
-        // Used to persist the lobby → save-slot association.
         public string CurrentLobbyId { get; private set; }
 
-        // Shareable short code of the current lobby (format "XXXX-XXXX"), may be empty.
         public string CurrentRoomCode { get; private set; }
 
         private readonly Dictionary<int, RemotePlayer> _remotePlayers = new();
@@ -43,7 +36,7 @@ namespace CairnMultiplayerMod.Internal.Networking
 
         public event Action<int, string> OnPlayerJoined;
         public event Action<int> OnPlayerLeft;
-        public event Action<int, int, bool> OnRopeClip; // fromId, targetId, clip
+        public event Action<int, int, bool> OnRopeClip;
         public event Action OnHandshakeAck;
         public event Action<string> OnHandshakeRejected;
         public event Action<ServerStartGame> OnStartGameReceived;
@@ -51,10 +44,8 @@ namespace CairnMultiplayerMod.Internal.Networking
         public event Action<ServerPitonRemoved> OnPitonRemoved;
         public event Action<ServerTeleport> OnTeleport;
 
-        /// <summary>A feature stream arrived: sender id, channel, payload. Wired by FeatureHost.</summary>
         public event Action<int, ushort, byte[]> OnFeatureStream;
 
-        // Disconnection event for the UI.
         public event Action<string> OnDisconnected;
 
         public void Disconnect()
@@ -69,14 +60,12 @@ namespace CairnMultiplayerMod.Internal.Networking
                 ModLog.Info("[CairnMP] Disconnected.");
         }
 
-        /// <summary>Must be called every Unity frame: receives and dispatches pending packets.</summary>
         public void Update()
         {
             PumpSteamTransport();
             CairnMultiplayer.Api.MultiplayerApi.Runtime.Tick();
         }
 
-        // -- Sending --------------------------------------------------------------
 
         public void SendPlayerState(float x, float y, float z, float yaw, string sceneName, PlayerState state)
         {
@@ -157,16 +146,13 @@ namespace CairnMultiplayerMod.Internal.Networking
                 SendSteamFeatureStream(channel, payload, reliable);
         }
 
-        /// <summary>Requests roping up (clip=true) or unroping (clip=false) with a player.</summary>
         public void SendRopeClip(int targetPlayerId, bool clip)
         {
             if (IsSteamTransportActive)
                 SendSteamRopeClip(targetPlayerId, clip);
         }
 
-        // -- Internals ------------------------------------------------------------
 
-        /// <summary>Forgets everything tied to the session that just ended.</summary>
         private void Reset()
         {
             IsHandshakeComplete = false;
@@ -185,11 +171,6 @@ namespace CairnMultiplayerMod.Internal.Networking
         public void Dispose() => Disconnect();
     }
 
-    /// <summary>
-    /// Client-side representation of another player connected to the same server.
-    /// Updated from ServerPlayerState packets. The UI / ghost spawner reads this
-    /// data.
-    /// </summary>
     internal sealed class RemotePlayer
     {
         public int Id;
@@ -200,28 +181,22 @@ namespace CairnMultiplayerMod.Internal.Networking
         public PlayerState State;
         public double LastUpdateTime;
 
-        // Bone data from ServerBoneState packets (world space).
         public byte BoneCount;
         public float[] BonePositions;
-        public float[] BoneRotations; // xyzw quaternion
+        public float[] BoneRotations;
 
-        // Latest native Cairn frames received for the player and their climbot.
         public bool HasPlayerFrame;
         public NetFrameData PlayerFrame;
         public double LastPlayerFrameTime;
         public bool HasClimbotFrame;
         public NetFrameData ClimbotFrame;
 
-        // Lamp mode (AavaLightStick.CurrentMode) — synchronized when another player changes mode.
         public int LampMode;
         public bool HasLampState;
 
-        // Cosmetic state (bitfield, cf. Protocol.CosmeticFlag*) — bit 0 = glowing gloves.
         public byte CosmeticFlags;
         public bool HasCosmeticState;
 
-        // Compressed finger pose (Protocol.HandPosePackedSize bytes) — synchronized
-        // to animate the ghost's hands while climbing.
         public byte[] HandPosePacked;
         public bool HasHandPose;
     }

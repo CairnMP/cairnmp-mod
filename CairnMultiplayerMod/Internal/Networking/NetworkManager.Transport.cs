@@ -37,7 +37,6 @@ internal sealed partial class NetworkManager
 
     public bool IsSteamTransportActive => _steamTransportActive;
 
-    /// <summary>Activates the Steam P2P transport for the current lobby.</summary>
     public void StartSteamTransport(SteamLobbyManager lobby)
     {
         if (lobby == null || !lobby.IsInLobby) return;
@@ -64,7 +63,6 @@ internal sealed partial class NetworkManager
         ModLog.Debug($"[SteamP2P] Transport active. local={_steamLocalId} host={_steamHostId} playerId={LocalPlayerId}");
     }
 
-    /// <summary>Synchronizes the Steam member list with the remote-player stubs.</summary>
     public void RefreshSteamLobbyMembers(SteamLobbyManager lobby)
     {
         if (!_steamTransportActive || lobby == null || !lobby.IsInLobby) return;
@@ -309,14 +307,11 @@ internal sealed partial class NetworkManager
                     if (pkt.Clip && !_ropeCreationBudget.Take(fromId)) break;
                     var outPkt = new ServerRopeClip { FromPlayerId = fromId, TargetPlayerId = pkt.TargetPlayerId, Clip = pkt.Clip };
                     OnRopeClip?.Invoke(fromId, pkt.TargetPlayerId, pkt.Clip);
-                    // exceptSteamId:0 -> everyone, sender included (authoritative confirmation).
                     BroadcastSteamServerPacket(PacketId.ServerRopeClip, outPkt, exceptSteamId: 0, reliable: true);
                     break;
                 }
             case PacketId.ClientPitonPlaced:
             case PacketId.ClientPitonRemoved:
-                // Delegate to the authoritative core: validation, authoritative id, snapshot,
-                // local ghost and rebroadcast except sender.
                 Pitons.OnClientPacket(EnsureSteamRemotePlayer(remoteSteamId), id, r);
                 break;
             case PacketId.ClientFeatureStream:
@@ -330,7 +325,6 @@ internal sealed partial class NetworkManager
                         Channel = pkt.Channel,
                         Payload = pkt.Payload,
                     };
-                    // The host applies it locally too, then relays to everyone but the sender.
                     OnFeatureStream?.Invoke(playerId, pkt.Channel, pkt.Payload);
                     BroadcastSteamServerPacket(PacketId.ServerFeatureStream, outPkt,
                         exceptSteamId: remoteSteamId, reliable: pkt.Reliable);
@@ -427,8 +421,6 @@ internal sealed partial class NetworkManager
 
         if (_steamLobby != null && _steamLobby.IsHost)
         {
-            // Piton placed by the host itself: the authoritative core records it and
-            // broadcasts it to everyone (no local ghost, the host has the real piton).
             Pitons.HandleHostPitonPlaced(LocalPlayerId, piton);
             return;
         }
@@ -449,10 +441,6 @@ internal sealed partial class NetworkManager
         SendSteamPacketToHost(PacketId.ClientPitonRemoved, new ClientPitonRemoved { PitonId = pitonId }, reliable: true);
     }
 
-    /// <summary>
-    /// Real-time feature payload. The host fans it out directly; a guest sends it to the
-    /// host, which relays. Same shape as the frame packets this replaces.
-    /// </summary>
     private void SendSteamFeatureStream(ushort channel, byte[] payload, bool reliable)
     {
         if (!IsHandshakeComplete) return;
@@ -482,7 +470,6 @@ internal sealed partial class NetworkManager
             if (!RopeRequests.IsAllowed(LocalPlayerId, targetPlayerId, clip, _ropeLinks(), IsAdmittedPlayer)) return;
             if (clip && !_ropeCreationBudget.Take(LocalPlayerId)) return;
             OnRopeClip?.Invoke(LocalPlayerId, targetPlayerId, clip);
-            // exceptSteamId:0 -> broadcast to everyone (including the sender, who also renders the link).
             BroadcastSteamServerPacket(PacketId.ServerRopeClip, pkt, exceptSteamId: 0, reliable: true);
             return;
         }
@@ -502,11 +489,6 @@ internal sealed partial class NetworkManager
            && _steamIdsByPlayerId.TryGetValue(playerId, out var steamId)
            && _steamMembersPresent.Contains(steamId);
 
-    /// <summary>
-    /// Host only: sends a teleport order to ONE target player (/bring
-    /// command). Maps playerId -> steamId then sends a reliable ServerTeleport.
-    /// Returns false if we're not the host or if the target player can't be found.
-    /// </summary>
     public bool SendTeleportToPlayer(int targetPlayerId, float x, float y, float z, float yaw)
     {
         if (!_steamTransportActive || _steamLobby == null || !_steamLobby.IsHost) return false;
@@ -526,11 +508,8 @@ internal sealed partial class NetworkManager
 
         var target = new CSteamID(steamId);
 
-        // Pitons + lamps: official state held by the authoritative core. Weather and time
-        // replay through the feature framework's own snapshot.
         Pitons.SendSnapshotTo(EnsureSteamRemotePlayer(steamId));
 
-        // Active rope links (late-joiner).
         foreach (var (a, b) in _ropeLinks())
             SendSteamPayload(target, BuildPayload(PacketId.ServerRopeClip,
                 new ServerRopeClip { FromPlayerId = a, TargetPlayerId = b, Clip = true }), reliable: true);

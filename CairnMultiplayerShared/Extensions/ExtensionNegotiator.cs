@@ -4,7 +4,6 @@ using System.Linq;
 
 namespace CairnMultiplayer.Shared.Extensions;
 
-/// <summary>Result of comparing a host and client extension inventory.</summary>
 public sealed class ExtensionNegotiationResult
 {
     private ExtensionNegotiationResult(bool accepted, string reason, IReadOnlyList<string> enabledExtensionIds)

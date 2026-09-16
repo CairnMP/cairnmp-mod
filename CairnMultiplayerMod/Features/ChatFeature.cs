@@ -5,7 +5,6 @@ using CairnMultiplayerMod.GameApi;
 
 namespace CairnMultiplayerMod.Features;
 
-/// <summary>A chat line sent by a player.</summary>
 internal sealed class ChatMessage : IPacket
 {
     public string FromName = "";
@@ -40,9 +39,9 @@ internal sealed class ChatFeature : MultiplayerFeature
         _lines = feature.Broadcast<ChatMessage>("line", ShowRemoteLine);
 
         // The router checks the host role when dispatching; feedback shows up as local
-        // system lines. Typing is only allowed in game and while the game is not paused —
-        // Cairn pauses with timeScale=0, and an overlay left open there would keep the
-        // input freeze on after unpausing.
+        // system lines. Typing is only allowed in game and outside the native pause menu.
+        // Multiplayer deliberately keeps timeScale running while that menu is open, so
+        // the explicit pause-menu lifecycle signal is required in addition to IsPaused.
         Game.Chat.Configure(Send, () => IsHost, () => IsConnected && CanTypeNow());
 
         feature.EveryFrame(Game.Chat.Tick, FeaturePhase.Always);
@@ -53,7 +52,10 @@ internal sealed class ChatFeature : MultiplayerFeature
         feature.OnPlayerLeft((_, name) => Game.Chat.AddSystemLine($"{name} left the session."));
     }
 
-    private bool CanTypeNow() => Game.State.IsLocalPlayerInGame && !Game.Time.IsPaused;
+    private bool CanTypeNow()
+        => Game.State.IsLocalPlayerInGame
+           && !Game.Time.IsPaused
+           && !Game.Input.IsPauseMenuActive;
 
     /// <summary>
     /// Panic failsafe (F10): closes the overlay whatever the state, so a chat stuck open

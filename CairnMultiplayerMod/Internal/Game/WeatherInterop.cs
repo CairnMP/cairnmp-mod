@@ -8,27 +8,23 @@ using WeatherStateDefinition = Il2Cpp.WeatherZoneData.WeatherStateDefinition;
 namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>
-/// Global weather capture/replication against Cairn's native WeatherManager. On Steam only
-/// the host captures and publishes; clients apply the last snapshot and retry after loading.
+/// Clients retain the last host snapshot because WeatherManager is unavailable during loading.
 /// </summary>
 internal static class WeatherInterop
 {
-    private static MonoBehaviour _weatherManagerBehaviourCached;
     private static WeatherManager _weatherManagerCached;
-    private static int _lastWeatherManagerSearchFrame;
     private static bool _hasPendingRemoteWeather;
     private static WeatherSyncData _pendingRemoteWeather;
     private static int _lastAppliedWeatherKey = int.MinValue;
     private static int _lastAppliedWindOverride = int.MinValue;
     private static float _lastWeatherApplyFailureLogAt;
+    private static bool _weatherForcedByUs;
 
-    /// <summary>Forgets the scene-bound WeatherManager reference and the last-applied keys
-    /// (called on scene reload).</summary>
     internal static void ResetCaches()
     {
-        _weatherManagerBehaviourCached = null;
+        ReleaseRemoteWeatherOverride();
         _weatherManagerCached = null;
-        _lastWeatherManagerSearchFrame = 0;
+        _weatherForcedByUs = false;
         _lastAppliedWeatherKey = int.MinValue;
         _lastAppliedWindOverride = int.MinValue;
     }
@@ -103,6 +99,7 @@ internal static class WeatherInterop
 
     public static void ResetRemoteState()
     {
+        ReleaseRemoteWeatherOverride();
         _hasPendingRemoteWeather = false;
         _pendingRemoteWeather = default;
         _lastAppliedWeatherKey = int.MinValue;
@@ -129,6 +126,7 @@ internal static class WeatherInterop
                     weatherDef,
                     WeatherManager.ForcedInifiniteStateOrigin.NetPlay,
                     Protocol.WeatherStateTransitionSeconds);
+                _weatherForcedByUs = true;
                 _lastAppliedWeatherKey = weatherKey;
             }
 
@@ -205,11 +203,37 @@ internal static class WeatherInterop
         }
         catch (Exception exception) { ModLog.SuppressedException("weather.resolve-manager", exception); }
 
-        var behaviour = GameInterop.FindMonoBehaviourByName("WeatherManager", ref _weatherManagerBehaviourCached, ref _lastWeatherManagerSearchFrame);
-        var manager = behaviour != null ? behaviour.TryCast<WeatherManager>() : null;
-        if (manager != null)
-            _weatherManagerCached = manager;
-        return manager;
+        return null;
+    }
+
+    /// <summary>Releases only the NetPlay-owned infinite state. Cairn's own weather-doll
+    /// and photo-mode paths use the same cleanup sequence after clearing their override.</summary>
+    private static void ReleaseRemoteWeatherOverride()
+    {
+        if (!_weatherForcedByUs) return;
+
+        try
+        {
+            var manager = TryGetWeatherManager();
+            if (manager == null) return;
+            if (manager.forcedInifiniteStateDefOrigin != WeatherManager.ForcedInifiniteStateOrigin.NetPlay)
+            {
+                _weatherForcedByUs = false;
+                return;
+            }
+
+            manager.ForceInfiniteWeatherState(
+                null,
+                WeatherManager.ForcedInifiniteStateOrigin.NetPlay);
+            manager.DefineWeatherDefinitionsArray();
+            manager.TriggerCurrentWeatherState();
+            manager.WindModule?.ForceInfiniteWindState(WindZoneData.WindOverride.NoOverride);
+            _weatherForcedByUs = false;
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("weather.release-remote-override", exception);
+        }
     }
 
     private static WindZoneData.WindOverride WindOverrideFromType(WindZoneData.WindType windType)

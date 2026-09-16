@@ -22,10 +22,8 @@ namespace CairnMultiplayerMod.Internal.Networking.Authoritative
     /// </summary>
     internal interface IAuthoritativeSink
     {
-        /// <summary>The currently connected playerIds (for iterating / snapshots).</summary>
         IReadOnlyCollection<int> ConnectedPlayerIds { get; }
 
-        /// <summary>Sends a packet to a specific player.</summary>
         void SendTo(int playerId, PacketId id, IPacket packet, NetReliability reliability);
 
         /// <summary>

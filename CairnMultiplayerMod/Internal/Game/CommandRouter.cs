@@ -9,12 +9,6 @@ using UnityEngine;
 
 namespace CairnMultiplayerMod.Internal.Game;
 
-/// <summary>
-/// Parses and executes chat commands ("/name args"). The teleport commands are
-/// host-only: the role check is done HERE, on the machine that types the command. A
-/// non-host sees a local refusal and NO packet is sent (we never trust the client on
-/// the network side).
-/// </summary>
 internal sealed class CommandRouter
 {
     private readonly NetworkManager _network;
@@ -31,10 +25,6 @@ internal sealed class CommandRouter
         _commands = commands;
     }
 
-    /// <summary>
-    /// Processes a chat line. Returns true if it was a command (consumed), false if
-    /// it's a normal message to broadcast.
-    /// </summary>
     public bool TryHandle(string input)
     {
         var cmd = CommandParser.Parse(input);
@@ -56,11 +46,7 @@ internal sealed class CommandRouter
         return true;
     }
 
-    /// <summary>
-    /// Commands the local player can actually run right now: the built-ins (host-only
-    /// ones filtered out) plus the ones registered by the features. Single source for
-    /// /help AND for the chat completion, so the two can never drift apart.
-    /// </summary>
+    /// <summary>Help and completion share this filtered list so their availability cannot drift.</summary>
     internal IReadOnlyList<ChatCommandInfo> AvailableCommands()
     {
         var available = new List<ChatCommandInfo>
@@ -80,24 +66,14 @@ internal sealed class CommandRouter
                 available.Add(new ChatCommandInfo(command.Name, command.Usage, command.Description));
         }
 
-        // Alphabetical: /help lists them in a predictable order, and the Tab cycle keeps
-        // the same order from one keystroke to the next.
         available.Sort(static (left, right) => string.CompareOrdinal(left.Name, right.Name));
         return available;
     }
 
-    /// <summary>
-    /// Completion candidates for a half-typed line, for the chat overlay: command names,
-    /// then the connected players for the arguments a command declares as &lt;player&gt;.
-    /// </summary>
     internal ChatCompletionSet GetCompletions(string input)
         => ChatCompletion.Complete(input, AvailableCommands(), RemotePlayerNames());
 
-    /// <summary>
-    /// Names of the remote players, sorted so the Tab cycle is stable (the roster is a
-    /// dictionary, whose enumeration order is not guaranteed). The local player is not
-    /// listed: every command that takes a &lt;player&gt; targets someone else.
-    /// </summary>
+    /// <summary>Sorts the dictionary-backed roster to keep Tab cycling deterministic.</summary>
     private IReadOnlyList<string> RemotePlayerNames()
     {
         var names = new List<string>();
@@ -169,11 +145,7 @@ internal sealed class CommandRouter
             _systemLine($"Could not reach {p.Name}.");
     }
 
-    /// <summary>
-    /// True if the target can be teleported. A player in a bivouac (or loading/menu)
-    /// broadcasts a state != InGame and a frozen/stale position: we then refuse the
-    /// teleport so as not to yank them out of their bivouac or aim at a stale position.
-    /// </summary>
+    /// <summary>Non-gameplay lifecycle states carry stale positions and must reject teleports.</summary>
     private bool IsTeleportTargetReady(RemotePlayer p)
     {
         if (p.State == PlayerState.InGame) return true;
@@ -181,10 +153,7 @@ internal sealed class CommandRouter
         return false;
     }
 
-    /// <summary>
-    /// True if the remote player is WALKING (PawnState Walking), decoded from their last NetFrame.
-    /// False if there's no frame, or if they're climbing / falling / dead -> teleport refused.
-    /// </summary>
+    /// <summary>Climbing, falling and dead targets are unsafe teleport anchors.</summary>
     private bool IsRemoteWalking(RemotePlayer p)
     {
         if (!p.HasPlayerFrame) return false;
@@ -198,11 +167,6 @@ internal sealed class CommandRouter
         return false;
     }
 
-    /// <summary>
-    /// Resolves a player by nickname (case-insensitive) among the remote players.
-    /// Exact match takes priority, otherwise a unique prefix. Displays an error message
-    /// and returns false if nothing matches (or several ambiguous candidates).
-    /// </summary>
     private bool TryResolvePlayer(string name, out RemotePlayer player)
     {
         player = null;

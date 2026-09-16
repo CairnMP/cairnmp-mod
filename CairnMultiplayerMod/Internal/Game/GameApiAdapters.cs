@@ -31,6 +31,7 @@ internal sealed class GameTimeAdapter : IGameTimeApi
 internal sealed class GameInputAdapter : IGameInputApi
 {
     public bool IsKeyboardCaptured => InputCaptureState.IsKeyboardCaptured;
+    public bool IsPauseMenuActive => MultiplayerPausePatch.IsPauseMenuActive;
 
     public bool WasPressed(GameInputAction action)
     {

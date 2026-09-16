@@ -1,10 +1,68 @@
 using CairnMultiplayerMod.Internal.Game;
+using CairnMultiplayerMod.Internal.Game.Players;
+using CairnMultiplayer.Shared;
 using Xunit;
 
 namespace CairnMultiplayerMod.Tests;
 
 public sealed class PauseRegressionTests
 {
+    [Fact]
+    public void MultiplayerPauseRemainsInGameForPoseBroadcasts()
+    {
+        Assert.Equal(PlayerState.InGame,
+            PlayerStateBroadcaster.MapLifecycleForNetwork(
+                CairnGameLifecycleState.Menu, pauseMenuActive: true));
+        Assert.Equal(PlayerState.InMenu,
+            PlayerStateBroadcaster.MapLifecycleForNetwork(
+                CairnGameLifecycleState.Menu, pauseMenuActive: false));
+        Assert.Equal(PlayerState.Loading,
+            PlayerStateBroadcaster.MapLifecycleForNetwork(
+                CairnGameLifecycleState.Cutscene, pauseMenuActive: true));
+    }
+
+    [Fact]
+    public void PauseMenuLifecycleBlocksChatUntilNativeInputContextIsPopped()
+    {
+        var state = new PauseRequestSuppressionState();
+
+        Assert.False(state.IsPauseMenuActive);
+
+        state.BeginOpening(connected: true);
+        Assert.True(state.IsPauseMenuActive);
+
+        state.EndOpening();
+        Assert.True(state.IsPauseMenuActive);
+
+        state.BeginClosing();
+        Assert.True(state.IsPauseMenuActive);
+
+        state.EndClosing();
+        Assert.False(state.IsPauseMenuActive);
+    }
+
+    [Fact]
+    public void FailedPauseMenuOpeningDoesNotLeaveChatGateActive()
+    {
+        var state = new PauseRequestSuppressionState();
+
+        state.BeginOpening(connected: true);
+        Assert.True(state.SuppressPauseRequest());
+        Assert.True(state.SuppressGameTimePauseRequest());
+        state.EndOpening(succeeded: false);
+
+        Assert.False(state.IsPauseMenuActive);
+        Assert.False(state.SuppressPauseRequest());
+        Assert.False(state.SuppressGameTimePauseRequest());
+
+        // Cairn may still run its closing cleanup after a partial opening. Keep the
+        // matched unpause suppression so its request counters cannot go negative.
+        state.BeginClosing();
+        Assert.True(state.SuppressUnpauseRequest());
+        Assert.True(state.SuppressGameTimeUnpauseRequest());
+        state.EndClosing();
+    }
+
     [Fact]
     public void MultiplayerPauseSuppressesMatchedNativePauseAndUnpauseRequests()
     {

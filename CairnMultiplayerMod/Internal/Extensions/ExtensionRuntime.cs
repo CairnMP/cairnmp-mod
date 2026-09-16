@@ -14,6 +14,7 @@ internal interface IExtensionNetworkBridge
 {
     bool IsConnected { get; }
     bool IsHost { get; }
+    int LocalPlayerId { get; }
     MultiplayerPlayer LocalPlayer { get; }
     IReadOnlyList<MultiplayerPlayer> Players { get; }
     bool IsExtensionEnabled(string extensionId, int playerId);
@@ -80,6 +81,7 @@ internal sealed class ExtensionRuntime
 
     internal bool IsConnected => _bridge?.IsConnected == true;
     internal bool IsHost => _bridge?.IsHost == true;
+    internal int LocalPlayerId => _bridge?.LocalPlayerId ?? default;
     internal MultiplayerPlayer LocalPlayer => _bridge?.LocalPlayer ?? default;
     internal IReadOnlyList<MultiplayerPlayer> Players => _bridge?.Players ?? Array.Empty<MultiplayerPlayer>();
 

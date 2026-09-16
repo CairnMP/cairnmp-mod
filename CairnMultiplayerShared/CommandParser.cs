@@ -44,7 +44,6 @@ public static class CommandParser
         if (line.Length == 0 || line[0] != '/')
             return new ParsedCommand(false, "", Array.Empty<string>(), "");
 
-        // Strip the leading '/'.
         var body = line.Substring(1).Trim();
         if (body.Length == 0)
             return new ParsedCommand(true, "", Array.Empty<string>(), "");
@@ -56,8 +55,7 @@ public static class CommandParser
         for (int i = 1; i < parts.Length; i++)
             args[i - 1] = parts[i];
 
-        // Text after the command name, with edge whitespace trimmed but internal
-        // spaces preserved (multi-word nicknames).
+        // Internal spaces remain significant because player names may contain them.
         var nameLen = parts[0].Length;
         var argsText = body.Length > nameLen ? body.Substring(nameLen).Trim() : "";
 

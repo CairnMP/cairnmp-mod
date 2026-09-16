@@ -11,9 +11,9 @@ namespace CairnMultiplayerMod.Internal.Game;
 /// (Time.timeScale = 0). In multiplayer, that local freeze would disconnect the player from the
 /// shared world — the day/night clock (host-authoritative) freezes for everyone, remote
 /// avatars stop updating, etc. So we neutralize ONLY the pause menu's pause requests
-/// during a multiplayer session: the world keeps running for everyone,
-/// while the local climber stays frozen in place (the menu's input context
-/// already cuts gameplay -> no action reaches it).
+/// during a multiplayer session: world time and physics keep running, and the
+/// player's network snapshots continue while the menu's input context prevents
+/// new gameplay actions.
 ///
 /// We target precisely <see cref="PauseMenu"/> (ESC), distinct from the other legitimate
 /// pauses (cutscene, dialogue, loading) which must keep freezing.
@@ -26,9 +26,15 @@ internal static unsafe class MultiplayerPausePatch
 
     private static readonly PauseRequestSuppressionState Suppression = new();
     private static Func<bool> _isMultiplayerConnected = () => false;
+    private static Action _closeChatBeforePause = () => { };
 
-    internal static void Configure(Func<bool> isMultiplayerConnected)
-        => _isMultiplayerConnected = isMultiplayerConnected ?? (() => false);
+    internal static bool IsPauseMenuActive => Suppression.IsPauseMenuActive;
+
+    internal static void Configure(Func<bool> isMultiplayerConnected, Action closeChatBeforePause)
+    {
+        _isMultiplayerConnected = isMultiplayerConnected ?? (() => false);
+        _closeChatBeforePause = closeChatBeforePause ?? (() => { });
+    }
 
     public static void Install()
     {
@@ -93,6 +99,7 @@ internal static unsafe class MultiplayerPausePatch
             _mpPausePatchFailed = false;
             Suppression.Reset();
             _isMultiplayerConnected = () => false;
+            _closeChatBeforePause = () => { };
         }
     }
 
@@ -106,12 +113,26 @@ internal static unsafe class MultiplayerPausePatch
         // dialogue, loading, cutscene and solo pause requests remain untouched.
         internal static void PauseMenuOnOpeningPrefix()
         {
+            // Cpp2IL shows that Cairn pushes InputContext.PauseMenu in OnOpened and pops it
+            // in OnClosing. Release the chat's disableInputs/ignore-input lease before that
+            // native lifecycle starts; restoring it after the push corrupts the active maps
+            // and can leave bivouac/interaction input unavailable after the menu closes.
+            try
+            {
+                _closeChatBeforePause();
+            }
+            catch (Exception ex)
+            {
+                // A UI cleanup failure must never prevent the native pause menu from opening.
+                ModLog.Warning($"[Pause] Failed to close chat before pause menu: {ex.Message}");
+            }
+
             Suppression.BeginOpening(_isMultiplayerConnected());
         }
 
         internal static Exception PauseMenuOnOpeningFinalizer(Exception __exception)
         {
-            Suppression.EndOpening();
+            Suppression.EndOpening(__exception == null);
             return __exception;
         }
 

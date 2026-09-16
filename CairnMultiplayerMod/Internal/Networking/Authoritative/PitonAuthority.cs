@@ -15,7 +15,6 @@ internal sealed class PitonAuthority
     private readonly Action<ServerPitonPlaced> _onLocalPitonSpawn;
     private readonly Action<ServerPitonRemoved> _onLocalPitonDespawn;
 
-    // Official piton state, indexed by AUTHORITATIVE id.
     private readonly Dictionary<uint, ServerPitonPlaced> _pitons = new();
     // (placer playerId, placer's LOCAL id) -> authoritative id. Makes assignment
     // idempotent and removal translatable without depending on the client's local id.
@@ -40,7 +39,6 @@ internal sealed class PitonAuthority
         _onLocalPitonDespawn = onLocalPitonDespawn;
     }
 
-    /// <summary>Client* packet received from a GUEST (relayed by the host transport).</summary>
     public void OnClientPacket(int playerId, PacketId id, BinaryReader payload)
     {
         switch (id)
@@ -52,7 +50,6 @@ internal sealed class PitonAuthority
                     if (!PacketValidation.IsValidPitonPayload(pkt.PosX, pkt.PosY, pkt.PosZ,
                             pkt.RotX, pkt.RotY, pkt.RotZ, pkt.RotW, pkt.Quality, pkt.PitonHp, pkt.ItemId))
                         return;
-                    // Local ghost on the host + rebroadcast to everyone EXCEPT the placing guest.
                     Place(playerId, pkt.PitonId, ToServerPlaced(playerId, pkt), spawnLocalGhost: true, exceptPlayerId: playerId);
                     break;
                 }
@@ -66,15 +63,13 @@ internal sealed class PitonAuthority
         }
     }
 
-    /// <summary>Rejoin: pushes the official piton state to the target player.
-    /// Weather and time now replay through the feature framework's own snapshot.</summary>
+    /// <summary>Only pitons need this legacy snapshot; feature state has its own replay path.</summary>
     public void SendSnapshotTo(int playerId)
     {
         foreach (var pkt in _pitons.Values)
             _sink.SendTo(playerId, PacketId.ServerPitonPlaced, pkt, NetReliability.ReliableOrdered);
     }
 
-    // -- Placements by the HOST itself (it placed/removed a REAL piton) --------
 
     public void HandleHostPitonPlaced(int hostPlayerId, ClientPitonPlaced packet)
     {
@@ -83,14 +78,12 @@ internal sealed class PitonAuthority
                 packet.RotX, packet.RotY, packet.RotZ, packet.RotW,
                 packet.Quality, packet.PitonHp, packet.ItemId))
             return;
-        // No local ghost (the host has the real piton); broadcast to EVERYONE (exceptPlayerId 0).
         Place(hostPlayerId, packet.PitonId, ToServerPlaced(hostPlayerId, packet), spawnLocalGhost: false, exceptPlayerId: 0);
     }
 
     public void HandleHostPitonRemoved(int hostPlayerId, uint clientPitonId)
         => Remove(hostPlayerId, clientPitonId, despawnLocalGhost: false, exceptPlayerId: 0);
 
-    /// <summary>Full reset (scene change / disconnection).</summary>
     public void Reset()
     {
         _pitons.Clear();
@@ -108,7 +101,6 @@ internal sealed class PitonAuthority
         _placementBudget.Remove(playerId);
     }
 
-    // -- internal --------------------------------------------------------------
 
     private void Place(int playerId, uint clientId, ServerPitonPlaced fields, bool spawnLocalGhost, int exceptPlayerId)
     {
@@ -118,7 +110,7 @@ internal sealed class PitonAuthority
         foreach (var key in _authIdByClient.Keys)
             if (key.playerId == playerId) owned++;
         if (owned >= MaxPitonsPerPlayer || !_placementBudget.Take(playerId)) return;
-        fields.PitonId = ResolveAuthId(playerId, clientId); // local id -> authoritative id
+        fields.PitonId = ResolveAuthId(playerId, clientId);
         _pitons[fields.PitonId] = fields;
         if (spawnLocalGhost) _onLocalPitonSpawn?.Invoke(fields);
         _sink.Broadcast(PacketId.ServerPitonPlaced, fields, exceptPlayerId, NetReliability.ReliableOrdered);
@@ -127,7 +119,7 @@ internal sealed class PitonAuthority
     private void Remove(int playerId, uint clientId, bool despawnLocalGhost, int exceptPlayerId)
     {
         if (!_authIdByClient.TryGetValue((playerId, clientId), out var authId))
-            return; // nothing known to remove
+            return;
         _authIdByClient.Remove((playerId, clientId));
         _pitons.Remove(authId);
         var outPkt = new ServerPitonRemoved { FromPlayerId = playerId, PitonId = authId };
@@ -138,7 +130,7 @@ internal sealed class PitonAuthority
     private uint ResolveAuthId(int playerId, uint clientId)
     {
         if (_authIdByClient.TryGetValue((playerId, clientId), out var existing))
-            return existing; // idempotent: re-placing the same piton -> same id
+            return existing;
         var authId = _nextAuthId++;
         _authIdByClient[(playerId, clientId)] = authId;
         return authId;
@@ -148,7 +140,6 @@ internal sealed class PitonAuthority
         => new ServerPitonPlaced
         {
             FromPlayerId = playerId,
-            // PitonId is set to the authoritative id in Place().
             PosX = pkt.PosX,
             PosY = pkt.PosY,
             PosZ = pkt.PosZ,

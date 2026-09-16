@@ -1,6 +1,5 @@
 using System;
 using CairnMultiplayerMod.Internal.Diagnostics;
-using CairnMultiplayerMod.Internal.Game.Players;
 using Il2Cpp;
 using UnityEngine;
 
@@ -12,13 +11,13 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 /// the harness. We use it to anchor the rope between players as Cairn does, instead
 /// of an approximate vertical offset on the body root.
 /// </summary>
-internal static unsafe partial class RopeInterop
+internal static partial class RopeInterop
 {
     private static Harness _localHarnessCached;
     private static int _lastLocalHarnessSearchFrame;
 
-    /// <summary>Returns the local player's Harness component, resolved lazily on the MC
-    /// hierarchy (the MC may appear late, so the search is throttled while it fails).</summary>
+    /// <summary>Returns the local player's Harness from Cairn's PawnManager. The MC may
+    /// appear late, so failed reads are throttled.</summary>
     private static Harness ResolveLocalHarness()
     {
         if (_localHarnessCached != null) return _localHarnessCached;
@@ -27,23 +26,21 @@ internal static unsafe partial class RopeInterop
             return null;
         _lastLocalHarnessSearchFrame = Time.frameCount;
 
-        var mc = LocalPlayerInterop.TryGetMCGameObject();
-        if (mc == null) return null;
-
-        // The local harness is a Harness in the MC's hierarchy — but NOT a
-        // NetplayRemoteHarness (those belong to the ghosts).
-        var harnesses = mc.GetComponentsInChildren<Harness>(true);
-        if (harnesses == null) return null;
-        for (int i = 0; i < harnesses.Length; i++)
+        try
         {
-            var h = harnesses[i];
-            if (h == null) continue;
-            if (h.TryCast<Il2CppTheGameBakers.Cairn.Netplay.NetplayRemoteHarness>() != null) continue;
-            _localHarnessCached = h;
-            ModLog.Debug("[Harness] Local harness resolved on MC hierarchy");
-            return h;
+            // Cairn stores the authoritative local harness on its climbing controller.
+            // This avoids walking the complete MC hierarchy and cannot select a remote rig.
+            var harness = PawnManager.Instance?.ClimbingPawnController?.harness;
+            if (harness == null) return null;
+            _localHarnessCached = harness;
+            ModLog.Debug("[Harness] Local harness resolved through PawnManager");
+            return harness;
         }
-        return null;
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.resolve-local-harness", exception);
+            return null;
+        }
     }
 
     /// <summary>

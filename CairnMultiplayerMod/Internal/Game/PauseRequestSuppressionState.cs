@@ -13,14 +13,26 @@ internal sealed class PauseRequestSuppressionState
     private bool _suppressClosingPauseRequest;
     private bool _suppressClosingGameTimePauseRequest;
 
+    /// <summary>
+    /// True from the start of PauseMenu.OnOpening until its input context is popped in
+    /// PauseMenu.OnClosing. Multiplayer pause requests are suppressed, so TimeManager alone
+    /// cannot tell the chat that this native menu owns keyboard input.
+    /// </summary>
+    internal bool IsPauseMenuActive { get; private set; }
+
     internal void BeginOpening(bool connected)
     {
+        IsPauseMenuActive = true;
         _suppressOpeningRequests = connected;
         _pauseRequestSuppressed = false;
         _gameTimePauseRequestSuppressed = false;
     }
 
-    internal void EndOpening() => _suppressOpeningRequests = false;
+    internal void EndOpening(bool succeeded = true)
+    {
+        _suppressOpeningRequests = false;
+        if (!succeeded) IsPauseMenuActive = false;
+    }
 
     internal bool SuppressPauseRequest()
     {
@@ -49,6 +61,7 @@ internal sealed class PauseRequestSuppressionState
 
     internal void Reset()
     {
+        IsPauseMenuActive = false;
         _suppressOpeningRequests = false;
         _pauseRequestSuppressed = false;
         _gameTimePauseRequestSuppressed = false;

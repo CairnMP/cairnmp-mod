@@ -248,6 +248,7 @@ public sealed class ExtensionTransactionTests
         internal FakeBridge(bool isHost = true) => _isHost = isHost;
         public bool IsConnected => true;
         public bool IsHost => _isHost;
+        public int LocalPlayerId => 1;
         public MultiplayerPlayer LocalPlayer => new(1, "Host", isLocal: true, isHost: true);
         public IReadOnlyList<MultiplayerPlayer> Players => new[] { LocalPlayer };
         public List<ServerExtensionEvent> Events { get; } = new();

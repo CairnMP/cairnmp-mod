@@ -18,6 +18,7 @@ public partial class Mod
 
     private void HandleSceneLoaded(int buildIndex, string sceneName)
     {
+        MarkPerformanceScene("scene-loaded", sceneName);
         _loadedScenes.Add(sceneName);
         if (SceneRoles.IsGameplayRoot(sceneName))
             _runtimeState.LastGameplayScene = sceneName;
@@ -81,6 +82,7 @@ public partial class Mod
 
     private void HandleSceneUnloaded(int buildIndex, string sceneName)
     {
+        MarkPerformanceScene("scene-unloaded", sceneName);
         _loadedScenes.Remove(sceneName);
 
         if (string.Equals(CurrentScene, sceneName, StringComparison.Ordinal))
@@ -95,18 +97,16 @@ public partial class Mod
         ResetSceneBoundSyncState();
     }
 
-    /// <summary>Forgets everything bound to the scene we're leaving: IL2CPP caches held by
-    /// the game services, then the sync timers.</summary>
     private void ResetSceneBoundSyncState()
     {
         SceneCache.Reset();
+        _inventory?.InvalidateNativeUiCache();
+        PhotoModeNamesRow.InvalidateNativeUiCache();
         _hud?.Clear();
         ResetSyncTimers();
         Features?.NotifySceneReset();
     }
 
-    /// <summary>Restarts the broadcast cadence from scratch, without touching the caches.
-    /// Features rearm their own cadence through OnSceneReset.</summary>
     private void ResetSyncTimers()
     {
         Player.ResetSyncState();
@@ -115,8 +115,6 @@ public partial class Mod
 
     private bool IsGameplaySyncSuspended() => Bivouac.BlocksGameplaySync();
 
-    /// <summary>After unloading a scene, the current scene becomes the gameplay root
-    /// that remains loaded, or the last known root when a different scene was unloaded.</summary>
     private string ResolveCurrentSceneAfterUnload(string unloadedScene)
     {
         var loadedGameplayScene = _loadedScenes.FirstOrDefault(SceneRoles.IsGameplayRoot);
@@ -138,6 +136,8 @@ public partial class Mod
 
         try
         {
+            TickPerformance();
+            using var performance = Measure(PerformanceArea.ModUpdate);
             TickMod();
         }
         catch (Exception exception)
@@ -152,6 +152,7 @@ public partial class Mod
         _runtimeState.TimeSinceLastSceneLoad += Time.unscaledDeltaTime;
         if (_multiplayerModeActive)
         {
+            using var performance = Measure(PerformanceArea.Ui);
             _hud?.Tick();
             _inventory?.Tick();
         }
@@ -171,43 +172,42 @@ public partial class Mod
         // typing cannot trigger actions. InputManager independently blocks the game input.
         var chatTyping = _game.Input.IsKeyboardCaptured;
 
-        // Update the button injection in the main menu
         if (SceneRoles.IsMainMenu(CurrentScene))
         {
+            using var performance = Measure(PerformanceArea.Ui);
             _mainMenu.Tick();
             // Unlock FreeRoam: force the tweakable field as soon as it's loaded (no-op
             // once it succeeds). Complements the Harmony postfix on the public property.
             FreeRoamUnlockPatch.SetActive(true);
             FreeRoamUnlockPatch.TryForceTweakableField();
-            // Unhide the FreeRoam mode in the difficulty list (isHidden=false).
             FreeRoamUnlockPatch.TryUnhideDifficulty();
         }
 
-        // Pump the managed Steam callback queue (also handles deferred init).
-        Lobby.Pump(Time.unscaledDeltaTime);
-        CompleteBrowserRequest();
+        using (Measure(PerformanceArea.Network))
+        {
+            Lobby.Pump(Time.unscaledDeltaTime);
+            CompleteBrowserRequest();
+        }
 
-        // Lock the gameplay layer before processing network packets.
         Bivouac.Update();
 
-        // Process network events
-        Network.Update();
+        using (Measure(PerformanceArea.Network)) Network.Update();
 
         // Features that must keep running whatever the state (input, HUD upkeep) — placed
         // before the bivouac early-return, like the other always-on ticks below.
-        Features.Tick(FeaturePhase.Always);
+        using (Measure(PerformanceArea.Features)) Features.Tick(FeaturePhase.Always);
 
         // Name toggle (N) — placed BEFORE the bivouac/photo suspension return so it stays
         // reachable in photo mode (where gameplay is suspended).
         if (_multiplayerModeActive && !chatTyping) TickNameToggleInput();
 
-        // Injection of the "N" row into the native photo-mode legend. The clone is
-        // instantiated under an inactive parent, stripped of its non-visual components to
-        // prevent duplicated input handlers from blocking the game, and injected only while
-        // photo mode is open.
         if (_multiplayerModeActive)
         {
-            try { PhotoModeNamesRow.Tick(); }
+            try
+            {
+                using var performance = Measure(PerformanceArea.Ui);
+                PhotoModeNamesRow.Tick();
+            }
             catch (Exception ex) { LoggerInstance.Error($"[PhotoNames] tick failed: {ex.Message}"); }
         }
 
@@ -216,27 +216,23 @@ public partial class Mod
         if (Bivouac.IsSuspended)
         {
             Bivouac.TickSuspendedLog();
-            Player.TickSuspendedNetworkPresence();
+            using (Measure(PerformanceArea.Players)) Player.TickSuspendedNetworkPresence();
             TickConnectingStatus();
             return;
         }
 
-        // Handles the cursor blink + lobby refresh for the Canvas connection panel.
-        _panel.Tick(Time.unscaledDeltaTime);
+        using (Measure(PerformanceArea.Ui)) _panel.Tick(Time.unscaledDeltaTime);
 
-        // Recompute the local lifecycle state from the scene + handshake + MC.
         var newState = Player.ComputeLocalState();
         SetLocalState(newState);
 
-        // Diagnostic: watch for the sync recovering after a bivouac.
         Bivouac.TickRecoveryLog();
 
-        // Game launch flow
         StartGame.Tick();
 
-        // Periodic broadcast of the local player state + sync of remote ghosts.
         try
         {
+            using var performance = Measure(PerformanceArea.Players);
             Player.Tick();
         }
         catch (Exception ex)
@@ -245,10 +241,8 @@ public partial class Mod
             CrashHandler.RecordRecoverableExceptionOnce(ex, "Mod.TickPlayerSync");
         }
 
-        // Features that touch the world — only once gameplay sync is active.
-        Features.Tick(FeaturePhase.Gameplay);
+        using (Measure(PerformanceArea.Features)) Features.Tick(FeaturePhase.Gameplay);
 
-        // Progressive waiting status during lobby creation/join (provisioning).
         TickConnectingStatus();
 
         // Long-distance post-teleport settle (prevents falling into the void + fixes the
@@ -260,15 +254,14 @@ public partial class Mod
         // rope and belay without creating pitons or changing personal rope topology.
         try
         {
+            using var performance = Measure(PerformanceArea.Ropes);
             Rope.Tick(); // Input is gated inside; safety and anchor maintenance always run.
         }
         catch (Exception ex) { LoggerInstance.Error($"[RopeCouple] tick failed: {ex.Message}"); }
 
-        // Keyboard shortcuts via the new Input System
         var keyboard = Keyboard.current;
         if (keyboard == null) return;
 
-        // Chat open -> no mod shortcut passes through (total block).
         if (chatTyping) return;
 
         if (keyboard[_connectKey].wasPressedThisFrame)
@@ -309,11 +302,6 @@ public partial class Mod
         return Enum.TryParse<Key>(name, true, out var result) ? result : fallback;
     }
 
-    /// <summary>
-    /// N key: toggles the display of remote players' name plates. Works both in game
-    /// and in photo mode (the hint then appears at the bottom left via PhotoModeHud).
-    /// Read from the raw keyboard device.
-    /// </summary>
     private void TickNameToggleInput()
     {
         var kb = Keyboard.current;
@@ -347,19 +335,16 @@ public partial class Mod
 
     private void DrawModUi()
     {
+        using var performance = Measure(PerformanceArea.Ui);
         _panel?.OnGUI();
         Features?.DrawHud();
         if (_multiplayerModeActive)
             _hud?.Draw();
     }
 
-    /// <summary>Adapts the displayed status while we wait for the Steam round-trip for
-    /// lobby creation / join. No server provisioning here — the callback is typically
-    /// &lt; 1 s — so short messages only.</summary>
     private void TickConnectingStatus()
     {
         if (!_connectingStart.HasValue) return;
-        // The OnLobbyEntered event will clear _connectingStart and write "Connected".
         if (Lobby.IsInLobby) { _connectingStart = null; return; }
 
         var elapsed = (DateTime.UtcNow - _connectingStart.Value).TotalSeconds;
@@ -400,6 +385,7 @@ public partial class Mod
         if (_runtimeStopped) return;
         _runtimeStopped = true;
 
+        SafeStop("performance diagnostics", StopPerformance);
         SafeStop("input", InputInterop.ForceClearBlock);
         SafeStop("panel", () =>
         {

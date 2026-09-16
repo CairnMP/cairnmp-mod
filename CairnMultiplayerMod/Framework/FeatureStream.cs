@@ -30,7 +30,6 @@ internal sealed class Stream<T> where T : IPacket, new()
         _reliable = reliable;
     }
 
-    /// <summary>Sends to the other players. Cheap enough to call every frame.</summary>
     public void Send(T message)
     {
         if (_network == null || !_network.IsHandshakeComplete) return;
@@ -65,7 +64,6 @@ internal sealed class FeatureStreamRouter
     private readonly Dictionary<ushort, Action<int, byte[]>> _handlers = new();
     private readonly Dictionary<ushort, string> _namesByChannel = new();
 
-    /// <summary>Registers a channel and returns its id. Throws if the name collides.</summary>
     internal ushort Register(string channelName, Action<int, byte[]> handler)
     {
         var channel = Hash(channelName);

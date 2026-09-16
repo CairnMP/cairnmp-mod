@@ -23,13 +23,13 @@ public class QuaternionCodecTests
         => Math.Abs(a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w);
 
     [Theory]
-    [InlineData(0f, 0f, 0f, 1f)]   // identity
-    [InlineData(1f, 0f, 0f, 0f)]   // 180° around X
+    [InlineData(0f, 0f, 0f, 1f)]
+    [InlineData(1f, 0f, 0f, 0f)]
     [InlineData(0f, 1f, 0f, 0f)]
     [InlineData(0f, 0f, 1f, 0f)]
-    [InlineData(0.5f, 0.5f, 0.5f, 0.5f)] // 4 equal components
+    [InlineData(0.5f, 0.5f, 0.5f, 0.5f)]
     [InlineData(-0.5f, 0.5f, -0.5f, 0.5f)]
-    [InlineData(0.7071f, 0.7071f, 0f, 0f)] // two components at 1/√2
+    [InlineData(0.7071f, 0.7071f, 0f, 0f)]
     public void Encode_Decode_PreservesRotation(float x, float y, float z, float w)
     {
         var q = Normalize(x, y, z, w);

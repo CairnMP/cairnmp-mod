@@ -1,38 +1,25 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using CairnMultiplayerMod.Internal.Diagnostics;
-using Il2CppInterop.Runtime;
 using UnityEngine;
 
 namespace CairnMultiplayerMod.Internal.Game.Roping;
 
-internal static unsafe partial class RopeInterop
+internal static partial class RopeInterop
 {
-    private static MonoBehaviour _lifelineCached;
+    private static Il2Cpp.Lifeline _lifelineCached;
     private static int _lastLifelineSearchFrame;
     private static readonly PitonIdentityTracker _pitonIdentities = new();
     private static bool _spawningRemotePiton;
     private static HashSet<IntPtr> _beforeRemoteSpawn;
     private static readonly Dictionary<uint, GameObject> _remotePitonsByNetId = new();
-    // IL2CPP pointer of the Piton component — used to call Lifeline.DetachPiton
-    // which cleanly removes the piton from the rope and destroys the visual (vs. just
-    // Object.Destroy on the GameObject, which can leave a dangling ref).
+    // Native detach needs the Piton pointer; destroying only its GameObject leaves rope state dangling.
     private static readonly Dictionary<uint, IntPtr> _remotePitonPointersByNetId = new();
     private static readonly HashSet<uint> _remotePitonSpawnAttempts = new();
-    private static IntPtr _lifelineDetachPitonMethod;
-    private static bool _lifelineDetachPitonResolved;
     private static float _lastPitonCheckErrorLogAt;
     private const float PitonCheckErrorLogIntervalSeconds = 5f;
-    // LOCAL ClimbingV2PawnController — used to fill in the ClimbingSetting of remote
-    // pitons (spawned with ClimbingSetting=null) via UpdatePlacedPitonClimbingSetting.
     private static Il2Cpp.ClimbingV2PawnController _localClimbControllerCached;
-    private static int _lastClimbControllerSearchFrame;
-    private static IntPtr _lifelineUpdateSettingMethod;
-    private static bool _lifelineUpdateSettingResolved;
 
-    /// <summary>Forgets the scene-bound Lifeline reference and the piton bookkeeping
-    /// (called on scene reload).</summary>
     internal static void ResetCaches()
     {
         // Scene callbacks may arrive after native objects were destroyed; never invoke
@@ -45,6 +32,7 @@ internal static unsafe partial class RopeInterop
         _remotePitonsByNetId.Clear();
         _remotePitonPointersByNetId.Clear();
         _remotePitonSpawnAttempts.Clear();
+        _localClimbControllerCached = null;
     }
 
     internal static void ClearRemotePitons()
@@ -53,13 +41,26 @@ internal static unsafe partial class RopeInterop
         foreach (var id in new List<uint>(_remotePitonsByNetId.Keys)) RemoveRemotePiton(id);
     }
 
-    public static MonoBehaviour TryGetLifeline()
-        => GameInterop.FindMonoBehaviourByName("Lifeline", ref _lifelineCached, ref _lastLifelineSearchFrame);
+    public static Il2Cpp.Lifeline TryGetLifeline()
+    {
+        if (_lifelineCached != null) return _lifelineCached;
+        if (_lastLifelineSearchFrame != 0 && Time.frameCount - _lastLifelineSearchFrame < 30) return null;
+        _lastLifelineSearchFrame = Time.frameCount;
 
-    /// <summary>
-    /// Checks whether new pitons have been placed since the last call. Returns
-    /// the new piton's world position, rotation and quality via the out parameters.
-    /// </summary>
+        try
+        {
+            var mcGameObject = Players.LocalPlayerInterop.TryGetMCGameObject();
+            _lifelineCached = mcGameObject?.GetComponent<Il2Cpp.Lifeline>()
+                              ?? mcGameObject?.GetComponentInChildren<Il2Cpp.Lifeline>(true);
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.resolve-lifeline", exception);
+        }
+
+        return _lifelineCached;
+    }
+
     public static bool CheckForNewPiton(out uint netId, out Vector3 position,
         out Quaternion rotation, out byte quality, out int hp, out int itemId)
     {
@@ -79,15 +80,12 @@ internal static unsafe partial class RopeInterop
             if (!CompleteRemoteSpawnDiscovery(current)) return false;
             if (!_pitonIdentities.TryFindNew(current, out var pitonPtr)) return false;
 
-            // Read the Piton MonoBehaviour's transform for the position/rotation.
-            // The pointer can be stale (destroyed entry still in the list after
-            // a removal / save reload). We validate before touching transform
-            // to avoid spamming IL2CPP NREs that tank the frame.
-            var pitonMono = new MonoBehaviour(pitonPtr);
+            // The list can briefly contain a destroyed entry during reload/removal.
+            var piton = new Il2Cpp.Piton(pitonPtr);
             Transform t;
             try
             {
-                t = pitonMono.transform;
+                t = piton.transform;
                 if (t == null || t.Pointer == IntPtr.Zero)
                     return false;
                 position = t.position;
@@ -99,32 +97,9 @@ internal static unsafe partial class RopeInterop
                 return false;
             }
 
-            // Read the pitonHp field.
-            var pitonKlass = IL2CPP.il2cpp_object_get_class(pitonPtr);
-            var hpField = IL2CPP.GetIl2CppField(pitonKlass, "pitonHp");
-            if (hpField != IntPtr.Zero)
-            {
-                int hpOff = (int)IL2CPP.il2cpp_field_get_offset(hpField);
-                hp = *(int*)((byte*)pitonPtr + hpOff);
-            }
-
-            // Read executionQuality (enum, int-sized).
-            var qualField = IL2CPP.GetIl2CppField(pitonKlass, "executionQuality");
-            if (qualField != IntPtr.Zero)
-            {
-                int qualOff = (int)IL2CPP.il2cpp_field_get_offset(qualField);
-                quality = (byte)(*(int*)((byte*)pitonPtr + qualOff));
-            }
-
-            // Read ItemId (InventoryItemStringId -- a struct wrapping a single int).
-            var itemField = IL2CPP.GetIl2CppField(pitonKlass, "<ItemId>k__BackingField");
-            int readItemId = 0;
-            if (itemField != IntPtr.Zero)
-            {
-                int itemOff = (int)IL2CPP.il2cpp_field_get_offset(itemField);
-                readItemId = *(int*)((byte*)pitonPtr + itemOff);
-            }
-            itemId = readItemId;
+            hp = piton.pitonHp;
+            quality = (byte)piton.executionQuality;
+            itemId = piton.ItemId.value;
 
             netId = _pitonIdentities.Announce(pitonPtr);
             ModLog.Debug($"[Piton] Local piton #{netId} detected @ ({position.x:F1},{position.y:F1},{position.z:F1}) quality={quality} hp={hp} itemId={itemId}");
@@ -144,9 +119,6 @@ internal static unsafe partial class RopeInterop
         }
     }
 
-    /// <summary>
-    /// Detects the removal of a local piton already announced to the network.
-    /// </summary>
     public static bool CheckForRemovedPiton(out uint netId)
     {
         netId = 0;
@@ -167,9 +139,9 @@ internal static unsafe partial class RopeInterop
     }
 
     /// <summary>
-    /// Spawns a piton on the remote client by calling Lifeline.AddPiton()
-    /// via IL2CPP runtime invocation. Registers the piton properly in the rope
-    /// system so quickdraws and rope clipping work correctly.
+    /// Spawns a piton through Cairn's typed Lifeline API. Passing the local climbing
+    /// controller lets the game initialize its ClimbingSetting before the piton is
+    /// visible to Lifeline.Update or save serialization.
     /// </summary>
     public static bool SpawnRemotePiton(Vector3 position, Quaternion rotation,
         int quality, int hp, int itemId)
@@ -183,76 +155,28 @@ internal static unsafe partial class RopeInterop
                 return false;
             }
 
-            var klass = IL2CPP.il2cpp_object_get_class(lifeline.Pointer);
-
-            // Find the AddPiton method with 6 parameters. We want the overload:
-            // AddPiton(Vector3, Quaternion, PitonExecutionQuality, int, InventoryItemStringId, ClimbingSetting)
-            // where ClimbingSetting is a reference type we can pass as null.
-            IntPtr method = IntPtr.Zero;
-            IntPtr iter = IntPtr.Zero;
-            while (true)
+            var controller = ResolveLocalClimbController();
+            if (controller == null || controller.Pointer == IntPtr.Zero)
             {
-                var m = IL2CPP.il2cpp_class_get_methods(klass, ref iter);
-                if (m == IntPtr.Zero) break;
-                var namePtr = IL2CPP.il2cpp_method_get_name(m);
-                var name = Marshal.PtrToStringAnsi(namePtr);
-                if (name == "AddPiton" && IL2CPP.il2cpp_method_get_param_count(m) == 6)
-                {
-                    // Verify the last parameter is a reference type (the ClimbingSetting class,
-                    // not ClimbingV2PawnController). Both are reference types, but we take
-                    // the SECOND match (the ClimbingSetting overload is declared after the
-                    // Controller one in the decompilation).
-                    method = m;
-                    // Keep iterating to get the LAST 6-parameter overload.
-                }
-            }
-
-            if (method == IntPtr.Zero)
-            {
-                ModLog.Error("[Piton] Lifeline.AddPiton method not found");
+                ModLog.Warning("[Piton] Local ClimbingV2PawnController not found — cannot create a save-safe remote piton");
                 return false;
             }
-
-            // Prepare the arguments for il2cpp_runtime_invoke.
-            // Value types are passed as pointers to their data.
-            var pos = position;
-            var rot = rotation;
-            int qual = quality;
-            int pitonHp = hp;
-            int pitonItemId = itemId;
-
-            var args = stackalloc IntPtr[6];
-            args[0] = (IntPtr)(&pos);                // Vector3 pitonPosition
-            args[1] = (IntPtr)(&rot);                // Quaternion pitonRotation
-            args[2] = (IntPtr)(&qual);               // PitonExecutionQuality (enum = int)
-            args[3] = (IntPtr)(&pitonHp);            // int pitonHp
-            args[4] = (IntPtr)(&pitonItemId);        // InventoryItemStringId (struct = int)
-            args[5] = IntPtr.Zero;                   // ClimbingSetting = null
 
             // Capture identities even if native code allocates and then throws.
             if (_spawningRemotePiton || !TryCollectCurrentPitonPointers(out var before)) return false;
             if (!CompleteRemoteSpawnDiscovery(before)) return false;
             _beforeRemoteSpawn = before;
             _spawningRemotePiton = true;
-            IntPtr exception = IntPtr.Zero;
-            try { IL2CPP.il2cpp_runtime_invoke(method, lifeline.Pointer, (void**)args, ref exception); }
+            try
+            {
+                lifeline.AddPiton(position, rotation, (Il2Cpp.PitonExecutionQuality)quality,
+                    hp, (Il2Cpp.InventoryItemStringId)itemId, controller);
+            }
             finally
             {
                 _spawningRemotePiton = false;
                 if (TryCollectCurrentPitonPointers(out var after)) CompleteRemoteSpawnDiscovery(after);
             }
-
-            if (exception != IntPtr.Zero)
-            {
-                ModLog.Error($"[Piton] AddPiton threw an exception");
-                return false;
-            }
-
-            // The native piton was just added with ClimbingSetting=null (6th arg of AddPiton).
-            // A piton with a null ClimbingSetting crashes Lifeline.Update() and
-            // Piton.WriteToSavegame (native NRE) as soon as a rope attaches to it -> aborted
-            // save. We backfill the setting with the LOCAL climbing controller.
-            TryAssignLocalClimbingSetting(lifeline);
 
             ModLog.Debug($"[Piton] Spawned remote piton via Lifeline.AddPiton @ ({position.x:F1},{position.y:F1},{position.z:F1}) quality={quality} hp={hp}");
             return true;
@@ -314,159 +238,32 @@ internal static unsafe partial class RopeInterop
         var lifeline = TryGetLifeline();
         if (lifeline == null) return false;
 
-        var method = ResolveLifelineDetachPiton(lifeline);
-        if (method == IntPtr.Zero) return false;
-
         try
         {
-            var args = stackalloc IntPtr[1];
-            args[0] = pitonPtr;
-            IntPtr exception = IntPtr.Zero;
-            IL2CPP.il2cpp_runtime_invoke(method, lifeline.Pointer, (void**)args, ref exception);
-            if (exception != IntPtr.Zero)
-            {
-                ModLog.Warning("[Piton] Lifeline.DetachPiton threw, falling back");
-                return false;
-            }
+            lifeline.DetachPiton(new Il2Cpp.Piton(pitonPtr));
             return true;
         }
         catch (Exception ex)
         {
-            ModLog.Warning($"[Piton] DetachPiton invoke failed: {ex.Message}");
+            ModLog.Warning($"[Piton] DetachPiton failed: {ex.Message}");
             return false;
         }
     }
 
-    private static IntPtr ResolveLifelineDetachPiton(MonoBehaviour lifeline)
-    {
-        if (_lifelineDetachPitonResolved) return _lifelineDetachPitonMethod;
-        _lifelineDetachPitonResolved = true;
-
-        try
-        {
-            var klass = IL2CPP.il2cpp_object_get_class(lifeline.Pointer);
-            // We look for the instance (non-static) overload with 1 parameter:
-            // public void DetachPiton(Piton piton).
-            IntPtr iter = IntPtr.Zero;
-            while (true)
-            {
-                var m = IL2CPP.il2cpp_class_get_methods(klass, ref iter);
-                if (m == IntPtr.Zero) break;
-                var namePtr = IL2CPP.il2cpp_method_get_name(m);
-                if (namePtr == IntPtr.Zero) continue;
-                var name = Marshal.PtrToStringAnsi(namePtr);
-                if (name != "DetachPiton") continue;
-                if (IL2CPP.il2cpp_method_get_param_count(m) != 1) continue;
-                _lifelineDetachPitonMethod = m;
-                ModLog.Debug("[Piton] Resolved Lifeline.DetachPiton(Piton)");
-                break;
-            }
-
-            if (_lifelineDetachPitonMethod == IntPtr.Zero)
-                ModLog.Warning("[Piton] Lifeline.DetachPiton(Piton) not found, will use GameObject fallback");
-        }
-        catch (Exception ex)
-        {
-            ModLog.Warning($"[Piton] DetachPiton lookup failed: {ex.Message}");
-        }
-
-        return _lifelineDetachPitonMethod;
-    }
-
-    /// <summary>
-    /// Fills in the ClimbingSetting of the last placed piton (remote spawn) with the
-    /// LOCAL ClimbingV2PawnController, via Lifeline.UpdatePlacedPitonClimbingSetting.
-    /// Without this the ClimbingSetting stays null -> native NRE in Lifeline.Update() and
-    /// Piton.WriteToSavegame when the piton is clipped -> broken save.
-    /// Best-effort: if the local controller can't be found, we leave the piton as-is.
-    /// </summary>
-    private static void TryAssignLocalClimbingSetting(MonoBehaviour lifeline)
-    {
-        try
-        {
-            if (!TryGetLastPitonPointer(out var pitonPtr) || pitonPtr == IntPtr.Zero)
-                return;
-
-            var controller = ResolveLocalClimbController();
-            if (controller == null || controller.Pointer == IntPtr.Zero)
-            {
-                ModLog.Debug("[Piton] No local ClimbingV2PawnController — ClimbingSetting left null (save may break on clip-in)");
-                return;
-            }
-
-            var method = ResolveLifelineUpdateSettingMethod(lifeline);
-            if (method == IntPtr.Zero) return;
-
-            var args = stackalloc IntPtr[2];
-            args[0] = pitonPtr;              // Piton
-            args[1] = controller.Pointer;   // ClimbingV2PawnController
-            IntPtr exception = IntPtr.Zero;
-            IL2CPP.il2cpp_runtime_invoke(method, lifeline.Pointer, (void**)args, ref exception);
-            if (exception != IntPtr.Zero)
-            {
-                ModLog.Warning("[Piton] UpdatePlacedPitonClimbingSetting threw — piton save may still break");
-                return;
-            }
-
-            ModLog.Debug("[Piton] Assigned local ClimbingSetting to remote piton (save-safe)");
-        }
-        catch (Exception ex)
-        {
-            ModLog.Warning($"[Piton] TryAssignLocalClimbingSetting failed: {ex.Message}");
-        }
-    }
-
-    /// <summary>Finds (and caches) the LOCAL ClimbingV2PawnController. Remote players
-    /// are NetplayRemotePlayer (a different type) -> FindObjectsOfType only returns the local one.</summary>
     private static Il2Cpp.ClimbingV2PawnController ResolveLocalClimbController()
     {
         if (_localClimbControllerCached != null) return _localClimbControllerCached;
-        if (_lastClimbControllerSearchFrame != 0 && Time.frameCount - _lastClimbControllerSearchFrame < 30) return null;
-        _lastClimbControllerSearchFrame = Time.frameCount;
         try
         {
-            var all = UnityEngine.Object.FindObjectsOfType<Il2Cpp.ClimbingV2PawnController>();
-            if (all != null)
-                for (int i = 0; i < all.Length; i++)
-                    if (all[i] != null) { _localClimbControllerCached = all[i]; ModLog.Debug("[Piton] Local ClimbingV2PawnController resolved"); break; }
+            _localClimbControllerCached = Il2Cpp.PawnManager.Instance?.ClimbingPawnController;
+            if (_localClimbControllerCached != null)
+                ModLog.Debug("[Piton] Local ClimbingV2PawnController resolved");
         }
-        catch (Exception ex) { ModLog.Warning($"[Piton] ClimbingV2PawnController search failed: {ex.Message}"); }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.resolve-climbing-controller", exception);
+        }
         return _localClimbControllerCached;
-    }
-
-    private static IntPtr ResolveLifelineUpdateSettingMethod(MonoBehaviour lifeline)
-    {
-        if (_lifelineUpdateSettingResolved) return _lifelineUpdateSettingMethod;
-        _lifelineUpdateSettingResolved = true;
-
-        try
-        {
-            var klass = IL2CPP.il2cpp_object_get_class(lifeline.Pointer);
-            // Instance, 2 parameters: public void UpdatePlacedPitonClimbingSetting(Piton, ClimbingV2PawnController).
-            IntPtr iter = IntPtr.Zero;
-            while (true)
-            {
-                var m = IL2CPP.il2cpp_class_get_methods(klass, ref iter);
-                if (m == IntPtr.Zero) break;
-                var namePtr = IL2CPP.il2cpp_method_get_name(m);
-                if (namePtr == IntPtr.Zero) continue;
-                var name = Marshal.PtrToStringAnsi(namePtr);
-                if (name != "UpdatePlacedPitonClimbingSetting") continue;
-                if (IL2CPP.il2cpp_method_get_param_count(m) != 2) continue;
-                _lifelineUpdateSettingMethod = m;
-                ModLog.Debug("[Piton] Resolved Lifeline.UpdatePlacedPitonClimbingSetting(Piton, ClimbingV2PawnController)");
-                break;
-            }
-
-            if (_lifelineUpdateSettingMethod == IntPtr.Zero)
-                ModLog.Warning("[Piton] Lifeline.UpdatePlacedPitonClimbingSetting not found — remote pitons stay save-unsafe");
-        }
-        catch (Exception ex)
-        {
-            ModLog.Warning($"[Piton] UpdatePlacedPitonClimbingSetting lookup failed: {ex.Message}");
-        }
-
-        return _lifelineUpdateSettingMethod;
     }
 
     private static bool CompleteRemoteSpawnDiscovery(HashSet<IntPtr> current)
@@ -482,70 +279,25 @@ internal static unsafe partial class RopeInterop
     private static bool TryGetLastPitonPointer(out IntPtr pitonPtr)
     {
         pitonPtr = IntPtr.Zero;
-        if (!TryGetPlacedPitonItems(out var itemsArrayPtr, out var count) || count <= 0)
-            return false;
-
-        int headerSize = 4 * IntPtr.Size;
-        IntPtr lastItemPtr = *(IntPtr*)((byte*)itemsArrayPtr + headerSize + (count - 1) * IntPtr.Size);
-        return TryReadPitonPointer(lastItemPtr, out pitonPtr);
+        var piton = TryGetLifeline()?.GetLastPiton();
+        if (piton == null || piton.Pointer == IntPtr.Zero) return false;
+        pitonPtr = piton.Pointer;
+        return true;
     }
 
     private static bool TryCollectCurrentPitonPointers(out HashSet<IntPtr> pointers)
     {
         pointers = new HashSet<IntPtr>();
-        if (!TryGetPlacedPitonItems(out var itemsArrayPtr, out var count))
-            return false;
+        var placedPitons = TryGetLifeline()?.PlacedPitons;
+        if (placedPitons == null) return false;
 
-        int headerSize = 4 * IntPtr.Size;
-        for (int i = 0; i < count; i++)
+        for (var i = 0; i < placedPitons.Count; i++)
         {
-            IntPtr placedDataPtr = *(IntPtr*)((byte*)itemsArrayPtr + headerSize + i * IntPtr.Size);
-            if (TryReadPitonPointer(placedDataPtr, out var pitonPtr) && new Il2Cpp.Piton(pitonPtr) != null)
-                pointers.Add(pitonPtr);
+            var piton = placedPitons[i]?.Piton;
+            if (piton != null && piton.Pointer != IntPtr.Zero)
+                pointers.Add(piton.Pointer);
         }
 
         return true;
-    }
-
-    private static bool TryGetPlacedPitonItems(out IntPtr itemsArrayPtr, out int count)
-    {
-        itemsArrayPtr = IntPtr.Zero;
-        count = 0;
-
-        var lifeline = TryGetLifeline();
-        if (lifeline == null) return false;
-
-        var klass = IL2CPP.il2cpp_object_get_class(lifeline.Pointer);
-        var field = IL2CPP.GetIl2CppField(klass, "<PlacedPitons>k__BackingField");
-        if (field == IntPtr.Zero)
-            field = IL2CPP.GetIl2CppField(klass, "PlacedPitons");
-        if (field == IntPtr.Zero) return false;
-
-        int offset = (int)IL2CPP.il2cpp_field_get_offset(field);
-        IntPtr listPtr = *(IntPtr*)((byte*)lifeline.Pointer + offset);
-        if (listPtr == IntPtr.Zero) return false;
-
-        int sizeOffset = 3 * IntPtr.Size;
-        count = *(int*)((byte*)listPtr + sizeOffset);
-        if (count < 0) return false;
-
-        itemsArrayPtr = *(IntPtr*)((byte*)listPtr + 2 * IntPtr.Size);
-        return itemsArrayPtr != IntPtr.Zero;
-    }
-
-    private static bool TryReadPitonPointer(IntPtr placedDataPtr, out IntPtr pitonPtr)
-    {
-        pitonPtr = IntPtr.Zero;
-        if (placedDataPtr == IntPtr.Zero) return false;
-
-        var pdKlass = IL2CPP.il2cpp_object_get_class(placedDataPtr);
-        var pitonField = IL2CPP.GetIl2CppField(pdKlass, "<Piton>k__BackingField");
-        if (pitonField == IntPtr.Zero)
-            pitonField = IL2CPP.GetIl2CppField(pdKlass, "piton");
-        if (pitonField == IntPtr.Zero) return false;
-
-        int pitonOffset = (int)IL2CPP.il2cpp_field_get_offset(pitonField);
-        pitonPtr = *(IntPtr*)((byte*)placedDataPtr + pitonOffset);
-        return pitonPtr != IntPtr.Zero;
     }
 }

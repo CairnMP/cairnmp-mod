@@ -152,8 +152,8 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
         if (!_microphone.IsRunning) { StopCapture(); Status = "Microphone stopped — retrying"; return; }
         if (now - _lastPoll > .2 || _microphone.BufferedSamples > FrameSamples * 5)
         {
-            // A slow frame or a driver delivering >100 ms batches used to erase
-            // every captured sample before encoding. Keep the newest live audio.
+            // Slow frames and large driver batches can overflow the live window, so keep
+            // the newest samples.
             _microphone.KeepLatest(FrameSamples * 5);
             ClearPreRoll();
             _gate.Reset();

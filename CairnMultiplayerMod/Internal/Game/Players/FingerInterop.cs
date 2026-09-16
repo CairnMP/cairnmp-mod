@@ -9,15 +9,7 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Internal.Game.Players;
 
 /// <summary>
-/// Exact sync of finger bones between players.
-///
-/// The game's netplay only captures ~16 coarse bones, without the fingers -> the ghosts' hands
-/// stay frozen. Here we capture the finger bones of the Aava skeleton and apply them as
-/// localRotation onto the same ghost bones (after the native pipeline has posed the body).
-///
-/// Resolution BY NAME (not via the humanoid Animator: Cairn's rig isn't humanoid, isHuman=False).
-/// The names are identical on the local and ghost sides (same Aava skeleton):
-/// bn_{l|r}_{Thumb 00-02 | Index/Middle/Ring/Pinky 00-03}. We compress with smallest-three.
+/// Native netplay omits fingers, and Cairn's non-humanoid rig requires name-based bone lookup.
 /// </summary>
 internal static unsafe class FingerInterop
 {
@@ -47,7 +39,6 @@ internal static unsafe class FingerInterop
     // Finger-bone cache per ghost (GameObject instance id).
     private static readonly Dictionary<int, Transform[]> _ghostFingerBones = new();
 
-    /// <summary>Captures the local finger pose (compressed localRotations). False if unavailable.</summary>
     public static bool TryCaptureLocalPose(out byte[] packed)
     {
         packed = null;
@@ -65,7 +56,6 @@ internal static unsafe class FingerInterop
         }
     }
 
-    /// <summary>Applies a received finger pose onto the ghost's bones.</summary>
     public static bool TryApplyRemotePose(NetplayRemotePlayer ghost, byte[] packed)
     {
         if (ghost == null || ghost.Pointer == IntPtr.Zero) return false;
@@ -94,7 +84,6 @@ internal static unsafe class FingerInterop
         }
     }
 
-    /// <summary>First Animator in the hierarchy (used by other cosmetic modules).</summary>
     internal static Animator TryGetHumanoidAnimator(GameObject root)
     {
         try { return root.GetComponentInChildren<Animator>(true); }
@@ -170,10 +159,6 @@ internal static unsafe class FingerInterop
         return bones;
     }
 
-    /// <summary>
-    /// Resolves the finger bones by NAME in the hierarchy. Returns an array of the canonical
-    /// size (null entries where a bone is missing), or null if no bone was found.
-    /// </summary>
     private static Transform[] ResolveFingerBonesByName(GameObject root, out int resolvedCount)
     {
         resolvedCount = 0;

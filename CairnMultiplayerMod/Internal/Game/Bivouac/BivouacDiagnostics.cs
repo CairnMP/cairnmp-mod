@@ -9,17 +9,9 @@ using UnityEngine.UIElements;
 
 namespace CairnMultiplayerMod.Internal.Game.Bivouac;
 
-internal static unsafe partial class BivouacDiagnostics
+internal static partial class BivouacDiagnostics
 {
-    private static MonoBehaviour _tapingFingersManagerCached;
-    private static int _lastTapingFingersManagerSearchFrame;
-
-    /// <summary>Forgets the scene-bound TapingFingersManager reference (called on scene reload).</summary>
-    internal static void ResetCaches()
-    {
-        _tapingFingersManagerCached = null;
-        _lastTapingFingersManagerSearchFrame = 0;
-    }
+    internal static void ResetCaches() { }
 
     internal static string BuildBivouacDebugSnapshot()
     {
@@ -100,11 +92,7 @@ internal static unsafe partial class BivouacDiagnostics
     }
 
     private static TapingFingersManager FindTapingFingersManager()
-    {
-        var comp = GameInterop.FindMonoBehaviourByName("TapingFingersManager", ref _tapingFingersManagerCached,
-            ref _lastTapingFingersManagerSearchFrame);
-        return comp?.TryCast<TapingFingersManager>();
-    }
+        => TapingFingersManager.Instance;
 
     private static string BuildInputManagerDebug()
     {

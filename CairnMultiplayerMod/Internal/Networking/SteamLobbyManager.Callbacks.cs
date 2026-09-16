@@ -110,8 +110,6 @@ namespace CairnMultiplayerMod.Internal.Networking
 
         private void OnLobbyMatchListCb(uint lobbyCount)
         {
-            // Case 1: we're waiting on a JoinByCode → chain JoinLobby on the first
-            // result (or fail if empty).
             if (_pendingJoinCode != null)
             {
                 var context = _pendingJoinCodeFallbackScan ? "JoinByCodeFallback" : "JoinByCode";
@@ -184,7 +182,6 @@ namespace CairnMultiplayerMod.Internal.Networking
                 return;
             }
 
-            // Case 2: RequestLobbyList for the browser.
             if (_listTcs != null)
             {
                 var results = ReadLobbyListResults(MaxLobbyBrowserResults, "RequestLobbyList", lobbyCount);
@@ -251,8 +248,6 @@ namespace CairnMultiplayerMod.Internal.Networking
         private void OnLobbyDataUpdateCb(LobbyDataUpdate_t evt)
         {
             if (!IsInLobby || evt.m_ulSteamIDLobby != CurrentLobbyId.m_SteamID) return;
-            // When a member updates their LobbyMemberData (e.g. name changed) we
-            // can refresh the list to reflect nickname changes.
             RebuildMembers();
             RequestLobbyHeartbeat();
             OnMembersChanged?.Invoke();
@@ -266,7 +261,6 @@ namespace CairnMultiplayerMod.Internal.Networking
             _ = JoinById(evt.m_steamIDLobby.m_SteamID);
         }
 
-        // ── Helpers ───────────────────────────────────────────────────────────────
 
         private void TryHandleStartSignal()
         {

@@ -1,5 +1,4 @@
 using System;
-using System.Reflection;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2Cpp;
 using Il2CppTheGameBakers.Cairn.Netplay;
@@ -14,35 +13,22 @@ namespace CairnMultiplayerMod.Internal.Game.Players;
 /// SetMode(Mode, bool instant). We carry the Mode as an int in the packet
 /// and apply it as-is on the remote ghost via SetMode.
 /// </summary>
-internal static unsafe class LampInterop
+internal static class LampInterop
 {
     private static AavaLightStick _localLightStickCached;
     private static int _lastLocalLightStickSearchFrame;
     private static bool _localLightStickWarningLogged;
 
-    private static bool _lampReflectionResolved;
-    private static bool _lampReflectionFailed;
-    private static MethodInfo _lampCurrentModeGetter;   // Mode get_CurrentMode()
-    private static MethodInfo _lampSetModeMethod;       // void SetMode(Mode, bool)
-    private static Type _lampModeType;
-
     public static bool TryGetLocalState(out int mode)
     {
         mode = 0;
-        EnsureLampReflection();
-        if (_lampReflectionFailed || _lampCurrentModeGetter == null) return false;
-
         var lamp = TryGetLocalLightStick();
         if (lamp == null) return false;
 
         try
         {
-            var value = _lampCurrentModeGetter.Invoke(lamp, null);
-            if (value != null)
-            {
-                mode = Convert.ToInt32(value);
-                return true;
-            }
+            mode = (int)lamp.CurrentMode;
+            return true;
         }
         catch (Exception ex)
         {
@@ -59,13 +45,10 @@ internal static unsafe class LampInterop
     {
         if (remote == null || remote.Pointer == IntPtr.Zero) return false;
 
-        EnsureLampReflection();
-        if (_lampReflectionFailed || _lampSetModeMethod == null || _lampModeType == null) return false;
-
         AavaLightStick lamp;
         try
         {
-            lamp = remote.gameObject.GetComponentInChildren<AavaLightStick>(true);
+            lamp = remote.LightStick;
         }
         catch (Exception exception)
         {
@@ -77,17 +60,9 @@ internal static unsafe class LampInterop
 
         try
         {
-            // Check the current state to avoid spamming SetMode.
-            if (_lampCurrentModeGetter != null)
-            {
-                var current = _lampCurrentModeGetter.Invoke(lamp, null);
-                if (current != null && Convert.ToInt32(current) == mode)
-                    return true;
-            }
+            if ((int)lamp.CurrentMode == mode) return true;
 
-            // Build the enum value from the int and call SetMode(value, instant: true).
-            var enumValue = Enum.ToObject(_lampModeType, mode);
-            _lampSetModeMethod.Invoke(lamp, new object[] { enumValue, true });
+            lamp.SetMode((AavaLightStick.Mode)mode, forceUpdate: true);
             return true;
         }
         catch (Exception ex)
@@ -102,82 +77,6 @@ internal static unsafe class LampInterop
         _localLightStickCached = null;
         _lastLocalLightStickSearchFrame = 0;
         _localLightStickWarningLogged = false;
-    }
-
-    private static void EnsureLampReflection()
-    {
-        if (_lampReflectionResolved || _lampReflectionFailed) return;
-        _lampReflectionResolved = true;
-
-        try
-        {
-            var type = typeof(AavaLightStick);
-            const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic
-                                       | BindingFlags.Instance | BindingFlags.DeclaredOnly;
-
-            // get_CurrentMode() returning the Mode enum.
-            foreach (var m in type.GetMethods(flags))
-            {
-                if (m.Name == "get_CurrentMode" && m.GetParameters().Length == 0)
-                {
-                    _lampCurrentModeGetter = m;
-                    _lampModeType = m.ReturnType;
-                    break;
-                }
-            }
-
-            // SetMode(Mode, bool).
-            foreach (var m in type.GetMethods(flags))
-            {
-                if (m.Name != "SetMode") continue;
-                var ps = m.GetParameters();
-                if (ps.Length == 2 && ps[1].ParameterType == typeof(bool))
-                {
-                    _lampSetModeMethod = m;
-                    if (_lampModeType == null)
-                        _lampModeType = ps[0].ParameterType;
-                    break;
-                }
-            }
-
-            ModLog.Debug(
-                $"[LampSync] Reflection getCurrentMode={(_lampCurrentModeGetter?.Name ?? "null")} " +
-                $"setMode={(_lampSetModeMethod?.Name ?? "null")} " +
-                $"modeType={_lampModeType?.FullName ?? "null"}");
-
-            if (_lampCurrentModeGetter == null || _lampSetModeMethod == null || _lampModeType == null)
-            {
-                ModLog.Warning("[LampSync] Lamp API not fully resolved, sync disabled.");
-                _lampReflectionFailed = true;
-            }
-            else
-            {
-                LogModeEnumValues(_lampModeType);
-            }
-        }
-        catch (Exception ex)
-        {
-            _lampReflectionFailed = true;
-            ModLog.Warning($"[LampSync] Reflection setup failed: {ex.GetType().Name}:{ex.Message}");
-        }
-    }
-
-    private static void LogModeEnumValues(Type modeType)
-    {
-        try
-        {
-            if (!modeType.IsEnum) return;
-            var names = Enum.GetNames(modeType);
-            var values = Enum.GetValues(modeType);
-            var sb = new System.Text.StringBuilder("[LampSync] Mode enum values: ");
-            for (int i = 0; i < names.Length; i++)
-            {
-                if (i > 0) sb.Append(", ");
-                sb.Append(names[i]).Append('=').Append(Convert.ToInt32(values.GetValue(i)));
-            }
-            ModLog.Debug(sb.ToString());
-        }
-        catch (Exception exception) { ModLog.SuppressedException("lamp.describe-template", exception); }
     }
 
     private static AavaLightStick TryGetLocalLightStick()

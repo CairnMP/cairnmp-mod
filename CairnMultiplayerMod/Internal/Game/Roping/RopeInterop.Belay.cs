@@ -8,7 +8,7 @@ using Object = UnityEngine.Object;
 namespace CairnMultiplayerMod.Internal.Game.Roping;
 
 /// <summary>A dedicated native rope connects two harness holders. No synthetic pitons.</summary>
-internal static unsafe partial class RopeInterop
+internal static partial class RopeInterop
 {
     private static RopeBindingSession _ropeSession;
     private static NativeRopeBinding _ropeBinding;
@@ -57,7 +57,6 @@ internal static unsafe partial class RopeInterop
         }
     }
 
-    // Native FixedUpdate prefix, before the rope simulation.
     internal static bool BeforeRopePhysics(LogicalRope rope)
     {
         if (_ropeBinding?.Owns(rope) != true) return true;
@@ -158,7 +157,9 @@ internal static unsafe partial class RopeInterop
             // Clone only a segment prefab, never a live rope's holder list or particles.
             var segment = Object.Instantiate(_source.ropePartPrefab.gameObject, _root.transform);
             _part = segment.GetComponent<LogicalRopePart>();
-            _rope.ropeParts.Clear();
+            // LogicalRope.ropeParts is normally populated by Unity prefab deserialization.
+            // A LogicalRope created with AddComponent keeps this field null.
+            _rope.ropeParts = new Il2CppSystem.Collections.Generic.List<LogicalRopePart>();
             _rope.ropeParts.Add(_part);
             var sourceLine = _source.GetComponent<LineRenderer>() ?? _source.ropePartPrefab.GetComponent<LineRenderer>();
             if (sourceLine != null)
@@ -192,13 +193,16 @@ internal static unsafe partial class RopeInterop
             _rope.AttachTo(_local.Cast<IRopeHolder>(), RopeSide.End, true);
             _rope.AttachTo(_partner.Cast<IRopeHolder>(), RopeSide.Begin, true);
             _rope.MaxLengthMeters = _length;
-            _rope.SetLength(_length, false);
+            // Cairn queues rope-length changes for LogicalRope.FixedUpdate.
+            _rope.RequestSetLength(_length, false);
             _rope.SetCollisionsFilter(_source.category, _source.masks);
             _rope.TeleportOnAttachPoints();
             _rope.SetVisible(true);
             _rope.SyncRenderer();
             _attached = true;
             if (!HasBothAttachments) return false;
+            // Cairn's shared-rope mode selects its dedicated rope on the Lifeline.
+            // Secured-fall code reads this property again to calculate rope length.
             _lifeline.securingRope = _rope;
             _rope.enabled = true;
             ModLog.Info("[RopeTeam] Direct harness rope attached (no piton), max=" + _length);

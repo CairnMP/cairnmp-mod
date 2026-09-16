@@ -17,19 +17,12 @@ internal static unsafe class FreeRoamUnlockPatch
     private static bool _freeRoamFieldForced;
     private static bool _freeRoamDifficultyUnhidden;
 
-    // CRUCIAL GATE: we only force the flag WHILE in the MainMenu. Forcing
-    // EnableFreeRoamFeature=true from boot sends the game down a FreeRoam init path
-    // that isn't ready (intro/logo scene) -> black screen. During boot this flag stays false, so
-    // the native getter returns its real value and startup is normal.
+    // Enabling this before MainMenu sends Cairn through an unready path and causes a black screen.
     private static bool _freeRoamUnlockActive;
 
     public static bool IsFreeRoamUnlockInstalled => _freeRoamUnlockInstalled;
 
-    /// <summary>
-    /// Enables/disables the FreeRoam unlock. Called on scene transitions: true at the
-    /// MainMenu, false everywhere else. When disabling, we reset the tweakable field to
-    /// false so we don't contaminate the boot of an actually launched game.
-    /// </summary>
+    /// <summary>The native flag must be reset before a launched game boots.</summary>
     public static void SetActive(bool active)
     {
         if (_freeRoamUnlockActive == active) return;
@@ -39,23 +32,14 @@ internal static unsafe class FreeRoamUnlockPatch
         {
             TrySetFreeRoamTweakableField(false);
             RestoreFreeRoamModeHidden();
-            _freeRoamFieldForced = false;        // can re-force on the next menu pass
-            _freeRoamDifficultyUnhidden = false; // same for unhiding the mode
+            _freeRoamFieldForced = false;
+            _freeRoamDifficultyUnhidden = false;
         }
     }
 
     /// <summary>
-    /// Re-enables the FreeRoam feature that the game cut off. In a retail build, the native getter
-    /// <c>FreeRoamTweakables.EnableFreeRoamFeature</c> returns false, which hides the
-    /// <c>SelectedDifficulty.FreeRoam</c> difficulty (= 418187680) from the main menu even
-    /// though all the content (FreeRoamManager, warp points, Eagle Eye UI) is present.
-    ///
-    /// Two complementary levers because we don't know which one the menu queries:
-    ///   1. Harmony postfix on the public PROPERTY <c>EnableFreeRoamFeature</c> (a real
-    ///      native method, patchable) -> always returns true.
-    ///   2. direct write of the <c>enableFreeRoamFeature</c> field on the tweakable instance
-    ///      (cf. <see cref="TryForceTweakableField"/>), because the field accessor
-    ///      <c>get_enableFreeRoamFeature</c> is NOT patchable by Il2CppInterop.
+    /// Covers both access paths because Il2CppInterop can patch the public property but not the
+    /// field accessor used by some native menu code.
     /// </summary>
     public static void Install()
     {
@@ -74,9 +58,8 @@ internal static unsafe class FreeRoamUnlockPatch
                 return;
             }
 
-            // Only the public property is patchable; the field accessor throws a
-            // "field accessor can't be patched" error on the Il2CppInterop side -> we don't attempt it, and
-            // lever #2 (writing the field) covers direct readers of the field.
+            // Il2CppInterop cannot patch the field accessor, so direct readers are covered
+            // by writing the field while only the public property is patched.
             var getter = AccessTools.PropertyGetter(typeof(FreeRoamTweakables),
                 nameof(FreeRoamTweakables.EnableFreeRoamFeature));
             if (getter == null)
@@ -88,10 +71,8 @@ internal static unsafe class FreeRoamUnlockPatch
 
             FreeRoamUnlockHarmony.Patch(getter, postfix: postfix);
 
-            // Lever #3: prefix on InitializeButtons -> guarantees the data (flag +
-            // FreeRoam mode's isHidden) is correct JUST BEFORE the native code (re)builds
-            // the difficulty buttons. Without this, the buttons are built once before our
-            // unhiding and FreeRoam stays absent from the UI even if the data is correct.
+            // The native menu builds its buttons only once, so both flags must be correct
+            // immediately before InitializeButtons runs.
             var initButtons = AccessTools.Method(
                 typeof(MainMenuDifficultySelectElement),
                 nameof(MainMenuDifficultySelectElement.InitializeButtons));
@@ -133,12 +114,6 @@ internal static unsafe class FreeRoamUnlockPatch
         }
     }
 
-    /// <summary>
-    /// Lever #2: forces the <c>enableFreeRoamFeature</c> field to true on the tweakable
-    /// instance as soon as it's loaded (from the addressable). Idempotent and best-effort:
-    /// call every frame while in the menu until it succeeds. Covers the
-    /// case where the menu reads the field directly (unpatchable field accessor).
-    /// </summary>
     public static void TryForceTweakableField()
     {
         if (_freeRoamFieldForced || !_freeRoamUnlockActive) return;
@@ -150,14 +125,6 @@ internal static unsafe class FreeRoamUnlockPatch
         }
     }
 
-    /// <summary>
-    /// Unhides the FreeRoam difficulty in the menu: the mode is present in the
-    /// <c>DifficultyTweakables.modes</c> list but with <c>isHidden = true</c>, so the predicate of
-    /// <c>MainMenuDifficultySelectElement.InitializeButtons()</c> excludes it. We set its
-    /// <c>isHidden</c> to false (Mode is a reference type -> the edit persists in the array).
-    /// Call every frame in the menu until it succeeds. Diagnostic log: indicates whether the mode exists
-    /// in the list and how many modes there are in total.
-    /// </summary>
     public static void TryUnhideDifficulty()
     {
         if (_freeRoamDifficultyUnhidden || !_freeRoamUnlockActive) return;
@@ -170,14 +137,8 @@ internal static unsafe class FreeRoamUnlockPatch
     }
 
     /// <summary>
-    /// Core of the unhiding: sets <c>isHidden=false</c> on the FreeRoam Mode(s) in
-    /// <c>DifficultyTweakables.modes</c>. Ungated (re-appliable on each call) for the
-    /// InitializeButtons prefix. Returns false if the instance isn't ready yet.
-    ///
-    /// IMPORTANT: <c>Mode</c> is a VALUE TYPE (<c>sealed class Mode : Il2CppSystem.ValueType</c>).
-    /// The indexer <c>modes[i]</c> returns a boxed COPY -> editing <c>m.isHidden</c> doesn't touch
-    /// the array element. You MUST reassign <c>modes[i] = m</c> for the edit to persist.
-    /// <paramref name="stillHidden"/> = verification read-back after reassignment.
+    /// The IL2CPP <c>Mode</c> wrapper is a value type, so its edited boxed copy must be assigned
+    /// back into the native array.
     /// </summary>
     private static bool ApplyFreeRoamModeVisible(out bool found, out int changed, out int total, out bool stillHidden)
     {
@@ -201,10 +162,9 @@ internal static unsafe class FreeRoamUnlockPatch
                 if (m.isHidden)
                 {
                     m.isHidden = false;
-                    modes[i] = m;             // MANDATORY reassignment (value type)
+                    modes[i] = m; // Il2Cpp list access returns a value-type copy.
                     changed++;
                 }
-                // Read back from the array (new copy) to verify persistence.
                 stillHidden = modes[i].isHidden;
             }
             return true;
@@ -212,11 +172,10 @@ internal static unsafe class FreeRoamUnlockPatch
         catch (Exception ex)
         {
             ModLog.Warning($"[FreeRoam] FreeRoam difficulty unhide failed: {ex.Message}");
-            return true; // don't loop indefinitely on error
+            return true; // A persistent native error cannot be repaired by polling every frame.
         }
     }
 
-    /// <summary>Restores the retail Story menu when leaving the main menu.</summary>
     private static void RestoreFreeRoamModeHidden()
     {
         try
@@ -243,8 +202,6 @@ internal static unsafe class FreeRoamUnlockPatch
         }
     }
 
-    /// <summary>Writes <c>enableFreeRoamFeature = value</c> on the tweakable instance if
-    /// it is loaded. Returns true if the write took place.</summary>
     private static bool TrySetFreeRoamTweakableField(bool value)
     {
         try
@@ -268,18 +225,13 @@ internal static unsafe class FreeRoamUnlockPatch
 
     private static class FreeRoamUnlockPatches
     {
-        // Forces the FreeRoam feature active ONLY when the menu gate is armed (cf.
-        // _freeRoamUnlockActive). Outside the menu (boot, gameplay), we leave the real value.
         internal static void ForceEnabledPostfix(ref bool __result)
         {
             if (_freeRoamUnlockActive) __result = true;
         }
 
-        // Before EACH build of the difficulty buttons: we make sure ALL the
-        // data read by the filtering predicate is correct BEFORE the native code runs:
-        //   1. the enableFreeRoamFeature FIELD = true (the predicate reads the field directly,
-        //      NOT the patched property -> it must be forced here, not a frame later);
-        //   2. the FreeRoam mode unhidden (isHidden = false).
+        // The native filter reads the field directly, so a property patch applied a frame
+        // later cannot affect this one-time button build.
         internal static void InitializeButtonsPrefix()
         {
             if (!_freeRoamUnlockActive) return;

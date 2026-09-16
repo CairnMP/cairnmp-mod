@@ -11,15 +11,8 @@ using Object = UnityEngine.Object;
 namespace CairnMultiplayerMod.Internal.Game.Players;
 
 /// <summary>
-/// Manager for remote ghosts. The objects are created as soon as the remote player
-/// is known, then kept alive across loads and animations.
-///
-/// Cairn can block the spawn if the remote player is instantiated too late after
-/// scene transitions. So we favor an early spawn, with off-screen placement until
-/// a usable pose has been received.
-///
-/// Tries the real Cairn model first (MC_Netplay_Player.prefab), then falls back to
-/// a primitive humanoid if the prefab isn't available.
+/// Ghosts spawn early and remain off-screen until posed because Cairn may reject prefab
+/// instantiation late in a scene transition.
 /// </summary>
 internal static class RemotePlayerManager
 {
@@ -29,14 +22,8 @@ internal static class RemotePlayerManager
     private const float FirstFrameWaitLogIntervalSeconds = 3f;
     private const double PlayerFrameFreshSeconds = 0.5;
 
-    /// <summary>
-    /// Whether to show name plates above remote ghosts. Toggled with the N key
-    /// (useful in photo mode for clean shots). Applied every frame in UpdateAll to
-    /// each ghost's native nameMesh.
-    /// </summary>
     public static bool ShowNames { get; private set; } = true;
 
-    /// <summary>Toggles the display of remote player names. Returns the new state.</summary>
     public static bool ToggleNames()
     {
         ShowNames = !ShowNames;
@@ -50,34 +37,23 @@ internal static class RemotePlayerManager
         public bool IsRealModel;
         public bool RootPoseFallbackLogged;
 
-        // Native interpolation applied once on the remote climbot (created lazily on
-        // the first climbot frame received) — same smoothing as the player.
         public bool ClimbotLerpApplied;
 
-        // Last mode applied to the AavaLightStick component — used to deduplicate
-        // SetMode calls on the ghost side.
         public int LastAppliedLampMode;
         public bool HasAppliedLampState;
 
-        // Last stick anchor mode applied (Locator/Default) — dedup, cf. ApplyPendingLampStates.
         public int LastAppliedStickAnchor;
         public bool HasAppliedStickAnchor;
 
-        // Last outfit bitfield applied (active meshes) — dedup, cf. ApplyPendingLampStates.
         public int LastAppliedOutfit;
         public bool HasAppliedOutfit;
 
-        // Last glowing-gloves state applied to the ghost — dedup of the calls.
         public bool LastAppliedGloves;
         public bool HasAppliedCosmeticState;
 
 
-        // Last finger pose applied (reference of the received array) — used to
-        // reapply only on change (fingers persist between frames).
         public byte[] LastAppliedHandPosePacked;
 
-        // The ghost's netplay ropes (NetLogicalRope*, green by default) to recolor
-        // white. Cached once found; scan throttled while null.
         public List<LineRenderer> NetRopes;
         public float NextNetRopeScanAt;
     }
@@ -98,34 +74,24 @@ internal static class RemotePlayerManager
 
     private static readonly Color[] _palette =
     {
-        new(0.20f, 0.80f, 1.00f), // cyan blue
-        new(1.00f, 0.80f, 0.20f), // amber yellow
-        new(1.00f, 0.30f, 0.70f), // pink
-        new(0.40f, 1.00f, 0.40f), // light green
-        new(1.00f, 0.40f, 0.30f), // coral
-        new(0.80f, 0.60f, 1.00f), // purple
+        new(0.20f, 0.80f, 1.00f),
+        new(1.00f, 0.80f, 0.20f),
+        new(1.00f, 0.30f, 0.70f),
+        new(0.40f, 1.00f, 0.40f),
+        new(1.00f, 0.40f, 0.30f),
+        new(0.80f, 0.60f, 1.00f),
     };
 
-    /// <summary>
-    /// Stable color associated with a player id (same palette as the ghosts).
-    /// Reused by ping markers to identify the author by color.
-    /// </summary>
     public static Color ColorForPlayer(int playerId)
     {
         var index = (playerId % _palette.Length + _palette.Length) % _palette.Length;
         return _palette[index];
     }
 
-    /// <summary>
-    /// Called every frame while connected. Spawns ghosts as soon as the network
-    /// knows a remote player and keeps them alive across transitions. Ghosts only
-    /// despawn if the player leaves.
-    /// </summary>
     public static void Reconcile(NetworkManager net, PlayerState localState)
     {
         if (net == null) return;
 
-        // Create the ghosts as soon as the network knows a remote player.
         foreach (var kv in net.RemotePlayers)
         {
             var rp = kv.Value;
@@ -210,12 +176,6 @@ internal static class RemotePlayerManager
         return $"{Math.Max(0, now - rp.LastUpdateTime):0.0}s ago";
     }
 
-    /// <summary>
-    /// World position of the rope's attach point on a ghost's harness
-    /// (NetplayRemoteHarness.GetAttachPosition()). Used to rope the inter-player
-    /// rope to the real harness, like the game does. False if the ghost / its
-    /// harness isn't available.
-    /// </summary>
     public static bool TryGetGhostHarnessAttachPosition(int playerId, out Vector3 pos)
     {
         pos = default;
@@ -276,10 +236,6 @@ internal static class RemotePlayerManager
         go.transform.rotation = Quaternion.Euler(0f, rp.YawDeg, 0f);
     }
 
-    /// <summary>
-    /// Updates each ghost's transform from the latest network data.
-    /// Called every frame after Reconcile.
-    /// </summary>
     public static void UpdateAll(NetworkManager net, PlayerState localState)
     {
         foreach (var kv in net.RemotePlayers)
@@ -294,11 +250,9 @@ internal static class RemotePlayerManager
                 continue;
             }
 
-            // Recolor the ghost's green netplay rope to white.
             if (entry.IsRealModel)
                 RecolorGhostNetRopes(entry);
 
-            // Drive the animation via the game's native SetFrame pipeline.
             var frameRefused = false;
             if (entry.IsRealModel && entry.NrpComponent != null && HasFreshPlayerFrame(rp))
             {
@@ -345,12 +299,9 @@ internal static class RemotePlayerManager
         ApplyPendingCosmetics(net);
         ApplyPendingFingerPoses(net);
 
-        // Re-seat the ghosts' glove rigs onto their body bones (after this frame's SetFrames).
         CosmeticInterop.TickGhostGloveRigs();
 
-        // Name-plate state: applied AFTER all this frame's SetFrames (the native code
-        // can re-enable the nameMesh), to always have the last word and avoid flickering.
-        // Only affects real-model ghosts (native nameMesh field).
+        // SetFrame may re-enable nameMesh, so visibility is asserted afterwards.
         foreach (var kv in net.RemotePlayers)
         {
             if (!_ghosts.TryGetValue(kv.Key, out var entry)) continue;
@@ -359,18 +310,11 @@ internal static class RemotePlayerManager
         }
     }
 
-    /// <summary>
-    /// Recolors the ghost's netplay rope (LineRenderers named NetLogicalRope*, debug
-    /// green RGBA(0,1,0.016) by default) to white, to match the local rope
-    /// (LogicalRope). The GetComponentsInChildren scan is throttled to 2 Hz while
-    /// nothing is found (the rope can be created late); once found, we reassert white
-    /// every frame in case the game greens the rope back (negligible cost).
-    /// </summary>
+    /// <summary>The native update restores debug green, so white must be reasserted after it.</summary>
     private static void RecolorGhostNetRopes(GhostEntry entry)
     {
         if (entry.Root == null) return;
 
-        // Invalid cache (rope destroyed/recreated) -> restart a scan.
         if (entry.NetRopes != null && (entry.NetRopes.Count == 0 || entry.NetRopes[0] == null))
             entry.NetRopes = null;
 
@@ -409,11 +353,6 @@ internal static class RemotePlayerManager
         catch (Exception exception) { ModLog.SuppressedException("remote-player.recolor-ropes", exception); }
     }
 
-    /// <summary>
-    /// Applies the received finger poses to the ghosts, after the native pipeline
-    /// (SetFrame) that poses the body. Only reapplies on change: the fingers'
-    /// localRotation persist between frames (they aren't touched by the body's bone set).
-    /// </summary>
     private static void ApplyPendingFingerPoses(NetworkManager net)
     {
         foreach (var kv in net.RemotePlayers)
@@ -475,10 +414,6 @@ internal static class RemotePlayerManager
         entry.HasAppliedOutfit = true;
     }
 
-    /// <summary>
-    /// Applies the received cosmetic state (glowing gloves for now) to the ghosts.
-    /// Only reapplies on change, like the lamp.
-    /// </summary>
     private static void ApplyPendingCosmetics(NetworkManager net)
     {
         foreach (var kv in net.RemotePlayers)
@@ -513,12 +448,7 @@ internal static class RemotePlayerManager
         return now - rp.LastPlayerFrameTime <= PlayerFrameFreshSeconds;
     }
 
-    /// <summary>
-    /// Places the ghost from the position/yaw of the presence channel without touching its
-    /// bones — the rig therefore shows its bind pose (the "T-pose" of the bug reports).
-    /// <paramref name="reason"/> tells the two causes apart in the log: no fresh frame
-    /// arrived, or one arrived and no apply path would take it.
-    /// </summary>
+    /// <summary>Position fallback deliberately leaves the rig in bind pose instead of freezing it elsewhere.</summary>
     private static void ApplyRootPoseFallback(GhostEntry entry, RemotePlayer rp, string reason)
     {
         entry.Root.transform.position = new Vector3(rp.X, rp.Y, rp.Z);
@@ -531,7 +461,6 @@ internal static class RemotePlayerManager
         }
     }
 
-    /// <summary>Destroys all ghosts — called on disconnect.</summary>
     public static void ClearAll()
     {
         foreach (var kv in _ghosts)
@@ -588,7 +517,6 @@ internal static class RemotePlayerManager
         return false;
     }
 
-    // -- Tracking callbacks (no visual work) ---------------------------
 
     public static void OnPlayerJoined(int id, string name, RemotePlayer rp = null)
     {
@@ -607,9 +535,7 @@ internal static class RemotePlayerManager
         _spawnWaits.Remove(id);
     }
 
-    // -- Internal ---------------------------------------------------------
 
-    /// <summary>Drops the cosmetic module's caches for this ghost before its GameObject dies.</summary>
     private static void PurgeGhostCosmeticCaches(GhostEntry entry)
     {
         if (entry?.NrpComponent == null) return;
@@ -623,8 +549,6 @@ internal static class RemotePlayerManager
         GameObject go = null;
         try
         {
-            // Try the real Cairn prefab first. On failure or if it's invisible,
-            // fall back to the primitive humanoid.
             var prefab = NetplayAnimationInterop.TryGetNetplayClimberPrefab();
 
             bool isRealModel = false;
@@ -639,7 +563,6 @@ internal static class RemotePlayerManager
                 var nrpComp = go.GetComponent<NetplayRemotePlayer>()
                     ?? go.GetComponentInChildren<NetplayRemotePlayer>(true);
 
-                // Enable the visuals expected by the native prefab.
                 if (nrpComp == null)
                 {
                     ModLog.Warning("[Ghost] NetplayRemotePlayer component missing from native prefab");
@@ -652,10 +575,7 @@ internal static class RemotePlayerManager
                     go.SetActive(true);
                     ActivateNativeRemoteVisuals(go);
 
-                    // Native interpolation: the prefab smooths the movement toward currentFrame in
-                    // its Update(). We enable it explicitly (the mod writes currentFrame inline at
-                    // network rate; without lerp the render snaps on every packet). We preserve an
-                    // already-configured lerpSpeed, otherwise a reasonable fallback. Log the defaults for tuning.
+                    // Network-rate frame writes need native interpolation to avoid visible snapping.
                     if (nrpComp != null)
                     {
                         try
@@ -666,9 +586,7 @@ internal static class RemotePlayerManager
                         }
                         catch (Exception exception) { ModLog.SuppressedException("remote-player.apply-spawn-lerp", exception); }
 
-                        // Native skin: tint each remote player with the game's official palette
-                        // (NetplayPlayerSkin.SetColorIndex) instead of the mod's manual palette.
-                        // Stable per-player index (conservative modulo to stay in range).
+                        // Use Cairn's palette so custom shaders receive the expected material setup.
                         try
                         {
                             var skin = nrpComp.skin != null
@@ -684,7 +602,6 @@ internal static class RemotePlayerManager
                         catch (Exception exception) { ModLog.SuppressedException("remote-player.apply-native-skin", exception); }
                     }
 
-                    // Force updateWhenOffscreen on the SkinnedMeshes + enable the renderers.
                     var skinned = go.GetComponentsInChildren<SkinnedMeshRenderer>(true);
                     for (int i = 0; i < skinned.Count; i++)
                     {
@@ -694,11 +611,9 @@ internal static class RemotePlayerManager
                         catch (Exception exception) { ModLog.SuppressedException("remote-player.enable-renderer", exception); }
                     }
 
-                    // Remove the cameras.
                     var cameras = go.GetComponentsInChildren<Camera>(true);
                     for (int i = 0; i < cameras.Count; i++) Object.Destroy(cameras[i]);
 
-                    // Disable the prefab's colliders, add our own capsule collider.
                     var colliders = go.GetComponentsInChildren<Collider>(true);
                     for (int i = 0; i < colliders.Count; i++)
                     {
@@ -746,11 +661,6 @@ internal static class RemotePlayerManager
         }
     }
 
-    /// <summary>
-    /// Adds a capsule collider to the ghost's root. Acts as a fallback for any Unity
-    /// physics that checks colliders, even though Cairn's main movement system
-    /// bypasses standard physics.
-    /// </summary>
     private static void ActivateNativeRemoteVisuals(GameObject root)
     {
         if (root == null) return;
@@ -780,7 +690,7 @@ internal static class RemotePlayerManager
             col.center = new Vector3(0f, 0.9f, 0f);
             col.radius = 0.3f;
             col.height = 1.8f;
-            col.direction = 1; // Y axis
+            col.direction = 1;
         }
         catch (Exception ex)
         {

@@ -30,7 +30,6 @@ internal static class FeatureLog
     internal static void Warn(string message) => _warn(message);
     internal static void Error(string message) => _error(message);
 
-    /// <summary>Redirects the output. Pass null delegates to disable output.</summary>
     internal static void SetSink(Action<string> info, Action<string> warn, Action<string> error)
     {
         LastErrors.Clear();

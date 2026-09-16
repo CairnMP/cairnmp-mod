@@ -4,7 +4,6 @@ using CairnMultiplayer.Shared;
 
 namespace CairnMultiplayerMod.Internal.Networking;
 
-/// <summary>Applies replicated player state and native animation frames.</summary>
 internal sealed partial class NetworkManager
 {
     private void HandlePlayerState(BinaryReader reader)

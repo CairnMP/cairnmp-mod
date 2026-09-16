@@ -60,6 +60,7 @@ internal sealed class UnavailableGameApi : IGameApi
     private sealed class UnavailableInputApi : IGameInputApi
     {
         public bool IsKeyboardCaptured => false;
+        public bool IsPauseMenuActive => false;
         public bool WasPressed(GameInputAction action) => false;
         public bool WasKeyPressed(GameKey key) => false;
     }

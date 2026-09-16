@@ -46,10 +46,9 @@ public class PacketCodecTests
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
         {
-            PacketCodec.WriteString(w, "ab"); // 2 bytes UTF-8
+            PacketCodec.WriteString(w, "ab");
         }
         var bytes = ms.ToArray();
-        // 2 little-endian length bytes + payload
         Assert.Equal(4, bytes.Length);
         Assert.Equal(0x02, bytes[0]);
         Assert.Equal(0x00, bytes[1]);
@@ -82,8 +81,6 @@ public class ProtocolVersionTests
     {
         // When you bump Protocol.Version, update this value AND the release notes
         // to signal to clients that they need to update.
-        // 12: ClientFeatureStream carries a reliability flag.
-        // 11: finger poses joined the framework, on the shared real-time stream channel.
         Assert.Equal(13, Protocol.Version);
     }
 
@@ -142,7 +139,6 @@ public class HandPosePacketTests
     [Fact]
     public void HandPosePackedSize_MatchesFingerBoneCount()
     {
-        // 38 finger bones (Aava skeleton, resolved by name) x 4 bytes smallest-three = 152.
         Assert.Equal(38, Protocol.FingerBoneCount);
         Assert.Equal(Protocol.FingerBoneCount * QuaternionCodec.PackedSize, Protocol.HandPosePackedSize);
         Assert.Equal(152, Protocol.HandPosePackedSize);

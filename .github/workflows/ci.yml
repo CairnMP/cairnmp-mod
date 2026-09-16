@@ -30,6 +30,8 @@ jobs:
           node-version: 22
       - name: Check version declarations
         run: node scripts/sync-versions.js --check
+      - name: Test performance report tooling
+        run: node --test scripts/compare-performance.test.js
       - name: Restore locked dependencies
         run: dotnet restore CairnMultiplayer.Tests/CairnMultiplayer.Tests.csproj --locked-mode
       - name: Test

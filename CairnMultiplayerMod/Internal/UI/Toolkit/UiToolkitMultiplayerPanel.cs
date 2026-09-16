@@ -369,8 +369,6 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         visibilityCol.Add(_visibilitySegment.Root);
         configRow.Add(visibilityCol);
 
-        // Save note: at startup each player lands in the game's native save menu
-        // and picks new/existing themselves, just like in single-player.
         var saveNote = CairnUi.Label("Everyone picks new or existing save in Cairn's menu when the host starts.",
             11, CairnUi.TextMuted, FontStyle.Italic);
         saveNote.style.marginTop = 8;

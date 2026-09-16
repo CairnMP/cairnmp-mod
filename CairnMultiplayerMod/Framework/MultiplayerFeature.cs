@@ -43,12 +43,9 @@ internal abstract class MultiplayerFeature
     /// </summary>
     protected internal abstract void OnRegister(FeatureBuilder feature);
 
-    // ── Session shortcuts, so a feature never reaches through the composition root ──
 
-    /// <summary>Our own player id in the current session.</summary>
-    protected int LocalPlayerId => Session.LocalPlayer.Id;
+    protected int LocalPlayerId => Session.LocalPlayerId;
 
-    /// <summary>Our own display name (Steam persona).</summary>
     protected string LocalPlayerName => Session.LocalPlayer.Name;
 
     protected string GetPlayerName(int playerId)
@@ -69,23 +66,19 @@ internal abstract class MultiplayerFeature
         }
     }
 
-    /// <summary>True when this peer is the authoritative host.</summary>
     protected bool IsHost => Session.IsHost;
 
-    /// <summary>True when a session is established.</summary>
     protected bool IsConnected => Session.IsConnected;
 
     /// <summary>True while a mod UI (the chat) is consuming key presses. Check it before
     /// reacting to a key, otherwise typing a message triggers your shortcut.</summary>
     protected bool KeyboardCaptured => Game.Input.IsKeyboardCaptured;
 
-    /// <summary>Safe access to Cairn, bound before <see cref="OnRegister"/> runs.</summary>
     protected IGameApi Game { get; private set; } = UnavailableGameApi.Instance;
 
     protected void LogInfo(string message) => FeatureLog.Info($"[Feature:{Id}] {message}");
     protected void LogWarning(string message) => FeatureLog.Warn($"[Feature:{Id}] {message}");
 
-    /// <summary>Set by the host at registration; tests can supply their own runtime.</summary>
     internal ExtensionRuntime Session { private get; set; } = MultiplayerApi.Runtime;
 
     internal void BindGame(IGameApi game) => Game = game ?? UnavailableGameApi.Instance;

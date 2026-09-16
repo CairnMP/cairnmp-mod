@@ -9,19 +9,17 @@ internal static class ModConfig
     private static readonly string CategoryKeybinds = "Keybinds";
     private static readonly string CategoryDebug = "Debug";
 
-    // Player
     public static MelonPreferences_Entry<string> PlayerName;
 
-    // Room
     public static MelonPreferences_Entry<string> RoomCode;
     public static MelonPreferences_Entry<int> MaxPlayers;
 
-    // Keybinds
     public static MelonPreferences_Entry<string> ConnectKey;
     public static MelonPreferences_Entry<string> DisconnectKey;
 
-    // Debug
     public static MelonPreferences_Entry<bool> VerboseLogging;
+    public static MelonPreferences_Entry<bool> PerformanceDiagnostics;
+    public static MelonPreferences_Entry<string> PerformanceScenario;
 
     public static void Register()
     {
@@ -38,5 +36,7 @@ internal static class ModConfig
 
         var debug = MelonPreferences.CreateCategory(CategoryDebug);
         VerboseLogging = debug.CreateEntry("VerboseLogging", false);
+        PerformanceDiagnostics = debug.CreateEntry("PerformanceDiagnostics", false);
+        PerformanceScenario = debug.CreateEntry("PerformanceScenario", "unspecified - set route, save, run number and voice/rope state");
     }
 }

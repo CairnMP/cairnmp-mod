@@ -5,7 +5,6 @@ using CairnMultiplayerMod.Framework;
 
 namespace CairnMultiplayerMod.Features;
 
-/// <summary>The authoritative time of day, plus whether everyone is asleep.</summary>
 internal sealed class ClockState : IPacket
 {
     public float DayTime01;
@@ -24,7 +23,6 @@ internal sealed class ClockState : IPacket
     }
 }
 
-/// <summary>A player telling the host whether they are asleep in a bivouac.</summary>
 internal sealed class SleepReport : IPacket
 {
     public bool Asleep;
@@ -51,7 +49,6 @@ internal sealed class ClockFeature : MultiplayerFeature
     private HostState<ClockState> _clock;
     private HostCommand<SleepReport> _sleep;
 
-    // Host side: who is asleep, by player id.
     private readonly Dictionary<int, bool> _asleepByPlayer = new();
 
     private float _publishTimer;
@@ -93,7 +90,6 @@ internal sealed class ClockFeature : MultiplayerFeature
         else TickClient();
     }
 
-    /// <summary>Tells the host when our own sleep state flips — not every frame.</summary>
     private void ReportLocalSleep()
     {
         if (!Game.Clock.TryGetLocalSleep(out var asleep)) return;
@@ -163,8 +159,6 @@ internal sealed class ClockFeature : MultiplayerFeature
             Game.Clock.Freeze(_lastReceived.DayTime01);
     }
 
-    /// <summary>True when every other player who is actually in game is asleep. Players
-    /// loading or in a menu do not block the consensus.</summary>
     private bool EveryoneElseAsleep()
     {
         foreach (var playerId in Game.Players.RemoteSleepParticipants)

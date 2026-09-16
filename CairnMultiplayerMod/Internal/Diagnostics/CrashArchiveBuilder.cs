@@ -18,7 +18,6 @@ internal sealed class CrashIncident
     public string Fingerprint { get; init; }
 }
 
-/// <summary>Creates a local, self-contained crash bundle without transmitting it.</summary>
 internal static class CrashArchiveBuilder
 {
     internal const int MaxLogFiles = 12;

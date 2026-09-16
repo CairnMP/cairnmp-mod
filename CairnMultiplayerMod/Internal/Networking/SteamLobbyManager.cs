@@ -12,9 +12,6 @@ using Il2CppSteamworks;
 
 namespace CairnMultiplayerMod.Internal.Networking
 {
-    /// <summary>
-    /// Represents a current member of the Steam lobby (another player or self).
-    /// </summary>
     internal sealed class LobbyMember
     {
         public ulong SteamId { get; init; }
@@ -38,15 +35,13 @@ namespace CairnMultiplayerMod.Internal.Networking
     /// </summary>
     internal sealed partial class SteamLobbyManager : IDisposable
     {
-        // SetLobbyData keys used to filter CairnMP lobbies on the browser side
-        // and to store the shareable code.
         private const string KeyCairnApp = "cairnmp_app";
         private const string KeyCode = "code";
         private const string KeyName = "name";
         private const string KeyHostName = "host_name";
         private const string KeyModVersion = "mod_version";
         private const string KeyProtocolVersion = "protocol_version";
-        private const string KeyVisibility = "visibility"; // for the browser display
+        private const string KeyVisibility = "visibility";
         private const string KeyStartNonce = "start_nonce";
         private const string KeyStartDifficulty = "start_difficulty";
         private const string KeyStartSkipTutorials = "start_skip_tutorials";
@@ -60,7 +55,6 @@ namespace CairnMultiplayerMod.Internal.Networking
         private const string CodeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
         private const int CodeBlockLen = 4;
 
-        // ── Current state ─────────────────────────────────────────────────────────
 
         public CSteamID CurrentLobbyId { get; private set; }
         public string CurrentRoomCode { get; private set; } = "";
@@ -91,7 +85,6 @@ namespace CairnMultiplayerMod.Internal.Networking
             }
         }
 
-        /// <summary>Capacity of the current lobby (0 if not connected).</summary>
         public int MaxMembers
         {
             get
@@ -109,12 +102,7 @@ namespace CairnMultiplayerMod.Internal.Networking
 
         private readonly List<LobbyMember> _members = new();
 
-        // Pending configuration used to finalize the SetLobbyData writes once
-        // LobbyCreated_t is received.
         private HostConfig _pendingHostConfig;
-
-        // ── TaskCompletionSources ─────────────────────────────────────────────────
-        // Only one operation at a time (the UI disables the button while Connecting).
 
         private TaskCompletionSource<bool> _createTcs;
         private TaskCompletionSource<bool> _joinTcs;
@@ -129,7 +117,7 @@ namespace CairnMultiplayerMod.Internal.Networking
         private string _pendingOperationName = "";
         private bool _disposed;
 
-        // ── Steam callbacks (kept referenced to avoid GC) ─────────────────────────
+        // Steamworks callback registrations are invalidated if these handles are collected.
 
         private Callback<LobbyCreated_t> _cbLobbyCreated;
         private Callback<LobbyEnter_t> _cbLobbyEnter;
@@ -137,7 +125,6 @@ namespace CairnMultiplayerMod.Internal.Networking
         private Callback<GameLobbyJoinRequested_t> _cbGameLobbyJoinRequested;
         private Callback<LobbyDataUpdate_t> _cbLobbyDataUpdate;
 
-        // ── Public events ─────────────────────────────────────────────────────────
 
         public event Action<CSteamID> OnLobbyEntered;
         public event Action<string> OnLobbyError;
@@ -145,7 +132,6 @@ namespace CairnMultiplayerMod.Internal.Networking
         public event Action OnMembersChanged;
         public event Action<ServerStartGame> OnStartRequested;
 
-        // ── Lifecycle ─────────────────────────────────────────────────────────────
 
         private enum SteamApiLoadStatus
         {
@@ -158,10 +144,8 @@ namespace CairnMultiplayerMod.Internal.Networking
         private readonly SteamApiLoadStatus _steamApiStatus;
         private readonly string _steamApiLoadError;
 
-        /// <summary>True when steam_api64.dll was found and loaded successfully.</summary>
         public bool IsSteamIntegrationAvailable => _steamApiStatus == SteamApiLoadStatus.Loaded;
 
-        /// <summary>User-facing reason Steam matchmaking cannot initialize.</summary>
         public string SteamUnavailableReason => _steamApiStatus switch
         {
             SteamApiLoadStatus.Missing =>
@@ -174,7 +158,6 @@ namespace CairnMultiplayerMod.Internal.Networking
         private const string MsgSteamNotReady =
             "Steam isn't ready. Make sure the Steam client is running, then try again in a few seconds.";
 
-        /// <summary>Message explaining why a lobby operation cannot run yet.</summary>
         private string NotInitializedMessage() =>
             IsSteamIntegrationAvailable ? MsgSteamNotReady : SteamUnavailableReason;
 
@@ -224,7 +207,6 @@ namespace CairnMultiplayerMod.Internal.Networking
         [DllImport("steam_api64", EntryPoint = "SteamInternal_SteamAPI_Init", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         private static extern int NativeSteamInternal_SteamAPI_Init(string pszVersions, byte[] pOutErrMsg);
 
-        // Game root (Cairn.exe directory) — computed once at preload.
         private static string _gameRoot = "";
 
         /// <summary>steam_api64.dll ships with Cairn in Cairn_Data/Plugins/x86_64/
@@ -275,7 +257,6 @@ namespace CairnMultiplayerMod.Internal.Networking
         private const string CairnSteamAppId = "1588550";
         private static string _activeAppId = CairnSteamAppId;
 
-        /// <summary>Writes steam_appid.txt with the given appId to the game root.</summary>
         private static void WriteAppId(string appId)
         {
             try
@@ -311,12 +292,10 @@ namespace CairnMultiplayerMod.Internal.Networking
         /// </summary>
         private bool TryInitializeSteam()
         {
-            // Check 1: is Steam running?
             bool steamRunning = false;
             try { steamRunning = NativeSteamAPI_IsSteamRunning(); }
             catch (Exception ex) { ModLog.Warning($"[SteamLobby] IsSteamRunning threw: {ex.Message}"); }
 
-            // Check 2: native context already established (non-zero pipe = init OK)?
             int nativePipe = 0;
             int nativeUser = 0;
             try
@@ -328,8 +307,7 @@ namespace CairnMultiplayerMod.Internal.Networking
 
             bool alreadyInited = nativePipe != 0 && nativeUser != 0;
 
-            // Check 3: SteamAPI_Init looks for steam_appid.txt in the CWD —
-            // if the launcher changed the CWD, the file is invisible to the SDK.
+            // SteamAPI_Init resolves steam_appid.txt from the process working directory.
             string cwd = Environment.CurrentDirectory;
             ModLog.Debug($"[SteamLobby] TryInit: steamRunning={steamRunning} pipe={nativePipe} user={nativeUser} alreadyInited={alreadyInited}");
             ModLog.Debug($"[SteamLobby] CWD='{cwd}'  gameRoot='{_gameRoot}'  match={string.Equals(cwd, _gameRoot, StringComparison.OrdinalIgnoreCase)}");
@@ -454,9 +432,7 @@ namespace CairnMultiplayerMod.Internal.Networking
             }
         }
 
-        /// <summary>Pumps the Steam callbacks — called every frame by the bootstrap update loop.
-        /// Also handles the deferred initialization to give Cairn time to
-        /// set up its own Steam context before we try to attach to it.</summary>
+        /// <summary>Initialization is deferred until Cairn has established its own Steam context.</summary>
         public void Pump(float dt = 0f)
         {
             if (_disposed) return;
@@ -537,10 +513,7 @@ namespace CairnMultiplayerMod.Internal.Networking
             }
         }
 
-        // ── Public API ────────────────────────────────────────────────────────────
 
-        /// <summary>Creates a Steam lobby with the requested visibility and capacity.
-        /// Resolves after LobbyCreated_t + metadata write + LobbyEnter_t.</summary>
         public Task<bool> CreateLobby(HostConfig cfg)
         {
             if (!EnsureSteamReady()) return Task.FromResult(false);
@@ -581,8 +554,6 @@ namespace CairnMultiplayerMod.Internal.Networking
             return task;
         }
 
-        /// <summary>Joins a lobby via its short "XXXX-XXXX" code.
-        /// First searches via RequestLobbyList filtered on the code, then JoinLobby.</summary>
         public Task<bool> JoinByCode(string code)
         {
             if (!EnsureSteamReady()) return Task.FromResult(false);
@@ -612,8 +583,6 @@ namespace CairnMultiplayerMod.Internal.Networking
             return task;
         }
 
-        /// <summary>Joins a lobby via its SteamID64 (used from the browser or a
-        /// Steam Friends invite).</summary>
         public Task<bool> JoinById(ulong lobbyId64)
         {
             if (!EnsureSteamReady()) return Task.FromResult(false);
@@ -646,7 +615,6 @@ namespace CairnMultiplayerMod.Internal.Networking
             return task;
         }
 
-        /// <summary>Fetches the list of public CairnMP lobbies.</summary>
         public Task<List<LobbyEntry>> RequestLobbyList()
         {
             if (!EnsureSteamReady())
@@ -683,7 +651,6 @@ namespace CairnMultiplayerMod.Internal.Networking
             return task;
         }
 
-        /// <summary>Leaves the current lobby. No-op if not in a lobby.</summary>
         public void Leave()
         {
             if (!IsInLobby) return;
@@ -694,7 +661,6 @@ namespace CairnMultiplayerMod.Internal.Networking
             OnLobbyLeft?.Invoke();
         }
 
-        /// <summary>Broadcasts a start order via the Steam lobby metadata.</summary>
         public bool BroadcastStart(ServerStartGame start)
         {
             if (!IsInLobby)
@@ -732,7 +698,6 @@ namespace CairnMultiplayerMod.Internal.Networking
             }
         }
 
-        // ── Steam callbacks ───────────────────────────────────────────────────────
 
         private void RebuildMembers()
         {
@@ -811,7 +776,6 @@ namespace CairnMultiplayerMod.Internal.Networking
             if (hadTcs) OnLobbyError?.Invoke(err);
         }
 
-        /// <summary>Generates an "XXXX-XXXX" code from the alphabet without ambiguous characters.</summary>
         private static string GenerateRoomCode()
         {
             var buf = new char[CodeBlockLen * 2 + 1];
@@ -823,12 +787,10 @@ namespace CairnMultiplayerMod.Internal.Networking
             return new string(buf);
         }
 
-        /// <summary>Normalizes an entered code (uppercase, strips internal spaces).</summary>
         private static string NormalizeCode(string raw)
         {
             if (string.IsNullOrEmpty(raw)) return "";
             var s = raw.Trim().ToUpperInvariant().Replace(" ", "");
-            // Auto-insert the dash if missing and we have 8 characters.
             if (!s.Contains('-') && s.Length == CodeBlockLen * 2)
                 s = s.Substring(0, CodeBlockLen) + "-" + s.Substring(CodeBlockLen);
             return s;

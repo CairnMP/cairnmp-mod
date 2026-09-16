@@ -252,6 +252,7 @@ internal sealed partial class NetworkManager
 
         public bool IsConnected => _network._steamTransportActive;
         public bool IsHost => _network._steamLobby?.IsHost == true;
+        public int LocalPlayerId => _network.LocalPlayerId;
         public MultiplayerPlayer LocalPlayer => _network.ToApiPlayer(_network.LocalPlayerId);
         public IReadOnlyList<MultiplayerPlayer> Players
         {

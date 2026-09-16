@@ -64,12 +64,10 @@ internal sealed class HostState<T> where T : IPacket, new()
         _label = label;
     }
 
-    /// <summary>The value currently known on this peer, if one has been published yet.</summary>
     public bool TryGet(out T value) => _state.TryGet(out value);
 
     internal ReplicatedState<T> Inner => _state;
 
-    /// <summary>Publishes a new value. No-op with a warning when called off the host.</summary>
     public void Set(T value)
     {
         if (!_runtime.IsConnected) return;
@@ -110,10 +108,8 @@ internal sealed class PerPlayerState<T> where T : IPacket, new()
     /// transaction (see <see cref="HostRequest{T}.Publish{TState}"/>).</summary>
     internal ReplicatedState<T> Inner => _state;
 
-    /// <summary>The value currently known for that player, if any.</summary>
     public bool TryGet(int playerId, out T value) => _state.TryGetForPlayer(playerId, out value);
 
-    /// <summary>Publishes a player's value. Host only.</summary>
     public void Set(int playerId, T value)
     {
         if (!_runtime.IsConnected) return;
@@ -128,7 +124,6 @@ internal sealed class PerPlayerState<T> where T : IPacket, new()
             FeatureLog.Warn($"[Feature:{_label}] state update refused: {result.Reason}");
     }
 
-    /// <summary>Drops a player's value. Host only. Leaving players are cleared for you.</summary>
     public void Remove(int playerId)
     {
         if (!_runtime.IsConnected || !_runtime.IsHost) return;
@@ -198,7 +193,6 @@ internal sealed class HostCommand<T> where T : IPacket, new()
     }
 }
 
-/// <summary>A host-authoritative transient event, optionally staged inside a command.</summary>
 internal sealed class HostEvent<T> where T : IPacket, new()
 {
     private readonly ExtensionRuntime _runtime;
@@ -226,20 +220,16 @@ internal sealed class HostEvent<T> where T : IPacket, new()
     }
 }
 
-/// <summary>What the host handler receives for a <see cref="HostCommand{T}"/>.</summary>
 internal readonly struct HostRequest<T>
 {
     private readonly HostCommandContext<T> _context;
 
     internal HostRequest(HostCommandContext<T> context) => _context = context;
 
-    /// <summary>Id of the player who asked.</summary>
     public int FromPlayerId => _context.Sender.Id;
 
-    /// <summary>What they asked for.</summary>
     public T Message => _context.Request;
 
-    /// <summary>Refuses the request; the sender receives the reason.</summary>
     public void Reject(string reason) => _context.Reject(reason);
 
     /// <summary>
@@ -250,14 +240,11 @@ internal readonly struct HostRequest<T>
     public void Publish<TState>(PerPlayerState<TState> state, TState value) where TState : IPacket, new()
         => _context.SetForPlayer(state.Inner, FromPlayerId, value);
 
-    /// <summary>Publishes global host state in the same transaction as the command verdict.</summary>
     public void Publish<TState>(HostState<TState> state, TState value) where TState : IPacket, new()
         => _context.Set(state.Inner, value);
 
-    /// <summary>Emits a host event in the same transaction as the command verdict.</summary>
     public void Emit<TEvent>(HostEvent<TEvent> hostEvent, TEvent payload) where TEvent : IPacket, new()
         => _context.Broadcast(hostEvent.Inner, payload);
 
-    /// <summary>Runs a game-side action only after the command has committed.</summary>
     public void AfterCommit(Action action) => _context.AfterCommit(action);
 }

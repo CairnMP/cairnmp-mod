@@ -5,13 +5,6 @@ using CairnMultiplayerMod.GameApi;
 
 namespace CairnMultiplayerMod.Features;
 
-/// <summary>
-/// Marking a spot for the others. In free camera, a left click (or R1/RB on a pad) drops a
-/// coloured waypoint on the aimed point, visible to every player for a few seconds.
-///
-/// Reference feature for the framework: the whole thing — input, network, cleanup — lives in
-/// this one file. Nothing was added to Mod, to the networking layer or to the protocol.
-/// </summary>
 internal sealed class PingFeature : MultiplayerFeature
 {
     public override string Id => "ping";
@@ -59,7 +52,6 @@ internal sealed class PingFeature : MultiplayerFeature
         => Game.World.SpawnPing(fromPlayerId, ping.Position);
 }
 
-/// <summary>Where a player dropped a ping.</summary>
 internal sealed class PingPlaced : IPacket
 {
     public PingPlaced() { }

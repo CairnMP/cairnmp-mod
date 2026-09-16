@@ -21,8 +21,10 @@ namespace CairnMultiplayerMod.Internal.Game;
 internal sealed class InventoryAdapter : IInventoryApi
 {
     private const int MaxTransferCount = 10;
+    private const int MissingSectionRetryFrames = 300;
     private readonly List<ShareableItem> _items = new();
     private readonly Dictionary<uint, GroundVisual> _groundVisuals = new();
+    private readonly List<BagInventorySection> _sectionCandidates = new();
     private ShareActionsRegistration _shareActions;
     private BagInventorySection _section;
     private InventoryInputPrompt _givePrompt;
@@ -32,7 +34,8 @@ internal sealed class InventoryAdapter : IInventoryApi
     private InputActionAsset _shareInputAsset;
     private Il2CppSystem.Action _giveDelegate;
     private Il2CppSystem.Action _dropDelegate;
-    private int _lastSectionSearchFrame;
+    private int _nextSectionSearchFrame;
+    private bool _sectionCandidatesInitialized;
     private bool _creationErrorReported;
 
     internal void Tick()
@@ -171,7 +174,6 @@ internal sealed class InventoryAdapter : IInventoryApi
         return _selectedGroundId;
     }
 
-    /// <summary>World-anchored pickup legend inspired by Cairn's native interaction UI.</summary>
     public void DrawGroundItems()
     {
         if (_pickupItems.Count == 0 || Time.frameCount - _pickupFrame > 1
@@ -447,15 +449,7 @@ internal sealed class InventoryAdapter : IInventoryApi
 
         if (_section == null)
         {
-            if (Time.frameCount - _lastSectionSearchFrame < 20) return;
-            _lastSectionSearchFrame = Time.frameCount;
-            // Several bag sections can coexist (normal inventory, cooking, etc.).
-            // Bind to the visible one, not an arbitrary inactive section.
-            foreach (var section in UnityEngine.Object.FindObjectsOfType<BagInventorySection>(true))
-                if (section != null && section.isActiveAndEnabled
-                    && section.CanvasGroup != null && section.CanvasGroup.alpha > .01f)
-                { _section = section; break; }
-            if (_section == null) return;
+            if (!TryBindVisibleSection()) return;
             CreateNativeActions();
         }
 
@@ -471,6 +465,57 @@ internal sealed class InventoryAdapter : IInventoryApi
 
         if (!_section.isActiveAndEnabled || _section.CanvasGroup.alpha <= .01f)
             DestroyNativeActions();
+    }
+
+    /// <summary>
+    /// Unity's global object search dominated this adapter's profiled update cost. Cache every
+    /// section, including inactive ones, then select the visible section from that small list.
+    /// Closed inventory panels remain valid candidates and therefore do not cause another scan.
+    /// </summary>
+    private bool TryBindVisibleSection()
+    {
+        var frame = Time.frameCount;
+        if (!_sectionCandidatesInitialized)
+        {
+            if (frame < _nextSectionSearchFrame) return false;
+
+            _nextSectionSearchFrame = frame + MissingSectionRetryFrames;
+            _sectionCandidatesInitialized = true;
+            _sectionCandidates.Clear();
+
+            foreach (var section in UnityEngine.Object.FindObjectsOfType<BagInventorySection>(true))
+                if (section != null) _sectionCandidates.Add(section);
+        }
+
+        var hasLiveCandidate = false;
+        for (var index = 0; index < _sectionCandidates.Count; index++)
+        {
+            var section = _sectionCandidates[index];
+            if (section == null) continue;
+            hasLiveCandidate = true;
+
+            // Several bag sections can coexist (normal inventory, cooking, etc.).
+            // Bind to the visible one, not an arbitrary inactive section.
+            if (!section.isActiveAndEnabled || section.CanvasGroup == null
+                || section.CanvasGroup.alpha <= .01f) continue;
+
+            _section = section;
+            return true;
+        }
+
+        // A scene can destroy cached wrappers before its replacement UI is ready, so retry only
+        // while no live candidate exists.
+        if (!hasLiveCandidate && frame >= _nextSectionSearchFrame)
+            _sectionCandidatesInitialized = false;
+        return false;
+    }
+
+    internal void InvalidateNativeUiCache()
+    {
+        DestroyNativeActions();
+        _sectionCandidates.Clear();
+        _sectionCandidatesInitialized = false;
+        _nextSectionSearchFrame = 0;
     }
 
     private bool IsInventoryInteractive()

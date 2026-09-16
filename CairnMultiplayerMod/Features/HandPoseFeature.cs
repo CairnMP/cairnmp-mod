@@ -4,7 +4,6 @@ using CairnMultiplayerMod.Framework;
 
 namespace CairnMultiplayerMod.Features;
 
-/// <summary>A climber's finger pose, compressed (smallest-three per bone).</summary>
 internal sealed class HandPose : IPacket
 {
     public byte[] Packed;
@@ -14,13 +13,9 @@ internal sealed class HandPose : IPacket
 }
 
 /// <summary>
-/// Finger poses on the ghosts — what makes a remote climber grip holds instead of showing
-/// flat hands.
-///
-/// Streamed rather than host state: it is polled ~12 times a second and only sent when it
-/// changes, and the next capture supersedes the last. Sent reliably though, because a drop
-/// on a change-only stream would leave a ghost's fingers frozen on the previous pose until
-/// the player moves them again.
+/// Streamed rather than host state because each new capture supersedes the last. It remains
+/// reliable because a drop on a change-only stream would leave a ghost's fingers frozen
+/// until the player moves them again.
 /// </summary>
 internal sealed class HandPoseFeature : MultiplayerFeature
 {

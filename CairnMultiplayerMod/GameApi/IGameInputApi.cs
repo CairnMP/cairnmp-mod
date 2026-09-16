@@ -18,6 +18,7 @@ internal enum GameKey
 internal interface IGameInputApi
 {
     bool IsKeyboardCaptured { get; }
+    bool IsPauseMenuActive { get; }
     bool WasPressed(GameInputAction action);
     bool WasKeyPressed(GameKey key);
 }

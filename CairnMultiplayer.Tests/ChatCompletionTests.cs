@@ -7,10 +7,6 @@ using Xunit;
 
 namespace CairnMultiplayerShared.Tests;
 
-/// <summary>
-/// Chat input completion: command names and player names. The engine is pure (no Unity),
-/// so the whole Tab behaviour is covered here rather than in game.
-/// </summary>
 public class ChatCompletionTests
 {
     // Same shape and order as what CommandRouter.AvailableCommands() hands over: the
@@ -39,7 +35,7 @@ public class ChatCompletionTests
     [InlineData("")]
     [InlineData("hello")]
     [InlineData("hey Ali")]
-    [InlineData(" /tp")]           // a leading space is not a command line
+    [InlineData(" /tp")]
     public void PlainMessagesCompleteToNothing(string input)
     {
         var set = Complete(input);
@@ -64,10 +60,6 @@ public class ChatCompletionTests
         Assert.Equal(0, Complete("/zz").Count);
     }
 
-    /// <summary>
-    /// A command that takes arguments completes with a trailing space, so the next Tab
-    /// moves on to its first argument instead of cycling through command names again.
-    /// </summary>
     [Fact]
     public void OnlyCommandsWithArgumentsCompleteWithATrailingSpace()
     {
@@ -101,7 +93,6 @@ public class ChatCompletionTests
         Assert.Equal(new[] { "/bring Alice", "/bring Alina" }, Inputs(set));
     }
 
-    /// <summary>The last argument swallows the rest of the line: nicknames may contain spaces.</summary>
     [Theory]
     [InlineData("/tp Jean Mi")]
     [InlineData("/tp Jean ")]
@@ -118,14 +109,9 @@ public class ChatCompletionTests
     {
         var set = Complete("/wave Ali");
 
-        // Trailing space: the emote is still to be typed.
         Assert.Equal(new[] { "/wave Alice ", "/wave Alina " }, Inputs(set));
     }
 
-    /// <summary>
-    /// Arguments other than &lt;player&gt; have nothing to complete with, but the usage
-    /// stays on screen to say what is expected there.
-    /// </summary>
     [Fact]
     public void NonPlayerArgumentsOnlyShowTheUsage()
     {
@@ -134,7 +120,6 @@ public class ChatCompletionTests
         Assert.Equal(0, set.Count);
         Assert.Equal("/wave <player> <emote> - wave at a player", set.Usage);
 
-        // An optional argument is a placeholder too, and it is not a player either.
         var roll = Complete("/roll 2");
 
         Assert.Equal(0, roll.Count);
@@ -168,7 +153,6 @@ public class ChatCompletionTests
         Assert.Equal("", set.Usage);
     }
 
-    /// <summary>Without a host, /tp and /bring are not offered (the router filters them out).</summary>
     [Fact]
     public void OnlyTheGivenCommandsAreOffered()
     {
@@ -205,7 +189,6 @@ public class ChatCompletionTests
         Assert.Equal("Tab: Alice  [Alina]  Bob  Jean Michel", ChatCompletion.BuildHint(set, 1, 80));
     }
 
-    /// <summary>When the list is wider than the bar, the window follows the selection.</summary>
     [Fact]
     public void HintScrollsToKeepTheSelectionVisible()
     {
