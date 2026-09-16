@@ -24,6 +24,11 @@ internal sealed class StartGameFlow
     // until loading begins.
     private ServerStartGame? _forceNewGameOpts;
 
+    // Multiplayer must stop at the native difficulty menu. Going directly to save selection
+    // bypasses the only screen that exposes the mod-unlocked Free Roam option.
+    internal static MainMenuInterop.MainMenuStep MultiplayerLaunchEntryStep =>
+        MainMenuInterop.MainMenuStep.DifficultySelect;
+
     internal StartGameFlow(
         IMultiplayerPanel panel,
         Action restoreMainMenuInput,
@@ -94,8 +99,8 @@ internal sealed class StartGameFlow
 
                 _forceNewGameOpts = start;
 
-                MainMenuInterop.ForceMainMenuStep(MainMenuInterop.MainMenuStep.StoryModeManageSave);
-                ModLog.Info("[StartGame] Opened native save menu — player chooses new/existing (options re-applied each frame)");
+                MainMenuInterop.ForceMainMenuStep(MultiplayerLaunchEntryStep);
+                ModLog.Info("[StartGame] Opened native difficulty selection — player chooses mode before save selection (options re-applied each frame)");
 
                 _pendingStart = null;
                 _pendingStartRetries = 0;

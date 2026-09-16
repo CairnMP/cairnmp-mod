@@ -13,6 +13,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.2.13](#2213--2026-09-16-beta) | 2026-09-16 | Beta | Free Roam multiplayer launch fix |
 | [2.2.12](#2212--2026-09-16-beta) | 2026-09-16 | Beta | RE-verified native integration |
 | [2.2.11](#2211--2026-09-16-beta) | 2026-09-16 | Beta | Native cooperative-rope lifecycle fixes |
 | [2.2.10](#2210--2026-09-15-beta) | 2026-09-15 | Beta | Profiler-guided performance and rope fixes |
@@ -30,6 +31,23 @@ All notable CairnMP changes are documented here. Releases follow
 | [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
 | [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.2.13] — 2026-09-16 (beta)
+
+### Fixed
+
+- Starting a multiplayer lobby now opens Cairn's native difficulty selection
+  before save selection. Free Roam is therefore available again when creating a
+  new multiplayer game.
+
+### Compatibility and verification
+
+- Version **2.2.13** retains protocol **13**. All lobby members must use the same
+  mod version.
+- The launch transition is protected by a regression test. Two-account in-game
+  validation remains required before publishing the beta.
 
 ---
 
