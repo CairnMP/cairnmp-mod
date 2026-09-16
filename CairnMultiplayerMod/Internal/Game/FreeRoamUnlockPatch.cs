@@ -230,12 +230,11 @@ internal static unsafe class FreeRoamUnlockPatch
             if (_freeRoamUnlockActive) __result = true;
         }
 
-        // The native filter reads the field directly, so a property patch applied a frame
-        // later cannot affect this one-time button build.
+        // InitializeButtons runs while MainMenu is still loading, before OnSceneWasLoaded
+        // can arm _freeRoamUnlockActive. This hook itself is the safe menu-only boundary:
+        // prime the native data here so FreeRoam is included in the one-time button build.
         internal static void InitializeButtonsPrefix()
         {
-            if (!_freeRoamUnlockActive) return;
-
             bool fieldSet = TrySetFreeRoamTweakableField(true);
             ApplyFreeRoamModeVisible(out bool found, out int changed, out int total, out bool stillHidden);
             if (!_initButtonsPrefixLogged)
