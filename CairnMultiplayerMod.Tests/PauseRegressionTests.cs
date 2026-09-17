@@ -22,6 +22,17 @@ public sealed class PauseRegressionTests
     }
 
     [Fact]
+    public void AdditiveStreamingDoesNotAdvertiseAFalseLoadingTransition()
+    {
+        Assert.True(PlayerStateBroadcaster.ShouldPreserveInGameDuringStreaming(
+            CairnGameLifecycleState.Loading, PlayerState.InGame, hasGameplayContext: true));
+        Assert.False(PlayerStateBroadcaster.ShouldPreserveInGameDuringStreaming(
+            CairnGameLifecycleState.Loading, PlayerState.InGame, hasGameplayContext: false));
+        Assert.False(PlayerStateBroadcaster.ShouldPreserveInGameDuringStreaming(
+            CairnGameLifecycleState.Cutscene, PlayerState.InGame, hasGameplayContext: true));
+    }
+
+    [Fact]
     public void PauseMenuLifecycleBlocksChatUntilNativeInputContextIsPopped()
     {
         var state = new PauseRequestSuppressionState();

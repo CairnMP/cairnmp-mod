@@ -62,6 +62,7 @@ button; Cairn's native actions are temporarily blocked while it is held.
 | `View/Share` + `B/○` | Drop the selected backpack item |
 | `View/Share` + D-pad `←` / `→` | Select a shared ground item |
 | `View/Share` + D-pad `↑` | Show or hide player names |
+| `View/Share` + `RB/R1` | Place a multiplayer ping |
 | Hold `View/Share` + `LB/L1` | Push to talk |
 | `View/Share` + right-stick click | Emergency input release |
 

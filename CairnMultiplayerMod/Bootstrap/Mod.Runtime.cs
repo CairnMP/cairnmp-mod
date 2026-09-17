@@ -24,7 +24,10 @@ public partial class Mod
             _runtimeState.LastGameplayScene = sceneName;
 
         _runtimeState.CurrentScene = sceneName;
-        _runtimeState.TimeSinceLastSceneLoad = 0f;
+        // Cairn streams art/audio/LOD layers constantly while the pawn remains valid.
+        // Only a real gameplay boundary should restart the graph-stability timer.
+        if (SceneRoles.IsSyncResetPoint(sceneName) || SceneRoles.IsBivouac(sceneName))
+            _runtimeState.TimeSinceLastSceneLoad = 0f;
         LogDebug($"Scene loaded: [{buildIndex}] {sceneName}");
 
         var isMainMenu = SceneRoles.IsMainMenu(sceneName);
@@ -329,7 +332,7 @@ public partial class Mod
         if (state == LocalState)
             return;
 
-        LoggerInstance.Msg($"[State] local: {LocalState} -> {state}");
+        LoggerInstance.Msg($"[State] local: {LocalState} -> {state} ({Player.LastComputedStateReason})");
         _runtimeState.LocalPlayerState = state;
     }
 

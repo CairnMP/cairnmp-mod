@@ -44,7 +44,7 @@ internal sealed class VoiceFeature : MultiplayerFeature
             Game.Voice.Receive(player, frame.Burst, frame.Sequence, frame.Opus));
         feature.EveryFrame(Tick, FeaturePhase.Always);
         feature.OnSessionEnded(Game.Voice.Reset);
-        feature.OnSceneReset(Game.Voice.Reset);
+        feature.OnSceneReset(Game.Voice.ResetScene);
         feature.OnPlayerLeft((id, _) => Game.Voice.RemovePlayer(id));
     }
 

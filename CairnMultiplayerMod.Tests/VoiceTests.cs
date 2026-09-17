@@ -293,6 +293,24 @@ public sealed class VoiceTests
     }
 
     [Fact]
+    public void SolidObstacleStronglyMufflesButDoesNotCompletelyMuteVoice()
+    {
+        Assert.Equal(.22f, VoiceSpatialPolicy.OccludedVolume(1, 1), 3);
+        Assert.Equal(900f, VoiceSpatialPolicy.OccludedCutoff(18000, 1), 1);
+        Assert.Equal(.08f, VoiceSpatialPolicy.OccludedReverb(0, 1), 3);
+    }
+
+    [Fact]
+    public void PartialObstacleProducesProgressiveOcclusion()
+    {
+        var clearVolume = VoiceSpatialPolicy.OccludedVolume(.8f, 0);
+        var partialVolume = VoiceSpatialPolicy.OccludedVolume(.8f, .5f);
+        var blockedVolume = VoiceSpatialPolicy.OccludedVolume(.8f, 1);
+        Assert.True(clearVolume > partialVolume && partialVolume > blockedVolume);
+        Assert.InRange(VoiceSpatialPolicy.OccludedCutoff(12000, .5f), 3000, 3500);
+    }
+
+    [Fact]
     public void FinalVoiceMixLimiterPreventsMultipleSpeakersFromClipping()
     {
         var limiter = new VoiceOutputLimiter();

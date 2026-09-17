@@ -8,6 +8,7 @@ internal interface IVoiceApi
     void Receive(int playerId, uint burst, uint sequence, byte[] opus);
     void RemovePlayer(int playerId);
     void Reset();
+    void ResetScene();
 }
 
 internal sealed class UnavailableVoiceApi : IVoiceApi
@@ -18,4 +19,5 @@ internal sealed class UnavailableVoiceApi : IVoiceApi
     public void Receive(int playerId, uint burst, uint sequence, byte[] opus) { }
     public void RemovePlayer(int playerId) { }
     public void Reset() { }
+    public void ResetScene() { }
 }

@@ -53,6 +53,14 @@ internal static class SceneRoles
         return true;
     }
 
+    /// <summary>Whether a streamed layer still belongs to the gameplay world.</summary>
+    public static bool HasGameplayContext(string currentScene, string lastGameplayScene)
+    {
+        if (IsGameplayRoot(currentScene)) return true;
+        if (string.IsNullOrEmpty(lastGameplayScene)) return false;
+        return !IsMainMenuArea(currentScene) && !IsLoading(currentScene) && !IsBivouac(currentScene);
+    }
+
     /// <summary>Returns the stable gameplay scene used in network state. Cairn may load
     /// audio, art and other additive scenes after the root; those callbacks must not make
     /// players or world objects appear to have changed maps.</summary>

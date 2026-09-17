@@ -23,6 +23,7 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
     private readonly VoiceActivityGate _gate = new();
     private readonly VoiceProcessor _processor = new();
     private readonly VoiceAcousticZones _acousticZones = new();
+    private readonly VoiceOcclusionProbe _occlusion = new();
     private readonly Dictionary<int, VoicePlayback> _speakers = new();
     private readonly HashSet<int> _mutedPlayers = new();
     private readonly Queue<(uint Burst, uint Sequence, byte[] Data)> _outgoing = new();
@@ -97,7 +98,7 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
         }
         try { _settings.Tick(); }
         catch (Exception ex) { ModLog.SuppressedException("voice.settings-tick", ex); }
-        var inGame = connected && _inGame() && _network()?.IsHandshakeComplete == true;
+        var inGame = connected && IsNativeGameplayStable() && _inGame() && _network()?.IsHandshakeComplete == true;
         var wantsCapture = Application.isFocused && (TestMicrophone || (inGame && VoicePreferences.CurrentMode != VoiceMode.Muted));
         var requested = VoicePreferences.Microphone.Value ?? "";
         var desiredId = requested.Length == 0 ? _defaultDevice : requested;
@@ -220,7 +221,7 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
     }
     public void Receive(int playerId, uint burst, uint sequence, byte[] opus)
     {
-        if (_mutedPlayers.Contains(playerId) || opus == null || opus.Length == 0 || opus.Length > 400 || VoicePreferences.SafeVolume <= 0 || !TryGetSpeaker(playerId, out var position, out var distance)) return;
+        if (_mutedPlayers.Contains(playerId) || opus == null || opus.Length == 0 || opus.Length > 400 || VoicePreferences.SafeVolume <= 0 || !TryGetSpeaker(playerId, out var listener, out var position, out var distance)) return;
         var acoustics = _acousticZones.Resolve(position);
         if (distance >= acoustics.MaxDistance && !_speakers.ContainsKey(playerId)) return;
         var now = Time.realtimeSinceStartupAsDouble;
@@ -234,12 +235,12 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
         }
         speaker.Receive(burst, sequence, opus, now);
     }
-    private bool TryGetSpeaker(int id, out Vector3 position, out float distance)
+    private bool TryGetSpeaker(int id, out Vector3 listener, out Vector3 position, out float distance)
     {
-        position = default; distance = 0;
+        listener = default; position = default; distance = 0;
         var network = _network();
-        if (!_inGame() || network?.IsHandshakeComplete != true || !network.RemotePlayers.TryGetValue(id, out var remote) || remote == null || remote.State != PlayerState.InGame ||
-            !LocalPlayerInterop.TryGetPose(out var local, out _)) return false;
+        if (!IsNativeGameplayStable() || !_inGame() || network?.IsHandshakeComplete != true || !network.RemotePlayers.TryGetValue(id, out var remote) || remote == null || remote.State != PlayerState.InGame ||
+            !LocalPlayerInterop.TryGetPose(out listener, out _)) return false;
         // Audio only needs a known position, not the native climbing harness. A
         // fallback avatar or a temporarily missing harness must not mute a peer.
         if (!RemotePlayerManager.TryGetGhostHarnessAttachPosition(id, out position))
@@ -248,9 +249,14 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
                     DateTime.UtcNow.Ticks / (double)TimeSpan.TicksPerSecond)) return false;
             position = new Vector3(remote.X, remote.Y, remote.Z);
         }
-        distance = Vector3.Distance(local, position);
+        distance = Vector3.Distance(listener, position);
         return float.IsFinite(distance);
     }
+
+    private static bool IsNativeGameplayStable()
+        => GameLifecycleService.TryGetRawGameState(out var lifecycle)
+           && PlayerStateBroadcaster.MapLifecycleForNetwork(
+               lifecycle, MultiplayerPausePatch.IsPauseMenuActive) == PlayerState.InGame;
     private void UpdateSpeakers(bool inGame, double now)
     {
         if (_output != null && !_output.IsRunning) { ResetOutput(); _outputRetryAt = now + 2; }
@@ -259,13 +265,17 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
         foreach (var id in _speakerIds)
         {
             var speaker = _speakers[id];
-            if (!inGame || VoicePreferences.SafeVolume <= 0 || now - speaker.LastReceived > 1 || !TryGetSpeaker(id, out var position, out var distance))
+            if (!inGame || VoicePreferences.SafeVolume <= 0 || now - speaker.LastReceived > 1 || !TryGetSpeaker(id, out var listener, out var position, out var distance))
             { StopSpeaker(id); continue; }
             var acoustics = _acousticZones.Resolve(position);
             if (!speaker.UpdateRange(distance < acoustics.MaxDistance, now)) { StopSpeaker(id); continue; }
-            speaker.Volume = VoicePreferences.SafeVolume * VoiceSpatialPolicy.Attenuation(distance, acoustics.MaxDistance);
-            speaker.Cutoff = VoiceSpatialPolicy.Cutoff(distance, acoustics.MaxDistance);
-            speaker.Reverb = VoiceSpatialPolicy.Reverb(distance, acoustics.Reverb, acoustics.MaxDistance);
+            var occlusion = _occlusion.Resolve(id, listener, position, now);
+            var directVolume = VoicePreferences.SafeVolume * VoiceSpatialPolicy.Attenuation(distance, acoustics.MaxDistance);
+            var directCutoff = VoiceSpatialPolicy.Cutoff(distance, acoustics.MaxDistance);
+            var directReverb = VoiceSpatialPolicy.Reverb(distance, acoustics.Reverb, acoustics.MaxDistance);
+            speaker.Volume = VoiceSpatialPolicy.OccludedVolume(directVolume, occlusion);
+            speaker.Cutoff = VoiceSpatialPolicy.OccludedCutoff(directCutoff, occlusion);
+            speaker.Reverb = VoiceSpatialPolicy.OccludedReverb(directReverb, occlusion);
             var camera = Camera.main;
             speaker.Pan = camera == null ? 0 : Vector3.Dot(camera.transform.right, (position - camera.transform.position).normalized);
             speaker.Tick(now);
@@ -292,6 +302,7 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
     public void RemovePlayer(int playerId)
     {
         _mutedPlayers.Remove(playerId);
+        _occlusion.Remove(playerId);
         StopSpeaker(playerId);
     }
     private void StopSpeaker(int playerId)
@@ -307,6 +318,24 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
         foreach (var speaker in _speakers.Values) speaker.Dispose();
         _speakers.Clear();
     }
-    public void Reset() { TestMicrophone = false; StopCapture(); ResetOutput(); _mutedPlayers.Clear(); _acousticZones.Reset(); }
+    public void Reset()
+    {
+        ResetAudioState();
+        _settings.ResetSession();
+    }
+    public void ResetScene()
+    {
+        ResetAudioState();
+        _settings.ResetScene();
+    }
+    private void ResetAudioState()
+    {
+        TestMicrophone = false;
+        StopCapture();
+        ResetOutput();
+        _mutedPlayers.Clear();
+        _acousticZones.Reset();
+        _occlusion.Reset();
+    }
     public void Dispose() { Reset(); _encoder?.Dispose(); _settings.Dispose(); }
 }

@@ -12,6 +12,7 @@ internal enum ControllerShortcut
     NextSharedItem,
     GiveSelectedItem,
     DropSelectedItem,
+    PlacePing,
     PushToTalk,
     Panic,
 }
@@ -23,6 +24,7 @@ internal enum ControllerButton
     West,
     North,
     LeftShoulder,
+    RightShoulder,
     DpadUp,
     DpadLeft,
     DpadRight,
@@ -45,6 +47,7 @@ internal static class ControllerShortcutBindings
         ControllerShortcut.NextSharedItem => ControllerButton.DpadRight,
         ControllerShortcut.GiveSelectedItem => ControllerButton.West,
         ControllerShortcut.DropSelectedItem => ControllerButton.East,
+        ControllerShortcut.PlacePing => ControllerButton.RightShoulder,
         ControllerShortcut.PushToTalk => ControllerButton.LeftShoulder,
         ControllerShortcut.Panic => ControllerButton.RightStick,
         _ => throw new ArgumentOutOfRangeException(nameof(shortcut), shortcut, null),

@@ -20,7 +20,7 @@ internal sealed class VoiceDistanceProcessor
         volume = float.IsFinite(volume) ? Math.Clamp(volume, 0, 3) : 0;
         pan = float.IsFinite(pan) ? Math.Clamp(pan, -1, 1) : 0;
         reverb = float.IsFinite(reverb) ? Math.Clamp(reverb, 0, .5f) : 0;
-        var filter = FilterCoefficient(float.IsFinite(cutoff) ? Math.Clamp(cutoff, 6000, 18000) : 18000);
+        var filter = FilterCoefficient(float.IsFinite(cutoff) ? Math.Clamp(cutoff, 600, 18000) : 18000);
         for (var i = 0; i < mono.Length; i++)
         {
             _volume += (volume - _volume) * _step;

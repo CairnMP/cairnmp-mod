@@ -13,6 +13,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.2.17](#2217--2026-09-18-stable) | 2026-09-18 | Stable | Streaming crash mitigation and realistic voice occlusion |
 | [2.2.16](#2216--2026-09-17-stable) | 2026-09-17 | Stable | Controller support and conflict-free player ropes |
 | [2.2.15](#2215--2026-09-17-beta) | 2026-09-17 | Beta | Stable harness ropes and cross-platform spatial voice |
 | [2.2.14](#2214--2026-09-16-beta) | 2026-09-16 | Beta | Free Roam button initialization fix |
@@ -34,6 +35,27 @@ All notable CairnMP changes are documented here. Releases follow
 | [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
 | [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.2.17] — 2026-09-18 (stable)
+
+### Fixed
+
+- Controller pings now use `View/Share + RB/R1` instead of bare `RB/R1`, so
+  Free Roam's native **Pick a destination** action remains exclusive to `RB/R1`.
+- Voice playback now detects terrain between players. Rock walls progressively
+  reduce volume, muffle high frequencies, and add a subtle reflected tail.
+- Voice and settings integrations no longer keep using scene-owned native Unity
+  objects during loading or after disconnecting, reducing transition crashes.
+- Additive world streaming no longer flips the multiplayer state between `InGame`
+  and `Loading`; native synchronization pauses safely without hiding players.
+
+### Compatibility
+
+- Version **2.2.17** retains protocol **13**. All lobby members must use the same
+  mod version.
+- This is a stable hotfix for version 2.2.16.
 
 ---
 

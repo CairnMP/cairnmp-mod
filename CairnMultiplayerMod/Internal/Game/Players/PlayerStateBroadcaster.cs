@@ -15,6 +15,7 @@ internal sealed class PlayerStateBroadcaster
 
     private float _stateTickTimer;
     private float _boneTickTimer;
+    internal string LastComputedStateReason { get; private set; } = "not computed";
 
     private const float NetFrameMissingLogIntervalSeconds = 3f;
     private bool _debugLoggedFirstPlayerFrameCapture;
@@ -48,6 +49,15 @@ internal sealed class PlayerStateBroadcaster
             if (_isGameplaySyncSuspended())
             {
                 TickSuspendedNetworkPresence();
+                return;
+            }
+
+            // Keep the durable network presence InGame during additive streaming, but
+            // never touch pawn/ghost native objects while Cairn's graph is unavailable.
+            if (_state.LocalPlayerState == PlayerState.InGame && !IsGameplayGraphReady())
+            {
+                _stateTickTimer = 0f;
+                _boneTickTimer = 0f;
                 return;
             }
 
@@ -143,29 +153,37 @@ internal sealed class PlayerStateBroadcaster
     internal PlayerState ComputeLocalState()
     {
         if (!_network.IsConnected)
-            return PlayerState.Unknown;
+            return Computed(PlayerState.Unknown, "network disconnected");
         if (!_network.IsHandshakeComplete)
-            return PlayerState.Connecting;
+            return Computed(PlayerState.Connecting, "handshake incomplete");
         var currentScene = _state.CurrentScene;
         if (currentScene == null)
-            return PlayerState.Connecting;
+            return Computed(PlayerState.Connecting, "no current scene");
 
         if (SceneRoles.IsMainMenuArea(currentScene))
-            return PlayerState.InMenu;
+            return Computed(PlayerState.InMenu, $"scene={currentScene}");
 
         if (SceneRoles.IsLoading(currentScene))
-            return PlayerState.Loading;
+            return Computed(PlayerState.Loading, $"transition scene={currentScene}");
 
-        if (GameLifecycleService.TryGetGameLifecycle(out var lifecycle, out _))
+        var hasGameplayContext = SceneRoles.HasGameplayContext(currentScene, _state.LastGameplayScene);
+
+        if (GameLifecycleService.TryGetGameLifecycle(out var lifecycle, out var lifecycleDetail))
         {
             var networkState = MapLifecycleForNetwork(
                 lifecycle, MultiplayerPausePatch.IsPauseMenuActive);
+            // GlobalGameManager briefly reports Loading while streaming additive world
+            // layers. Preserve the semantic session state; Tick's native-ready gate above
+            // independently pauses all unsafe pawn and ghost access.
+            if (ShouldPreserveInGameDuringStreaming(
+                    lifecycle, _state.LocalPlayerState, hasGameplayContext))
+                return Computed(PlayerState.InGame, $"transient streaming preserved: {lifecycleDetail}");
             if (networkState != PlayerState.InGame)
-                return networkState;
+                return Computed(networkState, lifecycleDetail);
         }
         else if (SceneRoles.IsBivouac(currentScene))
         {
-            return PlayerState.Loading;
+            return Computed(PlayerState.Loading, "bivouac scene without lifecycle");
         }
 
         // In a gameplay scene, wait for the graph to be stable before allowing
@@ -173,13 +191,36 @@ internal sealed class PlayerStateBroadcaster
         // the new MC exists; using that camera as an InGame signal would trigger
         // captures on destroyed objects.
         if (_state.TimeSinceLastSceneLoad < 1.0f)
-            return PlayerState.Loading;
+            return Computed(PlayerState.Loading, $"gameplay boundary settling ({_state.TimeSinceLastSceneLoad:0.00}s)");
 
         if (LocalPlayerInterop.TryGetPose(out _, out _))
-            return PlayerState.InGame;
+            return Computed(PlayerState.InGame, "gameplay graph ready");
 
-        return PlayerState.Loading;
+        if (_state.LocalPlayerState == PlayerState.InGame && hasGameplayContext)
+            return Computed(PlayerState.InGame, "transient missing pawn preserved");
+
+        return Computed(PlayerState.Loading, "local pawn unavailable");
     }
+
+    private PlayerState Computed(PlayerState state, string reason)
+    {
+        LastComputedStateReason = reason;
+        return state;
+    }
+
+    private static bool IsGameplayGraphReady()
+    {
+        if (!GameLifecycleService.TryGetRawGameState(out var lifecycle)) return false;
+        if (MapLifecycleForNetwork(lifecycle, MultiplayerPausePatch.IsPauseMenuActive) != PlayerState.InGame)
+            return false;
+        return LocalPlayerInterop.TryGetPose(out _, out _);
+    }
+
+    internal static bool ShouldPreserveInGameDuringStreaming(
+        CairnGameLifecycleState lifecycle, PlayerState currentState, bool hasGameplayContext)
+        => lifecycle == CairnGameLifecycleState.Loading
+           && currentState == PlayerState.InGame
+           && hasGameplayContext;
 
     /// <summary>
     /// Cairn temporarily pushes GlobalGameManager.GameState.Menu for the in-game pause

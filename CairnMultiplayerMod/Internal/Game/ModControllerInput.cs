@@ -47,6 +47,7 @@ internal static class ModControllerInput
         ControllerButton.West => gamepad.buttonWest,
         ControllerButton.North => gamepad.buttonNorth,
         ControllerButton.LeftShoulder => gamepad.leftShoulder,
+        ControllerButton.RightShoulder => gamepad.rightShoulder,
         ControllerButton.DpadUp => gamepad.dpad.up,
         ControllerButton.DpadLeft => gamepad.dpad.left,
         ControllerButton.DpadRight => gamepad.dpad.right,

@@ -48,4 +48,25 @@ internal static class VoiceSpatialPolicy
         var progress = float.IsFinite(distance) ? Math.Clamp(distance / Math.Max(1, maxDistance), 0, 1) : 1;
         return Math.Clamp(zoneAmount * (.65f + .35f * progress), 0, .5f);
     }
+
+    internal static float OccludedVolume(float directVolume, float occlusion)
+    {
+        if (!float.IsFinite(directVolume)) return 0;
+        occlusion = float.IsFinite(occlusion) ? Math.Clamp(occlusion, 0, 1) : 0;
+        return Math.Max(0, directVolume) * (1 - .78f * occlusion);
+    }
+
+    internal static float OccludedCutoff(float directCutoff, float occlusion)
+    {
+        directCutoff = float.IsFinite(directCutoff) ? Math.Clamp(directCutoff, 600, 18000) : 18000;
+        occlusion = float.IsFinite(occlusion) ? Math.Clamp(occlusion, 0, 1) : 0;
+        return directCutoff * MathF.Pow(900f / directCutoff, occlusion);
+    }
+
+    internal static float OccludedReverb(float zoneReverb, float occlusion)
+    {
+        zoneReverb = float.IsFinite(zoneReverb) ? Math.Clamp(zoneReverb, 0, .5f) : 0;
+        occlusion = float.IsFinite(occlusion) ? Math.Clamp(occlusion, 0, 1) : 0;
+        return Math.Clamp(zoneReverb + .08f * occlusion, 0, .5f);
+    }
 }

@@ -29,6 +29,7 @@ internal sealed class VoiceSettingsIntegration : IDisposable
     internal bool IsOpen => _bindings.Any(b => b.Menu != null && b.Menu.gameObject.activeInHierarchy && b.Menu.currentSettingsPageButton == b.Button);
     private sealed class Binding
     {
+        internal IntPtr PagePointer;
         internal SettingsMenu Menu;
         internal SettingsPage Page;
         internal SettingsPageButton Button;
@@ -60,12 +61,18 @@ internal sealed class VoiceSettingsIntegration : IDisposable
 
     internal void Tick()
     {
+        if (GameLifecycleService.TryGetGameLifecycle(out var lifecycle, out _)
+            && lifecycle == CairnGameLifecycleState.Loading)
+        {
+            _voice.TestMicrophone = false;
+            return;
+        }
         for (var i = _bindings.Count - 1; i >= 0; i--)
         {
             var binding = _bindings[i];
             if (binding.Menu == null || binding.Button == null)
             {
-                Pages.Remove(binding.Page.Pointer);
+                Pages.Remove(binding.PagePointer);
                 if (binding.Page != null) UnityEngine.Object.Destroy(binding.Page);
                 _bindings.RemoveAt(i);
                 continue;
@@ -199,7 +206,7 @@ internal sealed class VoiceSettingsIntegration : IDisposable
                 button.button.navigation = navigation;
             }
             menu.ToggleSettingPageButton(button, false);
-            _bindings.Add(new Binding { Menu = menu, Page = page, Button = button, Label = label, Previous = previous, PreviousNavigation = oldNavigation });
+            _bindings.Add(new Binding { PagePointer = page.Pointer, Menu = menu, Page = page, Button = button, Label = label, Previous = previous, PreviousNavigation = oldNavigation });
             ModLog.Info("[VoiceSettings] CairnMP page attached to " + menu.name);
         }
         catch
@@ -284,35 +291,73 @@ internal sealed class VoiceSettingsIntegration : IDisposable
         VoicePreferences.Save();
         return false;
     }
-    public void Dispose()
+    /// <summary>Detaches while session-owned UI is still expected to be alive.</summary>
+    internal void ResetSession()
+    {
+        var canTouchNativeOwners = GameLifecycleService.TryGetGameLifecycle(out var lifecycle, out _)
+                                   && lifecycle != CairnGameLifecycleState.Loading;
+        ClearBindings(canTouchNativeOwners);
+    }
+
+    /// <summary>
+    /// A scene callback may run after Unity has already freed native menu objects. Only
+    /// forget their managed wrappers here; the scene owns and destroys the cloned button.
+    /// </summary>
+    internal void ResetScene() => ClearBindings(cleanNativeOwners: false);
+
+    private void ClearBindings(bool cleanNativeOwners)
     {
         foreach (var binding in _bindings)
         {
-            if (binding.Menu != null && binding.Menu.currentSettingsPageButton == binding.Button) binding.Menu.CloseSettingsPage(true);
-            Pages.Remove(binding.Page.Pointer);
-            if (binding.Previous != null) binding.Previous.navigation = binding.PreviousNavigation;
-            if (binding.Menu != null && binding.Button != null)
+            Pages.Remove(binding.PagePointer);
+            if (cleanNativeOwners)
             {
-                var bouncing = binding.Menu.bouncingButtons;
-                var more = binding.Button.button?.TryCast<ButtonWithMoreEvents>();
-                if (bouncing != null && more != null && bouncing.ButtonsData != null) bouncing.ButtonsData.Remove(more);
-                var zone = bouncing?.GetComponent<BouncingArrowZone>();
-                if (zone != null && zone.childs != null)
+                try
                 {
-                    zone.childs = new Il2CppReferenceArray<BouncingArrowZone.SelectableChild>(
-                        zone.childs.Where(child => child.selectable != more).ToArray());
-                    if (zone.lastSelectedGameObject == binding.Button.gameObject)
+                    if (binding.Menu != null && binding.Menu.currentSettingsPageButton == binding.Button) binding.Menu.CloseSettingsPage(true);
+                    if (binding.Previous != null) binding.Previous.navigation = binding.PreviousNavigation;
+                    if (binding.Menu != null && binding.Button != null)
                     {
-                        zone.lastSelectedGameObject = null;
-                        zone.lastSelectedChild = new Il2CppSystem.Nullable<BouncingArrowZone.SelectableChild>();
+                        var bouncing = binding.Menu.bouncingButtons;
+                        var more = binding.Button.button?.TryCast<ButtonWithMoreEvents>();
+                        if (bouncing != null && more != null && bouncing.ButtonsData != null) bouncing.ButtonsData.Remove(more);
+                        var zone = bouncing?.GetComponent<BouncingArrowZone>();
+                        if (zone != null && zone.childs != null)
+                        {
+                            zone.childs = new Il2CppReferenceArray<BouncingArrowZone.SelectableChild>(
+                                zone.childs.Where(child => child.selectable != more).ToArray());
+                            if (zone.lastSelectedGameObject == binding.Button.gameObject)
+                            {
+                                zone.lastSelectedGameObject = null;
+                                zone.lastSelectedChild = new Il2CppSystem.Nullable<BouncingArrowZone.SelectableChild>();
+                            }
+                        }
+                        if (binding.Menu.lastSettingsPageButton == binding.Button) binding.Menu.lastSettingsPageButton = null;
                     }
+                    if (binding.Button != null) UnityEngine.Object.Destroy(binding.Button.gameObject);
                 }
-                if (binding.Menu.lastSettingsPageButton == binding.Button) binding.Menu.lastSettingsPageButton = null;
+                catch (Exception ex) { ModLog.SuppressedException("voice.settings-reset", ex); }
             }
-            if (binding.Button != null) UnityEngine.Object.Destroy(binding.Button.gameObject);
-            if (binding.Page != null) UnityEngine.Object.Destroy(binding.Page);
+            // The ScriptableObject is ours rather than scene-owned. Destroy it only when
+            // its wrapper is still known-good; otherwise dropping Pages makes it inert.
+            if (cleanNativeOwners)
+            {
+                try { if (binding.Page != null) UnityEngine.Object.Destroy(binding.Page); }
+                catch (Exception ex) { ModLog.SuppressedException("voice.settings-page-reset", ex); }
+            }
         }
         _bindings.Clear();
+        _status = null;
+        _microphoneField = null;
+        _deviceOptions = null;
+        _deviceFingerprint = null;
+        _nextSearch = 0;
+        _voice.TestMicrophone = false;
+    }
+
+    public void Dispose()
+    {
+        ClearBindings(cleanNativeOwners: true);
         _harmony.UnpatchSelf();
     }
 }

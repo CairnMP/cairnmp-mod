@@ -22,6 +22,7 @@ public sealed class ControllerShortcutTests
     [InlineData((int)ControllerShortcut.PickupSharedItem, (int)ControllerButton.South)]
     [InlineData((int)ControllerShortcut.GiveSelectedItem, (int)ControllerButton.West)]
     [InlineData((int)ControllerShortcut.DropSelectedItem, (int)ControllerButton.East)]
+    [InlineData((int)ControllerShortcut.PlacePing, (int)ControllerButton.RightShoulder)]
     [InlineData((int)ControllerShortcut.PushToTalk, (int)ControllerButton.LeftShoulder)]
     [InlineData((int)ControllerShortcut.Panic, (int)ControllerButton.RightStick)]
     public void GameplayShortcutsKeepTheDocumentedLayout(int shortcut, int expected)

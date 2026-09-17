@@ -20,4 +20,15 @@ public sealed class SceneRolesTests
     [InlineData("LoadingScreen")]
     public void TransitionSceneDoesNotReusePreviousGameplayRoot(string scene)
         => Assert.Equal(scene, SceneRoles.ResolveNetworkScene(scene, "2_Kami"));
+
+    [Theory]
+    [InlineData("2_Kami", true)]
+    [InlineData("Kami_AudioWorldScene", true)]
+    [InlineData("2_Kami_LOD", true)]
+    [InlineData("LoadingScreen", false)]
+    [InlineData("CommonBaseScene", false)]
+    [InlineData("MainMenu", false)]
+    [InlineData("BivouacIndoor", false)]
+    public void GameplayContextIncludesAdditiveLayersButNotRealBoundaries(string scene, bool expected)
+        => Assert.Equal(expected, SceneRoles.HasGameplayContext(scene, "2_Kami"));
 }
