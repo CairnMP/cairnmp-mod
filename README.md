@@ -99,8 +99,9 @@ includes voice activation, push-to-talk, microphone selection, individual player
 mutes, volume control, and a local microphone test.
 
 > [!WARNING]
-> Voice currently supports Windows through WASAPI. Two-player quality validation
-> is still in progress. See the [complete voice guide](docs/proximity-voice.md).
+> Voice supports Windows and Proton through WASAPI, plus native Linux and macOS
+> through OpenAL. Two-player quality validation is still in progress. See the
+> [complete voice guide](docs/proximity-voice.md).
 
 ## Documentation
 

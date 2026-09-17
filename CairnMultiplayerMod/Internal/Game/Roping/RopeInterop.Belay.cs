@@ -1,5 +1,6 @@
 using System;
 using CairnMultiplayerMod.Internal.Diagnostics;
+using CairnMultiplayerMod.Internal.Game.Players;
 using Il2Cpp;
 using Il2CppTheGameBakers.Cairn.Netplay;
 using UnityEngine;
@@ -102,6 +103,9 @@ internal static partial class RopeInterop
         private GameObject _root;
         private LogicalRope _rope;
         private LogicalRopePart _part;
+        private LogicalRopeRenderer _renderer;
+        private GameObject _outfitWithHarness, _outfitWithoutHarness;
+        private bool _outfitWithHarnessWasActive, _outfitWithoutHarnessWasActive;
         private int _createdFrame, _personalOperationDepth;
         private Vector3 _lastLocal, _lastPartner;
         private bool _attached, _disposed;
@@ -173,6 +177,12 @@ internal static partial class RopeInterop
                 line.positionCount = 0;
                 var renderer = _root.AddComponent<LogicalRopeRenderer>();
                 renderer.lineRenderer = line;
+                // AddComponent does not deserialize the prefab links. Without these
+                // references the renderer can use an empty/stale part list, leaving
+                // one end of the visible rope at an invalid world position.
+                renderer.parts = _rope.ropeParts;
+                _rope.logicalRopeRenderer = renderer;
+                _renderer = renderer;
             }
             segment.SetActive(true);
             _root.SetActive(true);
@@ -193,11 +203,16 @@ internal static partial class RopeInterop
             _rope.AttachTo(_local.Cast<IRopeHolder>(), RopeSide.End, true);
             _rope.AttachTo(_partner.Cast<IRopeHolder>(), RopeSide.Begin, true);
             _rope.MaxLengthMeters = _length;
-            // Cairn queues rope-length changes for LogicalRope.FixedUpdate.
-            _rope.RequestSetLength(_length, false);
+            if (!RopeAttachmentPolicy.TryGetInitialLength(
+                    _length, Vector3.Distance(_lastLocal, _lastPartner), out var initialLength))
+                return false;
+            // Cairn queues rope-length changes for LogicalRope.FixedUpdate. Start at
+            // the actual harness separation, plus a small slack, never fully paid out.
+            _rope.RequestSetLength(initialLength, false);
             _rope.SetCollisionsFilter(_source.category, _source.masks);
             _rope.TeleportOnAttachPoints();
             _rope.SetVisible(true);
+            _renderer?.SyncFromRope(_rope);
             _rope.SyncRenderer();
             _attached = true;
             if (!HasBothAttachments) return false;
@@ -205,8 +220,68 @@ internal static partial class RopeInterop
             // Secured-fall code reads this property again to calculate rope length.
             _lifeline.securingRope = _rope;
             _rope.enabled = true;
-            ModLog.Info("[RopeTeam] Direct harness rope attached (no piton), max=" + _length);
+            SetHarnessVisual();
+            ModLog.Info("[RopeTeam] Direct harness rope attached (no piton), max=" + _length
+                + ", initial=" + initialLength);
             return true;
+        }
+
+        // The piton path does not enable a component on Harness itself. PawnSkinHandler
+        // swaps these two Aava outfit meshes; reproducing only that visual switch keeps
+        // the direct cooperative rope out of the piton, inventory and save lifecycles.
+        private void SetHarnessVisual()
+        {
+            try
+            {
+                var mc = LocalPlayerInterop.TryGetMCGameObject();
+                if (mc == null) return;
+                var meshes = mc.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                if (meshes == null) return;
+                for (var i = 0; i < meshes.Length; i++)
+                {
+                    var mesh = meshes[i];
+                    if (mesh == null) continue;
+                    if (mesh.name == "MC_Outfit")
+                    {
+                        _outfitWithHarness = mesh.gameObject;
+                        _outfitWithHarnessWasActive = _outfitWithHarness.activeSelf;
+                        if (!_outfitWithHarnessWasActive) _outfitWithHarness.SetActive(true);
+                    }
+                    else if (mesh.name == "MC_Outift_NoHarness")
+                    {
+                        _outfitWithoutHarness = mesh.gameObject;
+                        _outfitWithoutHarnessWasActive = _outfitWithoutHarness.activeSelf;
+                        if (_outfitWithoutHarnessWasActive) _outfitWithoutHarness.SetActive(false);
+                    }
+                }
+            }
+            catch (Exception ex) { ModLog.Warning("[RopeTeam] Could not enable harness visual: " + ex.Message); }
+        }
+
+        private void RestoreHarnessVisual()
+        {
+            try
+            {
+                // Once our direct rope is detached, IsSecured reports real pitons only.
+                // A piton placed during the link must keep its native harness appearance.
+                var keepHarness = _lifeline != null && _lifeline.IsSecured(1);
+                if (_outfitWithHarness != null)
+                {
+                    var desired = keepHarness || _outfitWithHarnessWasActive;
+                    if (_outfitWithHarness.activeSelf != desired) _outfitWithHarness.SetActive(desired);
+                }
+                if (_outfitWithoutHarness != null)
+                {
+                    var desired = !keepHarness && _outfitWithoutHarnessWasActive;
+                    if (_outfitWithoutHarness.activeSelf != desired) _outfitWithoutHarness.SetActive(desired);
+                }
+            }
+            catch (Exception ex) { ModLog.Warning("[RopeTeam] Could not restore harness visual: " + ex.Message); }
+            finally
+            {
+                _outfitWithHarness = null;
+                _outfitWithoutHarness = null;
+            }
         }
 
         public bool Maintain()
@@ -265,8 +340,9 @@ internal static partial class RopeInterop
             catch (Exception ex) { ModLog.Warning("[RopeTeam] Native detach failed: " + ex.Message); }
             finally
             {
+                RestoreHarnessVisual();
                 if (_root != null) { _root.SetActive(false); Object.Destroy(_root); }
-                _root = null; _rope = null;
+                _root = null; _rope = null; _part = null; _renderer = null;
             }
         }
     }

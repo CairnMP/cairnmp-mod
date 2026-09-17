@@ -52,6 +52,39 @@ public sealed class VoiceDistanceTests
     }
 
     [Fact]
+    public void DirectionAddsARealInterauralDelay()
+    {
+        var processor = new VoiceDistanceProcessor();
+        var warmup = new float[48000];
+        processor.Process(warmup, new float[warmup.Length * 2], 0, 1, .8f, 18000);
+        var impulse = new float[96];
+        impulse[0] = 1;
+        var output = new float[impulse.Length * 2];
+
+        processor.Process(impulse, output, 0, 1, .8f, 18000);
+
+        Assert.True(Math.Abs(output[1]) > .1f);
+        Assert.All(output.Take(30).Where((_, index) => index % 2 == 0), sample => Assert.InRange(Math.Abs(sample), 0, .0001));
+        Assert.Contains(output.Skip(30).Where((_, index) => index % 2 == 0), sample => Math.Abs(sample) > .01f);
+    }
+
+    [Fact]
+    public void RoomReverbProducesABoundedDelayedReflection()
+    {
+        var processor = new VoiceDistanceProcessor();
+        var warmup = new float[48000];
+        processor.Process(warmup, new float[warmup.Length * 2], 0, 1, 0, 18000, .3f);
+        var impulse = new float[6500];
+        impulse[0] = 1;
+        var output = new float[impulse.Length * 2];
+
+        processor.Process(impulse, output, 0, 1, 0, 18000, .3f);
+
+        var delayedReflection = output.Skip(6200 * 2).Select(Math.Abs).Max();
+        Assert.InRange(delayedReflection, .05, .5);
+    }
+
+    [Fact]
     public void RangeGraceRetainsDecoderAcrossBoundaryOscillations()
     {
         using var playback = new VoicePlayback(true);
@@ -68,12 +101,12 @@ public sealed class VoiceDistanceTests
     {
         var lastVolume = 1f;
         var lastCutoff = 18000f;
-        for (var i = 0; i <= 350; i++)
+        for (var i = 0; i <= 450; i++)
         {
             var distance = i / 10f;
             var volume = VoiceSpatialPolicy.Attenuation(distance);
             var cutoff = VoiceSpatialPolicy.Cutoff(distance);
-            Assert.InRange(lastVolume - volume, -.00001f, .009f);
+            Assert.InRange(lastVolume - volume, -.00001f, .01f);
             Assert.InRange(cutoff, 5999.99f, 18000);
             Assert.True(cutoff <= lastCutoff + .01f);
             lastVolume = volume; lastCutoff = cutoff;

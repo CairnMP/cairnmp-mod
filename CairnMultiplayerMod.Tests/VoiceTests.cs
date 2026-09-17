@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
 using CairnMultiplayerMod.Features;
 using CairnMultiplayerMod.Internal.Game.Voice;
 using Concentus;
@@ -11,6 +13,28 @@ namespace CairnMultiplayerMod.Tests;
 
 public sealed class VoiceTests
 {
+    [Fact]
+    public void AudioBackendSelectionKeepsWasapiOnWindowsAndUsesOpenAlElsewhere()
+    {
+        Assert.Equal(VoiceBackendKind.Wasapi, VoiceAudioBackend.KindFor(true));
+        Assert.Equal(VoiceBackendKind.OpenAl, VoiceAudioBackend.KindFor(false));
+        Assert.Equal(OperatingSystem.IsWindows() ? VoiceBackendKind.Wasapi : VoiceBackendKind.OpenAl,
+            VoiceAudioBackend.Kind);
+    }
+
+    [Fact]
+    public void OpenAlCaptureDeviceListReadsUtf8DoubleNullTerminatedNames()
+    {
+        var bytes = Encoding.UTF8.GetBytes("Microphone α\0USB Mic\0\0");
+        var pointer = Marshal.AllocHGlobal(bytes.Length);
+        try
+        {
+            Marshal.Copy(bytes, 0, pointer, bytes.Length);
+            Assert.Equal(new[] { "Microphone α", "USB Mic" }, OpenAlNative.ReadStringList(pointer));
+        }
+        finally { Marshal.FreeHGlobal(pointer); }
+    }
+
     [Fact]
     public void BatchedCaptureRetainsAudibleRecentFramesInsteadOfDroppingEveryBatch()
     {
@@ -239,13 +263,12 @@ public sealed class VoiceTests
     [Theory]
     [InlineData(0, 1)]
     [InlineData(5, 1)]
-    [InlineData(12.5, .775)]
-    [InlineData(20, .55)]
-    [InlineData(22.5, .475)]
-    [InlineData(25, .4)]
-    [InlineData(27.5, .2)]
-    [InlineData(30, 0)]
-    [InlineData(35, 0)]
+    [InlineData(12.5, .8)]
+    [InlineData(20, .6)]
+    [InlineData(25, .475)]
+    [InlineData(30, .35)]
+    [InlineData(35, .175)]
+    [InlineData(40, 0)]
     public void ProximityCurveUsesGentleAudibleSegments(float distance, float expected)
         => Assert.Equal(expected, VoiceSpatialPolicy.Attenuation(distance), 3);
 
@@ -258,6 +281,15 @@ public sealed class VoiceTests
         VoiceSpatialPolicy.PanGains(1, -1, out var left, out var right);
         Assert.Equal(1, left, 3);
         Assert.Equal(0, right, 3);
+    }
+
+    [Fact]
+    public void ReverberantZoneCarriesAQuietTailBeyondNormalRange()
+    {
+        Assert.Equal(0, VoiceSpatialPolicy.Attenuation(50), 3);
+        Assert.InRange(VoiceSpatialPolicy.Attenuation(50, VoiceSpatialPolicy.ReverberantMaxDistance), .11f, .13f);
+        Assert.True(VoiceSpatialPolicy.Reverb(50, .3f, VoiceSpatialPolicy.ReverberantMaxDistance) > .25f);
+        Assert.Equal(0, VoiceSpatialPolicy.Attenuation(70, VoiceSpatialPolicy.ReverberantMaxDistance));
     }
 
     [Fact]

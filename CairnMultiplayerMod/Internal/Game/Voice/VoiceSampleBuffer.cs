@@ -2,7 +2,7 @@ using System;
 
 namespace CairnMultiplayerMod.Internal.Game.Voice;
 
-/// <summary>Bounded PCM queue shared by the game and WASAPI threads. Overflow drops old audio.</summary>
+/// <summary>Bounded PCM queue shared by the game and native audio threads. Overflow drops old audio.</summary>
 internal sealed class VoiceSampleBuffer
 {
     private readonly float[] _samples;

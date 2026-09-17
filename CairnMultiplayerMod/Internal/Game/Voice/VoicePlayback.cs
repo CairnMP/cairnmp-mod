@@ -18,6 +18,7 @@ internal sealed class VoicePlayback : IDisposable, ISampleProvider
     internal volatile float Volume;
     internal volatile float Pan;
     internal volatile float Cutoff = 18000;
+    internal volatile float Reverb;
     private double _outOfRangeSince = double.NaN;
     internal double LastReceived { get; private set; }
 
@@ -36,13 +37,13 @@ internal sealed class VoicePlayback : IDisposable, ISampleProvider
     public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(VoiceAdapter.SampleRate, 2);
     public int Read(float[] data, int offset, int count)
     {
-        // WASAPI thread: no Unity, IL2CPP or codec access here.
+        // Native audio thread: no Unity, IL2CPP or codec access here.
         var frames = count / 2;
         if (_audioScratch.Length != frames) _audioScratch = new float[frames];
         _pcm.Read(_audioScratch);
         if (_distance != null)
         {
-            _distance.Process(_audioScratch, data, offset, Volume, Pan, Cutoff);
+            _distance.Process(_audioScratch, data, offset, Volume, Pan, Cutoff, Reverb);
             if (count % 2 != 0) data[offset + count - 1] = 0;
             return count;
         }

@@ -13,6 +13,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.2.15](#2215--2026-09-17-beta) | 2026-09-17 | Beta | Stable harness ropes and cross-platform spatial voice |
 | [2.2.14](#2214--2026-09-16-beta) | 2026-09-16 | Beta | Free Roam button initialization fix |
 | [2.2.13](#2213--2026-09-16-beta) | 2026-09-16 | Beta | Free Roam multiplayer launch fix |
 | [2.2.12](#2212--2026-09-16-beta) | 2026-09-16 | Beta | RE-verified native integration |
@@ -32,6 +33,44 @@ All notable CairnMP changes are documented here. Releases follow
 | [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
 | [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.2.15] — 2026-09-17 (beta)
+
+### Added
+
+- Proximity voice now uses OpenAL capture and streaming output on native Linux
+  and macOS, while retaining WASAPI on Windows and Proton. All platforms keep
+  the same Opus stream, spatial processing, device selection and local test.
+- Cairn's authored acoustic rooms now extend voice range from 40 to 70 metres
+  when both players share a cave, room, gym or shelter. These zones add a short,
+  bounded reflection, while a small interaural delay improves player direction.
+- CI now compiles and tests the voice backend boundary on Windows, Ubuntu and
+  macOS Intel runners.
+
+### Changed
+
+- Outdoor voice range is now 40 metres with a smoother distance curve. The
+  settings description and voice guide document the platform and zone behavior.
+
+### Fixed
+
+- Direct player-to-player ropes now start from the live harness separation plus
+  bounded slack instead of spawning fully paid out at their maximum length.
+- Runtime-created rope renderers now receive Cairn's rope-part references and an
+  immediate synchronization, preventing invalid segments from stretching toward
+  the horizon while walking or climbing.
+- Aava's harness outfit is shown while the cooperative rope is attached and is
+  restored safely afterward without hiding a harness earned by placing a piton.
+
+### Compatibility and verification
+
+- Version **2.2.15** retains protocol **13**. All lobby members must use the same
+  mod version.
+- The Release suite passes **283/283** managed tests. Physical Linux and macOS
+  microphone/output validation remains required; Linux native uses the system
+  `libopenal.so.1`.
 
 ---
 

@@ -236,7 +236,7 @@ internal sealed class VoiceSettingsIntegration : IDisposable
         var currentKey = Enum.TryParse<Key>(VoicePreferences.PushToTalkKey.Value, true, out var parsed) ? parsed : Key.V;
         var fields = new List<Field>
         {
-            new FieldInfo("PROXIMITY VOICE — voices fade out beyond 30 m"),
+            new FieldInfo("PROXIMITY VOICE — 40 m outdoors, farther in shared rooms"),
             new FieldListDropdown(new FieldLabel("Voice mode"), Labels(new[] { "Open mic (voice detection)", "Push to talk", "Microphone muted" }),
                 (int)VoicePreferences.CurrentMode, (FieldList.OnValueChangedDelegate)(new Action<int,int>((_, value) => { VoicePreferences.Mode.Value = value; VoicePreferences.Save(); })), new Il2CppSystem.Nullable<int>(0)),
             (_microphoneField = new FieldListDropdown(new FieldLabel("Microphone"), DeviceLabels(options),

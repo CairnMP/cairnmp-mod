@@ -18,7 +18,7 @@ using MelonLoader;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-[assembly: MelonInfo(typeof(CairnMultiplayerMod.Bootstrap.Mod), "Cairn Multiplayer Mod", "2.2.14", "CairnModTeam")]
+[assembly: MelonInfo(typeof(CairnMultiplayerMod.Bootstrap.Mod), "Cairn Multiplayer Mod", "2.2.15", "CairnModTeam")]
 [assembly: MelonGame("TheGameBakers", "Cairn")]
 
 namespace CairnMultiplayerMod.Bootstrap;

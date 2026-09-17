@@ -6,14 +6,14 @@ using NAudio.Wave.SampleProviders;
 
 namespace CairnMultiplayerMod.Internal.Game.Voice;
 
-internal sealed class WindowsVoiceOutput : IDisposable, ISampleProvider
+internal sealed class WindowsVoiceOutput : IVoiceOutput, ISampleProvider
 {
     private readonly MixingSampleProvider _mixer = new(WaveFormat.CreateIeeeFloatWaveFormat(VoiceAdapter.SampleRate, 2)) { ReadFully = true };
     private readonly WasapiOut _output;
     private readonly VoiceOutputLimiter _limiter = new();
     private long _renderedSamples;
-    internal long RenderedSamples => Interlocked.Read(ref _renderedSamples);
-    internal bool IsRunning => _output.PlaybackState == PlaybackState.Playing;
+    public long RenderedSamples => Interlocked.Read(ref _renderedSamples);
+    public bool IsRunning => _output.PlaybackState == PlaybackState.Playing;
     public WaveFormat WaveFormat => _mixer.WaveFormat;
     internal WindowsVoiceOutput()
     {
@@ -21,8 +21,8 @@ internal sealed class WindowsVoiceOutput : IDisposable, ISampleProvider
         try { _output.Init(this.ToWaveProvider()); _output.Play(); }
         catch { _output.Dispose(); throw; }
     }
-    internal void Add(VoicePlayback voice) => _mixer.AddMixerInput(voice);
-    internal void Remove(VoicePlayback voice) => _mixer.RemoveMixerInput(voice);
+    public void Add(VoicePlayback voice) => _mixer.AddMixerInput(voice);
+    public void Remove(VoicePlayback voice) => _mixer.RemoveMixerInput(voice);
     public int Read(float[] buffer, int offset, int count)
     {
         var read = _mixer.Read(buffer, offset, count);

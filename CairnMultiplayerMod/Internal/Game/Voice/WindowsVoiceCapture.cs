@@ -6,20 +6,18 @@ using NAudio.Wave;
 
 namespace CairnMultiplayerMod.Internal.Game.Voice;
 
-internal sealed record VoiceDevice(string Id, string Name);
-
 /// <summary>Cairn disables Unity Audio for Wwise. WASAPI owns only the mod's audio session.</summary>
-internal sealed class WindowsVoiceCapture : IDisposable
+internal sealed class WindowsVoiceCapture : IVoiceCapture
 {
     private readonly MMDevice _device;
     private readonly WasapiCapture _capture;
     private readonly VoiceSampleBuffer _buffer = new(VoiceAdapter.SampleRate / 5);
     private volatile Exception _failure;
     private long _sampleCount;
-    internal string DeviceId => _device.ID;
-    internal long CapturedSamples => Interlocked.Read(ref _sampleCount);
-    internal int BufferedSamples => _buffer.Count;
-    internal bool IsRunning => _capture.CaptureState == CaptureState.Starting || _capture.CaptureState == CaptureState.Capturing;
+    public string DeviceId => _device.ID;
+    public long CapturedSamples => Interlocked.Read(ref _sampleCount);
+    public int BufferedSamples => _buffer.Count;
+    public bool IsRunning => _capture.CaptureState == CaptureState.Starting || _capture.CaptureState == CaptureState.Capturing;
 
     internal static VoiceDevice[] Enumerate(out string defaultId)
     {
@@ -64,15 +62,15 @@ internal sealed class WindowsVoiceCapture : IDisposable
         Interlocked.Add(ref _sampleCount, args.BytesRecorded / 2);
     }
     private void OnStopped(object sender, StoppedEventArgs args) => _failure = args.Exception;
-    internal bool TryRead(float[] frame)
+    public bool TryRead(float[] frame)
     {
         if (_failure != null) throw new InvalidOperationException("Audio input stopped", _failure);
         if (_buffer.Count < frame.Length) return false;
         _buffer.Read(frame);
         return true;
     }
-    internal void Clear() => _buffer.Clear();
-    internal void KeepLatest(int samples) => _buffer.KeepLatest(samples);
+    public void Clear() => _buffer.Clear();
+    public void KeepLatest(int samples) => _buffer.KeepLatest(samples);
     public void Dispose()
     {
         _capture.DataAvailable -= OnData;

@@ -17,11 +17,12 @@ namespace CairnMultiplayerMod.Internal.Game.Voice;
 internal sealed class VoiceAdapter : IVoiceApi, IDisposable
 {
     internal const int SampleRate = 48000, FrameSamples = 960;
-    internal const float MaxDistance = 30f;
+    internal const float MaxDistance = VoiceSpatialPolicy.NormalMaxDistance;
     private readonly Func<NetworkManager> _network;
     private readonly Func<bool> _inGame;
     private readonly VoiceActivityGate _gate = new();
     private readonly VoiceProcessor _processor = new();
+    private readonly VoiceAcousticZones _acousticZones = new();
     private readonly Dictionary<int, VoicePlayback> _speakers = new();
     private readonly HashSet<int> _mutedPlayers = new();
     private readonly Queue<(uint Burst, uint Sequence, byte[] Data)> _outgoing = new();
@@ -32,8 +33,8 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
     private readonly short[] _pcm16 = new short[FrameSamples];
     private readonly VoiceSettingsIntegration _settings;
     private IOpusEncoder _encoder;
-    private WindowsVoiceCapture _microphone;
-    private WindowsVoiceOutput _output;
+    private IVoiceCapture _microphone;
+    private IVoiceOutput _output;
     private VoicePlayback _monitor;
     private string _requestedDevice, _defaultDevice = "";
     private Task<(VoiceDevice[] Devices, string DefaultId)> _deviceRefresh;
@@ -86,11 +87,11 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
         if (_deviceRefresh == null && now >= _refreshAt)
         {
             _refreshAt = now + 5;
-            // Windows endpoint discovery routinely takes more than a frame. It must
-            // never block Unity's main thread.
+            // Native endpoint discovery may block on Windows, Linux or macOS. It
+            // must never stall Unity's main thread.
             _deviceRefresh = Task.Run(() =>
             {
-                var devices = WindowsVoiceCapture.Enumerate(out var defaultId);
+                var devices = VoiceAudioBackend.EnumerateCaptureDevices(out var defaultId);
                 return (devices, defaultId);
             });
         }
@@ -137,7 +138,7 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
             Status = "Selected microphone disconnected — choose another microphone";
             return;
         }
-        _microphone = new WindowsVoiceCapture(id);
+        _microphone = VoiceAudioBackend.CreateCapture(id);
         _lastPoll = now;
         _encoder ??= OpusCodecFactory.CreateEncoder(SampleRate, 1, OpusApplication.OPUS_APPLICATION_VOIP);
         _encoder.Bitrate = 32000;
@@ -217,8 +218,9 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
     }
     public void Receive(int playerId, uint burst, uint sequence, byte[] opus)
     {
-        if (_mutedPlayers.Contains(playerId) || opus == null || opus.Length == 0 || opus.Length > 400 || VoicePreferences.SafeVolume <= 0 || !TryGetSpeaker(playerId, out _, out var distance)) return;
-        if (distance >= MaxDistance && !_speakers.ContainsKey(playerId)) return;
+        if (_mutedPlayers.Contains(playerId) || opus == null || opus.Length == 0 || opus.Length > 400 || VoicePreferences.SafeVolume <= 0 || !TryGetSpeaker(playerId, out var position, out var distance)) return;
+        var acoustics = _acousticZones.Resolve(position);
+        if (distance >= acoustics.MaxDistance && !_speakers.ContainsKey(playerId)) return;
         var now = Time.realtimeSinceStartupAsDouble;
         if (!EnsureOutput(now)) return;
         if (!_speakers.TryGetValue(playerId, out var speaker))
@@ -257,11 +259,13 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
             var speaker = _speakers[id];
             if (!inGame || VoicePreferences.SafeVolume <= 0 || now - speaker.LastReceived > 1 || !TryGetSpeaker(id, out var position, out var distance))
             { StopSpeaker(id); continue; }
-            if (!speaker.UpdateRange(distance < MaxDistance, now)) { StopSpeaker(id); continue; }
-            speaker.Volume = VoicePreferences.SafeVolume * VoiceSpatialPolicy.Attenuation(distance);
-            speaker.Cutoff = VoiceSpatialPolicy.Cutoff(distance);
+            var acoustics = _acousticZones.Resolve(position);
+            if (!speaker.UpdateRange(distance < acoustics.MaxDistance, now)) { StopSpeaker(id); continue; }
+            speaker.Volume = VoicePreferences.SafeVolume * VoiceSpatialPolicy.Attenuation(distance, acoustics.MaxDistance);
+            speaker.Cutoff = VoiceSpatialPolicy.Cutoff(distance, acoustics.MaxDistance);
+            speaker.Reverb = VoiceSpatialPolicy.Reverb(distance, acoustics.Reverb, acoustics.MaxDistance);
             var camera = Camera.main;
-            speaker.Pan = camera == null ? 0 : Vector3.Dot(camera.transform.right, (position - camera.transform.position).normalized) * .85f;
+            speaker.Pan = camera == null ? 0 : Vector3.Dot(camera.transform.right, (position - camera.transform.position).normalized);
             speaker.Tick(now);
         }
         if (_output != null && _speakers.Count == 0 && _monitor == null) ResetOutput();
@@ -271,7 +275,7 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
         if (_output?.IsRunning == true) return true;
         if (now < _outputRetryAt) return false;
         _outputRetryAt = now + 5;
-        try { ResetOutput(); _output = new WindowsVoiceOutput(); return true; }
+        try { ResetOutput(); _output = VoiceAudioBackend.CreateOutput(); return true; }
         catch (Exception ex) { Status = "Audio output unavailable: " + ex.Message; ModLog.Warning("[Voice] " + Status); return false; }
     }
     private void StopCapture()
@@ -301,6 +305,6 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
         foreach (var speaker in _speakers.Values) speaker.Dispose();
         _speakers.Clear();
     }
-    public void Reset() { TestMicrophone = false; StopCapture(); ResetOutput(); _mutedPlayers.Clear(); }
+    public void Reset() { TestMicrophone = false; StopCapture(); ResetOutput(); _mutedPlayers.Clear(); _acousticZones.Reset(); }
     public void Dispose() { Reset(); _encoder?.Dispose(); _settings.Dispose(); }
 }

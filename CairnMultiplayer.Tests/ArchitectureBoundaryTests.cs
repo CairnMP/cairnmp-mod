@@ -75,6 +75,17 @@ public sealed class ArchitectureBoundaryTests
     }
 
     [Fact]
+    public void VoiceOrchestrationDependsOnThePlatformBackendBoundary()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Voice", "VoiceAdapter.cs"));
+
+        Assert.Contains("VoiceAudioBackend", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("WindowsVoiceCapture", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("WindowsVoiceOutput", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PacketDispatcherDoesNotApplyGameOrTransportDetails()
     {
         var source = File.ReadAllText(Path.Combine(
@@ -206,6 +217,11 @@ public sealed class ArchitectureBoundaryTests
 
         Assert.Contains("_lifeline.securingRope = _rope", interop, StringComparison.Ordinal);
         Assert.Contains("_lifeline.securingRope = _personalRope", interop, StringComparison.Ordinal);
+        Assert.Contains("TryGetInitialLength", interop, StringComparison.Ordinal);
+        Assert.Contains("renderer.parts = _rope.ropeParts", interop, StringComparison.Ordinal);
+        Assert.Contains("SetHarnessVisual", interop, StringComparison.Ordinal);
+        Assert.Contains("RestoreHarnessVisual", interop, StringComparison.Ordinal);
+        Assert.Contains("MC_Outift_NoHarness", interop, StringComparison.Ordinal);
         Assert.Contains("BeginPersonalRopeOperation", patch, StringComparison.Ordinal);
         Assert.Contains("AfterPersonalOperation", patch, StringComparison.Ordinal);
     }
