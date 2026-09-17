@@ -56,6 +56,9 @@ internal static class RemotePlayerManager
 
         public List<LineRenderer> NetRopes;
         public float NextNetRopeScanAt;
+
+        public CapsuleCollider Collider;
+        public bool PhysicsActive = true;
     }
 
     private class SpawnWaitEntry
@@ -246,9 +249,15 @@ internal static class RemotePlayerManager
             var rp = kv.Value;
             if (!ShouldApplyPose(rp, localState))
             {
+                // Loading / menu / stale peer: park the ghost far away AND take its capsule
+                // out of the physics scene, so the teleport never touches PhysX while Cairn
+                // is swapping scenes.
+                SetGhostPhysicsActive(entry, false);
                 entry.Root.transform.position = HiddenSpawnPosition;
                 continue;
             }
+
+            SetGhostPhysicsActive(entry, true);
 
             if (entry.IsRealModel)
                 RecolorGhostNetRopes(entry);
@@ -461,8 +470,19 @@ internal static class RemotePlayerManager
         }
     }
 
+    /// <summary>
+    /// Detaches every ghost from the physics scene. Called as soon as Cairn leaves gameplay,
+    /// because UpdateAll stops running before the scene is actually torn down.
+    /// </summary>
+    public static void SuspendPhysics()
+    {
+        foreach (var entry in _ghosts.Values)
+            SetGhostPhysicsActive(entry, false);
+    }
+
     public static void ClearAll()
     {
+        SuspendPhysics();
         foreach (var kv in _ghosts)
             if (kv.Value?.Root != null) Object.Destroy(kv.Value.Root);
         _ghosts.Clear();
@@ -686,6 +706,18 @@ internal static class RemotePlayerManager
     {
         try
         {
+            // A collider without a Rigidbody is a STATIC actor for PhysX, and the ghost is
+            // teleported every frame. Moving a static actor forces PhysX to rebuild its
+            // static AABB tree on a worker thread; doing that while the gameplay scene is
+            // being unloaded (or while a ghost spawns mid-transition) crashes the engine
+            // inside the pruner. A kinematic Rigidbody makes the capsule a moving actor,
+            // which is the supported way to carry a collider that changes position.
+            var body = ghost.AddComponent<Rigidbody>();
+            body.isKinematic = true;
+            body.useGravity = false;
+            body.interpolation = RigidbodyInterpolation.None;
+            body.collisionDetectionMode = CollisionDetectionMode.Discrete;
+
             var col = ghost.AddComponent<CapsuleCollider>();
             col.center = new Vector3(0f, 0.9f, 0f);
             col.radius = 0.3f;
@@ -696,5 +728,25 @@ internal static class RemotePlayerManager
         {
             ModLog.Warning($"[Ghost] AddPlayerCollider failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Keeps the ghost's capsule out of the physics scene whenever the ghost is not being
+    /// posed. Ghosts are DontDestroyOnLoad, so without this their actors stay registered
+    /// while Cairn tears the gameplay scene (and its physics scene) down.
+    /// </summary>
+    private static void SetGhostPhysicsActive(GhostEntry entry, bool active)
+    {
+        if (entry == null || entry.PhysicsActive == active) return;
+
+        try
+        {
+            entry.Collider ??= entry.Root?.GetComponent<CapsuleCollider>();
+            if (entry.Collider == null) return;
+
+            entry.Collider.enabled = active;
+            entry.PhysicsActive = active;
+        }
+        catch (Exception exception) { ModLog.SuppressedException("remote-player.toggle-ghost-physics", exception); }
     }
 }

@@ -88,6 +88,11 @@ public partial class Mod
         MarkPerformanceScene("scene-unloaded", sceneName);
         _loadedScenes.Remove(sceneName);
 
+        // Same reason as in SetLocalState: a persistent ghost collider must never be
+        // registered with the physics scene that is going away.
+        if (SceneRoles.IsGameplayRoot(sceneName) || SceneRoles.IsSyncResetPoint(sceneName))
+            RemotePlayerManager.SuspendPhysics();
+
         if (string.Equals(CurrentScene, sceneName, StringComparison.Ordinal))
             _runtimeState.CurrentScene = ResolveCurrentSceneAfterUnload(sceneName);
 
@@ -334,6 +339,12 @@ public partial class Mod
 
         LoggerInstance.Msg($"[State] local: {LocalState} -> {state} ({Player.LastComputedStateReason})");
         _runtimeState.LocalPlayerState = state;
+
+        // Leaving gameplay means Cairn is about to tear the scene down. Ghosts survive the
+        // transition (DontDestroyOnLoad), so their colliders must leave the physics scene
+        // now — a moving collider registered while it unloads is a PhysX hazard.
+        if (state != PlayerState.InGame)
+            RemotePlayerManager.SuspendPhysics();
     }
 
     public override void OnGUI()
