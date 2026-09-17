@@ -161,7 +161,8 @@ public partial class Mod : MelonMod
 
         Rope = new RopeCoupleController(Network, _runtimeState);
         Player = new PlayerStateBroadcaster(
-            Network, _runtimeState, Rope.Reset, () => Bivouac?.BlocksGameplaySync() == true);
+            Network, _runtimeState, Rope.Reset, () => Bivouac?.BlocksGameplaySync() == true,
+            isSpeaking: playerId => _voice?.IsSpeaking(playerId) == true);
         StartGame = new StartGameFlow(_panel, _mainMenu.RestoreMainMenuInput, _runtimeState);
         Bivouac = new BivouacSyncGate(
             Network, _panel, _runtimeState, ResetSyncTimers, ResetSceneBoundSyncState, SetLocalState);

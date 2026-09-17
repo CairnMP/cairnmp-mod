@@ -1,8 +1,10 @@
 using System;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Internal.Diagnostics;
+using CairnMultiplayerMod.Internal.Game.Voice;
 using Il2Cpp;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
+using Il2CppTMPro;
 using Il2CppTheGameBakers.Cairn.Netplay;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
@@ -92,6 +94,49 @@ internal static class NetplayAnimationInterop
             LogNativeSetFrameFailure("player", frameData, ex, ref _nativePlayerSetFrameFailureLogged);
             return ApplyNetFrameToGhostBones(player, frameData, "player", ref _directPlayerBoneFallbackLogged);
         }
+    }
+
+    // Resolved once against the game's own font: the preferred icon is an emoji and TMP draws
+    // a blank box for a glyph the font does not carry.
+    private static string _speakingIcon;
+
+    /// <summary>
+    /// Writes the floating name, prefixed with the speaking icon while the player is heard.
+    /// Returns the text that ended up on the label so the caller can skip identical writes —
+    /// assigning TMP text rebuilds its mesh, and this runs every frame.
+    /// </summary>
+    public static string SetGhostNameLabel(NetplayRemotePlayer player, string playerName, bool speaking, string lastApplied)
+    {
+        if (player == null) return lastApplied;
+        try
+        {
+            var mesh = player.nameMesh;
+            if (mesh == null) return lastApplied;
+
+            var label = VoiceIndicatorPolicy.BuildNameLabel(playerName, speaking, ResolveSpeakingIcon(mesh));
+            if (string.Equals(label, lastApplied, StringComparison.Ordinal)) return lastApplied;
+
+            mesh.text = label;
+            return label;
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("netplay.set-name-label-text", exception);
+            return lastApplied;
+        }
+    }
+
+    private static string ResolveSpeakingIcon(TMP_Text mesh)
+    {
+        if (_speakingIcon != null) return _speakingIcon;
+
+        _speakingIcon = VoiceIndicatorPolicy.ResolveIcon(codePoint =>
+        {
+            var font = mesh.font;
+            return font != null && font.HasCharacter(codePoint);
+        });
+        ModLog.Debug($"[Voice] Speaking icon resolved to '{_speakingIcon}'");
+        return _speakingIcon;
     }
 
     public static void SetGhostNameVisible(NetplayRemotePlayer player, bool visible)

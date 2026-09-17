@@ -253,6 +253,15 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
         return float.IsFinite(distance);
     }
 
+    /// <summary>
+    /// Whether we are currently hearing this player. Read from the audio already received, so
+    /// it costs no extra packet — and a muted or out-of-range player never gets a fresh stamp,
+    /// which makes the indicator clear itself with no special case.
+    /// </summary>
+    public bool IsSpeaking(int playerId)
+        => _speakers.TryGetValue(playerId, out var speaker)
+           && VoiceIndicatorPolicy.IsSpeaking(speaker.LastReceived, Time.realtimeSinceStartupAsDouble);
+
     private static bool IsNativeGameplayStable()
         => GameLifecycleService.TryGetRawGameState(out var lifecycle)
            && PlayerStateBroadcaster.MapLifecycleForNetwork(

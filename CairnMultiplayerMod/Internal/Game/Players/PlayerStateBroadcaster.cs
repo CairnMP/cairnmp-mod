@@ -12,6 +12,9 @@ internal sealed class PlayerStateBroadcaster
     private readonly RuntimeState _state;
     private readonly System.Action _resetRope;
     private readonly System.Func<bool> _isGameplaySyncSuspended;
+    // Drives the speaking icon on the floating names. Optional: the broadcaster runs fine
+    // without voice, the icon simply never lights.
+    private readonly System.Func<int, bool> _isSpeaking;
 
     private float _stateTickTimer;
     private float _boneTickTimer;
@@ -27,13 +30,15 @@ internal sealed class PlayerStateBroadcaster
         NetworkManager network,
         RuntimeState state,
         System.Action resetRope,
-        System.Func<bool> isGameplaySyncSuspended)
+        System.Func<bool> isGameplaySyncSuspended,
+        System.Func<int, bool> isSpeaking = null)
     {
         _network = network;
         _state = state ?? throw new System.ArgumentNullException(nameof(state));
         _resetRope = resetRope ?? throw new System.ArgumentNullException(nameof(resetRope));
         _isGameplaySyncSuspended = isGameplaySyncSuspended
             ?? throw new System.ArgumentNullException(nameof(isGameplaySyncSuspended));
+        _isSpeaking = isSpeaking;
     }
 
     internal void ResetTimers()
@@ -104,7 +109,7 @@ internal sealed class PlayerStateBroadcaster
             }
 
             RemotePlayerManager.Reconcile(_network, _state.LocalPlayerState);
-            RemotePlayerManager.UpdateAll(_network, _state.LocalPlayerState);
+            RemotePlayerManager.UpdateAll(_network, _state.LocalPlayerState, _isSpeaking);
         }
         else
         {

@@ -59,6 +59,8 @@ internal static class RemotePlayerManager
 
         public CapsuleCollider Collider;
         public bool PhysicsActive = true;
+
+        public string LastAppliedNameLabel;
     }
 
     private class SpawnWaitEntry
@@ -239,7 +241,7 @@ internal static class RemotePlayerManager
         go.transform.rotation = Quaternion.Euler(0f, rp.YawDeg, 0f);
     }
 
-    public static void UpdateAll(NetworkManager net, PlayerState localState)
+    public static void UpdateAll(NetworkManager net, PlayerState localState, Func<int, bool> isSpeaking = null)
     {
         foreach (var kv in net.RemotePlayers)
         {
@@ -310,12 +312,19 @@ internal static class RemotePlayerManager
 
         CosmeticInterop.TickGhostGloveRigs();
 
-        // SetFrame may re-enable nameMesh, so visibility is asserted afterwards.
+        // SetFrame may re-enable nameMesh and rewrites its text, so both the visibility and
+        // the label are asserted afterwards — otherwise the speaking icon is erased as soon
+        // as a frame arrives.
         foreach (var kv in net.RemotePlayers)
         {
             if (!_ghosts.TryGetValue(kv.Key, out var entry)) continue;
-            if (entry.IsRealModel && entry.NrpComponent != null)
-                NetplayAnimationInterop.SetGhostNameVisible(entry.NrpComponent, ShowNames);
+            if (!entry.IsRealModel || entry.NrpComponent == null) continue;
+
+            NetplayAnimationInterop.SetGhostNameVisible(entry.NrpComponent, ShowNames);
+
+            var speaking = isSpeaking != null && isSpeaking(kv.Key);
+            entry.LastAppliedNameLabel = NetplayAnimationInterop.SetGhostNameLabel(
+                entry.NrpComponent, kv.Value?.Name, speaking, entry.LastAppliedNameLabel);
         }
     }
 
