@@ -53,6 +53,9 @@ All notable CairnMP changes are documented here. Releases follow
 - Moved cooperative player-rope attach/detach from E to the dedicated L key, so
   native interactions such as placing or grabbing a piton cannot trigger both
   actions at once.
+- Starting a multiplayer game now opens Cairn's native save selection first,
+  allowing each player to resume an existing save or choose a new slot instead
+  of being sent directly into new-game creation.
 
 ### Compatibility
 

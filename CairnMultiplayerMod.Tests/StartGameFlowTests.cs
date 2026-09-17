@@ -7,9 +7,9 @@ namespace CairnMultiplayerMod.Tests;
 public sealed class StartGameFlowTests
 {
     [Fact]
-    public void MultiplayerLaunchOpensDifficultySelectionSoFreeRoamCanBeChosen()
+    public void MultiplayerLaunchOpensSaveSelectionBeforeStartingANewGame()
     {
-        Assert.Equal(MainMenuInterop.MainMenuStep.DifficultySelect,
+        Assert.Equal(MainMenuInterop.MainMenuStep.StoryModeManageSave,
             StartGameFlow.MultiplayerLaunchEntryStep);
     }
 }

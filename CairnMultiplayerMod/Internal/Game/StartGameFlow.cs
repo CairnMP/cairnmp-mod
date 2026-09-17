@@ -24,10 +24,11 @@ internal sealed class StartGameFlow
     // until loading begins.
     private ServerStartGame? _forceNewGameOpts;
 
-    // Multiplayer must stop at the native difficulty menu. Going directly to save selection
-    // bypasses the only screen that exposes the mod-unlocked Free Roam option.
+    // Always enter through Cairn's save manager so players can resume an existing save.
+    // Choosing an empty slot continues through the native new-game/difficulty flow, where
+    // Free Roam is already made available by FreeRoamUnlockPatch.
     internal static MainMenuInterop.MainMenuStep MultiplayerLaunchEntryStep =>
-        MainMenuInterop.MainMenuStep.DifficultySelect;
+        MainMenuInterop.MainMenuStep.StoryModeManageSave;
 
     internal StartGameFlow(
         IMultiplayerPanel panel,
@@ -56,7 +57,7 @@ internal sealed class StartGameFlow
         _pendingStart = pkt;
         _pendingStartRetries = 0;
         _pendingStartRetryTimer = 1.0f;
-        _panel.SetStatus($"Launching game ({(GameDifficulty)pkt.Difficulty})...", true);
+        _panel.SetStatus("Opening save selection...", true);
     }
 
     internal void Tick()
@@ -68,7 +69,7 @@ internal sealed class StartGameFlow
             if (SceneRoles.IsMainMenuArea(currentScene))
             {
                 var s = _forceNewGameOpts.Value;
-                // Difficulty stays local because this native screen lets each player choose it.
+                // Difficulty stays local because Cairn's native new-save flow owns that choice.
                 GameOptionsInterop.SetNextGameSkipOptions(
                     s.SkipTutorials, s.SkipPractice, s.AssistEnabled, verbose: false);
             }
@@ -100,7 +101,7 @@ internal sealed class StartGameFlow
                 _forceNewGameOpts = start;
 
                 MainMenuInterop.ForceMainMenuStep(MultiplayerLaunchEntryStep);
-                ModLog.Info("[StartGame] Opened native difficulty selection — player chooses mode before save selection (options re-applied each frame)");
+                ModLog.Info("[StartGame] Opened native save selection — player chooses an existing or new save (options re-applied each frame)");
 
                 _pendingStart = null;
                 _pendingStartRetries = 0;
