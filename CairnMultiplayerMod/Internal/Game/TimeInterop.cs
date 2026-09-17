@@ -109,6 +109,17 @@ internal static class TimeInterop
         UnfreezeDayCycle();
     }
 
+    /// <summary>
+    /// A scene boundary replaces NightDayCycle.Instance, so the freeze we held is gone with
+    /// the old one — only the ownership flag needs clearing. Calling Unfreeze here instead
+    /// would hand the day/night cycle back to the game for a moment, making the sky jump
+    /// until the next host packet re-freezes it.
+    /// </summary>
+    public static void ForgetSceneBoundFreeze()
+    {
+        _dayCycleFrozenByUs = false;
+    }
+
     public static void DumpTimeApi()
     {
         if (_timeApiDumped) return;

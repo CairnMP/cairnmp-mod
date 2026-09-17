@@ -20,13 +20,23 @@ internal static class WeatherInterop
     private static float _lastWeatherApplyFailureLogAt;
     private static bool _weatherForcedByUs;
 
+    /// <summary>
+    /// A scene boundary destroys the WeatherManager we cached, so the pointer and the
+    /// "already applied" keys must go. The host's weather must NOT: releasing the override
+    /// here makes the new zone's own weather play out for a moment before the next host
+    /// packet forces it back — the visible flip-back players report. Instead the last known
+    /// state is re-armed, so TickRemote reapplies it as soon as the new manager exists.
+    /// </summary>
     internal static void ResetCaches()
     {
-        ReleaseRemoteWeatherOverride();
         _weatherManagerCached = null;
+        // The new manager carries none of our override yet.
         _weatherForcedByUs = false;
         _lastAppliedWeatherKey = int.MinValue;
         _lastAppliedWindOverride = int.MinValue;
+
+        if (_pendingRemoteWeather.IsValid)
+            _hasPendingRemoteWeather = true;
     }
 
     public static bool TryCaptureWeather(out WeatherSyncData state)

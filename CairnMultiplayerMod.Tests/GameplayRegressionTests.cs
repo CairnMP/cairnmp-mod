@@ -297,6 +297,9 @@ public sealed class GameplayRegressionTests
         public bool TryGetLocalSleep(out bool value) { value = true; return true; }
         public bool Freeze(float value) { Frozen = true; return true; }
         public bool Unfreeze() { Frozen = false; return true; }
+        // Deliberately leaves Frozen alone: a scene change forgets our ownership of the
+        // freeze without releasing it on the game.
+        public void OnSceneChanged() { }
         public void Reset() => Frozen = false;
         public void LogDiagnosticsOnce() { }
     }

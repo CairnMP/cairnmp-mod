@@ -73,7 +73,7 @@ internal sealed class ClockFeature : MultiplayerFeature
         feature.EveryFrame(Tick, FeaturePhase.Always);
 
         feature.OnPlayerLeft((playerId, _) => _asleepByPlayer.Remove(playerId));
-        feature.OnSceneReset(Reset);
+        feature.OnSceneReset(ResetForSceneChange);
         feature.OnSessionEnded(Reset);
     }
 
@@ -168,11 +168,25 @@ internal sealed class ClockFeature : MultiplayerFeature
         return true;
     }
 
-    private void Reset()
+    /// <summary>
+    /// A scene boundary (including entering and leaving a bivouac) replaces the native cycle,
+    /// but the session carries on. Only the freeze ownership and the local send cadence are
+    /// scene-bound; the host's time, the held baseline and who is asleep all belong to the
+    /// session. Dropping them here unfroze the sky and stopped the fast-forward until the
+    /// next packet — and a bivouac is exactly when both matter.
+    /// </summary>
+    private void ResetForSceneChange()
     {
         _publishTimer = 0f;
+        // Re-report our sleep state promptly: it may well have changed across the boundary.
         _hasReportedSleep = false;
         _sleepRefreshTimer = 0f;
+        Game.Clock.OnSceneChanged();
+    }
+
+    private void Reset()
+    {
+        ResetForSceneChange();
         _lastReportedSleep = false;
         _heldDayTime01 = 0f;
         _hasHeldDayTime01 = false;

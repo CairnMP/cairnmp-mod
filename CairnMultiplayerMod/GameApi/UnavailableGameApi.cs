@@ -112,6 +112,7 @@ internal sealed class UnavailableGameApi : IGameApi
         public bool TryGetLocalSleep(out bool asleep) { asleep = false; return false; }
         public bool Freeze(float dayTime) => false;
         public bool Unfreeze() => false;
+        public void OnSceneChanged() { }
         public void Reset() { }
         public void LogDiagnosticsOnce() { }
     }
@@ -140,6 +141,7 @@ internal sealed class UnavailableGameApi : IGameApi
         public bool IsValid(CairnMultiplayer.Shared.WeatherSyncData weather) => false;
         public void ApplyRemote(CairnMultiplayer.Shared.WeatherSyncData weather) { }
         public void TickRemote() { }
+        public void OnSceneChanged() { }
         public void Reset() { }
     }
 

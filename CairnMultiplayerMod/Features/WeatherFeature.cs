@@ -34,9 +34,11 @@ internal sealed class WeatherFeature : MultiplayerFeature
 
         // The scene reload destroys the weather manager we cached, and rearms the cadence
         // so the next capture goes out promptly instead of waiting a full interval.
+        // Crossing a scene is NOT leaving the session: dropping the host's weather here
+        // would let the new zone's own weather show through until the next packet.
         feature.OnSceneReset(() =>
         {
-            Game.Weather.Reset();
+            Game.Weather.OnSceneChanged();
             _publishTimer = Protocol.WeatherStateUpdateIntervalSeconds;
         });
         feature.OnSessionEnded(Game.Weather.Reset);

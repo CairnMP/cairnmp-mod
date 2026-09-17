@@ -121,6 +121,7 @@ internal sealed class ClockAdapter : IClockApi
     public bool TryGetLocalSleep(out bool asleep) => TimeInterop.TryIsLocalAsleep(out asleep);
     public bool Freeze(float dayTime) => TimeInterop.FreezeDayCycle(dayTime);
     public bool Unfreeze() => TimeInterop.UnfreezeDayCycle();
+    public void OnSceneChanged() => TimeInterop.ForgetSceneBoundFreeze();
     public void Reset() => TimeInterop.ResetCaches();
     public void LogDiagnosticsOnce() => TimeInterop.DumpTimeApi();
 }
@@ -261,6 +262,7 @@ internal sealed class WeatherAdapter : IWeatherApi
 
     public void ApplyRemote(WeatherSyncData weather) => WeatherInterop.ApplyRemoteWeather(weather);
     public void TickRemote() => WeatherInterop.TickRemote();
+    public void OnSceneChanged() => WeatherInterop.ResetCaches();
     public void Reset() => WeatherInterop.ResetRemoteState();
 }
 
