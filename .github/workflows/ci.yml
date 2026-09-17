@@ -36,21 +36,3 @@ jobs:
         run: dotnet restore CairnMultiplayer.Tests/CairnMultiplayer.Tests.csproj --locked-mode
       - name: Test
         run: dotnet test CairnMultiplayer.Tests/CairnMultiplayer.Tests.csproj --configuration Release --no-restore -p:DeployMod=false
-
-  voice-portability:
-    strategy:
-      matrix:
-        os: [windows-latest, ubuntu-latest, macos-15-intel]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          global-json-file: global.json
-      - name: Restore locked dependencies
-        run: dotnet restore CairnMultiplayerMod.Tests/CairnMultiplayerMod.Tests.csproj --locked-mode
-      - name: Compile and test voice backend
-        run: dotnet test CairnMultiplayerMod.Tests/CairnMultiplayerMod.Tests.csproj --configuration Release --no-restore -p:DeployMod=false

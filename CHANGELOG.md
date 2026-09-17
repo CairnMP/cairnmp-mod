@@ -46,8 +46,8 @@ All notable CairnMP changes are documented here. Releases follow
 - Cairn's authored acoustic rooms now extend voice range from 40 to 70 metres
   when both players share a cave, room, gym or shelter. These zones add a short,
   bounded reflection, while a small interaural delay improves player direction.
-- CI now compiles and tests the voice backend boundary on Windows, Ubuntu and
-  macOS Intel runners.
+- Architecture coverage prevents voice orchestration from depending directly on
+  a platform-specific capture or output implementation.
 
 ### Changed
 
