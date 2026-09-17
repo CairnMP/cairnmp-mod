@@ -94,6 +94,23 @@ internal static class CrashHandler
             _warning($"[CairnMP] Could not create the local diagnostic log: {exception.Message}");
         }
 
+        // A native crash kills the process without raising a managed exception, so nothing
+        // below would ever fire. The watch leaves a marker behind instead, and reading it
+        // here is the only moment we can learn that the last session was killed.
+        try
+        {
+            var previousCrash = NativeCrashWatch.InitializeAndCollectPreviousReport(dataRoot);
+            if (previousCrash != null)
+            {
+                AppendSessionLog("NATIVE-CRASH", "previous session", previousCrash);
+                _warning($"[CairnMP] {previousCrash}");
+            }
+        }
+        catch (Exception exception)
+        {
+            ReportInternalFailure("check the previous session for a native crash", exception);
+        }
+
         AddLogPath(_sessionLogPath);
         try { AddLogPath(Path.Combine(MelonEnvironment.MelonLoaderDirectory, "Latest.log")); }
         catch (Exception exception) { ReportInternalFailure("resolve the MelonLoader log", exception); }
@@ -110,7 +127,13 @@ internal static class CrashHandler
         if (Interlocked.Exchange(ref _initialized, 0) == 0) return;
         AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException;
         TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException;
+        NativeCrashWatch.Disarm();
     }
+
+    /// <summary>
+    /// Records what the mod is doing, so a native crash leaves behind more than a truncated log.
+    /// </summary>
+    public static void SetBreadcrumb(string breadcrumb) => NativeCrashWatch.SetBreadcrumb(breadcrumb);
 
     private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs args)
     {

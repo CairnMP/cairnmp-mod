@@ -24,6 +24,7 @@ public partial class Mod
             _runtimeState.LastGameplayScene = sceneName;
 
         _runtimeState.CurrentScene = sceneName;
+        UpdateCrashBreadcrumb();
         // Cairn streams art/audio/LOD layers constantly while the pawn remains valid.
         // Only a real gameplay boundary should restart the graph-stability timer.
         if (SceneRoles.IsSyncResetPoint(sceneName) || SceneRoles.IsBivouac(sceneName))
@@ -92,6 +93,8 @@ public partial class Mod
         // registered with the physics scene that is going away.
         if (SceneRoles.IsGameplayRoot(sceneName) || SceneRoles.IsSyncResetPoint(sceneName))
             RemotePlayerManager.SuspendPhysics();
+
+        CrashHandler.SetBreadcrumb($"unloading scene {sceneName}");
 
         if (string.Equals(CurrentScene, sceneName, StringComparison.Ordinal))
             _runtimeState.CurrentScene = ResolveCurrentSceneAfterUnload(sceneName);
@@ -345,6 +348,27 @@ public partial class Mod
         // now — a moving collider registered while it unloads is a PhysX hazard.
         if (state != PlayerState.InGame)
             RemotePlayerManager.SuspendPhysics();
+
+        UpdateCrashBreadcrumb();
+    }
+
+    /// <summary>
+    /// Feeds the native-crash marker. A crash inside the engine leaves no managed trace, so
+    /// this breadcrumb is all the next launch will have to go on.
+    /// </summary>
+    private void UpdateCrashBreadcrumb()
+    {
+        try
+        {
+            CrashHandler.SetBreadcrumb(
+                $"state={LocalState} scene={CurrentScene ?? "none"} " +
+                $"{RemotePlayerManager.DebugSummary()} " +
+                $"net={(Network?.IsConnected == true ? "connected" : "offline")}");
+        }
+        catch (Exception exception)
+        {
+            CrashHandler.RecordRecoverableExceptionOnce(exception, "Mod.UpdateCrashBreadcrumb");
+        }
     }
 
     public override void OnGUI()
