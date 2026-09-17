@@ -288,7 +288,14 @@ public partial class Mod : MelonMod
             }
 
             LogDebug($"[CairnMP] ServerTeleport received -> ({pkt.X:F1}, {pkt.Y:F1}, {pkt.Z:F1})");
-            TeleportInterop.TeleportLocalPlayer(new Vector3(pkt.X, pkt.Y, pkt.Z), pkt.Yaw);
+            // Being brought over is decided by the host, but only this client knows whether
+            // its own pawn can survive the move. Refusing here — and saying so — beats
+            // yanking someone off a wall.
+            if (!TeleportInterop.TeleportLocalPlayer(new Vector3(pkt.X, pkt.Y, pkt.Z), pkt.Yaw, out var refused))
+            {
+                LoggerInstance.Msg($"[CairnMP] Teleport request refused: {refused}");
+                _game?.Chat.AddSystemLine($"The host tried to bring you over, but {refused}.");
+            }
         };
         // Authoritative game launch by the server: queues the packet, applies it in
         // Update when the MainMenu scene is active.

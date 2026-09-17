@@ -2,6 +2,7 @@ using System;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game.Players;
 using Il2Cpp;
+using Il2CppTheGameBakers.Cairn.Netplay;
 using UnityEngine;
 
 namespace CairnMultiplayerMod.Internal.Game.World;
@@ -27,10 +28,49 @@ internal static unsafe class TeleportInterop
     private static CairnSceneManager _sceneManagerCached;
     private static int _lastSceneManagerSearchFrame;
 
-    public static bool TeleportLocalPlayer(Vector3 position, float yawDeg)
+    /// <summary>
+    /// Whether the local pawn can be moved right now. Cairn only tolerates a hard transform
+    /// write while the pawn is in a plain grounded walk: climbing keeps live references to
+    /// holds and rope constraints, and falling/dead run their own recovery. Moving the pawn
+    /// out from under either leaves the native controller pointing at geometry that is no
+    /// longer there.
+    /// </summary>
+    public static bool CanTeleportLocalPlayer(out string reason)
     {
+        reason = null;
+
+        if (LocalPlayerInterop.TryGetMCGameObject() == null)
+        {
+            reason = "you are not in game";
+            return false;
+        }
+
+        var state = PawnCaptureInterop.GetLocalPawnState().ToString();
+        if (TeleportPolicy.AllowsTeleport(state)) return true;
+
+        reason = TeleportPolicy.DescribeRefusal(state);
+        return false;
+    }
+
+    public static bool TeleportLocalPlayer(Vector3 position, float yawDeg)
+        => TeleportLocalPlayer(position, yawDeg, out _);
+
+    public static bool TeleportLocalPlayer(Vector3 position, float yawDeg, out string refusedReason)
+    {
+        // The same guard covers both entry points: /tp moving the host, and a ServerTeleport
+        // moving whoever the host brings over. Only the pawn being moved matters here.
+        if (!CanTeleportLocalPlayer(out refusedReason))
+        {
+            ModLog.Debug($"[Teleport] Refused: {refusedReason}");
+            return false;
+        }
+
         var go = LocalPlayerInterop.TryGetMCGameObject();
-        if (go == null) return false;
+        if (go == null)
+        {
+            refusedReason = "you are not in game";
+            return false;
+        }
 
         Roping.RopeInterop.ReleaseAllAnchors();
 
@@ -153,6 +193,12 @@ internal static unsafe class TeleportInterop
             }
 
             if (!inGame || IsWorldStreamingBusy()) { _teleportStableSince = -1f; return; }
+
+            // Zone travel drops the pawn at the zone spawn, and it may still be falling or
+            // grabbing a wall. Repositioning it then is the same hazard as the initial
+            // teleport, so wait for a grounded walk exactly as we wait for streaming. The
+            // 40 s deadline still releases us if that never happens.
+            if (!PawnCaptureInterop.IsLocalPlayerWalking()) { _teleportStableSince = -1f; return; }
 
             var go = LocalPlayerInterop.TryGetMCGameObject();
             if (go == null) { _teleportStableSince = -1f; return; }

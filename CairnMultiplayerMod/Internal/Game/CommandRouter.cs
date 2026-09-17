@@ -111,10 +111,10 @@ internal sealed class CommandRouter
         }
 
         // The host already knows the player's position: 100% local teleport.
-        if (TeleportInterop.TeleportLocalPlayer(new Vector3(p.X, p.Y, p.Z), p.YawDeg))
+        if (TeleportInterop.TeleportLocalPlayer(new Vector3(p.X, p.Y, p.Z), p.YawDeg, out var refused))
             _systemLine($"Teleported to {p.Name}.");
         else
-            _systemLine("Can't teleport right now (not in game?).");
+            _systemLine($"Can't teleport right now: {refused ?? "not in game"}.");
     }
 
     private void HandleBring(string targetName)
