@@ -19,6 +19,7 @@ internal static class ModConfig
 
     public static MelonPreferences_Entry<bool> VerboseLogging;
     public static MelonPreferences_Entry<bool> PerformanceDiagnostics;
+    public static MelonPreferences_Entry<bool> NativeProfiling;
     public static MelonPreferences_Entry<string> PerformanceScenario;
 
     public static void Register()
@@ -37,6 +38,9 @@ internal static class ModConfig
         var debug = MelonPreferences.CreateCategory(CategoryDebug);
         VerboseLogging = debug.CreateEntry("VerboseLogging", false);
         PerformanceDiagnostics = debug.CreateEntry("PerformanceDiagnostics", false);
+        // Times the native methods flagged by the reverse-engineering audit. Adds Harmony
+        // hooks to per-frame game code, so it stays off unless someone is measuring.
+        NativeProfiling = debug.CreateEntry("NativeProfiling", false);
         PerformanceScenario = debug.CreateEntry("PerformanceScenario", "unspecified - set route, save, run number and voice/rope state");
     }
 }

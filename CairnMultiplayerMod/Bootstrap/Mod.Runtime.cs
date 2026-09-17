@@ -148,6 +148,7 @@ public partial class Mod
         try
         {
             TickPerformance();
+            NativePerformanceProbe.Tick();
             using var performance = Measure(PerformanceArea.ModUpdate);
             TickMod();
         }

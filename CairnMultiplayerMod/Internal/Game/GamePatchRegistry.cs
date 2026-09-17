@@ -33,6 +33,7 @@ internal static class GamePatchRegistry
         new("main-menu buttons", MainMenuButtonIntegration.Install, MainMenuButtonIntegration.Uninstall),
         new("free-roam unlock", FreeRoamUnlockPatch.Install, FreeRoamUnlockPatch.Uninstall),
         new("savegame piton guard", SavegamePitonGuardPatch.Install, SavegamePitonGuardPatch.Uninstall),
+        new("native performance probe", NativePerformanceProbe.Install, NativePerformanceProbe.Uninstall),
     };
 
     private static readonly List<PatchModule> Installed = new();
