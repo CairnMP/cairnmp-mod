@@ -150,6 +150,15 @@ public partial class Mod
     private void TickMod()
     {
         _runtimeState.TimeSinceLastSceneLoad += Time.unscaledDeltaTime;
+
+        // Arm controller shortcuts only after their modifier has already blocked Cairn for
+        // one frame. This runs before inventory/features so every consumer sees one coherent
+        // controller snapshot and secondary buttons cannot trigger both action sets.
+        ModControllerInput.Update();
+        InputCaptureState.IsControllerShortcutCaptured = ModControllerInput.IsModifierHeld
+            && (_multiplayerModeActive || SceneRoles.IsMainMenu(CurrentScene));
+        InputInterop.ReconcileGameplayInput(InputCaptureState.WantsGameplayBlocked);
+
         if (_multiplayerModeActive)
         {
             using var performance = Measure(PerformanceArea.Ui);
@@ -162,10 +171,12 @@ public partial class Mod
         // early return below, so it stays reachable even mid-bivouac. Whoever captured the
         // keyboard releases it on its own side — the chat feature also listens for F10.
         var panicKeyboard = Keyboard.current;
-        if (panicKeyboard != null && panicKeyboard.f10Key.wasPressedThisFrame)
+        var panicPressed = panicKeyboard != null && panicKeyboard.f10Key.wasPressedThisFrame;
+        panicPressed |= ModControllerInput.WasPressed(ControllerShortcut.Panic);
+        if (panicPressed)
         {
             InputInterop.ForceClearBlock();
-            LoggerInstance.Msg("[CairnMP] Panic: input force-cleared (F10)");
+            LoggerInstance.Msg("[CairnMP] Panic: input force-cleared");
         }
 
         // While a mod UI captures the keyboard for chat, suppress the mod's shortcuts so
@@ -249,7 +260,7 @@ public partial class Mod
         // zone-load repositioning). No-op if no teleport is pending.
         TeleportInterop.TickSettle(LocalState == PlayerState.InGame);
 
-        // Inter-player roping: clip detection (E) + maintenance of the NATIVE rope team.
+        // Inter-player roping: dedicated keyboard/controller input + maintenance of the NATIVE rope team.
         // A dedicated native rope attaches to both harnesses and provides the visual
         // rope and belay without creating pitons or changing personal rope topology.
         try
@@ -259,12 +270,14 @@ public partial class Mod
         }
         catch (Exception ex) { LoggerInstance.Error($"[RopeCouple] tick failed: {ex.Message}"); }
 
-        var keyboard = Keyboard.current;
-        if (keyboard == null) return;
-
         if (chatTyping) return;
 
-        if (keyboard[_connectKey].wasPressedThisFrame)
+        var keyboard = Keyboard.current;
+        var togglePanel = keyboard != null && keyboard[_connectKey].wasPressedThisFrame;
+        togglePanel |= ModControllerInput.WasPressed(ControllerShortcut.TogglePanel);
+        if (_panel.IsVisible && Gamepad.current?.buttonEast.wasPressedThisFrame == true)
+            togglePanel = true;
+        if (togglePanel)
         {
             if (_panel.IsVisible)
             {
@@ -283,7 +296,7 @@ public partial class Mod
             }
         }
 
-        if (keyboard[_disconnectKey].wasPressedThisFrame)
+        if (keyboard != null && keyboard[_disconnectKey].wasPressedThisFrame)
         {
             if (Network.IsConnected)
             {
@@ -294,7 +307,7 @@ public partial class Mod
         // While the multiplayer panel is open, reassert the blocking of the menu's action maps
         // to prevent any background navigation (Delete, arrows, back).
         if (_panel.IsVisible)
-            InputInterop.BlockMainMenuActionMaps();
+            InputInterop.BlockMainMenuActionMaps(allowOverlayNavigation: true);
     }
 
     private static Key ParseKey(string name, Key fallback)
@@ -304,13 +317,11 @@ public partial class Mod
 
     private void TickNameToggleInput()
     {
-        var kb = Keyboard.current;
-        if (kb == null) return;
-
-        if (!kb[Key.N].wasPressedThisFrame) return;
+        var keyboardPressed = Keyboard.current?[Key.N].wasPressedThisFrame == true;
+        if (!keyboardPressed && !ModControllerInput.WasPressed(ControllerShortcut.ToggleNames)) return;
 
         var shown = RemotePlayerManager.ToggleNames();
-        LoggerInstance.Msg($"[CairnMP] Player names {(shown ? "shown" : "hidden")} (N)");
+        LoggerInstance.Msg($"[CairnMP] Player names {(shown ? "shown" : "hidden")}");
     }
 
     private void SetLocalState(PlayerState state)

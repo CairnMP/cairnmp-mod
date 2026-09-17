@@ -8,6 +8,13 @@ namespace CairnMultiplayerMod.Tests;
 
 public sealed class DirectRopeTests
 {
+    [Fact]
+    public void PlayerRopeUsesDedicatedKeyInsteadOfNativeInteractionKey()
+    {
+        Assert.Equal("L", RopeCoupleController.ToggleKeyName);
+        Assert.NotEqual("E", RopeCoupleController.ToggleKeyName);
+    }
+
     private sealed class Binding : IRopeBinding
     {
         public bool IsReady { get; set; }

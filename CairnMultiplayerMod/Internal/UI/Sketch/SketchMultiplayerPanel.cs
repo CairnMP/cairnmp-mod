@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using CairnMultiplayerMod.Internal.Networking;
 using Il2CppTMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.Events;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
@@ -499,6 +500,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     public void Tick(float dt)
     {
         if (!_visible) return;
+        EnsureControllerFocus();
         if (_copyFeedbackSeconds > 0f)
         {
             _copyFeedbackSeconds -= dt;
@@ -513,6 +515,23 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     }
 
     public void OnGUI() { }
+
+    private void EnsureControllerFocus()
+    {
+        var eventSystem = EventSystem.current;
+        if (eventSystem == null || _canvasGo == null) return;
+        var selected = eventSystem.currentSelectedGameObject;
+        if (selected != null && selected.transform.IsChildOf(_canvasGo.transform)) return;
+
+        foreach (var selectable in _canvasGo.GetComponentsInChildren<Selectable>(true))
+        {
+            if (selectable != null && selectable.IsActive() && selectable.IsInteractable())
+            {
+                eventSystem.SetSelectedGameObject(selectable.gameObject);
+                return;
+            }
+        }
+    }
 
     public void DestroyResources()
     {

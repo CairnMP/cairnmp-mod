@@ -15,7 +15,7 @@ Cairn’s native settings fields, scrolling, navigation, and reset controls.
 | Microphone | System communications/default input | A named input device can be selected. |
 | Detection threshold | −40 dB | Adjustable from −60 to −10 dB. |
 | Microphone enhancement | On | High-pass filtering, automatic gain, compression, and limiting. |
-| Push-to-talk key | `V` | Configurable from the settings dropdown. |
+| Push-to-talk input | `V` or hold `View/Share + LB/L1` | Keyboard key is configurable. |
 | Voice volume | 100% | Adjustable from 0% to 300%. |
 | Maximum audible distance | 40 m outdoors / 70 m in shared acoustic zones | Volume decreases with distance. |
 
@@ -25,7 +25,8 @@ Cairn’s native settings fields, scrolling, navigation, and reset controls.
 
 - **Voice activation** opens the microphone when the input level crosses the
   configured threshold.
-- **Push-to-talk** transmits only while the selected key is held.
+- **Push-to-talk** transmits only while the selected keyboard key or
+  `View/Share + LB/L1` controller shortcut is held.
 - **Microphone mute** stops outgoing voice without muting other players.
 
 Voice activation uses the level measured before automatic gain, so quiet

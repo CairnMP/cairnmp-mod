@@ -167,8 +167,11 @@ internal sealed class InventoryAdapter : IInventoryApi
         if (index < 0) index = 0;
         var scroll = Mouse.current?.scroll.ReadValue().y ?? 0f;
         var keyboard = Keyboard.current;
-        var direction = scroll > 0 || keyboard?.rightArrowKey.wasPressedThisFrame == true ? 1
-            : scroll < 0 || keyboard?.leftArrowKey.wasPressedThisFrame == true ? -1 : 0;
+        var next = scroll > 0 || keyboard?.rightArrowKey.wasPressedThisFrame == true
+                   || ModControllerInput.WasPressed(ControllerShortcut.NextSharedItem);
+        var previous = scroll < 0 || keyboard?.leftArrowKey.wasPressedThisFrame == true
+                       || ModControllerInput.WasPressed(ControllerShortcut.PreviousSharedItem);
+        var direction = next ? 1 : previous ? -1 : 0;
         index = (index + direction + _pickupItems.Count) % _pickupItems.Count;
         _selectedGroundId = _pickupItems[index].Id;
         return _selectedGroundId;
@@ -217,6 +220,7 @@ internal sealed class InventoryAdapter : IInventoryApi
             if (_pickupItems.Count == 1)
             {
                 GroundKey(x, y, scale);
+                GroundLabel(x, y + 42f * scale, "E  /  View+ A   Pick up", 360f * scale, scale);
                 GroundLine(new Vector2(x, y + 23f * scale),
                     new Vector2(screen.x, Screen.height - screen.y), scale);
                 return;
@@ -245,7 +249,7 @@ internal sealed class InventoryAdapter : IInventoryApi
                 new Vector2(left + (visible - 1) * 72f * scale + 25f * scale, y + 41f * scale), scale);
             GroundLabel(x, y + 88f * scale, "Scroll / ← →   Navigate", 360f * scale, scale);
             GroundKey(x - 65f * scale, y + 126f * scale, scale);
-            GroundLabel(x + 25f * scale, y + 126f * scale, "Pick up", 140f * scale, scale);
+            GroundLabel(x + 70f * scale, y + 126f * scale, "Pick up  /  View+ A", 230f * scale, scale);
         }
         finally { GUI.color = previousColor; }
     }
@@ -463,6 +467,12 @@ internal sealed class InventoryAdapter : IInventoryApi
         SetPromptVisible(_dropPrompt, _dropInput,
             inventoryOpen && hasItem, SafeCan(_shareActions.CanDrop));
 
+        if (inventoryOpen && hasItem)
+        {
+            if (ModControllerInput.WasPressed(ControllerShortcut.GiveSelectedItem)) InvokeGive();
+            if (ModControllerInput.WasPressed(ControllerShortcut.DropSelectedItem)) InvokeDrop();
+        }
+
         if (!_section.isActiveAndEnabled || _section.CanvasGroup.alpha <= .01f)
             DestroyNativeActions();
     }
@@ -538,9 +548,9 @@ internal sealed class InventoryAdapter : IInventoryApi
             var map = _shareInputAsset.AddActionMap("CairnMPInventory");
             _giveInput = map.AddAction("GiveNearest", InputActionType.Button, "<Keyboard>/g");
             _dropInput = map.AddAction("DropItem", InputActionType.Button, "<Keyboard>/x");
-            _givePrompt = ClonePrompt(template, "CairnMP Give nearest", "Give nearest",
+            _givePrompt = ClonePrompt(template, "CairnMP Give nearest", "Give nearest (View/Share + X)",
                 _giveInput, out _giveDelegate, InvokeGive);
-            _dropPrompt = ClonePrompt(template, "CairnMP Drop item", "Drop",
+            _dropPrompt = ClonePrompt(template, "CairnMP Drop item", "Drop (View/Share + B)",
                 _dropInput, out _dropDelegate, InvokeDrop);
             _creationErrorReported = false;
         }

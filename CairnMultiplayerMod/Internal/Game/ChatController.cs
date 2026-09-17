@@ -89,7 +89,7 @@ internal sealed class ChatController
             return;
         }
         // Reconcile every frame so a temporarily missing InputManager does not strand input.
-        InputInterop.ReconcileGameplayInput(_isOpen);
+        InputInterop.ReconcileGameplayInput(InputCaptureState.WantsGameplayBlocked);
         InputCaptureState.IsKeyboardCaptured = _isOpen;
     }
 
@@ -280,7 +280,7 @@ internal sealed class ChatController
         _draft = "";
         InvalidateCompletions();
         InputCaptureState.IsKeyboardCaptured = true;
-        InputInterop.ReconcileGameplayInput(true);   // immediate (the per-frame reconcile follows)
+        InputInterop.ReconcileGameplayInput(InputCaptureState.WantsGameplayBlocked);
     }
 
     private void Close()
@@ -290,7 +290,7 @@ internal sealed class ChatController
         InvalidateCompletions();
         _hint = "";
         InputCaptureState.IsKeyboardCaptured = false;
-        InputInterop.ReconcileGameplayInput(false);  // immediate; per-frame reconcile = safety net
+        InputInterop.ReconcileGameplayInput(InputCaptureState.WantsGameplayBlocked);
     }
 
     private void Submit()

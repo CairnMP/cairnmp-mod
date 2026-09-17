@@ -18,8 +18,9 @@ as it does in Cairn's shared-rope mode. The personal rope is retained and select
 temporarily for piton operations, then restored permanently when the cooperative
 link ends. A verified partner attachment counts as one belay anchor. Disconnection,
 death, missing endpoints, or teleportation releases the cooperative resources. The
-E key still detaches an existing partner outside the initial three-metre attachment
-radius.
+dedicated L key or View/Share + Y/△ controller shortcut attaches or detaches a
+partner, including outside the initial three-metre attachment radius. E remains
+reserved for Cairn's native interactions.
 
 No synthetic Piton enters the placed-piton list, inventory or save data. Old
 pitons already saved by earlier versions are left untouched because their origin
@@ -62,7 +63,9 @@ Static inspection and managed unit tests do not establish in-game physics qualit
 - Place and recover real wall pitons before, during and after cooperative use.
   Their positions and personal rope attachments should survive detachment.
 - Test a controlled fall and maximum rope tension in a nonlethal test area.
-  Verify native suspension and that E still releases the link at zero slack.
+  Verify native suspension and that L still releases the link at zero slack.
+- While standing beside a partner and a piton, press E. Verify that the piton
+  interaction occurs without attaching or detaching the cooperative rope.
 - Test a late-loaded remote model, partner departure, death, teleportation,
   checkpoint reload and scene streaming; verify no orphaned rope actors.
 - Save/reload, leave the lobby and load solo in the same process, then restart.

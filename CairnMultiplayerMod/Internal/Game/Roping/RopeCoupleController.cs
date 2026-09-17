@@ -12,6 +12,8 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 internal sealed class RopeCoupleController
 {
     private const float RopeClipRangeMeters = 3f;
+    internal const string ToggleKeyName = "L";
+    private static readonly Key ToggleKey = System.Enum.Parse<Key>(ToggleKeyName);
 
     private readonly NetworkManager _network;
     private readonly RuntimeState _state;
@@ -107,7 +109,8 @@ internal sealed class RopeCoupleController
     private void HandleRopeClipInput()
     {
         var keyboard = Keyboard.current;
-        if (keyboard == null || !keyboard[Key.E].wasPressedThisFrame)
+        var keyboardPressed = keyboard != null && keyboard[ToggleKey].wasPressedThisFrame;
+        if (!keyboardPressed && !ModControllerInput.WasPressed(ControllerShortcut.ToggleRope))
             return;
 
         // An existing rope must always be releasable, including at zero slack.
@@ -152,7 +155,7 @@ internal sealed class RopeCoupleController
                 float d = Vector3.Distance(localPos, new Vector3(rp.X, rp.Y, rp.Z));
                 sb.Append($" [{kv.Key} state={rp.State} dist={d:F1}m hasFrame={rp.HasPlayerFrame}]");
             }
-            ModLog.Info($"[RopeCouple] E pressed — no eligible ghost within {RopeClipRangeMeters:F0}m " +
+            ModLog.Info($"[RopeCouple] {ToggleKey} pressed — no eligible ghost within {RopeClipRangeMeters:F0}m " +
                 $"(remote players: {total}):{(total == 0 ? " none" : sb.ToString())}");
             return;
         }

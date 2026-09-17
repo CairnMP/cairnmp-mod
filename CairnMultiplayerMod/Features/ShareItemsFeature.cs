@@ -550,7 +550,9 @@ internal sealed class ShareItemsFeature : MultiplayerFeature
         _nearbyGroundItems.Sort((left, right) => left.Id.CompareTo(right.Id));
         var selectedId = Game.Inventory.SelectGroundItem(_nearbyGroundItems);
         if (!_groundItems.TryGetValue(selectedId, out item)) return;
-        if (!Game.Input.WasKeyPressed(GameKey.E) || !_pickupRequested.Add(item.Id)) return;
+        var pickupPressed = Game.Input.WasKeyPressed(GameKey.E)
+                            || Game.Input.WasPressed(GameInputAction.PickupSharedItemController);
+        if (!pickupPressed || !_pickupRequested.Add(item.Id)) return;
         _pickupRequests.Send(new PickupGroundItemRequest { GroundItemId = item.Id },
             (accepted, answer) =>
             {

@@ -140,6 +140,7 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
     public void Tick(float dt)
     {
         if (!_visible) return;
+        EnsureControllerFocus();
         UpdateSteamProfile();
         if (_currentScreen == Screen.Connected)
             RefreshConnected(_lobby, GetLocalPlayerName());
@@ -147,6 +148,19 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
 
     public void OnGUI()
     {
+    }
+
+    private void EnsureControllerFocus()
+    {
+        if (_root?.focusController?.focusedElement != null) return;
+
+        VisualElement target = _currentScreen switch
+        {
+            Screen.Browser => _refreshButton,
+            Screen.Connected => _startButton ?? _copyButton,
+            _ => _createButton,
+        };
+        target?.Focus();
     }
 
     public void DestroyResources()

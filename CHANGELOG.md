@@ -13,6 +13,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.2.16](#2216--2026-09-17-stable) | 2026-09-17 | Stable | Controller support and conflict-free player ropes |
 | [2.2.15](#2215--2026-09-17-beta) | 2026-09-17 | Beta | Stable harness ropes and cross-platform spatial voice |
 | [2.2.14](#2214--2026-09-16-beta) | 2026-09-16 | Beta | Free Roam button initialization fix |
 | [2.2.13](#2213--2026-09-16-beta) | 2026-09-16 | Beta | Free Roam multiplayer launch fix |
@@ -33,6 +34,33 @@ All notable CairnMP changes are documented here. Releases follow
 | [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
 | [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.2.16] — 2026-09-17 (stable)
+
+### Added
+
+- Added a controller layout for the multiplayer panel, cooperative ropes,
+  shared items, player names, and voice push-to-talk. CairnMP shortcuts use
+  View/Share as a modifier and the multiplayer panel now preserves controller
+  navigation while native background menus stay blocked. Holding the modifier
+  temporarily captures gameplay input so face-button shortcuts cannot also fire
+  Cairn actions.
+
+### Fixed
+
+- Moved cooperative player-rope attach/detach from E to the dedicated L key, so
+  native interactions such as placing or grabbing a piton cannot trigger both
+  actions at once.
+
+### Compatibility
+
+- Version **2.2.16** retains protocol **13**. All lobby members must use the same
+  mod version.
+- This is the stable promotion of the 2.2 beta series, including multiplayer
+  Free Roam, shared items, proximity voice, native cooperative ropes, bivouac
+  synchronization, lobby browsing and the managed extension API improvements.
 
 ---
 

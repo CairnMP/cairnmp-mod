@@ -39,7 +39,10 @@ internal sealed class GameInputAdapter : IGameInputApi
         {
             GameInputAction.PrimaryPointer => Mouse.current?.leftButton.wasPressedThisFrame == true,
             GameInputAction.PingController => Gamepad.current?.rightShoulder.wasPressedThisFrame == true,
-            GameInputAction.Panic => Keyboard.current?.f10Key.wasPressedThisFrame == true,
+            GameInputAction.Panic => Keyboard.current?.f10Key.wasPressedThisFrame == true
+                                     || ModControllerInput.WasPressed(ControllerShortcut.Panic),
+            GameInputAction.PickupSharedItemController =>
+                ModControllerInput.WasPressed(ControllerShortcut.PickupSharedItem),
             _ => false,
         };
     }

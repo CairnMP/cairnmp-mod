@@ -59,12 +59,12 @@ internal static class InputInterop
     /// Both navigation layers must be disabled: either EventSystem or Cairn's action maps can
     /// otherwise move the native menu behind the multiplayer panel.
     /// </summary>
-    public static void BlockMainMenuActionMaps()
+    public static void BlockMainMenuActionMaps(bool allowOverlayNavigation = false)
     {
         try
         {
             var es = EventSystem.current;
-            if (es != null) es.sendNavigationEvents = false;
+            if (es != null) es.sendNavigationEvents = allowOverlayNavigation;
 
             var mgr = FindInputManager();
             if (mgr != null)

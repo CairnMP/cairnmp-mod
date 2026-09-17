@@ -47,6 +47,28 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 ## Player guide
 
+### Controller
+
+CairnMP uses **View/Share/Create** as a modifier so its commands do not replace
+Cairn's normal controller layout. Hold the modifier first, then press the action
+button; Cairn's native actions are temporarily blocked while it is held.
+
+| Controller shortcut | Action |
+| --- | --- |
+| `View/Share` + `Menu/Options` | Open or close the multiplayer panel |
+| `View/Share` + `Y/△` | Attach or detach the cooperative rope |
+| `View/Share` + `A/✕` | Pick up a shared ground item |
+| `View/Share` + `X/□` | Give the selected backpack item |
+| `View/Share` + `B/○` | Drop the selected backpack item |
+| `View/Share` + D-pad `←` / `→` | Select a shared ground item |
+| `View/Share` + D-pad `↑` | Show or hide player names |
+| Hold `View/Share` + `LB/L1` | Push to talk |
+| `View/Share` + right-stick click | Emergency input release |
+
+The multiplayer panel supports D-pad/stick navigation, confirm, and `B/○` to
+close. Text chat and manual lobby-code entry still require text input; public
+lobby browsing, hosting, gameplay actions, and voice are controller-accessible.
+
 ### Chat
 
 | Key | Action |
@@ -56,7 +78,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 | `Tab` | Complete a command or player argument |
 | `Shift` + `Tab` | Cycle completion backward |
 | `Escape` | Close chat |
-| `F10` | Force-close chat if needed |
+| `F10` or `View/Share` + right-stick click | Force-close chat if needed |
 
 Your climber remains stationary while you type. The suggestion bar lists matching
 commands and players, including nicknames with spaces, and displays command usage.
@@ -69,8 +91,8 @@ an argument as `<player>`.
 
 Select an ordinary consumable in Cairn’s backpack. The native action bar adds:
 
-- **`G` — Give nearest:** transfer one unit to the nearest eligible player;
-- **`X` — Drop:** place one unit into the shared world.
+- **`G` or `View/Share + X/□` — Give nearest:** transfer one unit to the nearest eligible player;
+- **`X` or `View/Share + B/○` — Drop:** place one unit into the shared world.
 
 | Rule | Limit |
 | --- | ---: |
@@ -84,7 +106,7 @@ the same area. The prompts are disabled while an item is being dragged or the ba
 is busy.
 
 Dropped items are owned by the host, synchronized to every player, and picked up
-with **`E`**. If the recipient’s backpack is full, the item returns to the ground
+with **`E`** or **`View/Share + A/✕`**. If the recipient’s backpack is full, the item returns to the ground
 instead of being destroyed or duplicated.
 
 > [!NOTE]

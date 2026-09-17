@@ -5,6 +5,7 @@ internal enum GameInputAction
     PrimaryPointer,
     PingController,
     Panic,
+    PickupSharedItemController,
 }
 
 internal enum GameKey

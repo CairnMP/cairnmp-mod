@@ -248,6 +248,7 @@ internal sealed class VoiceSettingsIntegration : IDisposable
                 (Il2CppSystem.Action<bool>)(new Action<bool>(value => { VoicePreferences.EnhanceMicrophone.Value = value; VoicePreferences.Save(); })), new Il2CppSystem.Nullable<bool>(true)),
             new FieldListDropdown(new FieldLabel("Push-to-talk key"), Labels(keys.Select(k => k.ToString()).ToArray()), Math.Max(0, Array.IndexOf(keys, currentKey)),
                 (FieldList.OnValueChangedDelegate)(new Action<int,int>((_, value) => { if (value >= 0 && value < keys.Length) { VoicePreferences.PushToTalkKey.Value = keys[value].ToString(); VoicePreferences.Save(); } })), new Il2CppSystem.Nullable<int>(Array.IndexOf(keys, Key.V))),
+            new FieldInfo("Controller push-to-talk: hold View/Share + LB/L1."),
             new FieldSlider(new FieldLabel("Voice volume (%)"), 0, 300, true, VoicePreferences.SafeVolume * 100,
                 (FieldSlider.OnValueChangedDelegate)(new Action<float,float>((_, value) => { VoicePreferences.Volume.Value = value / 100; VoicePreferences.Save(); })), new Il2CppSystem.Nullable<float>(100)),
             new FieldToggle(new FieldLabel("Test microphone (local playback)"), false,

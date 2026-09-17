@@ -164,6 +164,8 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
         var ptt = Enum.TryParse<Key>(VoicePreferences.PushToTalkKey.Value, true, out var key)
             && Enum.IsDefined(typeof(Key), key) && key != Key.None && Keyboard.current != null
             && Keyboard.current[key].isPressed && !InputCaptureState.IsKeyboardCaptured;
+        ptt |= !InputCaptureState.IsKeyboardCaptured
+               && ModControllerInput.IsHeld(ControllerShortcut.PushToTalk);
         for (var frame = 0; frame < 5 && _microphone.TryRead(_frame); frame++)
         {
             _processor.Process(_frame, VoicePreferences.EnhanceMicrophone.Value);

@@ -143,7 +143,7 @@ internal static class PhotoModeNamesRow
             }
             if (label == null && tmps.Length > 0) label = tmps[0];
 
-            if (keycap != null) keycap.text = "N";
+            if (keycap != null) keycap.text = "N / ↑";
             _label = label;
             _row = clone;
             _lastShown = !RemotePlayerManager.ShowNames;
@@ -295,7 +295,9 @@ internal static class PhotoModeNamesRow
         bool shown = RemotePlayerManager.ShowNames;
         if (shown == _lastShown) return;
         _lastShown = shown;
-        try { _label.text = shown ? "Hide player names" : "Show player names"; }
+        try { _label.text = shown
+            ? "Hide player names (View/Share + ↑)"
+            : "Show player names (View/Share + ↑)"; }
         catch (Exception exception) { ModLog.SuppressedException("photo-mode.update-toggle-label", exception); }
     }
 }
