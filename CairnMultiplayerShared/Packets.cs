@@ -446,12 +446,22 @@ public struct ServerStartGame : IPacket
     public bool SkipPractice;
     public bool AssistEnabled;
 
+    /// <summary>The lobby's game mode, cast from <see cref="MultiplayerMode"/>. It travels with
+    /// the launch because it decides the difficulty every player starts under.</summary>
+    public byte Mode;
+
+    /// <summary>Constraints the mode adds on top of the difficulty, cast from
+    /// <see cref="ClimbConstraints"/>.</summary>
+    public int ExtraConstraints;
+
     public void Serialize(BinaryWriter w)
     {
         w.Write(Difficulty);
         w.Write(SkipTutorials);
         w.Write(SkipPractice);
         w.Write(AssistEnabled);
+        w.Write(Mode);
+        w.Write(ExtraConstraints);
     }
 
     public void Deserialize(BinaryReader r)
@@ -460,6 +470,8 @@ public struct ServerStartGame : IPacket
         SkipTutorials = r.ReadBoolean();
         SkipPractice = r.ReadBoolean();
         AssistEnabled = r.ReadBoolean();
+        Mode = r.ReadByte();
+        ExtraConstraints = r.ReadInt32();
     }
 }
 

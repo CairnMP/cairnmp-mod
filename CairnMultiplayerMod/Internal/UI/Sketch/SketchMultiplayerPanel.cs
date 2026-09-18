@@ -1,36 +1,55 @@
 using System;
 using System.Collections.Generic;
+using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Networking;
 using Il2CppTMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.Events;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 namespace CairnMultiplayerMod.Internal.UI.Sketch;
 
+/// <summary>
+/// The multiplayer panel, in the game's own photo-mode skin.
+///
+/// One screen does one thing. Creating a climb asks for the mode first, because the mode is
+/// what everyone will be playing and everything else on the form is a detail next to it; the
+/// rest of the screens exist to get you into a lobby and back out of the panel.
+/// </summary>
 internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
 {
-    private readonly SteamLobbyManager _lobby;
-    private enum Screen { Host = 0, Join = 1, Browse = 2, Connected = 3 }
+    private enum Screen { Home = 0, ModeSelect = 1, Create = 2, Join = 3, Browse = 4, Lobby = 5 }
 
     private const int MinSlots = 2, MaxSlots = 8, MaxBrowseRows = 5;
     private static readonly string[] VisLabels = { "Public", "Friends", "Private" };
     private static readonly LobbyVisibility[] VisValues =
         { LobbyVisibility.Public, LobbyVisibility.FriendsOnly, LobbyVisibility.Private };
+    private static readonly IReadOnlyList<MultiplayerModeRules> ModeValues = MultiplayerModes.Available;
+
+    private readonly SteamLobbyManager _lobby;
 
     private GameObject _canvasGo;
     private GameObject _contentGo;
-    private Screen _current = Screen.Host;
+    private RectTransform _panelRect;
+    private CanvasGroup _panelGroup, _bodyGroup;
+    private Selectable _focusTarget;
+    private float _searchDotsSeconds;
+    private int _searchDots;
+    private Screen _current = Screen.Home;
     private bool _visible, _isConnected, _isConnecting;
     private string _statusText = "Disconnected";
     private string _lobbyName = "";
     private IReadOnlyList<LobbyEntry> _lobbies;
     private string _codeDraft = "";
+    private int _modeIndex;
     private int _browsePage;
     private bool _isBrowsing;
     private float _copyFeedbackSeconds, _memberRefreshSeconds;
+
     private readonly List<Button> _browseButtons = new();
     private readonly List<Button> _navigationButtons = new();
     private readonly List<Button> _settingButtons = new();
@@ -63,6 +82,8 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         _lobby = lobby ?? throw new ArgumentNullException(nameof(lobby));
         _slots = Mathf.Clamp(ModConfig.MaxPlayers?.Value ?? MaxSlots, MinSlots, MaxSlots);
     }
+
+    private MultiplayerModeRules SelectedMode => ModeValues[Mathf.Clamp(_modeIndex, 0, ModeValues.Count - 1)];
 
     public void Show()
     {
@@ -104,7 +125,8 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         SketchUiKit.FillColor(dim, new Color(0f, 0f, 0f, 0.55f), raycast: true);
 
         var panel = SketchUiKit.Make("Panel", _canvasGo.transform);
-        SketchUiKit.Box(panel, Vector2.zero, new Vector2(800f, 760f));
+        _panelRect = SketchUiKit.Box(panel, Vector2.zero, new Vector2(800f, 760f));
+        _panelGroup = panel.AddComponent<CanvasGroup>();
 
         var frame = SketchUiKit.Make("Frame", panel.transform);
         SketchUiKit.Rect(frame, Vector2.zero, Vector2.one,
@@ -124,7 +146,11 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
             "X", 22f, SketchUiKit.TextCream, TextAlignmentOptions.Center);
         SketchUiKit.MakeButton(close, (UnityAction)Hide);
 
-        SwitchTo(_isConnected ? Screen.Connected : _current == Screen.Connected ? Screen.Host : _current);
+        SwitchTo(_isConnected ? Screen.Lobby : _current == Screen.Lobby ? Screen.Home : _current);
+
+        // The window arrives rather than appearing: a short rise from slightly small reads as
+        // the panel opening, and covers the frame where the first screen is still building.
+        SketchMotion.FadeIn(_panelGroup, _panelRect, 0.965f);
     }
 
     private void SwitchTo(Screen screen)
@@ -138,17 +164,42 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
 
         BuildTitle(screen);
         var body = BuildBodyPanel();
+        _bodyGroup = body.AddComponent<CanvasGroup>();
 
         switch (screen)
         {
-            case Screen.Host: BuildHost(body); break;
+            case Screen.Home: BuildHome(body); break;
+            case Screen.ModeSelect: BuildModeSelect(body); break;
+            case Screen.Create: BuildCreate(body); break;
             case Screen.Join: BuildJoin(body); break;
             case Screen.Browse: BuildBrowse(body); break;
-            case Screen.Connected: BuildConnected(body); break;
+            case Screen.Lobby: BuildLobby(body); break;
         }
 
         UpdateStatusLabel();
+        UpdateInteractable();
+        SketchMotion.FadeIn(_bodyGroup);
+        FocusScreen();
         if (screen == Screen.Browse) RequestBrowse();
+    }
+
+    /// <summary>
+    /// Rebuilds the navigation order and hands the controller its starting point. Called on
+    /// every screen change, and again whenever the lobby list is redrawn under it.
+    /// </summary>
+    private void FocusScreen()
+    {
+        // Same reasoning as the motion tick: losing the navigation order is a nuisance,
+        // losing the panel is not.
+        try { _focusTarget = SketchFocus.Apply(_contentGo); }
+        catch (Exception exception)
+        {
+            _focusTarget = null;
+            ModLog.Warning($"[Panel] Explicit navigation unavailable: {exception.Message}");
+        }
+        var eventSystem = EventSystem.current;
+        if (eventSystem == null || _focusTarget == null) return;
+        eventSystem.SetSelectedGameObject(_focusTarget.gameObject);
     }
 
     private void BuildTitle(Screen screen)
@@ -157,40 +208,60 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         SketchUiKit.StretchTop(title, 138f);
         SketchUiKit.Sliced(title, GameUiAssetLibrary.PanelTitle, SketchUiKit.PanelTint);
 
-        if (screen == Screen.Connected)
+        if (screen == Screen.Lobby)
         {
             var name = string.IsNullOrEmpty(_lobby.CurrentLobbyName) ? _lobbyName : _lobby.CurrentLobbyName;
             _titleLabel = SketchUiKit.LabelBox(title.transform, "Title", new Vector2(0f, 4f), new Vector2(660f, 60f),
-                string.IsNullOrEmpty(name) ? "LOBBY" : name, 32f, SketchUiKit.TextCream, TextAlignmentOptions.Center, logo: true);
+                string.IsNullOrEmpty(name) ? "LOBBY" : name, 32f, SketchUiKit.TextCream,
+                TextAlignmentOptions.Center, logo: true);
             return;
         }
 
-        SketchUiKit.LabelBox(title.transform, "Title", new Vector2(0f, 40f), new Vector2(620f, 42f),
-            "MULTIPLAYER", 30f, SketchUiKit.TextCream, TextAlignmentOptions.Center, logo: true);
-        BuildTab(title.transform, Screen.Host, GameUiAssetLibrary.IconMountain, "HOST", -220f);
-        BuildTab(title.transform, Screen.Join, GameUiAssetLibrary.IconFriend, "JOIN", 0f);
-        BuildTab(title.transform, Screen.Browse, GameUiAssetLibrary.IconPlayer, "BROWSE", 220f);
+        SketchUiKit.LabelBox(title.transform, "Title", new Vector2(0f, 26f), new Vector2(620f, 44f),
+            HeadlineOf(screen), 30f, SketchUiKit.TextCream, TextAlignmentOptions.Center, logo: true);
+        SketchUiKit.LabelBox(title.transform, "Subtitle", new Vector2(0f, -22f), new Vector2(660f, 30f),
+            SubtitleOf(screen), 16f, SketchUiKit.TextDim, TextAlignmentOptions.Center);
+
+        if (screen != Screen.Home) BuildBackButton(title.transform, BackTargetOf(screen));
     }
 
-    private void BuildTab(Transform parent, Screen screen, string icon, string label, float x)
+    private static string HeadlineOf(Screen screen) => screen switch
     {
-        bool active = _current == screen;
-        var tab = SketchUiKit.Make("Tab_" + label, parent);
-        SketchUiKit.Box(tab, new Vector2(x, -24f), new Vector2(198f, 60f));
-        SketchUiKit.Sliced(tab, GameUiAssetLibrary.RowBg,
-            active ? SketchUiKit.RowTint : new Color(0.04f, 0.06f, 0.12f, 0.12f), raycast: true);
-        var iconGo = SketchUiKit.Make("Icon", tab.transform);
-        SketchUiKit.Box(iconGo, new Vector2(-58f, 0f), new Vector2(34f, 34f));
-        SketchUiKit.Simple(iconGo, icon, active ? SketchUiKit.IconActive : SketchUiKit.IconIdle);
-        SketchUiKit.LabelBox(tab.transform, "Label", new Vector2(22f, 0f), new Vector2(112f, 34f),
-            label, 20f, active ? SketchUiKit.TextCream : SketchUiKit.TextDim, TextAlignmentOptions.Center, logo: true);
-        if (active)
-        {
-            var underline = SketchUiKit.Make("Selected", tab.transform);
-            SketchUiKit.Box(underline, new Vector2(0f, -27f), new Vector2(154f, 2f));
-            SketchUiKit.FillColor(underline, SketchUiKit.Accent);
-        }
-        _navigationButtons.Add(SketchUiKit.MakeButton(tab, (UnityAction)(() => SwitchTo(screen))));
+        Screen.ModeSelect => "GAME MODE",
+        Screen.Create => "NEW CLIMB",
+        Screen.Join => "JOIN A CLIMB",
+        Screen.Browse => "PUBLIC CLIMBS",
+        _ => "MULTIPLAYER",
+    };
+
+    private string SubtitleOf(Screen screen) => screen switch
+    {
+        Screen.ModeSelect => "Everyone plays by the rules you pick here",
+        Screen.Create => $"{SelectedMode.Name} - {DifficultyLabel(SelectedMode.Difficulty)}",
+        Screen.Join => "Ask your friend for their lobby code",
+        Screen.Browse => "Open lobbies looking for climbers",
+        _ => "Climb together",
+    };
+
+    /// <summary>Where the back arrow leads. Create steps back into the mode choice it came
+    /// from, so changing your mind never means filling the form again.</summary>
+    private static Screen BackTargetOf(Screen screen) => screen switch
+    {
+        Screen.Create => Screen.ModeSelect,
+        _ => Screen.Home,
+    };
+
+    private void BuildBackButton(Transform parent, Screen target)
+    {
+        var back = SketchUiKit.Make("Back", parent);
+        SketchUiKit.Box(back, new Vector2(-320f, 18f), new Vector2(46f, 46f));
+        SketchUiKit.Sliced(back, GameUiAssetLibrary.RowBg, SketchUiKit.RowTint, raycast: true);
+        var arrow = SketchUiKit.Make("Arrow", back.transform);
+        SketchUiKit.Box(arrow, Vector2.zero, new Vector2(22f, 26f));
+        // The sprite already points left -- ArrowButton mirrors it to make a right arrow, not
+        // the other way round -- so it is used as it comes.
+        SketchUiKit.Simple(arrow, GameUiAssetLibrary.Arrow, SketchUiKit.TextCream);
+        _navigationButtons.Add(SketchUiKit.MakeButton(back, (UnityAction)(() => SwitchTo(target))));
     }
 
     private GameObject BuildBodyPanel()
@@ -201,65 +272,181 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         return body;
     }
 
-    private void BuildHost(GameObject body)
+    private void BuildHome(GameObject body)
     {
+        BuildHomeCard(body, 158f, GameUiAssetLibrary.IconMountain, "CREATE A CLIMB",
+            "Pick a game mode and open a lobby", () => SwitchTo(Screen.ModeSelect));
+        BuildHomeCard(body, 30f, GameUiAssetLibrary.IconFriend, "JOIN WITH A CODE",
+            "Enter the code a friend gave you", () => SwitchTo(Screen.Join));
+        BuildHomeCard(body, -98f, GameUiAssetLibrary.IconPlayer, "BROWSE CLIMBS",
+            "Find a public lobby to join", () => SwitchTo(Screen.Browse));
+
+        BuildStatus(body.transform);
+    }
+
+    private void BuildHomeCard(GameObject body, float y, string icon, string title, string subtitle,
+        Action onClick)
+    {
+        var card = SketchUiKit.Make("Card_" + title, body.transform);
+        SketchUiKit.Box(card, new Vector2(0f, y), new Vector2(660f, 112f));
+        SketchUiKit.Sliced(card, GameUiAssetLibrary.RowBg, SketchUiKit.RowTint, raycast: true);
+
+        var iconGo = SketchUiKit.Make("Icon", card.transform);
+        SketchUiKit.Box(iconGo, new Vector2(-268f, 0f), new Vector2(46f, 46f));
+        SketchUiKit.Simple(iconGo, icon, SketchUiKit.IconActive);
+
+        var titleLabel = SketchUiKit.LabelBox(card.transform, "Title", new Vector2(24f, 18f),
+            new Vector2(500f, 34f), title, 24f, SketchUiKit.TextCream, TextAlignmentOptions.Left, logo: true);
+        var subtitleLabel = SketchUiKit.LabelBox(card.transform, "Subtitle", new Vector2(24f, -16f),
+            new Vector2(500f, 26f), subtitle, 15f, SketchUiKit.TextDim, TextAlignmentOptions.Left);
+
+        _navigationButtons.Add(SketchUiKit.MakeButton(card, (UnityAction)(() => onClick())));
+        SketchMotion.Card(card);
+        SketchMotion.Accent(card, titleLabel, SketchUiKit.Accent);
+        SketchMotion.Accent(card, subtitleLabel, SketchUiKit.TextCream);
+    }
+
+    private void BuildModeSelect(GameObject body)
+    {
+        var top = 168f;
+        for (var index = 0; index < ModeValues.Count; index++)
+            BuildModeCard(body, top - index * 146f, index);
+
+        BuildStatus(body.transform);
+    }
+
+    private void BuildModeCard(GameObject body, float y, int index)
+    {
+        var rules = ModeValues[index];
+        var selected = index == _modeIndex;
+
+        var card = SketchUiKit.Make("Mode_" + rules.Mode, body.transform);
+        SketchUiKit.Box(card, new Vector2(0f, y), new Vector2(660f, 130f));
+        SketchUiKit.Sliced(card, GameUiAssetLibrary.RowBg,
+            selected ? SketchUiKit.RowTint : new Color(0.04f, 0.06f, 0.12f, 0.3f), raycast: true);
+
+        if (selected)
+        {
+            var edge = SketchUiKit.Make("Selected", card.transform);
+            SketchUiKit.Box(edge, new Vector2(-328f, 0f), new Vector2(4f, 118f));
+            SketchUiKit.FillColor(edge, SketchUiKit.Accent);
+        }
+
+        var nameLabel = SketchUiKit.LabelBox(card.transform, "Name", new Vector2(-4f, 40f), new Vector2(600f, 34f),
+            rules.Name.ToUpperInvariant(), 24f,
+            selected ? SketchUiKit.TextCream : SketchUiKit.TextDim, TextAlignmentOptions.Left, logo: true);
+        SketchUiKit.LabelBox(card.transform, "Difficulty", new Vector2(220f, 40f), new Vector2(180f, 26f),
+            DifficultyLabel(rules.Difficulty), 15f, SketchUiKit.Accent, TextAlignmentOptions.Right);
+
+        var summary = SketchUiKit.LabelBox(card.transform, "Summary", new Vector2(-4f, 2f), new Vector2(600f, 44f),
+            rules.Summary, 15f, SketchUiKit.TextDim, TextAlignmentOptions.Left);
+        summary.enableWordWrapping = true;
+
+        SketchUiKit.LabelBox(card.transform, "Rules", new Vector2(-4f, -40f), new Vector2(600f, 24f),
+            RulesLine(rules), 13f, SketchUiKit.Accent, TextAlignmentOptions.Left);
+
+        var captured = index;
+        _navigationButtons.Add(SketchUiKit.MakeButton(card, (UnityAction)(() =>
+        {
+            _modeIndex = captured;
+            SwitchTo(Screen.Create);
+        })));
+        SketchMotion.Card(card);
+        SketchMotion.Accent(card, nameLabel, SketchUiKit.Accent);
+        SketchMotion.Accent(card, summary, SketchUiKit.TextCream);
+    }
+
+    private static string RulesLine(MultiplayerModeRules rules) => MultiplayerModeText.PromiseLine(rules);
+
+    private static string DifficultyLabel(GameDifficulty difficulty)
+        => MultiplayerModeText.DifficultyName(difficulty);
+
+    private void BuildCreate(GameObject body)
+    {
+        BuildModeBanner(body.transform, 210f, showChange: true);
+
         _autoLobbyName = $"{GetLocalPlayerName()}'s climb";
-        var nameCell = SketchUiKit.RowStrip(body.transform, "Lobby name", 172f, 420f);
+        var nameCell = SketchUiKit.RowStrip(body.transform, "Lobby name", 116f, 420f);
         SketchUiKit.Label(nameCell, "Value", _autoLobbyName, 16f, SketchUiKit.TextCream, TextAlignmentOptions.Right);
 
-        var slotsCell = SketchUiKit.RowStrip(body.transform, "Slots", 96f);
+        var slotsCell = SketchUiKit.RowStrip(body.transform, "Slots", 46f);
         _slotsLabel = SketchUiKit.Stepper(slotsCell, _slots.ToString(),
             (UnityAction)(() => AdjustSlots(-1)), (UnityAction)(() => AdjustSlots(+1)));
 
-        var visCell = SketchUiKit.RowStrip(body.transform, "Visibility", 20f);
+        var visCell = SketchUiKit.RowStrip(body.transform, "Visibility", -24f);
         _visLabel = SketchUiKit.Stepper(visCell, VisLabels[_visIndex],
             (UnityAction)(() => CycleVisibility(-1)), (UnityAction)(() => CycleVisibility(+1)));
 
         foreach (var button in slotsCell.GetComponentsInChildren<Button>()) _settingButtons.Add(button);
         foreach (var button in visCell.GetComponentsInChildren<Button>()) _settingButtons.Add(button);
 
-        _createBtn = PrimaryButton(body.transform, new Vector2(0f, -116f), new Vector2(420f, 70f),
+        _createBtn = PrimaryButton(body.transform, new Vector2(0f, -120f), new Vector2(420f, 70f),
             "CREATE LOBBY", out _createLabel, (UnityAction)OnCreateClicked);
 
         BuildStatus(body.transform);
+    }
 
-        UpdateInteractable();
+    /// <summary>
+    /// The mode, restated wherever it still matters: while filling the form, and once inside
+    /// the lobby. Nobody should have to remember what they picked two screens ago.
+    /// </summary>
+    private void BuildModeBanner(Transform parent, float y, bool showChange)
+    {
+        var rules = _isConnected ? _lobby.CurrentModeRules : SelectedMode;
+
+        var banner = SketchUiKit.Make("ModeBanner", parent);
+        SketchUiKit.Box(banner, new Vector2(0f, y), new Vector2(660f, 84f));
+        SketchUiKit.Sliced(banner, GameUiAssetLibrary.RowBg, SketchUiKit.RowTint);
+
+        SketchUiKit.LabelBox(banner.transform, "Name", new Vector2(-8f, 20f), new Vector2(460f, 30f),
+            rules.Name.ToUpperInvariant(), 21f, SketchUiKit.TextCream, TextAlignmentOptions.Left, logo: true);
+        SketchUiKit.LabelBox(banner.transform, "Rules", new Vector2(-8f, -12f), new Vector2(460f, 24f),
+            RulesLine(rules), 13f, SketchUiKit.TextDim, TextAlignmentOptions.Left);
+        SketchUiKit.LabelBox(banner.transform, "Difficulty", new Vector2(236f, 20f), new Vector2(160f, 26f),
+            DifficultyLabel(rules.Difficulty), 15f, SketchUiKit.Accent, TextAlignmentOptions.Right);
+
+        if (!showChange) return;
+
+        var change = SketchUiKit.Make("Change", banner.transform);
+        SketchUiKit.Box(change, new Vector2(248f, -14f), new Vector2(128f, 34f));
+        SketchUiKit.Sliced(change, GameUiAssetLibrary.RowBg, SketchUiKit.RowTint, raycast: true);
+        SketchUiKit.Label(change.transform, "Label", "CHANGE", 14f, SketchUiKit.TextCream,
+            TextAlignmentOptions.Center);
+        _navigationButtons.Add(SketchUiKit.MakeButton(change, (UnityAction)(() => SwitchTo(Screen.ModeSelect))));
     }
 
     private void BuildJoin(GameObject body)
     {
-        var codeCell = SketchUiKit.RowStrip(body.transform, "Lobby code", 110f, 360f);
+        var codeCell = SketchUiKit.RowStrip(body.transform, "Lobby code", 150f, 360f);
         _codeInput = SketchUiKit.NativeField(codeCell, "XXXX-XXXX", 16);
         _codeInput.text = _codeDraft;
         _codeInput.textComponent.fontSize = 24f;
         _codeInput.textComponent.alignment = TextAlignmentOptions.Center;
         _codeInput.onValueChanged.AddListener((UnityAction<string>)(_ => UpdateInteractable()));
-        _codeInput.onSubmit.AddListener((UnityAction<string>)(_ => OnJoinClicked()));
 
-        SketchUiKit.LabelBox(body.transform, "Hint", new Vector2(0f, 42f), new Vector2(620f, 28f),
-            "Enter a friend's lobby code to join.", 15f, SketchUiKit.TextDim, TextAlignmentOptions.Center);
-
-        _joinBtn = PrimaryButton(body.transform, new Vector2(0f, -86f), new Vector2(420f, 70f),
+        _joinBtn = PrimaryButton(body.transform, new Vector2(0f, 40f), new Vector2(420f, 70f),
             "JOIN", out _joinLabel, (UnityAction)OnJoinClicked);
 
-        BuildStatus(body.transform);
+        var hint = SketchUiKit.LabelBox(body.transform, "Hint", new Vector2(0f, -50f), new Vector2(620f, 60f),
+            "The host sees the code on their lobby screen. The game mode is theirs to choose, and you will play by it.",
+            15f, SketchUiKit.TextDim, TextAlignmentOptions.Center);
+        hint.enableWordWrapping = true;
 
-        UpdateInteractable();
+        BuildStatus(body.transform);
     }
 
     private void BuildBrowse(GameObject body)
     {
-        SketchUiKit.LabelBox(body.transform, "BrowseTitle", new Vector2(-170f, 226f), new Vector2(340f, 28f),
-            "Public lobbies", 18f, SketchUiKit.TextCream, TextAlignmentOptions.Left);
-        _refreshBtn = PrimaryButton(body.transform, new Vector2(255f, 214f), new Vector2(180f, 44f),
+        _refreshBtn = PrimaryButton(body.transform, new Vector2(255f, 218f), new Vector2(180f, 44f),
             _isBrowsing ? "SEARCHING..." : "REFRESH", out _refreshLabel, (UnityAction)RequestBrowse);
-        _browseSummary = SketchUiKit.LabelBox(body.transform, "Results", new Vector2(-170f, 194f),
-            new Vector2(340f, 24f), "", 14f, SketchUiKit.TextDim, TextAlignmentOptions.Left);
+        _browseSummary = SketchUiKit.LabelBox(body.transform, "Results", new Vector2(-170f, 218f),
+            new Vector2(340f, 24f), "", 15f, SketchUiKit.TextDim, TextAlignmentOptions.Left);
 
         _browseList = body.transform;
         _browseEmpty = SketchUiKit.Make("Empty", body.transform);
         SketchUiKit.Box(_browseEmpty, new Vector2(0f, 20f), new Vector2(640f, 80f));
-        var emptyLabel = SketchUiKit.Label(_browseEmpty.transform, "T", "No public lobbies right now.\nRefresh or host one.",
+        var emptyLabel = SketchUiKit.Label(_browseEmpty.transform, "T",
+            "No public lobbies right now.\nRefresh, or open one of your own.",
             18f, SketchUiKit.TextDim, TextAlignmentOptions.Center);
         emptyLabel.enableWordWrapping = true;
 
@@ -291,7 +478,8 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         int pageCount = Math.Max(1, (count + MaxBrowseRows - 1) / MaxBrowseRows);
         _browsePage = Mathf.Clamp(_browsePage, 0, pageCount - 1);
         if (_pageLabel != null) _pageLabel.text = $"{_browsePage + 1} / {pageCount}";
-        if (_browseSummary != null) _browseSummary.text = _isBrowsing ? "Searching for lobbies..." : $"{count} public lobbies";
+        if (_browseSummary != null)
+            _browseSummary.text = _isBrowsing ? "Searching for lobbies..." : $"{count} public lobbies";
 
         int first = _browsePage * MaxBrowseRows;
         int shown = Mathf.Min(count - first, MaxBrowseRows);
@@ -310,8 +498,12 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
 
             SketchUiKit.LabelBox(row.transform, "Name", new Vector2(-80f, 12f), new Vector2(536f, 26f),
                 entry.Name, 19f, SketchUiKit.TextCream, TextAlignmentOptions.Left);
+            // The mode is what the lobby is, so it sits next to the host's name rather than
+            // behind a click: it decides how the whole climb will be played.
+            var rules = MultiplayerModes.RulesFor(entry.Mode);
             SketchUiKit.LabelBox(row.transform, "Host", new Vector2(-80f, -14f), new Vector2(536f, 20f),
-                $"Hosted by {entry.HostName}", 12f, SketchUiKit.TextDim, TextAlignmentOptions.Left);
+                $"{rules.Name}  -  hosted by {entry.HostName}", 12f, SketchUiKit.TextDim,
+                TextAlignmentOptions.Left);
             bool full = entry.MaxPlayers > 0 && entry.PlayerCount >= entry.MaxPlayers;
             SketchUiKit.LabelBox(row.transform, "Count", new Vector2(280f, 0f), new Vector2(120f, 28f),
                 full ? "FULL" : $"{entry.PlayerCount} / {entry.MaxPlayers}", 16f,
@@ -321,10 +513,12 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
                 if (!_isConnecting && !_isConnected && !_isBrowsing && !full) OnJoinByLobbyIdRequested?.Invoke(id);
             }));
             button.interactable = !full && !_isConnecting && !_isConnected && !_isBrowsing;
+            SketchMotion.Card(row);
             // Full lobbies stay disabled when connection state changes.
             if (!full) _browseButtons.Add(button);
         }
         UpdateInteractable();
+        if (_current == Screen.Browse) FocusScreen();
     }
 
     private void RequestBrowse()
@@ -343,24 +537,26 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         RenderBrowseRows();
     }
 
-    private void BuildConnected(GameObject body)
+    private void BuildLobby(GameObject body)
     {
-        SketchUiKit.LabelBox(body.transform, "CodeLabel", new Vector2(-250f, 214f), new Vector2(180f, 30f),
+        SketchUiKit.LabelBox(body.transform, "CodeLabel", new Vector2(-250f, 232f), new Vector2(180f, 30f),
             "Lobby code", 18f, SketchUiKit.TextDim, TextAlignmentOptions.Left);
-        _connCodeLabel = SketchUiKit.LabelBox(body.transform, "Code", new Vector2(0f, 214f), new Vector2(340f, 60f),
+        _connCodeLabel = SketchUiKit.LabelBox(body.transform, "Code", new Vector2(0f, 232f), new Vector2(340f, 60f),
             "----", 40f, SketchUiKit.Accent, TextAlignmentOptions.Center, logo: true);
-        _copyBtn = PrimaryButton(body.transform, new Vector2(278f, 214f), new Vector2(136f, 48f),
+        _copyBtn = PrimaryButton(body.transform, new Vector2(278f, 232f), new Vector2(136f, 48f),
             "COPY", out _connCopyLabel, (UnityAction)OnCopyClicked);
 
-        SketchUiKit.LabelBox(body.transform, "PlayersHdr", new Vector2(-240f, 156f), new Vector2(200f, 24f),
+        BuildModeBanner(body.transform, 158f, showChange: false);
+
+        SketchUiKit.LabelBox(body.transform, "PlayersHdr", new Vector2(-240f, 102f), new Vector2(200f, 24f),
             "PLAYERS", 15f, SketchUiKit.TextDim, TextAlignmentOptions.Left);
-        _connCountLabel = SketchUiKit.LabelBox(body.transform, "Count", new Vector2(280f, 156f), new Vector2(120f, 24f),
+        _connCountLabel = SketchUiKit.LabelBox(body.transform, "Count", new Vector2(280f, 102f), new Vector2(120f, 24f),
             "", 15f, SketchUiKit.TextDim, TextAlignmentOptions.Right);
 
         for (int i = 0; i < MaxSlots; i++)
         {
             var row = SketchUiKit.Make("PlayerRow", body.transform);
-            SketchUiKit.Box(row, new Vector2(0f, 116f - i * 32f), new Vector2(696f, 30f));
+            SketchUiKit.Box(row, new Vector2(0f, 68f - i * 32f), new Vector2(696f, 30f));
             SketchUiKit.Sliced(row, GameUiAssetLibrary.RowBg, SketchUiKit.RowTint);
             _memberRows.Add(row);
             _memberNames.Add(SketchUiKit.LabelBox(row.transform, "Name", new Vector2(-90f, 0f), new Vector2(484f, 28f),
@@ -368,24 +564,25 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
             _memberRoles.Add(SketchUiKit.LabelBox(row.transform, "Role", new Vector2(248f, 0f), new Vector2(166f, 28f),
                 "", 13f, SketchUiKit.Accent, TextAlignmentOptions.Right));
         }
-        _statusLabel = SketchUiKit.LabelBox(body.transform, "Status", new Vector2(0f, -141f), new Vector2(680f, 28f),
+
+        _statusLabel = SketchUiKit.LabelBox(body.transform, "Status", new Vector2(0f, -172f), new Vector2(680f, 28f),
             "", 14f, SketchUiKit.TextDim, TextAlignmentOptions.Center);
 
-        _connStart = PrimaryButton(body.transform, new Vector2(0f, -187f), new Vector2(420f, 60f),
+        _connStart = PrimaryButton(body.transform, new Vector2(0f, -212f), new Vector2(420f, 60f),
             "START CLIMB", out _, (UnityAction)(() => OnStartRequested?.Invoke())).gameObject;
-        _connStartHint = SketchUiKit.LabelBox(body.transform, "StartHint", new Vector2(0f, -187f), new Vector2(600f, 30f),
-            "Waiting for host to start", 15f, SketchUiKit.TextDim, TextAlignmentOptions.Center).gameObject;
+        _connStartHint = SketchUiKit.LabelBox(body.transform, "StartHint", new Vector2(0f, -212f), new Vector2(600f, 30f),
+            "Waiting for the host to start", 15f, SketchUiKit.TextDim, TextAlignmentOptions.Center).gameObject;
 
         var leave = SketchUiKit.Make("LeaveLobby", body.transform);
-        SketchUiKit.Box(leave, new Vector2(0f, -240f), new Vector2(260f, 38f));
+        SketchUiKit.Box(leave, new Vector2(0f, -262f), new Vector2(260f, 38f));
         SketchUiKit.Sliced(leave, GameUiAssetLibrary.RowBg, SketchUiKit.RowTint, raycast: true);
         SketchUiKit.Label(leave.transform, "Label", "LEAVE LOBBY", 16f, SketchUiKit.TextDim, TextAlignmentOptions.Center);
         SketchUiKit.MakeButton(leave, (UnityAction)(() => OnDisconnectRequested?.Invoke()));
 
-        RefreshConnected();
+        RefreshLobby();
     }
 
-    private void RefreshConnected()
+    private void RefreshLobby()
     {
         var lobby = _lobby;
         string code = lobby?.CurrentRoomCode;
@@ -414,7 +611,8 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
             _memberRows[i].SetActive(member != null);
             if (member == null) continue;
             _memberNames[i].text = string.IsNullOrEmpty(member.Name) ? "Player" : member.Name;
-            _memberRoles[i].text = member.IsSelf && member.IsHost ? "YOU / HOST" : member.IsHost ? "HOST" : member.IsSelf ? "YOU" : "";
+            _memberRoles[i].text = member.IsSelf && member.IsHost ? "YOU / HOST"
+                : member.IsHost ? "HOST" : member.IsSelf ? "YOU" : "";
         }
     }
 
@@ -427,6 +625,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
             LobbyName = !string.IsNullOrEmpty(_autoLobbyName) ? _autoLobbyName : $"{GetLocalPlayerName()}'s climb",
             MaxPlayers = _slots,
             Visibility = VisValues[_visIndex],
+            Mode = SelectedMode.Mode,
         };
         OnHostRequested?.Invoke(cfg);
     }
@@ -445,7 +644,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         if (string.IsNullOrEmpty(code)) return;
         GUIUtility.systemCopyBuffer = code;
         if (_connCopyLabel != null) _connCopyLabel.text = "COPIED";
-        _copyFeedbackSeconds = 2f;
+        _copyFeedbackSeconds = 1.5f;
     }
 
     private void AdjustSlots(int d)
@@ -468,8 +667,8 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         _isConnected = connected;
         _isConnecting = false;
 
-        if (connected && _current != Screen.Connected) SwitchTo(Screen.Connected);
-        else if (!connected && _current == Screen.Connected) SwitchTo(Screen.Host);
+        if (connected && _current != Screen.Lobby) SwitchTo(Screen.Lobby);
+        else if (!connected && _current == Screen.Lobby) SwitchTo(Screen.Home);
 
         UpdateStatusLabel();
         UpdateInteractable();
@@ -500,6 +699,9 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     public void Tick(float dt)
     {
         if (!_visible) return;
+        SketchMotion.Tick(dt);
+        HandleShortcuts();
+        TickSearchingLabel(dt);
         EnsureControllerFocus();
         if (_copyFeedbackSeconds > 0f)
         {
@@ -507,14 +709,53 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
             if (_copyFeedbackSeconds <= 0f && _connCopyLabel != null) _connCopyLabel.text = "COPY";
         }
         _memberRefreshSeconds -= dt;
-        if (_current == Screen.Connected && _memberRefreshSeconds <= 0f)
+        if (_current == Screen.Lobby && _memberRefreshSeconds <= 0f)
         {
             _memberRefreshSeconds = 0.25f;
-            RefreshConnected();
+            RefreshLobby();
         }
     }
 
     public void OnGUI() { }
+
+    /// <summary>
+    /// Escape steps back the way the arrow does, and closes the panel from the screens that
+    /// have nowhere to step back to. Enter only submits the code field, because anywhere else
+    /// the event system already submits whatever has focus and would fire twice.
+    /// </summary>
+    private void HandleShortcuts()
+    {
+        var keyboard = Keyboard.current;
+        if (keyboard == null || _isConnecting) return;
+
+        if (keyboard.escapeKey.wasPressedThisFrame)
+        {
+            if (_current is Screen.Home or Screen.Lobby) Hide();
+            else SwitchTo(BackTargetOf(_current));
+            return;
+        }
+
+        if (_current != Screen.Join || _codeInput == null || !_codeInput.isFocused) return;
+        if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
+            OnJoinClicked();
+    }
+
+    /// <summary>A search that says nothing for two seconds reads as a panel that has hung.</summary>
+    private void TickSearchingLabel(float dt)
+    {
+        if (!_isBrowsing || _refreshLabel == null)
+        {
+            _searchDotsSeconds = 0f;
+            _searchDots = 0;
+            return;
+        }
+
+        _searchDotsSeconds += dt;
+        if (_searchDotsSeconds < 0.3f) return;
+        _searchDotsSeconds = 0f;
+        _searchDots = (_searchDots + 1) % 4;
+        _refreshLabel.text = "SEARCHING" + new string('.', _searchDots);
+    }
 
     private void EnsureControllerFocus()
     {
@@ -522,6 +763,12 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         if (eventSystem == null || _canvasGo == null) return;
         var selected = eventSystem.currentSelectedGameObject;
         if (selected != null && selected.transform.IsChildOf(_canvasGo.transform)) return;
+
+        if (_focusTarget != null && _focusTarget.IsActive() && _focusTarget.IsInteractable())
+        {
+            eventSystem.SetSelectedGameObject(_focusTarget.gameObject);
+            return;
+        }
 
         foreach (var selectable in _canvasGo.GetComponentsInChildren<Selectable>(true))
         {
@@ -536,6 +783,11 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     public void DestroyResources()
     {
         _visible = false;
+        SketchMotion.Clear();
+        _panelRect = null;
+        _panelGroup = null;
+        _bodyGroup = null;
+        _focusTarget = null;
         if (_codeInput != null) _codeDraft = _codeInput.text ?? "";
         if (_canvasGo != null) { _canvasGo.SetActive(false); Object.Destroy(_canvasGo); }
         _canvasGo = null;

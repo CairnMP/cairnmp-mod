@@ -31,16 +31,21 @@ public partial class Mod
             return;
         }
 
-        _panel.SetStatus("Starting lobby...", true);
-        Lobby.BroadcastStart(BuildDefaultStartGame());
+        var rules = Lobby.CurrentModeRules;
+        _panel.SetStatus($"Starting {rules.Name}...", true);
+        Lobby.BroadcastStart(BuildStartGame(rules));
     }
 
-    private static ServerStartGame BuildDefaultStartGame() => new()
+    /// <summary>The mode decides the difficulty; the rest are launch conveniences that have
+    /// always been the same for every lobby.</summary>
+    private static ServerStartGame BuildStartGame(MultiplayerModeRules rules) => new()
     {
-        Difficulty = (int)GameDifficulty.Explorer,
+        Difficulty = (int)rules.Difficulty,
         SkipTutorials = true,
         SkipPractice = true,
         AssistEnabled = false,
+        Mode = (byte)rules.Mode,
+        ExtraConstraints = (int)rules.ExtraConstraints,
     };
 
     private async void OnHostRequested(HostConfig config)

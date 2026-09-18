@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using CairnMultiplayer.Api;
+using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal.Extensions;
 
@@ -43,6 +45,18 @@ internal abstract class MultiplayerFeature
     /// </summary>
     protected internal abstract void OnRegister(FeatureBuilder feature);
 
+
+    /// <summary>
+    /// The rules this lobby is played under. A feature that behaves differently per mode asks
+    /// here rather than testing the mode by name: outside a session, and in solo, it reads as
+    /// the default rope-team rules, so there is never a null case to handle.
+    /// </summary>
+    protected MultiplayerModeRules Rules => _rules();
+
+    private Func<MultiplayerModeRules> _rules = () => MultiplayerModes.RopeTeam;
+
+    internal void BindRules(Func<MultiplayerModeRules> rules)
+        => _rules = rules ?? (() => MultiplayerModes.RopeTeam);
 
     protected int LocalPlayerId => Session.LocalPlayerId;
 

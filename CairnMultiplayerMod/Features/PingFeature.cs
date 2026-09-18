@@ -28,7 +28,10 @@ internal sealed class PingFeature : MultiplayerFeature
     private void TickInput()
     {
         if (KeyboardCaptured) return;
-        if (!Game.World.IsFreeCameraActive) return;
+        // A spectator aims with the same camera the game is rendering through, so the ping
+        // lands the same way it does from the eagle view. Someone who is out of the climb can
+        // still read the face for the people on it, which is the most useful thing left to do.
+        if (!Game.World.IsFreeCameraActive && !Game.Spectator.IsActive) return;
         if (Game.Time.UnscaledTime < _cooldownUntil) return;
 
         var pressed = Game.Input.WasPressed(GameInputAction.PrimaryPointer)

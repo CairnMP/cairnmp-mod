@@ -18,4 +18,6 @@ internal interface IGameApi
     IWeatherApi Weather { get; }
     IWorldApi World { get; }
     IVoiceApi Voice => UnavailableVoiceApi.Instance;
+    ILifeApi Life => UnavailableLifeApi.Instance;
+    ISpectatorApi Spectator => UnavailableSpectatorApi.Instance;
 }

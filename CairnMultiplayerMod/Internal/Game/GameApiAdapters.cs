@@ -19,6 +19,8 @@ internal sealed class GameStateAdapter : IGameStateApi
 
     public PlayerState LocalPlayerState => _localState();
     public bool IsLocalPlayerInGame => LocalPlayerState == PlayerState.InGame;
+    public bool IsLocalPlayerInBivouac => GameLifecycleService.IsLocalInBivouac();
+    public bool HasReachedSummit => Life.LifeInterop.HasReachedSummit();
 }
 
 internal sealed class GameTimeAdapter : IGameTimeApi
@@ -65,7 +67,9 @@ internal sealed class HudAdapter : IGameHudApi
     }
 
     private readonly Dictionary<string, Message> _messages = new(StringComparer.Ordinal);
-    private GUIStyle _style;
+    private readonly List<StandingRow> _standings = new();
+    private string _standingsTitle = "";
+    private GUIStyle _style, _standingsStyle, _standingsTitleStyle;
 
     public void ShowMessage(string id, string text, float durationSeconds)
     {
@@ -96,7 +100,9 @@ internal sealed class HudAdapter : IGameHudApi
 
     internal void Draw()
     {
-        if (_messages.Count == 0 || Event.current?.type != EventType.Repaint) return;
+        if (Event.current?.type != EventType.Repaint) return;
+        DrawStandings();
+        if (_messages.Count == 0) return;
         _style ??= new GUIStyle(GUI.skin.label)
         {
             fontSize = 18,
@@ -112,7 +118,68 @@ internal sealed class HudAdapter : IGameHudApi
         }
     }
 
-    internal void Clear() => _messages.Clear();
+    public void ShowStandings(string title, IReadOnlyList<StandingRow> rows)
+    {
+        _standingsTitle = title ?? "";
+        _standings.Clear();
+        if (rows != null) _standings.AddRange(rows);
+    }
+
+    public void HideStandings()
+    {
+        _standings.Clear();
+        _standingsTitle = "";
+    }
+
+    /// <summary>
+    /// Drawn in the top-right corner, opposite the messages, because both can be on screen at
+    /// once and a standings table that jumps around is unreadable.
+    /// </summary>
+    private void DrawStandings()
+    {
+        if (_standings.Count == 0) return;
+
+        _standingsStyle ??= new GUIStyle(GUI.skin.label) { fontSize = 15, alignment = TextAnchor.MiddleLeft };
+        _standingsTitleStyle ??= new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 15,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleLeft,
+        };
+
+        const float width = 260f, rowHeight = 22f, padding = 10f;
+        var height = padding * 2f + rowHeight * (_standings.Count + 1);
+        var x = Screen.width - width - 20f;
+        var box = new Rect(x, 20f, width, height);
+        GUI.color = new Color(0f, 0f, 0f, 0.45f);
+        GUI.DrawTexture(box, Texture2D.whiteTexture);
+        GUI.color = Color.white;
+
+        GUI.Label(new Rect(x + padding, 20f + padding, width - padding * 2f, rowHeight),
+            _standingsTitle, _standingsTitleStyle);
+
+        var y = 20f + padding + rowHeight;
+        foreach (var row in _standings)
+        {
+            _standingsStyle.normal.textColor = row.IsOut ? new Color(0.72f, 0.72f, 0.72f, 0.6f)
+                : row.IsLocal ? new Color(0.98f, 0.82f, 0.45f, 1f)
+                : Color.white;
+            _standingsStyle.fontStyle = row.IsLocal ? FontStyle.Bold : FontStyle.Normal;
+
+            GUI.Label(new Rect(x + padding, y, 26f, rowHeight), $"{row.Rank}.", _standingsStyle);
+            GUI.Label(new Rect(x + padding + 26f, y, width - padding * 2f - 116f, rowHeight),
+                row.Name, _standingsStyle);
+            var detail = new GUIStyle(_standingsStyle) { alignment = TextAnchor.MiddleRight };
+            GUI.Label(new Rect(x + width - padding - 90f, y, 90f, rowHeight), row.Detail, detail);
+            y += rowHeight;
+        }
+    }
+
+    internal void Clear()
+    {
+        _messages.Clear();
+        HideStandings();
+    }
 }
 
 internal sealed class ClockAdapter : IClockApi
@@ -153,6 +220,17 @@ internal sealed class PlayersAdapter : IPlayersApi
         _network = network ?? throw new ArgumentNullException(nameof(network));
         _state = state ?? throw new ArgumentNullException(nameof(state));
     }
+
+    public bool IsLocalPlayerFalling
+        => PawnCaptureInterop.GetLocalPawnState() == Il2CppTheGameBakers.Cairn.Netplay.NetFrame.PawnStateType.Falling;
+
+    public bool IsRopedToLocalPlayer(int playerId)
+    {
+        var network = _network();
+        return network != null && Roping.RopeLinkState.IsLinked(network.LocalPlayerId, playerId);
+    }
+
+    public bool ShakeLocalClimberGrip() => Roping.RopeShakeInterop.ShakeLocalClimber();
 
     public bool TryGetLocation(int playerId, out PlayerLocation location)
     {
@@ -285,6 +363,34 @@ internal sealed class WorldAdapter : IWorldApi
     public void TickPings() => PingMarkerManager.Update();
     public void DrawPings() => PingMarkerManager.OnGUI();
     public void ClearPings() => PingMarkerManager.ClearAll();
+
+    public bool TryTeleportLocalPlayer(WorldPosition position, float yawDegrees, out string refusedReason)
+        => TeleportInterop.TeleportLocalPlayer(
+            new Vector3(position.X, position.Y, position.Z), yawDegrees, out refusedReason);
+
+    private readonly List<Vector3> _markBuffer = new();
+
+    public void SetTrailMarks(int playerId, IReadOnlyList<WorldPosition> positions)
+    {
+        _markBuffer.Clear();
+        if (positions != null)
+            foreach (var position in positions)
+                _markBuffer.Add(new Vector3(position.X, position.Y, position.Z));
+        PingMarkerManager.SetMarks(playerId, _markBuffer);
+    }
+
+    public void ClearTrailMarks() => PingMarkerManager.ClearMarks();
+
+    public bool AreTrailsVisible => ClimbTrailManager.IsVisible;
+
+    public void RecordTrailPoint(int playerId, WorldPosition position)
+        => ClimbTrailManager.Record(playerId, new Vector3(position.X, position.Y, position.Z));
+
+    public void SetTrailsVisible(bool visible) => ClimbTrailManager.SetVisible(visible);
+
+    public void ForgetTrail(int playerId) => ClimbTrailManager.Forget(playerId);
+
+    public void ClearTrails() => ClimbTrailManager.Clear();
 }
 
 internal sealed class ChatAdapter : IChatApi

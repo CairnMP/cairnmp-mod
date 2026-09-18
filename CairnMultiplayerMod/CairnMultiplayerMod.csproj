@@ -121,6 +121,10 @@
       <HintPath>$(Il2CppAssembliesDir)\Unity.ResourceManager.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Unity.Cinemachine">
+      <HintPath>$(Il2CppAssembliesDir)\Unity.Cinemachine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>

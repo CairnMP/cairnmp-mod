@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CairnMultiplayer.Api;
+using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal.Extensions;
 using CairnMultiplayerMod.Internal.Networking;
@@ -24,6 +25,7 @@ internal sealed class FeatureHost : IDisposable
     private readonly IGameApi _game;
     private readonly Func<NetworkManager> _networkProvider;
     private readonly Func<bool> _isActive;
+    private readonly Func<MultiplayerModeRules> _rules;
     private readonly FeatureStreamRouter _streams = new();
     private readonly List<Registered> _features = new();
 
@@ -31,12 +33,14 @@ internal sealed class FeatureHost : IDisposable
         ExtensionRuntime runtime = null,
         IGameApi game = null,
         Func<NetworkManager> networkProvider = null,
-        Func<bool> isActive = null)
+        Func<bool> isActive = null,
+        Func<MultiplayerModeRules> rules = null)
     {
         _runtime = runtime ?? MultiplayerApi.Runtime;
         _game = game ?? UnavailableGameApi.Instance;
         _networkProvider = networkProvider ?? (() => null);
         _isActive = isActive ?? (() => true);
+        _rules = rules ?? (() => MultiplayerModes.RopeTeam);
     }
 
     internal void DispatchStream(int fromPlayerId, ushort channel, byte[] payload)
@@ -71,6 +75,7 @@ internal sealed class FeatureHost : IDisposable
             var builder = new FeatureBuilder(_runtime, extension, _streams,
                 _networkProvider, _game, feature.Id);
             feature.Session = _runtime;
+            feature.BindRules(_rules);
             feature.BindGame(builder.Game);
             try
             {

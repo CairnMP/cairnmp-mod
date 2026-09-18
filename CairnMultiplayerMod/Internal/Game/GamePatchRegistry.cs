@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game.Bivouac;
+using CairnMultiplayerMod.Internal.Game.Life;
 using CairnMultiplayerMod.Internal.Game.MainMenu;
 using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Game.Roping;
@@ -34,6 +35,8 @@ internal static class GamePatchRegistry
         new("free-roam unlock", FreeRoamUnlockPatch.Install, FreeRoamUnlockPatch.Uninstall),
         new("savegame piton guard", SavegamePitonGuardPatch.Install, SavegamePitonGuardPatch.Uninstall),
         new("native performance probe", NativePerformanceProbe.Install, NativePerformanceProbe.Uninstall),
+        new("downed climbers", DeathScreenPatch.Install, DeathScreenPatch.Uninstall),
+        new("revive prompt", RevivePromptPatch.Install, RevivePromptPatch.Uninstall),
     };
 
     private static readonly List<PatchModule> Installed = new();

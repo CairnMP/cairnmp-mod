@@ -48,6 +48,8 @@ internal sealed class UnavailableGameApi : IGameApi
     {
         public CairnMultiplayer.Shared.PlayerState LocalPlayerState => CairnMultiplayer.Shared.PlayerState.Unknown;
         public bool IsLocalPlayerInGame => false;
+        public bool IsLocalPlayerInBivouac => false;
+        public bool HasReachedSummit => false;
     }
 
     private sealed class UnavailableTimeApi : IGameTimeApi
@@ -69,6 +71,8 @@ internal sealed class UnavailableGameApi : IGameApi
     {
         public void ShowMessage(string id, string text, float durationSeconds) { }
         public void HideMessage(string id) { }
+        public void ShowStandings(string title, System.Collections.Generic.IReadOnlyList<StandingRow> rows) { }
+        public void HideStandings() { }
     }
 
     private sealed class UnavailableChatApi : IChatApi
@@ -104,6 +108,15 @@ internal sealed class UnavailableGameApi : IGameApi
         { reason = "Inventory is unavailable."; return false; }
         public bool TryAdd(int definitionId, int count, out string reason)
         { reason = "Inventory is unavailable."; return false; }
+        public bool HasHealingItem => false;
+        public bool TryConsumeHealingItem(out string itemName)
+        { itemName = null; return false; }
+        public IGameRegistration AddItemUsedListener(Action<int> onUsed)
+        {
+            if (onUsed == null) throw new ArgumentNullException(nameof(onUsed));
+            return new InactiveRegistration("inventory.item-used");
+        }
+        public bool ApplySharedConsumable(int definitionId) => false;
     }
 
     private sealed class UnavailableClockApi : IClockApi
@@ -131,6 +144,9 @@ internal sealed class UnavailableGameApi : IGameApi
         public void SetRemoteAppearance(int playerId, int packed) { }
         public void SetRemoteCosmetics(int playerId, byte flags) { }
         public void ResetHandPoseCaches() { }
+        public bool IsLocalPlayerFalling => false;
+        public bool IsRopedToLocalPlayer(int playerId) => false;
+        public bool ShakeLocalClimberGrip() => false;
         public void ResetAppearanceCaches() { }
     }
 
@@ -148,6 +164,15 @@ internal sealed class UnavailableGameApi : IGameApi
     private sealed class UnavailableWorldApi : IWorldApi
     {
         public bool IsFreeCameraActive => false;
+        public bool TryTeleportLocalPlayer(WorldPosition position, float yawDegrees, out string refusedReason)
+        { refusedReason = "The world is unavailable."; return false; }
+        public void SetTrailMarks(int playerId, System.Collections.Generic.IReadOnlyList<WorldPosition> positions) { }
+        public void ClearTrailMarks() { }
+        public bool AreTrailsVisible => false;
+        public void RecordTrailPoint(int playerId, WorldPosition position) { }
+        public void SetTrailsVisible(bool visible) { }
+        public void ForgetTrail(int playerId) { }
+        public void ClearTrails() { }
         public bool TryGetAimPoint(out WorldPosition position) { position = default; return false; }
         public void SpawnPing(int ownerId, WorldPosition position) { }
         public void TickPings() { }

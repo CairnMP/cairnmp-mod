@@ -19,6 +19,12 @@ internal static class PingMarkerManager
 
     private static readonly Dictionary<int, PingEntry> _pings = new();
 
+    /// <summary>
+    /// Trail marks, kept apart from pings: a ping is one fading call for attention, a mark is
+    /// something a climber left behind on purpose and expects to find again.
+    /// </summary>
+    private static readonly Dictionary<int, List<Vector3>> _marks = new();
+
     private const float MarkerSizePx = 22f;
     private const float ArrowSizePx = 26f;
     private const float EdgeMarginPx = 36f;
@@ -54,11 +60,31 @@ internal static class PingMarkerManager
                 _pings.Remove(id);
     }
 
-    public static void ClearAll() => _pings.Clear();
+    public static void ClearAll()
+    {
+        _pings.Clear();
+        _marks.Clear();
+    }
+
+    public static void SetMarks(int ownerId, IReadOnlyList<Vector3> positions)
+    {
+        if (positions == null || positions.Count == 0)
+        {
+            _marks.Remove(ownerId);
+            return;
+        }
+
+        if (!_marks.TryGetValue(ownerId, out var list))
+            _marks[ownerId] = list = new List<Vector3>();
+        list.Clear();
+        list.AddRange(positions);
+    }
+
+    public static void ClearMarks() => _marks.Clear();
 
     public static void OnGUI()
     {
-        if (_pings.Count == 0) return;
+        if (_pings.Count == 0 && _marks.Count == 0) return;
         if (Event.current == null || Event.current.type != EventType.Repaint) return;
 
         var cam = Camera.main;
@@ -72,13 +98,23 @@ internal static class PingMarkerManager
         foreach (var kv in _pings)
         {
             var ping = kv.Value;
-            DrawPing(cam, camPos, ping);
+            DrawPing(cam, camPos, ping, edgeArrow: true);
+        }
+
+        foreach (var kv in _marks)
+        {
+            var colour = RemotePlayerManager.ColorForPlayer(kv.Key);
+            foreach (var position in kv.Value)
+                // No edge arrow for marks: a face covered in them would fill the screen's
+                // rim with pointers to things nobody is looking for right now.
+                DrawPing(cam, camPos, new PingEntry { WorldPos = position, Color = colour },
+                    edgeArrow: false);
         }
 
         GUI.color = prevColor;
     }
 
-    private static void DrawPing(Camera cam, Vector3 camPos, PingEntry ping)
+    private static void DrawPing(Camera cam, Vector3 camPos, PingEntry ping, bool edgeArrow)
     {
         var screen = cam.WorldToScreenPoint(ping.WorldPos);
         var behind = screen.z < 0f;
@@ -107,7 +143,7 @@ internal static class PingMarkerManager
             GUI.DrawTexture(rect, _dotTexture);
             DrawLabel(guiPos.x, guiPos.y + MarkerSizePx * 0.5f + 2f, $"{distance}m");
         }
-        else
+        else if (edgeArrow)
         {
             DrawEdgeArrow(guiPos, distance, ping.Color);
         }

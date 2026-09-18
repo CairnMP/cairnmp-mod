@@ -43,6 +43,9 @@ internal sealed class StartGameFlow
 
     internal bool HasPending => _pendingStart.HasValue;
 
+    private static MultiplayerModeRules RulesOf(ServerStartGame start)
+        => MultiplayerModes.Parse(start.Mode);
+
     internal void Cancel()
     {
         _pendingStart = null;
@@ -69,9 +72,15 @@ internal sealed class StartGameFlow
             if (SceneRoles.IsMainMenuArea(currentScene))
             {
                 var s = _forceNewGameOpts.Value;
-                // Difficulty stays local because Cairn's native new-save flow owns that choice.
-                GameOptionsInterop.SetNextGameSkipOptions(
-                    s.SkipTutorials, s.SkipPractice, s.AssistEnabled, verbose: false);
+                // The lobby's mode decides the difficulty, so it is re-applied every frame:
+                // the native New Game flow rewrites these options when the player walks
+                // through it, and the last write before the launch is the one that counts.
+                if (!GameOptionsInterop.SetNextGameMode(RulesOf(s), s.SkipTutorials,
+                        s.SkipPractice, s.AssistEnabled, verbose: false))
+                {
+                    GameOptionsInterop.SetNextGameSkipOptions(
+                        s.SkipTutorials, s.SkipPractice, s.AssistEnabled, verbose: false);
+                }
             }
             else
             {
@@ -96,7 +105,14 @@ internal sealed class StartGameFlow
             else if (_pendingStartRetries == 3 && _pendingStartRetryTimer >= 0.5f)
             {
                 var start = _pendingStart.Value;
-                GameOptionsInterop.SetNextGameSkipOptions(start.SkipTutorials, start.SkipPractice, start.AssistEnabled);
+                var rules = RulesOf(start);
+                if (!GameOptionsInterop.SetNextGameMode(rules, start.SkipTutorials,
+                        start.SkipPractice, start.AssistEnabled))
+                {
+                    GameOptionsInterop.SetNextGameSkipOptions(
+                        start.SkipTutorials, start.SkipPractice, start.AssistEnabled);
+                }
+                _state.ModeRules = rules;
 
                 _forceNewGameOpts = start;
 

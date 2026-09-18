@@ -75,6 +75,22 @@ benefits from the change.
 The [managed extension example](examples/ManagedExtensionExample/) demonstrates
 the public API. It is a source example, not a project in the solution.
 
+### Run the game from Rider
+
+The solution ships two run configurations in [`.run/`](.run):
+
+- **CairnMP - Build Debug** builds the mod project with `-p:DeployMod=true`,
+  which copies the mod and its symbols into the game's `Mods` folder.
+- **CairnMP** launches the game and runs that build first, so pressing Run
+  always starts Cairn with the code currently in the editor.
+
+A normal build never deploys, so a solution build leaves whatever the game's
+`Mods` folder already held. When the game behaves like an older build, check
+that the last thing you ran was the **CairnMP** configuration.
+
+Set the `CAIRN_DIR_2` environment variable to a second game folder to have the
+same build deploy there too, which is how two-client sessions are tested.
+
 ## Run the checks
 
 ### Portable checks

@@ -1,5 +1,8 @@
 using System;
+using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Internal.Diagnostics;
+using Il2Cpp;
+using Il2CppTheGameBakers.Cairn;
 using UnityEngine;
 
 namespace CairnMultiplayerMod.Internal.Game.MainMenu;
@@ -49,6 +52,72 @@ internal static unsafe class GameOptionsInterop
             ModLog.Error($"[GameOptions] SetNextGameSkipOptions failed: {ex}");
             return false;
         }
+    }
+
+
+    /// <summary>
+    /// Applies a lobby's mode to the next new game: everyone launches under the same
+    /// difficulty, with the same constraints.
+    ///
+    /// The values come from the game's own difficulty table rather than from constants of
+    /// ours -- a mode names a difficulty, Cairn says what that difficulty is worth. Only the
+    /// constraints the mode adds (a free-solo lobby forcing permadeath, say) are ours.
+    /// Returns false while the menu or the difficulty table is not there yet; the caller
+    /// retries, because the native New Game flow rewrites these options on entry.
+    /// </summary>
+    public static bool SetNextGameMode(MultiplayerModeRules rules, bool skipTutorials,
+        bool skipPractice, bool assistEnabled, bool verbose = true)
+    {
+        try
+        {
+            var menu = FindMainMenuComponent();
+            var opts = menu?.nextGameStartOptions;
+            if (opts == null) return false;
+
+            if (!NativeDifficultyCatalog.TryGetDefaults(rules.Difficulty, out var defaults))
+            {
+                LogMissingDifficultyOnce(rules);
+                return false;
+            }
+
+            var constraints = defaults.Constraints
+                              | (GamemodeConstraints)(int)rules.ExtraConstraints;
+
+            var ng = opts.newGameOptions;
+            ng.currentSelectedDifficulty = defaults.Difficulty;
+            ng.customizedDifficulty = new GameSetup.CustomizedDifficulty(
+                defaults.ClimbingPackage, defaults.SurvivalPackage, constraints);
+            // Assist stays the host's call; the mode's constraints (NoAssistMode) are what
+            // actually forbid it, and the game enforces those itself.
+            ng.assistEnabled = assistEnabled;
+            ng.skipTutorials = skipTutorials;
+            ng.skipPractice = skipPractice;
+            opts.newGameOptions = ng;
+
+            if (verbose)
+            {
+                var check = opts.newGameOptions;
+                ModLog.Info($"[GameOptions] Mode '{rules.Name}' applied: difficulty=" +
+                    $"{check.currentSelectedDifficulty} constraints={constraints} " +
+                    $"climbing={defaults.ClimbingPackage} survival={defaults.SurvivalPackage}");
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ModLog.Error($"[GameOptions] SetNextGameMode failed: {ex}");
+            return false;
+        }
+    }
+
+    private static GameDifficulty _missingDifficultyLogged = GameDifficulty.Invalid;
+
+    private static void LogMissingDifficultyOnce(MultiplayerModeRules rules)
+    {
+        if (_missingDifficultyLogged == rules.Difficulty) return;
+        _missingDifficultyLogged = rules.Difficulty;
+        ModLog.Warning($"[GameOptions] The game's difficulty table has no entry for " +
+            $"{rules.Difficulty} yet; mode '{rules.Name}' will be applied once it loads.");
     }
 
     private static Il2CppTheGameBakers.Cairn.UI.MainMenu FindMainMenuComponent()

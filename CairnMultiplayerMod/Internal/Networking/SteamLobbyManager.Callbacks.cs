@@ -41,6 +41,8 @@ namespace CairnMultiplayerMod.Internal.Networking
                 SteamMatchmaking.SetLobbyData(lobbyId, KeyModVersion, ModVersion());
                 SteamMatchmaking.SetLobbyData(lobbyId, KeyProtocolVersion, Protocol.Version.ToString(CultureInfo.InvariantCulture));
                 SteamMatchmaking.SetLobbyData(lobbyId, KeyVisibility, cfg.Visibility.ToString());
+                SteamMatchmaking.SetLobbyData(lobbyId, KeyMode,
+                    ((byte)cfg.Mode).ToString(CultureInfo.InvariantCulture));
                 SteamMatchmaking.SetLobbyData(lobbyId, KeyStartNonce, "");
                 SteamMatchmaking.SetLobbyMemberLimit(lobbyId, Math.Max(2, Math.Min(cfg.MaxPlayers, 16)));
                 SteamMatchmaking.SetLobbyJoinable(lobbyId, true);
@@ -202,6 +204,7 @@ namespace CairnMultiplayerMod.Internal.Networking
                         PlayerCount = cnt,
                         MaxPlayers = cap,
                         Region = "",
+                        Mode = ReadLobbyMode(id),
                     });
                 }
                 var tcs = _listTcs;
@@ -276,8 +279,36 @@ namespace CairnMultiplayerMod.Internal.Networking
                 SkipTutorials = ParseBoolLobbyData(KeyStartSkipTutorials, true),
                 SkipPractice = ParseBoolLobbyData(KeyStartSkipPractice, true),
                 AssistEnabled = ParseBoolLobbyData(KeyStartAssistEnabled, false),
+                Mode = (byte)ParseIntLobbyData(KeyStartMode, (int)MultiplayerMode.RopeTeam),
+                ExtraConstraints = ParseIntLobbyData(KeyStartConstraints, 0),
             };
             RaiseStartSignal(nonce, start);
+        }
+
+        /// <summary>
+        /// The mode the current lobby advertises. Read back from Steam rather than kept in a
+        /// field, so host and guests answer from the same place.
+        /// </summary>
+        public MultiplayerModeRules CurrentModeRules
+            => IsInLobby ? MultiplayerModes.RulesFor(ReadLobbyMode(CurrentLobbyId))
+                         : MultiplayerModes.RopeTeam;
+
+        /// <summary>An unknown or unadvertised mode reads as the default: a lobby created by
+        /// another version must stay joinable rather than disappear from the browser.</summary>
+        private static MultiplayerMode ReadLobbyMode(CSteamID lobbyId)
+        {
+            try
+            {
+                var raw = SteamMatchmaking.GetLobbyData(lobbyId, KeyMode);
+                return int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+                    ? MultiplayerModes.Parse(value).Mode
+                    : MultiplayerMode.RopeTeam;
+            }
+            catch (Exception exception)
+            {
+                ModLog.SuppressedException("steam-lobby.read-mode", exception);
+                return MultiplayerMode.RopeTeam;
+            }
         }
 
         private void RaiseStartSignal(string nonce, ServerStartGame start)
@@ -286,7 +317,8 @@ namespace CairnMultiplayerMod.Internal.Networking
                 return;
 
             _lastStartNonce = nonce;
-            ModLog.Info($"[SteamLobby] Start received nonce={nonce} difficulty={(GameDifficulty)start.Difficulty}.");
+            ModLog.Info($"[SteamLobby] Start received nonce={nonce} mode={(MultiplayerMode)start.Mode} " +
+                $"difficulty={(GameDifficulty)start.Difficulty}.");
             OnStartRequested?.Invoke(start);
         }
 

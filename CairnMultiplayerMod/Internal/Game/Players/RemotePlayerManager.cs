@@ -187,6 +187,28 @@ internal static class RemotePlayerManager
         return TryGetGhostHarness(playerId, out var harness) && RopeInterop.TryGetHarnessAttachPosition(harness, out pos);
     }
 
+    /// <summary>
+    /// The ghost's root transform, for anything that needs to point at a remote climber --
+    /// the spectator camera today. Only a fully built ghost qualifies: the placeholder has no
+    /// body worth watching.
+    /// </summary>
+    internal static bool TryGetGhostTransform(int playerId, out UnityEngine.Transform ghost)
+    {
+        ghost = null;
+        if (!_ghosts.TryGetValue(playerId, out var entry)) return false;
+        if (!entry.IsRealModel || entry.Root == null) return false;
+        try
+        {
+            ghost = entry.Root.transform;
+            return ghost != null;
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("remote-player.resolve-ghost-transform", exception);
+            return false;
+        }
+    }
+
     internal static bool TryGetGhostHarness(int playerId, out Il2Cpp.Harness harness)
     {
         harness = null;

@@ -72,8 +72,48 @@ internal static class CairnUi
         button.style.marginBottom = 0;
         button.style.paddingLeft = 12;
         button.style.paddingRight = 12;
+        AddHoverFeedback(button, primary);
         return button;
     }
+
+    /// <summary>
+    /// UI Toolkit styles here are set inline, which leaves no room for a :hover rule, so the
+    /// feedback is wired by hand. Without it a button gives no sign it can be pressed.
+    /// </summary>
+    private static void AddHoverFeedback(Button button, bool primary)
+    {
+        var idleBackground = primary ? Accent : Surface;
+        var idleBorder = primary ? Accent : Border;
+        var hoverBackground = primary ? Lighten(Accent, 0.12f) : Lighten(Surface, 0.10f);
+        var pressBackground = primary ? Lighten(Accent, -0.10f) : Lighten(Surface, -0.06f);
+
+        button.RegisterCallback<MouseEnterEvent>((EventCallback<MouseEnterEvent>)(_ =>
+        {
+            button.style.backgroundColor = hoverBackground;
+            button.style.borderTopColor = Accent;
+            button.style.borderRightColor = Accent;
+            button.style.borderBottomColor = Accent;
+            button.style.borderLeftColor = Accent;
+        }));
+        button.RegisterCallback<MouseLeaveEvent>((EventCallback<MouseLeaveEvent>)(_ =>
+        {
+            button.style.backgroundColor = idleBackground;
+            button.style.borderTopColor = idleBorder;
+            button.style.borderRightColor = idleBorder;
+            button.style.borderBottomColor = idleBorder;
+            button.style.borderLeftColor = idleBorder;
+        }));
+        button.RegisterCallback<MouseDownEvent>(
+            (EventCallback<MouseDownEvent>)(_ => button.style.backgroundColor = pressBackground));
+        button.RegisterCallback<MouseUpEvent>(
+            (EventCallback<MouseUpEvent>)(_ => button.style.backgroundColor = hoverBackground));
+    }
+
+    private static Color Lighten(Color color, float amount) => new(
+        Mathf.Clamp01(color.r + amount),
+        Mathf.Clamp01(color.g + amount),
+        Mathf.Clamp01(color.b + amount),
+        color.a);
 
     public static TextField TextField(string placeholder, int maxLength)
     {

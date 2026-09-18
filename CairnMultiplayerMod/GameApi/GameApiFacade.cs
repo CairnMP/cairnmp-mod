@@ -7,7 +7,8 @@ internal sealed class GameApiFacade : IGameApi
     internal GameApiFacade(IMainMenuApi mainMenu, IGameStateApi state, IGameTimeApi time,
         IGameInputApi input, IGameHudApi hud, IChatApi chat, IInventoryApi inventory,
         IClockApi clock, IPlayersApi players,
-        IWeatherApi weather, IWorldApi world, IVoiceApi voice = null)
+        IWeatherApi weather, IWorldApi world, IVoiceApi voice = null, ILifeApi life = null,
+        ISpectatorApi spectator = null)
     {
         MainMenu = mainMenu ?? throw new ArgumentNullException(nameof(mainMenu));
         State = state ?? throw new ArgumentNullException(nameof(state));
@@ -21,6 +22,8 @@ internal sealed class GameApiFacade : IGameApi
         Weather = weather ?? throw new ArgumentNullException(nameof(weather));
         World = world ?? throw new ArgumentNullException(nameof(world));
         Voice = voice ?? UnavailableVoiceApi.Instance;
+        Life = life ?? UnavailableLifeApi.Instance;
+        Spectator = spectator ?? UnavailableSpectatorApi.Instance;
     }
 
     public IMainMenuApi MainMenu { get; }
@@ -35,4 +38,6 @@ internal sealed class GameApiFacade : IGameApi
     public IWeatherApi Weather { get; }
     public IWorldApi World { get; }
     public IVoiceApi Voice { get; }
+    public ILifeApi Life { get; }
+    public ISpectatorApi Spectator { get; }
 }

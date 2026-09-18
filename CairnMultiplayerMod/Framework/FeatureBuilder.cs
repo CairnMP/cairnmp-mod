@@ -101,6 +101,8 @@ internal sealed class FeatureBuilder
             Weather = inner.Weather;
             World = inner.World;
             Voice = inner.Voice;
+            Life = new FeatureLifeApi(inner.Life, own);
+            Spectator = inner.Spectator;
         }
 
         public IMainMenuApi MainMenu { get; }
@@ -115,6 +117,8 @@ internal sealed class FeatureBuilder
         public IWeatherApi Weather { get; }
         public IWorldApi World { get; }
         public IVoiceApi Voice { get; }
+        public ILifeApi Life { get; }
+        public ISpectatorApi Spectator { get; }
     }
 
     private sealed class FeatureMainMenuApi : IMainMenuApi
@@ -151,6 +155,13 @@ internal sealed class FeatureBuilder
             => _inner.ShowMessage($"{_featureId}.{id}", text, durationSeconds);
 
         public void HideMessage(string id) => _inner.HideMessage($"{_featureId}.{id}");
+
+        // Standings are a single screen-wide surface; only one feature can own it at a time,
+        // so there is nothing to namespace here.
+        public void ShowStandings(string title, IReadOnlyList<StandingRow> rows)
+            => _inner.ShowStandings(title, rows);
+
+        public void HideStandings() => _inner.HideStandings();
     }
 
     private sealed class FeatureChatApi : IChatApi
@@ -204,6 +215,32 @@ internal sealed class FeatureBuilder
             => _inner.TryRemoveAny(definitionId, count, out reason);
         public bool TryAdd(int definitionId, int count, out string reason)
             => _inner.TryAdd(definitionId, count, out reason);
+        public bool HasHealingItem => _inner.HasHealingItem;
+        public bool TryConsumeHealingItem(out string itemName)
+            => _inner.TryConsumeHealingItem(out itemName);
+        public IGameRegistration AddItemUsedListener(Action<int> onUsed)
+            => _own(_inner.AddItemUsedListener(onUsed));
+        public bool ApplySharedConsumable(int definitionId)
+            => _inner.ApplySharedConsumable(definitionId);
+    }
+
+    private sealed class FeatureLifeApi : ILifeApi
+    {
+        private readonly ILifeApi _inner;
+        private readonly Func<IGameRegistration, IGameRegistration> _own;
+
+        internal FeatureLifeApi(ILifeApi inner, Func<IGameRegistration, IGameRegistration> own)
+        { _inner = inner; _own = own; }
+
+        public bool IsLocalPlayerDown => _inner.IsLocalPlayerDown;
+        public IGameRegistration HoldBackDeathScreen(Func<bool> keepHolding, Action onWentDown)
+            => _own(_inner.HoldBackDeathScreen(keepHolding, onWentDown));
+        public void EndLocalPlayer() => _inner.EndLocalPlayer();
+        public bool ReviveLocalPlayer(float healthRatio) => _inner.ReviveLocalPlayer(healthRatio);
+        public void ExhaustLocalPlayer(float amount) => _inner.ExhaustLocalPlayer(amount);
+        public float FallenPartnerStaminaCost(float fallback) => _inner.FallenPartnerStaminaCost(fallback);
+        public IGameRegistration AddRevivePrompt(Func<int, bool> canRevive, Action<int> onRevive)
+            => _own(_inner.AddRevivePrompt(canRevive, onRevive));
     }
 
     internal IReadOnlyList<(FeaturePhase Phase, Action Tick)> Ticks => _ticks;

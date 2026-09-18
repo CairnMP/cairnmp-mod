@@ -269,14 +269,19 @@ internal static class SketchUiKit
         btn.targetGraphic = hit;
         btn.transition = Selectable.Transition.ColorTint;
         var colors = btn.colors;
+        // The tint multiplies the graphic's own colour, and most surfaces here are dark and
+        // half transparent: a subtle highlight simply does not read on them. These values
+        // brighten and thicken the surface enough to be felt without blowing out the
+        // near-white primary buttons.
         colors.normalColor = Color.white;
-        colors.highlightedColor = new Color(1.12f, 1.09f, 0.98f, 1f);
-        colors.selectedColor = new Color(1.12f, 1.09f, 0.98f, 1f);
-        colors.pressedColor = new Color(0.77f, 0.73f, 0.64f, 1f);
-        colors.disabledColor = new Color(0.55f, 0.55f, 0.55f, 0.55f);
-        colors.fadeDuration = 0.1f;
+        colors.highlightedColor = new Color(1.25f, 1.22f, 1.12f, 1.45f);
+        colors.selectedColor = new Color(1.25f, 1.22f, 1.12f, 1.45f);
+        colors.pressedColor = new Color(0.82f, 0.78f, 0.70f, 1.6f);
+        colors.disabledColor = new Color(0.55f, 0.55f, 0.55f, 0.45f);
+        colors.fadeDuration = 0.12f;
         btn.colors = colors;
         btn.onClick.AddListener(onClick);
+        SketchMotion.Track(go);
         return btn;
     }
 }

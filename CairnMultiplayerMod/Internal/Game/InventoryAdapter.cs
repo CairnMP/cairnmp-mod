@@ -419,6 +419,92 @@ internal sealed class InventoryAdapter : IInventoryApi
         }
     }
 
+    /// <summary>
+    /// A consumable that restores health, as the game defines it: an item whose own effect
+    /// table adds to the Hp stat. Reading Cairn's data instead of naming items keeps this
+    /// correct when the game adds, renames or rebalances one.
+    /// </summary>
+    public bool HasHealingItem => TryFindHealingItem(out _, out _);
+
+    public bool TryConsumeHealingItem(out string itemName)
+    {
+        itemName = null;
+        if (!TryFindHealingItem(out var definitionId, out var name)) return false;
+        if (!TryRemoveAny(definitionId, 1, out var reason))
+        {
+            ModLog.Warning($"[Inventory] Could not spend the healing item: {reason}");
+            return false;
+        }
+        itemName = name;
+        return true;
+    }
+
+    private bool TryFindHealingItem(out int definitionId, out string name)
+    {
+        definitionId = 0;
+        name = null;
+        try
+        {
+            var manager = InventoryManager.Instance;
+            if (manager == null) return false;
+
+            foreach (var item in GetShareableItems())
+            {
+                if (item.Count <= 0) continue;
+                if (!RestoresHealth(manager.GetItem((InventoryItemStringId)item.DefinitionId))) continue;
+                definitionId = item.DefinitionId;
+                name = item.Name;
+                return true;
+            }
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("inventory.find-healing", exception);
+        }
+        return false;
+    }
+
+    private static bool RestoresHealth(InventoryItem item)
+    {
+        var consumable = item?.TryCast<ConsumableItem>();
+        var stats = consumable?.baseAddStat?.dictionary;
+        if (stats == null) return false;
+        return stats.TryGetValue(SurvivalStat.Hp, out var added) && added > 0f;
+    }
+
+    public IGameRegistration AddItemUsedListener(Action<int> onUsed)
+    {
+        if (onUsed == null) throw new ArgumentNullException(nameof(onUsed));
+        _itemUsed?.Dispose();
+        ConsumableInterop.Listen(onUsed);
+        _itemUsed = new ItemUsedRegistration(this);
+        return _itemUsed;
+    }
+
+    public bool ApplySharedConsumable(int definitionId)
+        => ConsumableInterop.ApplySharedEffects(definitionId);
+
+    private ItemUsedRegistration _itemUsed;
+
+    private sealed class ItemUsedRegistration : IGameRegistration
+    {
+        private InventoryAdapter _owner;
+        internal ItemUsedRegistration(InventoryAdapter owner) => _owner = owner;
+
+        public string Id => "inventory.item-used";
+        public bool IsActive => _owner != null;
+
+        public void Dispose()
+        {
+            var owner = _owner;
+            if (owner == null) return;
+            _owner = null;
+            if (!ReferenceEquals(owner._itemUsed, this)) return;
+            owner._itemUsed = null;
+            ConsumableInterop.StopListening();
+        }
+    }
+
     private static InventoryStorageRequest NewRequest(int definitionId, int count)
         => new((InventoryItemStringId)definitionId, count,
             contentItemId: default, warmForSeconds: 0, lootTarget: LootTarget.Aava,

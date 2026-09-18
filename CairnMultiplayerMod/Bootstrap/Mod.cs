@@ -6,6 +6,7 @@ using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game;
+using CairnMultiplayerMod.Internal.Game.Life;
 using CairnMultiplayerMod.Internal.Game.Bivouac;
 using CairnMultiplayerMod.Internal.Game.MainMenu;
 using CairnMultiplayerMod.Internal.Game.Players;
@@ -114,7 +115,8 @@ public partial class Mod : MelonMod
         Features = new FeatureHost(
             game: _game,
             networkProvider: () => Network,
-            isActive: () => _multiplayerModeActive);
+            isActive: () => _multiplayerModeActive,
+            rules: () => _runtimeState.ModeRules);
         try
         {
             Features.RegisterAll(FeatureRegistry.CreateAll(), new Version(Protocol.GameVersion));
@@ -158,7 +160,7 @@ public partial class Mod : MelonMod
             new ClockAdapter(),
             new PlayersAdapter(() => Network, _runtimeState),
             new WeatherAdapter(),
-            new WorldAdapter(), _voice);
+            new WorldAdapter(), _voice, new LifeAdapter(), new SpectatorAdapter());
 
         Rope = new RopeCoupleController(Network, _runtimeState);
         Player = new PlayerStateBroadcaster(

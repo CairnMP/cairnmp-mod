@@ -43,7 +43,10 @@ namespace CairnMultiplayerMod.Internal.Networking
         private const string KeyProtocolVersion = "protocol_version";
         private const string KeyVisibility = "visibility";
         private const string KeyStartNonce = "start_nonce";
+        private const string KeyMode = "mode";
         private const string KeyStartDifficulty = "start_difficulty";
+        private const string KeyStartMode = "start_mode";
+        private const string KeyStartConstraints = "start_constraints";
         private const string KeyStartSkipTutorials = "start_skip_tutorials";
         private const string KeyStartSkipPractice = "start_skip_practice";
         private const string KeyStartAssistEnabled = "start_assist_enabled";
@@ -685,8 +688,13 @@ namespace CairnMultiplayerMod.Internal.Networking
                     start.SkipPractice ? "true" : "false");
                 SteamMatchmaking.SetLobbyData(CurrentLobbyId, KeyStartAssistEnabled,
                     start.AssistEnabled ? "true" : "false");
+                SteamMatchmaking.SetLobbyData(CurrentLobbyId, KeyStartMode,
+                    start.Mode.ToString(CultureInfo.InvariantCulture));
+                SteamMatchmaking.SetLobbyData(CurrentLobbyId, KeyStartConstraints,
+                    start.ExtraConstraints.ToString(CultureInfo.InvariantCulture));
                 SteamMatchmaking.SetLobbyData(CurrentLobbyId, KeyStartNonce, nonce);
-                ModLog.Info($"[SteamLobby] Start broadcast nonce={nonce} difficulty={(GameDifficulty)start.Difficulty}.");
+                ModLog.Info($"[SteamLobby] Start broadcast nonce={nonce} mode={(MultiplayerMode)start.Mode} " +
+                    $"difficulty={(GameDifficulty)start.Difficulty}.");
                 RaiseStartSignal(nonce, start);
                 return true;
             }

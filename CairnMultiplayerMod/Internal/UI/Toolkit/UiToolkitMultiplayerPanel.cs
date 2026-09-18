@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using CairnMultiplayerMod.Internal.Diagnostics;
+using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Internal.Networking;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -42,6 +43,9 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
     private Button _browseButton;
     private Button _refreshButton;
     private StepperControl _slotsStepper;
+    private SegmentControl _modeSegment;
+    private Label _modeSummary;
+    private Label _connectedMode;
     private SegmentControl _visibilitySegment;
 
     private VisualElement _lobbyList;
@@ -192,6 +196,9 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         _browseButton = null;
         _refreshButton = null;
         _slotsStepper = null;
+        _modeSegment = null;
+        _modeSummary = null;
+        _connectedMode = null;
         _visibilitySegment = null;
         _lobbyList = null;
         _browserEmptyLabel = null;
@@ -365,6 +372,21 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         var lobbyNameShell = BuildLobbyNameField();
         card.Add(lobbyNameShell);
 
+        var modeCol = Column();
+        modeCol.Add(CairnUi.MicroLabel("GAME MODE"));
+        _modeSegment = new SegmentControl(ModeNames(), 0);
+        _modeSegment.Changed += _ =>
+        {
+            if (_modeSummary != null) _modeSummary.text = DescribeMode(SelectedMode());
+        };
+        modeCol.Add(_modeSegment.Root);
+        _modeSummary = CairnUi.Label(DescribeMode(MultiplayerModes.Available[0]), 11, CairnUi.TextMuted,
+            FontStyle.Italic);
+        _modeSummary.style.marginTop = 4;
+        _modeSummary.style.marginBottom = 10;
+        modeCol.Add(_modeSummary);
+        card.Add(modeCol);
+
         var configRow = CairnUi.Row();
         card.Add(configRow);
 
@@ -518,6 +540,13 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         _copyButton.style.height = 48;
         codeRow.Add(_copyButton);
 
+        var modeCard = CairnUi.Card();
+        modeCard.style.marginBottom = 18;
+        _connectedScreen.Add(modeCard);
+        modeCard.Add(CairnUi.MicroLabel("GAME MODE"));
+        _connectedMode = CairnUi.Label("", 14, CairnUi.TextPrimary);
+        modeCard.Add(_connectedMode);
+
         var playersCard = CairnUi.Card();
         playersCard.style.flexGrow = 1;
         _connectedScreen.Add(playersCard);
@@ -665,6 +694,26 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
             : ModConfig.PlayerName.Value.Trim();
     }
 
+    /// <summary>The mode in one line: what it is worth, and what it owes a climber who falls.</summary>
+    private static string DescribeMode(MultiplayerModeRules rules)
+        => $"{rules.Summary} ({MultiplayerModeText.DifficultyName(rules.Difficulty)} - " +
+           $"{MultiplayerModeText.PromiseLine(rules, ", ")})";
+
+    private static string[] ModeNames()
+    {
+        var modes = MultiplayerModes.Available;
+        var names = new string[modes.Count];
+        for (var index = 0; index < modes.Count; index++) names[index] = modes[index].Name;
+        return names;
+    }
+
+    private MultiplayerModeRules SelectedMode()
+    {
+        var modes = MultiplayerModes.Available;
+        var index = _modeSegment?.SelectedIndex ?? 0;
+        return index >= 0 && index < modes.Count ? modes[index] : modes[0];
+    }
+
     private void OnCreateClicked()
     {
         if (_isConnecting) return;
@@ -686,6 +735,7 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
             LobbyName = lobbyName,
             MaxPlayers = _slotsStepper.Value,
             Visibility = visibility,
+            Mode = SelectedMode().Mode,
         });
     }
 
@@ -763,6 +813,7 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
 
         _connectedLobbyTitle.text = string.IsNullOrWhiteSpace(_lobbyName) ? "Lobby" : _lobbyName;
         _connectedCode.text = string.IsNullOrWhiteSpace(lobby.CurrentRoomCode) ? "----" : lobby.CurrentRoomCode;
+        if (_connectedMode != null) _connectedMode.text = DescribeMode(lobby.CurrentModeRules);
 
         var sb = new StringBuilder();
         var count = 0;
@@ -804,6 +855,7 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         _lobbyNameField?.SetEnabled(enabled);
         _codeField?.SetEnabled(enabled);
         _slotsStepper?.SetEnabled(enabled);
+        _modeSegment?.SetEnabled(enabled);
         _visibilitySegment?.SetEnabled(enabled);
         _joinButton?.SetEnabled(enabled);
         _browseButton?.SetEnabled(enabled);
