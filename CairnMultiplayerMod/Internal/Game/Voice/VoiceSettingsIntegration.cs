@@ -20,6 +20,8 @@ internal sealed class VoiceSettingsIntegration : IDisposable
     private readonly HarmonyLib.Harmony _harmony = new("CairnMultiplayerMod.VoiceSettings");
     private readonly VoiceAdapter _voice;
     private readonly List<Binding> _bindings = new();
+    private const double DeviceCheckIntervalSeconds = .5;
+    private double _nextDeviceCheck;
     private const double MinSearchIntervalSeconds = 2;
     private const double MaxSearchIntervalSeconds = 30;
     private double _nextSearch;
@@ -29,7 +31,21 @@ internal sealed class VoiceSettingsIntegration : IDisposable
     private FieldListDropdown _microphoneField;
     private List<string> _deviceOptions;
     private string _deviceFingerprint;
-    internal bool IsOpen => _bindings.Any(b => b.Menu != null && b.Menu.gameObject.activeInHierarchy && b.Menu.currentSettingsPageButton == b.Button);
+    // Called several times per Tick and from VoiceAdapter; a LINQ predicate here allocates a
+    // closure and an enumerator on every call, every frame.
+    internal bool IsOpen
+    {
+        get
+        {
+            for (var i = 0; i < _bindings.Count; i++)
+            {
+                var b = _bindings[i];
+                if (b.Menu != null && b.Menu.gameObject.activeInHierarchy && b.Menu.currentSettingsPageButton == b.Button)
+                    return true;
+            }
+            return false;
+        }
+    }
     private sealed class Binding
     {
         internal IntPtr PagePointer;
@@ -105,8 +121,11 @@ internal sealed class VoiceSettingsIntegration : IDisposable
                     }
                 }
         }
-        if (IsOpen && _microphoneField != null)
+        if (IsOpen && _microphoneField != null && Time.realtimeSinceStartupAsDouble >= _nextDeviceCheck)
         {
+            // Audio endpoints do not change at frame rate, and this fingerprint allocates a
+            // string per device plus the joined result every time it is built.
+            _nextDeviceCheck = Time.realtimeSinceStartupAsDouble + DeviceCheckIntervalSeconds;
             var fingerprint = string.Join("|", _voice.Devices.Select(d => d.Id + d.Name));
             if (fingerprint != _deviceFingerprint)
             {

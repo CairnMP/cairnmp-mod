@@ -271,6 +271,15 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
         if (_output != null && !_output.IsRunning) { ResetOutput(); _outputRetryAt = now + 2; }
         _speakerIds.Clear();
         foreach (var id in _speakers.Keys) _speakerIds.Add(id);
+
+        // Camera.main is a tagged lookup, and reading .transform crosses into IL2CPP. Both
+        // were being paid once PER SPEAKER, every frame. The camera cannot change within a
+        // single frame, so resolve it once and reuse the transform's values.
+        var camera = Camera.main;
+        var cameraTransform = camera == null ? null : camera.transform;
+        var cameraRight = cameraTransform == null ? Vector3.zero : cameraTransform.right;
+        var cameraPosition = cameraTransform == null ? Vector3.zero : cameraTransform.position;
+
         foreach (var id in _speakerIds)
         {
             var speaker = _speakers[id];
@@ -285,8 +294,9 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
             speaker.Volume = VoiceSpatialPolicy.OccludedVolume(directVolume, occlusion);
             speaker.Cutoff = VoiceSpatialPolicy.OccludedCutoff(directCutoff, occlusion);
             speaker.Reverb = VoiceSpatialPolicy.OccludedReverb(directReverb, occlusion);
-            var camera = Camera.main;
-            speaker.Pan = camera == null ? 0 : Vector3.Dot(camera.transform.right, (position - camera.transform.position).normalized);
+            speaker.Pan = cameraTransform == null
+                ? 0
+                : Vector3.Dot(cameraRight, (position - cameraPosition).normalized);
             speaker.Tick(now);
         }
         if (_output != null && _speakers.Count == 0 && _monitor == null) ResetOutput();
