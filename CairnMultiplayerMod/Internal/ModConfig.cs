@@ -20,6 +20,7 @@ internal static class ModConfig
     public static MelonPreferences_Entry<bool> VerboseLogging;
     public static MelonPreferences_Entry<bool> PerformanceDiagnostics;
     public static MelonPreferences_Entry<bool> NativeProfiling;
+    public static MelonPreferences_Entry<int> JobWorkerCount;
     public static MelonPreferences_Entry<string> PerformanceScenario;
 
     public static void Register()
@@ -41,6 +42,10 @@ internal static class ModConfig
         // Times the native methods flagged by the reverse-engineering audit. Adds Harmony
         // hooks to per-frame game code, so it stays off unless someone is measuring.
         NativeProfiling = debug.CreateEntry("NativeProfiling", false);
+        // Unity sizes its job worker pool from the core count. On machines with many threads
+        // the wake-up traffic can cost more than the parallelism returns — 0 leaves the engine
+        // alone, any other value is an experiment measured by the [GameTuning] frame report.
+        JobWorkerCount = debug.CreateEntry("JobWorkerCount", 0);
         PerformanceScenario = debug.CreateEntry("PerformanceScenario", "unspecified - set route, save, run number and voice/rope state");
     }
 }

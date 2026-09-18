@@ -149,6 +149,7 @@ public partial class Mod
         {
             TickPerformance();
             NativePerformanceProbe.Tick();
+            GameTuning.Tick();
             using var performance = Measure(PerformanceArea.ModUpdate);
             TickMod();
         }
@@ -452,6 +453,7 @@ public partial class Mod
         SafeStop("Steam lobby", () => Lobby?.Dispose());
         SafeStop("network transport", () => Network?.Dispose());
         SafeStop("IL2CPP exception capture", Il2CppExceptionCapture.Uninstall);
+        SafeStop("engine tuning", GameTuning.Restore);
         SafeStop("game patches", GamePatchRegistry.UninstallAll);
         SafeStop("crash handlers", CrashHandler.Shutdown);
         SafeStop("feature logging", () => FeatureLog.SetSink(null, null, null));

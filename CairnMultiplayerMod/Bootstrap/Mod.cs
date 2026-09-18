@@ -88,6 +88,7 @@ public partial class Mod : MelonMod
                 message => LoggerInstance.Warning(message),
                 message => LoggerInstance.Error(message));
 
+            GameTuning.Apply();
             InstallGamePatches();
             CreateComponents();
             WireLobbyEvents();
