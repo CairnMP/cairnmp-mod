@@ -13,6 +13,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.3.0](#230--2026-09-18-beta) | 2026-09-18 | Beta | Game modes, downed climbers and a rebuilt panel |
 | [2.2.17](#2217--2026-09-18-stable) | 2026-09-18 | Stable | Streaming crash mitigation and realistic voice occlusion |
 | [2.2.16](#2216--2026-09-17-stable) | 2026-09-17 | Stable | Controller support and conflict-free player ropes |
 | [2.2.15](#2215--2026-09-17-beta) | 2026-09-17 | Beta | Stable harness ropes and cross-platform spatial voice |
@@ -35,6 +36,71 @@ All notable CairnMP changes are documented here. Releases follow
 | [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
 | [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.3.0] — 2026-09-18 (beta)
+
+> This beta uses protocol 14. Every player in a lobby must run CairnMP 2.3.0;
+> earlier versions cannot join, and this is the first protocol change since 2.2.0.
+
+### Added
+
+- Game modes. A lobby is now created under **Rope team**, **Free solo** or **Race**.
+  The mode is advertised in the lobby browser, and it sets the difficulty and
+  constraints every player launches with, read from Cairn's own difficulty table
+  rather than from values of our own.
+- Downed climbers. Dying with a teammate still standing no longer ends the run: the
+  body stays on the face and a partner can put the climber back on their feet, at the
+  cost of a healing item, through Cairn's own revive prompt on the ghost.
+- Bivouac recall. Whoever is still standing can call the fallen back to camp with
+  **R**, bringing them in on half health.
+- Spectator seat. In a mode with no way back, a dead climber keeps watching: free
+  flight, or locked onto a teammate with **F** and **C**. Spectators can still place
+  pings to guide the living.
+- Race standings. A live table ranking climbers by the height they have gained since
+  the start, decided outright by the first to top out.
+- Rope shake. When a roped partner comes off the wall, the climbers tied to them lose
+  every hold they were merely holding; a firm hold rides it out.
+- Dead weight. A fallen rope member costs endurance to carry, at the rate the game's
+  own netplay tweakables set.
+- Shared rations. Eating or drinking on the rope feeds the whole rope team, paid for
+  by the climber who opened it.
+- Trail marks. **B** leaves a permanent mark on the face for everyone, including late
+  joiners; aiming at one of your own takes it back.
+- Climb trails. **T** or `/trails` draws the route every climber actually took. It
+  costs nothing on the wire: positions are already replicated.
+- Ascent recap. `/recap` shows the rope team's session: height gained, falls, and how
+  often each climber went down.
+
+### Changed
+
+- The multiplayer panel was rebuilt around one screen per intent — home, game mode,
+  new climb, join, browse, lobby — with the mode restated wherever it still matters.
+- The panel answers the pointer: cards slide and grow a golden edge under the cursor,
+  titles light up, buttons press in. Controller focus gets the same feedback, and
+  hovering moves that focus so the two never light up different elements.
+- Controller navigation is now written explicitly per screen instead of relying on
+  Unity's geometric guesswork, **Escape** steps back, and **Enter** submits the
+  lobby code.
+- The lobby browser states each lobby's game mode next to its host.
+
+### Compatibility
+
+- Version **2.3.0** raises the protocol from **13** to **14**: `ServerStartGame` now
+  carries the lobby's mode and its extra constraints. All lobby members must use this
+  exact version.
+- The public managed-extension API is unchanged; this release is a minor version
+  because it only adds to it.
+
+### Beta notes
+
+- Nothing here has been verified in a live two-client session yet. The mechanics most
+  likely to need tuning are the rope shake, which may prove too punishing, and dead
+  weight, whose native rate may be harsh once several partners are down.
+- Two native paths cannot be proven without playing: that the revive prompt appears on
+  our ghosts, and that the imposed difficulty survives Cairn's own new-game flow.
+  Both log what they do when `VerboseLogging` is on.
 
 ---
 
