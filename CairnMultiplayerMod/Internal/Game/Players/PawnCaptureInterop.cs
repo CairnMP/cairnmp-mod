@@ -1,5 +1,6 @@
 using System;
 using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.Internal;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using Il2CppTheGameBakers.Cairn.Netplay;
@@ -84,6 +85,7 @@ internal static class PawnCaptureInterop
                     if (frameData.IsValid && frameData.Positions != null && frameData.Positions.Length > 0
                         && IsFrameSendable(frameData, "player", ref _playerFrameTooLargeLogged))
                     {
+                        SampleBoneStability(frameData.Positions);
                         _lastNativePlayerFlags = (byte)(frameData.Flags & PlayerFlagsMask);
                         return true;
                     }
@@ -241,6 +243,28 @@ internal static class PawnCaptureInterop
             LogCaptureUnavailable("player", $"fallback failed: {ex.GetType().Name}: {GameInterop.FirstLine(ex.Message)}", ref _lastPlayerCaptureFailureLogAt);
             return false;
         }
+    }
+
+    // Half of every NetFrame is bone local positions, resent 30 times a second. In a skeletal
+    // rig those are bone lengths and never change, which would make them sendable once — but
+    // that has to be proven on this rig, not assumed. Costs nothing unless NativeProfiling is on.
+    private static readonly BonePositionStability BoneStability = new();
+    private static float _nextBoneStabilityReportAt;
+
+    private static void SampleBoneStability(float[] positions)
+    {
+        if (!ModConfig.NativeProfiling.Value) return;
+
+        try
+        {
+            BoneStability.Sample(positions);
+
+            var now = Time.unscaledTime;
+            if (now < _nextBoneStabilityReportAt) return;
+            _nextBoneStabilityReportAt = now + 10f;
+            ModLog.Info($"[BoneProbe] {BoneStability.Describe()}");
+        }
+        catch (Exception exception) { ModLog.SuppressedException("pawn.sample-bone-stability", exception); }
     }
 
     private static void WriteWorldTransform(Transform t, float[] positions, float[] eulers, int index)
