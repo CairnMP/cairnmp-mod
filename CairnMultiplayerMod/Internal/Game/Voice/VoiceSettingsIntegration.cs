@@ -20,7 +20,10 @@ internal sealed class VoiceSettingsIntegration : IDisposable
     private readonly HarmonyLib.Harmony _harmony = new("CairnMultiplayerMod.VoiceSettings");
     private readonly VoiceAdapter _voice;
     private readonly List<Binding> _bindings = new();
+    private const double MinSearchIntervalSeconds = 2;
+    private const double MaxSearchIntervalSeconds = 30;
     private double _nextSearch;
+    private double _searchInterval = MinSearchIntervalSeconds;
     private double _nextMeter;
     private FieldInfo _status;
     private FieldListDropdown _microphoneField;
@@ -117,15 +120,39 @@ internal sealed class VoiceSettingsIntegration : IDisposable
         // A settings menu is scene-owned. Once attached, repeated global Resources
         // scans only add frame spikes; destroyed bindings above re-enable discovery.
         if (_bindings.Count > 0) return;
+        // Attach() requires an ACTIVE menu, so scanning while no settings menu can be open
+        // finds nothing, leaves _bindings empty, and comes back two seconds later forever.
+        // Measured at ~20 ms per scan: a dropped frame every two seconds, all game long.
+        if (!CanASettingsMenuBeOpen(lifecycle)) return;
         if (Time.realtimeSinceStartupAsDouble < _nextSearch) return;
-        _nextSearch = Time.realtimeSinceStartupAsDouble + 2;
+
+        var found = false;
         foreach (var menu in Resources.FindObjectsOfTypeAll<SettingsMenu>())
         {
             if (menu == null || !menu.gameObject.scene.IsValid() || _bindings.Any(b => b.Menu == menu)) continue;
+            found = true;
             try { Attach(menu); }
             catch (Exception ex) { ModLog.Warning("[VoiceSettings] Could not attach page: " + ex.Message); }
         }
+
+        // Back off while the search keeps coming up empty, so an unexpected state cannot
+        // reinstate a spike every two seconds. Any success returns to the responsive rate.
+        _searchInterval = found || _bindings.Count > 0
+            ? MinSearchIntervalSeconds
+            : Math.Min(_searchInterval * 2, MaxSearchIntervalSeconds);
+        _nextSearch = Time.realtimeSinceStartupAsDouble + _searchInterval;
     }
+
+    /// <summary>
+    /// Whether the game can currently be showing a settings menu at all. The menu lives in the
+    /// main menu and behind the in-game pause menu; anywhere else the scan is pure waste.
+    /// </summary>
+    private static bool CanASettingsMenuBeOpen(CairnGameLifecycleState lifecycle)
+        // Unknown is allowed on purpose: if the lifecycle service is not answering we must not
+        // silently stop attaching the page. The backoff above bounds the cost of that case.
+        => lifecycle == CairnGameLifecycleState.Menu
+           || lifecycle == CairnGameLifecycleState.Unknown
+           || MultiplayerPausePatch.IsPauseMenuActive;
 
     private void Attach(SettingsMenu menu)
     {
@@ -352,6 +379,7 @@ internal sealed class VoiceSettingsIntegration : IDisposable
         _deviceOptions = null;
         _deviceFingerprint = null;
         _nextSearch = 0;
+        _searchInterval = MinSearchIntervalSeconds;
         _voice.TestMicrophone = false;
     }
 
