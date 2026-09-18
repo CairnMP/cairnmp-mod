@@ -105,6 +105,15 @@ internal static class NativePerformanceProbe
         ModLog.Info($"[NativeProbe] {kind} over {elapsed:F1}s — {_occlusionCell.Describe(elapsed)}");
         ModLog.Info($"[NativeProbe] {kind} over {elapsed:F1}s — {_streamingZone.Describe(elapsed)}");
 
+        // Not a native method, but the one cost the mod imposes on the game permanently: the
+        // game's own Debug.Log calls all cross into our managed callback.
+        var logCalls = Il2CppExceptionCapture.UnityLogCallbacks;
+        var logMs = Il2CppExceptionCapture.UnityLogTicks * 1000d / Stopwatch.Frequency;
+        ModLog.Info($"[NativeProbe] {kind} over {elapsed:F1}s — game Debug.Log through our hook: " +
+                    $"{logCalls} calls ({logCalls / elapsed:F0}/s), {logMs:F2} ms inside the callback " +
+                    $"({logMs / elapsed:F3} ms/s, marshalling of the two strings NOT included)");
+        Il2CppExceptionCapture.ResetUnityLogCounters();
+
         _contextualCulling.Reset();
         _occlusionCell.Reset();
         _streamingZone.Reset();

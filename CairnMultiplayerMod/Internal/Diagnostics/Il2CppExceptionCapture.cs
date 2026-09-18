@@ -102,8 +102,26 @@ internal static class Il2CppExceptionCapture
         }
     }
 
+    // Every Debug.Log the GAME makes comes through here, and Cairn logs a great deal. Even
+    // returning immediately, the two string arguments have already been marshalled from
+    // IL2CPP — a stack trace is not cheap to hand across that boundary. Counting the calls
+    // is what says whether this hook is affordable; an increment is all it costs.
+    private static long _unityLogCallbacks;
+    private static long _unityLogTicks;
+
+    internal static long UnityLogCallbacks => _unityLogCallbacks;
+    internal static long UnityLogTicks => _unityLogTicks;
+
+    internal static void ResetUnityLogCounters()
+    {
+        _unityLogCallbacks = 0;
+        _unityLogTicks = 0;
+    }
+
     private static void OnUnityLog(string condition, string stackTrace, LogType type)
     {
+        var startedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+        _unityLogCallbacks++;
         try
         {
             if (type != LogType.Exception) return;
@@ -118,6 +136,10 @@ internal static class Il2CppExceptionCapture
         {
             // Never feed this failure back into Unity's logger: that would recurse into this callback.
             System.Diagnostics.Debug.WriteLine($"CairnMP Unity exception callback failed: {exception}");
+        }
+        finally
+        {
+            _unityLogTicks += System.Diagnostics.Stopwatch.GetTimestamp() - startedAt;
         }
     }
 
