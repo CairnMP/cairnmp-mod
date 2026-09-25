@@ -26,7 +26,7 @@ CairnMP community space.
 
 ## Reporting a concern
 
-Report misconduct privately to **[contact@yutho.fr](mailto:contact@yutho.fr)**.
+Report misconduct privately to **[contact@yutho.fr](mailto:hello@yutho.fr)**.
 
 Please include relevant links and enough context to understand what happened.
 Do not repost private or harmful material publicly. Reports will be handled as
@@ -44,7 +44,7 @@ including:
 4. permanently banning a participant after severe or repeated violations.
 
 A participant may request reconsideration by emailing
-**[contact@yutho.fr](mailto:contact@yutho.fr)** with additional context.
+**[contact@yutho.fr](mailto:hello@yutho.fr)** with additional context.
 Maintainers are subject to the same standards as every other participant.
 
 ---
