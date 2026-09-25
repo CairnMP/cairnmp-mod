@@ -14,7 +14,7 @@
 
 Use GitHub’s private vulnerability reporting when the repository displays
 **Report a vulnerability**. If that option is unavailable, email
-**[contact@yutho.fr](mailto:contact@yutho.fr)** with the subject
+**[contact@yutho.fr](mailto:hello@yutho.fr)** with the subject
 `CairnMP security report`.
 
 Include the following information when possible:
