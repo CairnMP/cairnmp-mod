@@ -23,7 +23,7 @@ updates:
   - package-ecosystem: nuget
     directories:
       - /CairnMultiplayerShared
-      - /CairnMultiplayerShared.Tests
+      - /CairnMultiplayer.Tests
       - /CairnMultiplayerMod
       - /CairnMultiplayerMod.Tests
       - /CairnMultiplayerMod.Generators
