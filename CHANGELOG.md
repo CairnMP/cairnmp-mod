@@ -13,6 +13,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.3.1](#231--2026-10-15-beta) | 2026-10-15 | Beta | Game modes, races and rescues that keep their word |
 | [2.3.0](#230--2026-09-18-beta) | 2026-09-18 | Beta | Game modes, downed climbers and a rebuilt panel |
 | [2.2.17](#2217--2026-09-18-stable) | 2026-09-18 | Stable | Streaming crash mitigation and realistic voice occlusion |
 | [2.2.16](#2216--2026-09-17-stable) | 2026-09-17 | Stable | Controller support and conflict-free player ropes |
@@ -39,11 +40,11 @@ All notable CairnMP changes are documented here. Releases follow
 
 ---
 
-## [Unreleased]
+## [2.3.1] — 2026-10-15 (beta)
 
-> Protocol **15**. Taking up someone else's piton is now reported to the host, and the
-> race and revive features changed their messages: every player in a lobby must run the
-> same build.
+> This beta uses protocol **15**. Taking up someone else's piton is now reported to the
+> host, and the race and revive features changed their messages: every player in a lobby
+> must run CairnMP 2.3.1.
 
 ### Changed
 
@@ -97,8 +98,17 @@ All notable CairnMP changes are documented here. Releases follow
 ### Compatibility
 
 - Protocol **14 → 15**: `ClientPitonRecovered` and `ServerPitonRecovered` are new, and
-  the `race` and `revive` feature contracts changed. All lobby members must use the same
-  build.
+  the `race` and `revive` feature contracts changed. All lobby members must use this
+  exact version.
+- The loader is MelonLoader under its own name again, installed by the launcher in the
+  game's `MelonLoader` folder.
+
+### Beta notes
+
+- These fixes are covered by the test suites and build against the game, but none has
+  been played in a live two-client session yet.
+- This is the first release published from GitHub: the launcher installs it directly,
+  without the releases console.
 
 ---
 
