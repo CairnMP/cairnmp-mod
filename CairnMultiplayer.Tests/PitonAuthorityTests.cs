@@ -91,6 +91,100 @@ public sealed class PitonAuthorityTests
         Assert.IsType<ServerPitonPlaced>(sent.Packet);
     }
 
+    [Fact]
+    public void APitonTakenUpByAnotherClimberLeavesEveryWorldIncludingItsOwners()
+    {
+        var sink = new RecordingSink();
+        var despawned = new List<uint>();
+        var authority = new PitonAuthority(sink, _ => { }, removed => despawned.Add(removed.PitonId));
+        PlaceFromClient(authority, playerId: 10, clientPitonId: 7);
+        var authId = ((ServerPitonPlaced)sink.Broadcasts[0].Packet).PitonId;
+
+        Send(authority, 20, PacketId.ClientPitonRecovered, new ClientPitonRecovered { PitonId = authId });
+
+        // The host's own copy goes, and every other peer is told — but not the one who took it.
+        Assert.Equal(new[] { authId }, despawned);
+        var removal = sink.Broadcasts[1];
+        Assert.Equal(PacketId.ServerPitonRemoved, removal.Id);
+        Assert.Equal(20, removal.ExceptPlayerId);
+        // The owner hears it under their own id, the only one they know.
+        var told = Assert.Single(sink.Sends);
+        Assert.Equal(10, told.TargetPlayerId);
+        var recovered = Assert.IsType<ServerPitonRecovered>(told.Packet);
+        Assert.Equal(7u, recovered.PitonId);
+        Assert.Equal(20, recovered.ByPlayerId);
+
+        sink.Sends.Clear();
+        authority.SendSnapshotTo(30);
+        Assert.Empty(sink.Sends);
+    }
+
+    [Fact]
+    public void TheHostsOwnPitonTakenUpByAClientComesOffTheHostsLifeline()
+    {
+        var sink = new RecordingSink();
+        var recoveredLocally = new List<uint>();
+        var despawned = 0;
+        var authority = new PitonAuthority(sink, _ => { }, _ => despawned++, null, recoveredLocally.Add);
+        authority.HandleHostPitonPlaced(1, Placement(clientPitonId: 3));
+        var authId = ((ServerPitonPlaced)sink.Broadcasts[0].Packet).PitonId;
+
+        Send(authority, 20, PacketId.ClientPitonRecovered, new ClientPitonRecovered { PitonId = authId });
+
+        Assert.Equal(new[] { 3u }, recoveredLocally);
+        Assert.Equal(0, despawned);
+        Assert.Empty(sink.Sends);
+    }
+
+    [Fact]
+    public void TheHostTakingUpAClientsPitonDoesNotRemoveItFromItsOwnWorldTwice()
+    {
+        var sink = new RecordingSink();
+        var despawned = 0;
+        var authority = new PitonAuthority(sink, _ => { }, _ => despawned++);
+        PlaceFromClient(authority, playerId: 10, clientPitonId: 7);
+        var authId = ((ServerPitonPlaced)sink.Broadcasts[0].Packet).PitonId;
+
+        authority.HandleHostPitonRecovered(1, authId);
+
+        Assert.Equal(0, despawned);
+        Assert.Equal(10, Assert.Single(sink.Sends).TargetPlayerId);
+    }
+
+    [Fact]
+    public void TakingUpAPitonNobodyHasIsIgnored()
+    {
+        var sink = new RecordingSink();
+        var authority = new PitonAuthority(sink, _ => { }, _ => { });
+
+        Send(authority, 20, PacketId.ClientPitonRecovered, new ClientPitonRecovered { PitonId = 99 });
+
+        Assert.Empty(sink.Broadcasts);
+        Assert.Empty(sink.Sends);
+    }
+
+    private static ClientPitonPlaced Placement(uint clientPitonId) => new()
+    {
+        PitonId = clientPitonId,
+        PosX = 1f,
+        PosY = 2f,
+        PosZ = 3f,
+        RotW = 1f,
+        Quality = 1,
+        PitonHp = 100,
+        ItemId = 5,
+    };
+
+    private static void Send(PitonAuthority authority, int playerId, PacketId id, IPacket packet)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+            packet.Serialize(writer);
+        stream.Position = 0;
+        using var reader = new BinaryReader(stream);
+        authority.OnClientPacket(playerId, id, reader);
+    }
+
     private static void PlaceFromClient(PitonAuthority authority, int playerId, uint clientPitonId)
     {
         var packet = new ClientPitonPlaced

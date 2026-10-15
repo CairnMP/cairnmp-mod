@@ -50,6 +50,7 @@ internal sealed class UnavailableGameApi : IGameApi
         public bool IsLocalPlayerInGame => false;
         public bool IsLocalPlayerInBivouac => false;
         public bool HasReachedSummit => false;
+        public bool TryGetCampPosition(out WorldPosition position) { position = default; return false; }
     }
 
     private sealed class UnavailableTimeApi : IGameTimeApi
@@ -133,6 +134,8 @@ internal sealed class UnavailableGameApi : IGameApi
     private sealed class UnavailablePlayersApi : IPlayersApi
     {
         public System.Collections.Generic.IReadOnlyList<int> RemoteSleepParticipants => System.Array.Empty<int>();
+        public System.Collections.Generic.IReadOnlyList<int> RemotePlayersInGameOrBivouac => System.Array.Empty<int>();
+        public bool IsRemotePlayerInBivouac(int playerId) => false;
         public System.Collections.Generic.IReadOnlyList<int> RemotePlayersInGame { get; }
             = Array.Empty<int>();
         public bool TryGetLocation(int playerId, out PlayerLocation location)

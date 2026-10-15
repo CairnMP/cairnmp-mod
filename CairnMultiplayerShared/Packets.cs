@@ -325,6 +325,19 @@ public struct ClientPitonRemoved : IPacket
     public void Deserialize(BinaryReader r) => PitonId = r.ReadUInt32();
 }
 
+/// <summary>
+/// The sender took up a piton someone else placed. It carries the host's id for that piton —
+/// the only one the sender ever learned — where <see cref="ClientPitonRemoved"/> carries the
+/// placer's own.
+/// </summary>
+public struct ClientPitonRecovered : IPacket
+{
+    public uint PitonId;
+
+    public void Serialize(BinaryWriter w) => w.Write(PitonId);
+    public void Deserialize(BinaryReader r) => PitonId = r.ReadUInt32();
+}
+
 public struct ClientPlayerFrame : IPacket
 {
     public NetFrameData Frame;
@@ -541,6 +554,19 @@ public struct ServerPitonRemoved : IPacket
 
     public void Serialize(BinaryWriter w) { w.Write(FromPlayerId); w.Write(PitonId); }
     public void Deserialize(BinaryReader r) { FromPlayerId = r.ReadInt32(); PitonId = r.ReadUInt32(); }
+}
+
+/// <summary>
+/// Sent to a piton's owner only, when another climber took it up. It carries the owner's
+/// own id for the piton: the host never tells a placer the id it gave their pitons.
+/// </summary>
+public struct ServerPitonRecovered : IPacket
+{
+    public int ByPlayerId;
+    public uint PitonId;
+
+    public void Serialize(BinaryWriter w) { w.Write(ByPlayerId); w.Write(PitonId); }
+    public void Deserialize(BinaryReader r) { ByPlayerId = r.ReadInt32(); PitonId = r.ReadUInt32(); }
 }
 
 public struct ServerPlayerFrame : IPacket

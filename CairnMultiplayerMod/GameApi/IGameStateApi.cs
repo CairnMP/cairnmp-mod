@@ -12,6 +12,13 @@ internal interface IGameStateApi
     /// where a session can afford to be generous with the rules.</summary>
     bool IsLocalPlayerInBivouac { get; }
 
+    /// <summary>
+    /// Where the local climber is camped, while <see cref="IsLocalPlayerInBivouac"/>. Their
+    /// player location stays unknown for the whole camp — gameplay sync stands down there —
+    /// so this is the only way to point somebody at the fire.
+    /// </summary>
+    bool TryGetCampPosition(out WorldPosition position);
+
     /// <summary>True once the game considers the climb finished at the top.</summary>
     bool HasReachedSummit { get; }
 }

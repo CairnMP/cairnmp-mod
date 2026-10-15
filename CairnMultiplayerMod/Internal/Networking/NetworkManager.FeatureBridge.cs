@@ -218,7 +218,10 @@ internal sealed partial class NetworkManager
     {
         if (!_enabledExtensionsByPlayer.ContainsKey(playerId)) return;
         var player = ToApiPlayer(playerId);
-        BroadcastPeerStatus(playerId, joined: false);
+        // Peer status is the host's to announce. A client noticing the leave itself used to
+        // send this Server* packet to everyone, who dropped it as non-host traffic.
+        if (_steamLobby != null && _steamLobby.IsHost)
+            BroadcastPeerStatus(playerId, joined: false);
         _enabledExtensionsByPlayer.Remove(playerId);
         MultiplayerApi.Runtime.NotifyPlayerLeft(player);
     }

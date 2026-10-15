@@ -25,7 +25,9 @@ public static class PacketValidation
             reason = "isValid=false";
             return false;
         }
-        if (!IsValidVectorArray(frame.Positions, requirePosition, "positions", out reason)) return false;
+        // Positions get the same world bounds as a pose: the root one becomes the player's
+        // location, which everything from ghosts to voice distance reads.
+        if (!IsValidVectorArray(frame.Positions, requirePosition, "positions", out reason, MaxAbsPosition)) return false;
         if (!IsValidVectorArray(frame.Eulers, required: false, "eulers", out reason)) return false;
         if (frame.Eulers != null && frame.Eulers.Length > 0
             && frame.Positions != null && frame.Eulers.Length != frame.Positions.Length)
@@ -95,13 +97,14 @@ public static class PacketValidation
         if (positions.Length != boneCount * 3 || rotations.Length != boneCount * 4) return false;
 
         foreach (var value in positions)
-            if (!IsFinite(value)) return false;
+            if (!IsFinite(value) || Math.Abs(value) > MaxAbsPosition) return false;
         foreach (var value in rotations)
             if (!IsFinite(value)) return false;
         return true;
     }
 
-    private static bool IsValidVectorArray(float[]? values, bool required, string fieldName, out string? reason)
+    private static bool IsValidVectorArray(float[]? values, bool required, string fieldName, out string? reason,
+        float maxAbs = float.PositiveInfinity)
     {
         if (values == null)
         {
@@ -126,9 +129,16 @@ public static class PacketValidation
 
         for (var index = 0; index < values.Length; index++)
         {
-            if (IsFinite(values[index])) continue;
-            reason = $"{fieldName}[{index}] is not finite";
-            return false;
+            if (!IsFinite(values[index]))
+            {
+                reason = $"{fieldName}[{index}] is not finite";
+                return false;
+            }
+            if (Math.Abs(values[index]) > maxAbs)
+            {
+                reason = $"{fieldName}[{index}] is out of range";
+                return false;
+            }
         }
 
         reason = null;

@@ -18,6 +18,7 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
 {
     internal const int SampleRate = 48000, FrameSamples = 960;
     internal const float MaxDistance = VoiceSpatialPolicy.NormalMaxDistance;
+    private const double OutputIdleSeconds = 30;
     private readonly Func<NetworkManager> _network;
     private readonly Func<bool> _inGame;
     private readonly VoiceActivityGate _gate = new();
@@ -41,7 +42,7 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
     private Task<(VoiceDevice[] Devices, string DefaultId)> _deviceRefresh;
     private int _preRollStart, _preRollCount;
     private uint _sequence, _burst;
-    private double _retryAt, _lastPoll, _refreshAt, _outputRetryAt;
+    private double _retryAt, _lastPoll, _refreshAt, _outputRetryAt, _outputIdleSince;
     private bool _wasSending;
     internal bool TestMicrophone { get; set; }
     internal bool IsTransmitting { get; private set; }
@@ -299,15 +300,29 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
                 : Vector3.Dot(cameraRight, (position - cameraPosition).normalized);
             speaker.Tick(now);
         }
-        if (_output != null && _speakers.Count == 0 && _monitor == null) ResetOutput();
+        // Keep the device open through the pauses of a conversation: rebuilding it stalls the
+        // main thread, and the packets arriving meanwhile are lost.
+        if (_output != null && _speakers.Count == 0 && _monitor == null)
+        {
+            if (_outputIdleSince <= 0) _outputIdleSince = now;
+            else if (now - _outputIdleSince > OutputIdleSeconds) ResetOutput();
+        }
+        else _outputIdleSince = 0;
     }
     private bool EnsureOutput(double now)
     {
         if (_output?.IsRunning == true) return true;
         if (now < _outputRetryAt) return false;
-        _outputRetryAt = now + 5;
         try { ResetOutput(); _output = VoiceAudioBackend.CreateOutput(); return true; }
-        catch (Exception ex) { Status = "Audio output unavailable: " + ex.Message; ModLog.Warning("[Voice] " + Status); return false; }
+        catch (Exception ex)
+        {
+            // Only a failure waits before the next attempt. Throttling successes as well
+            // dropped every packet for up to 5 s when someone spoke again after a pause.
+            _outputRetryAt = now + 5;
+            Status = "Audio output unavailable: " + ex.Message;
+            ModLog.Warning("[Voice] " + Status);
+            return false;
+        }
     }
     private void StopCapture()
     {
@@ -332,6 +347,7 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
     }
     private void ResetOutput()
     {
+        _outputIdleSince = 0;
         _output?.Dispose(); _output = null;
         _monitor?.Dispose(); _monitor = null;
         foreach (var speaker in _speakers.Values) speaker.Dispose();
@@ -340,19 +356,23 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
     public void Reset()
     {
         ResetAudioState();
+        // Mutes are the player's choice for the session; a bivouac or a respawn must not
+        // make somebody audible again.
+        _mutedPlayers.Clear();
         _settings.ResetSession();
     }
-    public void ResetScene()
-    {
-        ResetAudioState();
-        _settings.ResetScene();
-    }
+    /// <summary>
+    /// The settings page is left alone: a scene boundary does not always take the settings
+    /// menu with it — a camp or a streamed zone leaves it alive — and forgetting a live
+    /// binding made the next scan add a second CairnMP button to the same menu. Its Tick
+    /// lets go of bindings whose menu Unity destroyed, a check that is safe on a freed object.
+    /// </summary>
+    public void ResetScene() => ResetAudioState();
     private void ResetAudioState()
     {
         TestMicrophone = false;
         StopCapture();
         ResetOutput();
-        _mutedPlayers.Clear();
         _acousticZones.Reset();
         _occlusion.Reset();
     }

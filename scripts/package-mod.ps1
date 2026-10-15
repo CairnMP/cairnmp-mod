@@ -30,7 +30,7 @@ Write-Host ""
 
 if (-not $SkipBuild) {
     $GameRefsDir = Join-Path $Root "game-refs/Il2CppAssemblies"
-    $GameDir     = "$env:LOCALAPPDATA\CairnMultiplayerData\game\CairnLoader\Il2CppAssemblies"
+    $GameDir     = "$env:LOCALAPPDATA\CairnMultiplayerData\game\MelonLoader\Il2CppAssemblies"
 
     $Il2CppFound = (Test-Path "$GameRefsDir\UnityEngine.CoreModule.dll") -or
                    (Test-Path "$GameDir\UnityEngine.CoreModule.dll")

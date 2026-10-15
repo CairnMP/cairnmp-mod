@@ -506,7 +506,10 @@ internal sealed class ShareItemsFeature : MultiplayerFeature
         { request.Reject("This session has reached its item-drop limit."); return; }
         if (!Game.Inventory.IsShareableDefinition(message.DefinitionId))
         { request.Reject("That item cannot be shared."); return; }
-        if (_groundItems.Count >= GroundItemsState.MaxItems)
+        // An item being picked up keeps its slot: a refused or abandoned pickup puts it back,
+        // and a ground filled up meanwhile could not hold it — the state would no longer
+        // serialize and the item would be lost.
+        if (_groundItems.Count + _pendingPickups.Count >= GroundItemsState.MaxItems)
         { request.Reject("Too many shared items are already on the ground."); return; }
         if (!Game.Players.TryGetLocation(request.FromPlayerId, out var location)
             || location.State != PlayerState.InGame || string.IsNullOrWhiteSpace(location.Scene))
@@ -735,6 +738,13 @@ internal sealed class ShareItemsFeature : MultiplayerFeature
     private void OnPlayerLeft(int playerId, string _)
     {
         if (!IsHost) return;
+        // A player id is derived from the Steam account, so it comes back when they rejoin —
+        // after a game restart, with their transfer numbers starting over. Their old numbers
+        // would turn their first gives and drops down as duplicates.
+        _seenTransfers.RemoveWhere(key => key.SenderId == playerId);
+        _seenDropRequests.RemoveWhere(key => key.SenderId == playerId);
+        _lastOfferAt.Remove(playerId);
+
         List<TransferKey> cancelled = null;
         foreach (var pair in _hostPending)
             if (pair.Value.TargetId == playerId || pair.Value.SenderId == playerId)

@@ -32,6 +32,7 @@ public partial class Mod
         LogDebug($"Scene loaded: [{buildIndex}] {sceneName}");
 
         var isMainMenu = SceneRoles.IsMainMenu(sceneName);
+        if (isMainMenu) MultiplayerPausePatch.OnMainMenuLoaded();
 
         // FreeRoam unlock: available to every player at the MainMenu. Forcing the flag
         // during boot or in game sends Cairn onto an unready init path -> black screen.
@@ -124,8 +125,6 @@ public partial class Mod
         Player.ResetTimers();
     }
 
-    private bool IsGameplaySyncSuspended() => Bivouac.BlocksGameplaySync();
-
     private string ResolveCurrentSceneAfterUnload(string unloadedScene)
     {
         var loadedGameplayScene = _loadedScenes.FirstOrDefault(SceneRoles.IsGameplayRoot);
@@ -211,6 +210,7 @@ public partial class Mod
         {
             Lobby.Pump(Time.unscaledDeltaTime);
             CompleteBrowserRequest();
+            CompleteConnectionRequest();
         }
 
         Bivouac.Update();

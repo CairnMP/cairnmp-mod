@@ -42,7 +42,19 @@ internal sealed class TrailMarksFeature : MultiplayerFeature
         feature.EveryFrame(TickInput, FeaturePhase.Always);
         feature.OnPlayerLeft((playerId, _) => Forget(playerId));
         feature.OnSessionEnded(Reset);
-        feature.OnSceneReset(() => Game.World.ClearTrailMarks());
+        feature.OnSceneReset(RedrawMarks);
+    }
+
+    /// <summary>
+    /// A scene boundary is not the end of the session, and the marks belong to the session.
+    /// Clearing them here left every mark invisible until its owner happened to edit the set
+    /// again, so the whole picture is put back from what we know instead.
+    /// </summary>
+    private void RedrawMarks()
+    {
+        Game.World.ClearTrailMarks();
+        foreach (var pair in _known)
+            Game.World.SetTrailMarks(pair.Key, pair.Value);
     }
 
     private void TickInput()

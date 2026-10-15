@@ -54,6 +54,9 @@ internal sealed class BivouacSyncGate
     private Vector3 _suspendPawnPos;
     private bool _hasSuspendPawnPos;
     private float _stuckSince;
+    // Set once the guard has overridden a stuck flag. The flag is still stuck the frame
+    // after, so without this the gate suspended again at once and looped every ~8 s.
+    private bool _stuckFlagOverridden;
 
     private bool _patchPaused;
     private float _patchResumeAt; // 0 = no deferred resume scheduled
@@ -129,6 +132,7 @@ internal sealed class BivouacSyncGate
     public void ForceResume()
     {
         _suspended = false;
+        _stuckFlagOverridden = false;
         ResumePatch(immediate: true);
     }
 
@@ -193,6 +197,7 @@ internal sealed class BivouacSyncGate
         if (SceneRoles.IsBivouac(_state.CurrentScene))
         {
             _stuckSince = 0f;
+            _stuckFlagOverridden = false;
             return true;
         }
 
@@ -200,7 +205,16 @@ internal sealed class BivouacSyncGate
             || lifecycle != CairnGameLifecycleState.Bivouac)
         {
             _stuckSince = 0f;
+            _stuckFlagOverridden = false;
             return false;
+        }
+
+        // An override stands for as long as the game itself keeps reporting gameplay. The
+        // entry position it was measured from is gone, so the movement test cannot be rerun.
+        if (_stuckFlagOverridden)
+        {
+            if (IsGameReportingGameplay()) return false;
+            _stuckFlagOverridden = false;
         }
 
         // The lifecycle is deduced from the BivouacManager flag, which can stay stuck on
@@ -221,8 +235,14 @@ internal sealed class BivouacSyncGate
         ModLog.Warning(
             "[State] Bivouac flag appears stuck (game=InGame, pawn moved) — forcing gameplay sync resume");
         _stuckSince = 0f;
+        _stuckFlagOverridden = true;
         return false;
     }
+
+    private bool IsGameReportingGameplay()
+        => SceneRoles.IsGameplayRoot(_state.CurrentScene)
+           && GameLifecycleService.TryGetRawGameState(out var raw)
+           && raw == CairnGameLifecycleState.InGame;
 
     /// <summary>
     /// Heuristic: the bivouac flag is probably stuck if the game itself reports InGame,
@@ -231,10 +251,7 @@ internal sealed class BivouacSyncGate
     /// </summary>
     private bool IsFlagLikelyStuck()
     {
-        if (!SceneRoles.IsGameplayRoot(_state.CurrentScene))
-            return false;
-
-        if (!GameLifecycleService.TryGetRawGameState(out var raw) || raw != CairnGameLifecycleState.InGame)
+        if (!IsGameReportingGameplay())
             return false;
 
         if (!_hasSuspendPawnPos)

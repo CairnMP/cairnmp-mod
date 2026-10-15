@@ -29,6 +29,14 @@ internal sealed partial class NetworkManager
         OnPitonRemoved?.Invoke(packet);
     }
 
+    private void HandlePitonRecovered(BinaryReader reader)
+    {
+        var packet = new ServerPitonRecovered();
+        packet.Deserialize(reader);
+        ModLog.Debug($"[Piton] Player {packet.ByPlayerId} took up our piton #{packet.PitonId}");
+        OnOwnPitonRecovered?.Invoke(packet.PitonId);
+    }
+
     private void HandleTeleport(BinaryReader reader)
     {
         var packet = new ServerTeleport();

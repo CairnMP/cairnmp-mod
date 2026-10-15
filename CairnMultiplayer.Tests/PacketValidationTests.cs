@@ -37,6 +37,35 @@ public sealed class PacketValidationTests
     }
 
     [Fact]
+    public void NetFramePositionsStayInsideTheWorld()
+    {
+        var frame = new NetFrameData
+        {
+            IsValid = true,
+            Positions = new[] { 0f, 3e38f, 0f },
+        };
+
+        // The root position becomes the player's location; a finite but absurd one must be
+        // refused like an out-of-world pose is.
+        Assert.False(PacketValidation.IsValidNetFrame(frame, requirePosition: true, out var reason));
+        Assert.Contains("out of range", reason);
+
+        // Angles are not positions and keep accepting any finite value.
+        frame.Positions = new[] { 1f, 2f, 3f };
+        frame.Eulers = new[] { 0f, 200000f, 0f };
+        Assert.True(PacketValidation.IsValidNetFrame(frame, requirePosition: true, out _));
+    }
+
+    [Fact]
+    public void BoneStatePositionsStayInsideTheWorld()
+    {
+        Assert.False(PacketValidation.IsValidBoneState(
+            1,
+            new[] { 0f, 200000f, 0f },
+            new[] { 0f, 0f, 0f, 1f }));
+    }
+
+    [Fact]
     public void BoneStateRequiresExactFiniteArrays()
     {
         Assert.True(PacketValidation.IsValidBoneState(

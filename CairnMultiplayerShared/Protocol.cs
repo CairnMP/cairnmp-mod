@@ -6,7 +6,7 @@ namespace CairnMultiplayer.Shared;
 /// </summary>
 public static class Protocol
 {
-    public const int Version = 14;
+    public const int Version = 15;
     public const string ConnectionKey = "cairnmp";
     public const int DefaultPort = 14000;
 
@@ -14,7 +14,7 @@ public static class Protocol
     /// CairnMP client version sent to the API when creating a lobby.
     /// Matches the deployed launcher/mod version.
     /// </summary>
-    public const string GameVersion = "2.3.0";
+    public const string GameVersion = "2.3.1";
 
     public const float PlayerStateUpdateIntervalSeconds = 1f / 30f;
 
@@ -97,6 +97,8 @@ public enum PacketId : byte
     /// <summary>Any feature's real-time stream, client to host. The channel is identified
     /// inside the payload, so a new stream never needs a new packet id.</summary>
     ClientFeatureStream = 19,
+    /// <summary>The sender took up a piton another climber placed.</summary>
+    ClientPitonRecovered = 20,
 
     ServerHandshakeAck = 64,
     ServerHandshakeReject = 65,
@@ -118,6 +120,8 @@ public enum PacketId : byte
     ServerExtensionPeerStatus = 88,
     /// <summary>Host relay of a feature stream, carrying the sender's id.</summary>
     ServerFeatureStream = 89,
+    /// <summary>Tells a piton's owner that another climber took it up.</summary>
+    ServerPitonRecovered = 90,
 }
 
 /// <summary>

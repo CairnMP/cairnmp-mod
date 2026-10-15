@@ -21,6 +21,16 @@ internal sealed class GameStateAdapter : IGameStateApi
     public bool IsLocalPlayerInGame => LocalPlayerState == PlayerState.InGame;
     public bool IsLocalPlayerInBivouac => GameLifecycleService.IsLocalInBivouac();
     public bool HasReachedSummit => Life.LifeInterop.HasReachedSummit();
+
+    public bool TryGetCampPosition(out WorldPosition position)
+    {
+        position = default;
+        // A real camp leaves the pawn where it sat down — the bivouac gate relies on that
+        // very fact to tell a stuck flag from a camp.
+        if (!IsLocalPlayerInBivouac || !LocalPlayerInterop.TryGetPose(out var camp, out _)) return false;
+        position = new WorldPosition(camp.x, camp.y, camp.z);
+        return true;
+    }
 }
 
 internal sealed class GameTimeAdapter : IGameTimeApi
@@ -199,20 +209,29 @@ internal sealed class PlayersAdapter : IPlayersApi
     private readonly Func<NetworkManager> _network;
     private readonly RuntimeState _state;
     private readonly List<int> _sleepParticipants = new();
+    private readonly List<int> _inGameOrBivouacPlayers = new();
     private readonly List<int> _inGamePlayers = new();
 
-    public IReadOnlyList<int> RemoteSleepParticipants
+    public IReadOnlyList<int> RemoteSleepParticipants => CollectInGameOrBivouac(_sleepParticipants);
+
+    public IReadOnlyList<int> RemotePlayersInGameOrBivouac => CollectInGameOrBivouac(_inGameOrBivouacPlayers);
+
+    public bool IsRemotePlayerInBivouac(int playerId)
     {
-        get
-        {
-            _sleepParticipants.Clear();
-            var network = _network();
-            if (network != null)
-                foreach (var pair in network.RemotePlayers)
-                    if (pair.Value?.State is PlayerState.InGame or PlayerState.Bivouac)
-                        _sleepParticipants.Add(pair.Key);
-            return _sleepParticipants;
-        }
+        var network = _network();
+        return network != null && network.RemotePlayers.TryGetValue(playerId, out var player)
+            && player?.State == PlayerState.Bivouac;
+    }
+
+    private IReadOnlyList<int> CollectInGameOrBivouac(List<int> players)
+    {
+        players.Clear();
+        var network = _network();
+        if (network != null)
+            foreach (var pair in network.RemotePlayers)
+                if (pair.Value?.State is PlayerState.InGame or PlayerState.Bivouac)
+                    players.Add(pair.Key);
+        return players;
     }
 
     internal PlayersAdapter(Func<NetworkManager> network, RuntimeState state)

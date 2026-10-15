@@ -13,6 +13,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.3.1](#231--2026-10-15-beta) | 2026-10-15 | Beta | Game modes, races and rescues that keep their word |
 | [2.3.0](#230--2026-09-18-beta) | 2026-09-18 | Beta | Game modes, downed climbers and a rebuilt panel |
 | [2.2.17](#2217--2026-09-18-stable) | 2026-09-18 | Stable | Streaming crash mitigation and realistic voice occlusion |
 | [2.2.16](#2216--2026-09-17-stable) | 2026-09-17 | Stable | Controller support and conflict-free player ropes |
@@ -36,6 +37,78 @@ All notable CairnMP changes are documented here. Releases follow
 | [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
 | [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.3.1] — 2026-10-15 (beta)
+
+> This beta uses protocol **15**. Taking up someone else's piton is now reported to the
+> host, and the race and revive features changed their messages: every player in a lobby
+> must run CairnMP 2.3.1.
+
+### Changed
+
+- Free solo keeps its word: death is final. A camp no longer brings the fallen back in
+  this mode; they keep watching, as the mode says.
+
+### Fixed
+
+- The game mode picked in the panel is applied: every lobby used to be created as Rope
+  team. Every client now knows the lobby's mode from the moment it joins.
+- `/recap` with three or more players no longer starts a stream of replies that never
+  ends.
+- Race: the host referees the finish, so two climbers topping out together no longer
+  each see themselves as the winner. A latecomer no longer misses the start, and is told
+  who already won.
+- Downed climbers stay clipped to their partner, so carrying them costs endurance as
+  intended. The revive prompt's collider is kept on ghosts, and a ghost that spawned as
+  a placeholder is rebuilt as the real climber once the game can provide it.
+- Who is down is known to latecomers too. The last climber to fall now tells the others,
+  and a run that ends no longer announces the climber back on their feet.
+- Rescues are confirmed by the host before the healing item is spent: two rescuers
+  reaching the same body no longer lose an item each, and a rescue from out of reach is
+  refused. A call back to camp is only accepted from a climber actually at one.
+- Calling the fallen back to camp with **R** works, and a teammate sitting at camp counts
+  as still standing.
+- Ending a session while down plays the death out instead of leaving the climber in a
+  dead body with no menu.
+- Pitons: taking up a piton someone else placed removes it for everyone, so it can no
+  longer end up in two bags. Pitons placed while a player is loading, camping or still in
+  the menu are no longer lost. After a reload, saved pitons are recognised instead of
+  being announced again as duplicates.
+- A client that restarts its game and rejoins can give and drop items again straight
+  away.
+- Ground items: an item being picked up keeps its place, so a full ground no longer
+  destroys it. Stale ground-item icons are cleaned up.
+- Trail marks are drawn again after a camp or a reload, and climb trails are kept.
+- A camping player's ghost is hidden instead of standing at the world origin, and
+  players who left no longer come back as frozen ghosts.
+- A stuck bivouac flag no longer suspends synchronization every few seconds.
+- Voice: output is kept for 30 seconds of silence, so the start of a sentence is no
+  longer lost; mutes survive scene changes; the speaking icon stays visible.
+- The CairnMP settings button is no longer duplicated after a camp, and the fallback
+  panel no longer leaks resources each time it opens.
+- Quitting to the main menu from the pause menu no longer leaves the chat closed and the
+  main menu counted as gameplay.
+- One malformed packet no longer stops the host from reading the others, and animation
+  positions are bounded like every other position.
+- Accepting a Steam invite while already in a lobby leaves that lobby first. A failed
+  create or join updates the panel from the game thread.
+
+### Compatibility
+
+- Protocol **14 → 15**: `ClientPitonRecovered` and `ServerPitonRecovered` are new, and
+  the `race` and `revive` feature contracts changed. All lobby members must use this
+  exact version.
+- The loader is MelonLoader under its own name again, installed by the launcher in the
+  game's `MelonLoader` folder.
+
+### Beta notes
+
+- These fixes are covered by the test suites and build against the game, but none has
+  been played in a live two-client session yet.
+- This is the first release published from GitHub: the launcher installs it directly,
+  without the releases console.
 
 ---
 
