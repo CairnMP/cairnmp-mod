@@ -22,6 +22,8 @@ internal sealed partial class NetworkManager
     private double _lastReliablePresenceSentAt;
     private double _lastSteamMemberRefreshAt;
     private double _lastSteamSendFailLogAt;
+    private double _lastSteamPacketDropLogAt;
+    private int _droppedSteamPackets;
     private readonly Dictionary<ulong, int> _steamPlayerIds = new();
     private readonly Dictionary<int, ulong> _steamIdsByPlayerId = new();
     private readonly Dictionary<ulong, string> _steamPlayerNames = new();
@@ -158,7 +160,10 @@ internal sealed partial class NetworkManager
                 for (int i = 0; i < bytesRead; i++)
                     payload[i] = buffer[i];
 
-                ProcessSteamPacket(remoteId, payload);
+                // One bad packet must not end the pump: a truncated payload would otherwise
+                // strand every packet queued behind it, frame after frame.
+                try { ProcessSteamPacket(remoteId, payload); }
+                catch (Exception ex) { LogDroppedSteamPacket(remoteId.m_SteamID, payload, ex); }
             }
         }
         catch (Exception ex)
@@ -312,6 +317,7 @@ internal sealed partial class NetworkManager
                 }
             case PacketId.ClientPitonPlaced:
             case PacketId.ClientPitonRemoved:
+            case PacketId.ClientPitonRecovered:
                 Pitons.OnClientPacket(EnsureSteamRemotePlayer(remoteSteamId), id, r);
                 break;
             case PacketId.ClientFeatureStream:
@@ -439,6 +445,19 @@ internal sealed partial class NetworkManager
         }
 
         SendSteamPacketToHost(PacketId.ClientPitonRemoved, new ClientPitonRemoved { PitonId = pitonId }, reliable: true);
+    }
+
+    private void SendSteamPitonRecovered(uint pitonId)
+    {
+        if (!IsHandshakeComplete) return;
+
+        if (_steamLobby != null && _steamLobby.IsHost)
+        {
+            Pitons.HandleHostPitonRecovered(LocalPlayerId, pitonId);
+            return;
+        }
+
+        SendSteamPacketToHost(PacketId.ClientPitonRecovered, new ClientPitonRecovered { PitonId = pitonId }, reliable: true);
     }
 
     private void SendSteamFeatureStream(ushort channel, byte[] payload, bool reliable)
@@ -580,6 +599,20 @@ internal sealed partial class NetworkManager
 
         _lastSteamSendFailLogAt = now;
         return true;
+    }
+
+    private void LogDroppedSteamPacket(ulong remoteSteamId, byte[] payload, Exception exception)
+    {
+        _droppedSteamPackets++;
+        var now = NowSeconds();
+        if (now - _lastSteamPacketDropLogAt < 2.0)
+            return;
+
+        _lastSteamPacketDropLogAt = now;
+        var id = payload.Length > 0 ? ((PacketId)payload[0]).ToString() : "(empty)";
+        ModLog.Warning($"[SteamP2P] Dropped packet {id} from {remoteSteamId} " +
+                       $"(size={payload.Length}, dropped so far={_droppedSteamPackets}): " +
+                       $"{exception.GetType().Name}: {exception.Message}");
     }
 
     private bool ShouldForwardReliablePresence(ulong sourceSteamId)

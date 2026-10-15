@@ -345,11 +345,6 @@ internal sealed class VoiceSettingsIntegration : IDisposable
         ClearBindings(canTouchNativeOwners);
     }
 
-    /// <summary>
-    /// A scene callback may run after Unity has already freed native menu objects. Only
-    /// forget their managed wrappers here; the scene owns and destroys the cloned button.
-    /// </summary>
-    internal void ResetScene() => ClearBindings(cleanNativeOwners: false);
 
     private void ClearBindings(bool cleanNativeOwners)
     {

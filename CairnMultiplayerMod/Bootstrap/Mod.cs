@@ -75,7 +75,6 @@ public partial class Mod : MelonMod
 
         try
         {
-            Il2CppExceptionCapture.Install();
             ModConfig.Register();
             VoicePreferences.Register();
             VerboseLogging = ModConfig.VerboseLogging.Value;
@@ -88,6 +87,9 @@ public partial class Mod : MelonMod
                 message => LoggerInstance.Msg(message),
                 message => LoggerInstance.Warning(message),
                 message => LoggerInstance.Error(message));
+            // After the log sinks: Install reports whether capture works only through ModLog,
+            // which drops everything before ModLog.Initialize.
+            Il2CppExceptionCapture.Install();
 
             GameTuning.Apply();
             InstallGamePatches();
@@ -177,6 +179,9 @@ public partial class Mod : MelonMod
         {
             _connectingStart = null;
             _lastLobbyError = null;
+            // The launch signal sets the rules again, but not before features start: a
+            // latecomer's session runs for seconds before their own launch goes through.
+            _runtimeState.ModeRules = Lobby.CurrentModeRules;
             var code = Lobby.CurrentRoomCode;
             _panel.SetCurrentLobbyName(Lobby.CurrentLobbyName);
             _panel.SetStatus(string.IsNullOrEmpty(code) ? "Connected" : $"Connected — code {code}", true);
@@ -197,6 +202,7 @@ public partial class Mod : MelonMod
         {
             SetMultiplayerModeActive(false);
             StartGame.Cancel();
+            _runtimeState.ModeRules = MultiplayerModes.RopeTeam;
             RopeInterop.ClearRemotePitons();
             Network.Disconnect();
             WeatherInterop.ResetRemoteState();
@@ -265,23 +271,11 @@ public partial class Mod : MelonMod
         };
         Network.OnRopeClip += RopeLinkState.Apply;
 
-        Network.OnPitonPlaced += pkt =>
-        {
-            if (IsGameplaySyncSuspended())
-                return;
-
-            RopeInterop.SpawnRemotePiton(pkt.PitonId,
-                new Vector3(pkt.PosX, pkt.PosY, pkt.PosZ),
-                new Quaternion(pkt.RotX, pkt.RotY, pkt.RotZ, pkt.RotW),
-                pkt.Quality, pkt.PitonHp, pkt.ItemId);
-        };
-        Network.OnPitonRemoved += pkt =>
-        {
-            if (IsGameplaySyncSuspended())
-                return;
-
-            RopeInterop.RemoveRemotePiton(pkt.PitonId);
-        };
+        // Recorded whatever the local player is doing; the Lifeline catches up on the next
+        // frame of play. Dropping them during a load or a camp lost those pitons for good.
+        Network.OnPitonPlaced += RopeInterop.KnowRemotePiton;
+        Network.OnPitonRemoved += pkt => RopeInterop.ForgetRemotePiton(pkt.PitonId);
+        Network.OnOwnPitonRecovered += RopeInterop.ForgetOwnPiton;
         Network.OnTeleport += pkt =>
         {
             // The player may have entered a bivouac between the host check and delivery.

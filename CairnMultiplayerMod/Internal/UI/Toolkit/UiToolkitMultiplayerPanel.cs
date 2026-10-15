@@ -176,7 +176,6 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
 
         _documentGo = null;
         _document = null;
-        _panelSettings = null;
         _root = null;
         _card = null;
         _screenHost = null;
@@ -219,11 +218,18 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         _documentGo = new GameObject("MP_UIToolkit");
         Object.DontDestroyOnLoad(_documentGo);
 
-        _panelSettings = ScriptableObject.CreateInstance<PanelSettings>();
-        _panelSettings.name = "MP_UIToolkitPanelSettings";
-        _panelSettings.scaleMode = PanelScaleMode.ScaleWithScreenSize;
-        _panelSettings.referenceResolution = new Vector2Int(1920, 1080);
-        _panelSettings.sortingOrder = 210;
+        // One for the life of the mod: a new one per build left a ScriptableObject and its
+        // runtime panel behind on every open and close. Destroying it alongside the document
+        // instead would race the document's own teardown at the end of the frame.
+        if (_panelSettings == null)
+        {
+            _panelSettings = ScriptableObject.CreateInstance<PanelSettings>();
+            _panelSettings.hideFlags = HideFlags.DontUnloadUnusedAsset;
+            _panelSettings.name = "MP_UIToolkitPanelSettings";
+            _panelSettings.scaleMode = PanelScaleMode.ScaleWithScreenSize;
+            _panelSettings.referenceResolution = new Vector2Int(1920, 1080);
+            _panelSettings.sortingOrder = 210;
+        }
 
         _document = _documentGo.AddComponent<UIDocument>();
         _document.panelSettings = _panelSettings;

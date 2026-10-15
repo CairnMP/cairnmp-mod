@@ -20,7 +20,9 @@ internal sealed partial class NetworkManager
     private PitonAuthority Pitons => _pitonAuthority ??= new PitonAuthority(
         SteamSink,
         pkt => OnPitonPlaced?.Invoke(pkt),
-        pkt => OnPitonRemoved?.Invoke(pkt));
+        pkt => OnPitonRemoved?.Invoke(pkt),
+        clock: null,
+        onLocalPitonRecovered: localId => OnOwnPitonRecovered?.Invoke(localId));
 
     private sealed class SteamAuthoritativeSink : IAuthoritativeSink
     {

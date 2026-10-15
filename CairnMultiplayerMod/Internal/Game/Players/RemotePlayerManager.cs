@@ -58,6 +58,8 @@ internal static class RemotePlayerManager
         public float NextNetRopeScanAt;
 
         public CapsuleCollider Collider;
+        /// <summary>The prefab's own colliders kept for the game's interaction prompts.</summary>
+        public List<Collider> InteractionColliders;
         public bool PhysicsActive = true;
 
         public string LastAppliedNameLabel;
@@ -73,6 +75,9 @@ internal static class RemotePlayerManager
     private static readonly Dictionary<int, GhostEntry> _ghosts = new();
     private static readonly Dictionary<int, SpawnWaitEntry> _spawnWaits = new();
     private static readonly List<int> _playersToRemove = new();
+    private static readonly List<int> _placeholders = new();
+    private const float PlaceholderUpgradeIntervalSeconds = 5f;
+    private static float _nextPlaceholderUpgradeAt;
 
 
     private static readonly Vector3 HiddenSpawnPosition = new(0f, -10000f, 0f);
@@ -117,6 +122,8 @@ internal static class RemotePlayerManager
             SpawnGhost(rp.Id, rp.Name, rp);
         }
 
+        UpgradePlaceholders(net, localState);
+
         // Don't remove during Loading/Connecting: Cairn can block a late respawn.
         // We only remove players that have genuinely left.
         _playersToRemove.Clear();
@@ -135,6 +142,37 @@ internal static class RemotePlayerManager
                 _spawnWaits.Remove(id);
                 ModLog.Debug($"[Ghost] Despawned player {id} (left session)");
             }
+        }
+    }
+
+    /// <summary>
+    /// A ghost built while Cairn's climber prefab was out of reach is only a stand-in — no
+    /// harness, so no rope, no name and no revive prompt — and nothing used to replace it.
+    /// Once the prefab can be found again, the stand-in is rebuilt as the real climber.
+    /// </summary>
+    private static void UpgradePlaceholders(NetworkManager net, PlayerState localState)
+    {
+        if (localState != PlayerState.InGame) return;
+        _placeholders.Clear();
+        foreach (var kv in _ghosts)
+            if (kv.Value != null && !kv.Value.IsRealModel) _placeholders.Add(kv.Key);
+        if (_placeholders.Count == 0 || Time.unscaledTime < _nextPlaceholderUpgradeAt) return;
+        // A prefab that is found but still cannot be instantiated must not have stand-ins
+        // destroyed and rebuilt every frame.
+        _nextPlaceholderUpgradeAt = Time.unscaledTime + PlaceholderUpgradeIntervalSeconds;
+        if (NetplayAnimationInterop.TryGetNetplayClimberPrefab() == null) return;
+
+        foreach (var id in _placeholders)
+        {
+            if (!net.RemotePlayers.TryGetValue(id, out var rp) || !HasRemotePose(rp)) continue;
+            if (_ghosts.TryGetValue(id, out var standIn))
+            {
+                SetGhostPhysicsActive(standIn, false);
+                if (standIn.Root != null) Object.Destroy(standIn.Root);
+                _ghosts.Remove(id);
+            }
+            SpawnGhost(id, rp.Name, rp);
+            ModLog.Debug($"[Ghost] Rebuilt {id}'s stand-in as the native climber");
         }
     }
 
@@ -236,6 +274,10 @@ internal static class RemotePlayerManager
     {
         if (rp == null) return false;
         if (rp.State == PlayerState.Unknown || rp.State == PlayerState.InMenu || rp.State == PlayerState.Loading) return false;
+        // A camper reports no pose at all (their presence packets carry 0,0,0), while their
+        // last frame still looks renderable — without this the ghost and its collider were
+        // parked at the world origin for the whole camp.
+        if (rp.State == PlayerState.Bivouac) return false;
         if (HasRenderableFrame(rp)) return true;
         if (rp.LastUpdateTime <= 0) return false;
         return true;
@@ -334,9 +376,9 @@ internal static class RemotePlayerManager
 
         CosmeticInterop.TickGhostGloveRigs();
 
-        // SetFrame may re-enable nameMesh and rewrites its text, so both the visibility and
-        // the label are asserted afterwards — otherwise the speaking icon is erased as soon
-        // as a frame arrives.
+        // Both the visibility and the label are asserted after the frames are applied. The
+        // label is written only here — the SetFrame patch no longer touches it — so the
+        // last-applied cache stays true to what the mesh shows.
         foreach (var kv in net.RemotePlayers)
         {
             if (!_ghosts.TryGetValue(kv.Key, out var entry)) continue;
@@ -671,7 +713,8 @@ internal static class RemotePlayerManager
                         try { colliders[i].enabled = false; }
                         catch (Exception exception) { ModLog.SuppressedException("remote-player.disable-prefab-collider", exception); }
                     }
-                    AddPlayerCollider(go);
+                    var interactionColliders = RestoreInteractionColliders(go, id);
+                    var capsule = AddPlayerCollider(go);
 
                     isRealModel = true;
                     ModLog.Debug($"[Ghost] Spawned native Cairn player for {id} ({name})");
@@ -684,6 +727,8 @@ internal static class RemotePlayerManager
                         Root = go,
                         NrpComponent = nrpComp,
                         IsRealModel = true,
+                        Collider = capsule,
+                        InteractionColliders = interactionColliders,
                     };
                 }
             }
@@ -733,7 +778,52 @@ internal static class RemotePlayerManager
         }
     }
 
-    private static void AddPlayerCollider(GameObject ghost)
+    /// <summary>
+    /// The game finds what a climber can interact with — the revive prompt on a body among
+    /// them — through the provider's own colliders, which the blanket shutdown above also
+    /// switched off. They come back as triggers: reachable, but never something to bump
+    /// into. Called before the ghost's kinematic body is added, they ride on it like the
+    /// capsule does instead of standing in the static physics tree.
+    /// </summary>
+    private static List<Collider> RestoreInteractionColliders(GameObject ghost, int id)
+    {
+        var restored = new List<Collider>();
+        try
+        {
+            var providers = ghost.GetComponentsInChildren<NetplayRemotePlayerInteractionProvider>(true);
+            for (int p = 0; p < providers.Count; p++)
+            {
+                var provider = providers[p];
+                if (provider == null) continue;
+                var before = restored.Count;
+                var own = provider.GetComponents<Collider>();
+                for (int i = 0; i < own.Count; i++) RestoreAsTrigger(own[i], restored);
+                if (restored.Count > before) continue;
+
+                var nested = provider.GetComponentsInChildren<Collider>(true);
+                for (int i = 0; i < nested.Count; i++) RestoreAsTrigger(nested[i], restored);
+            }
+
+            ModLog.Debug(restored.Count == 0
+                ? $"[Ghost] {id}'s interaction provider carries no collider to restore"
+                : $"[Ghost] Restored {restored.Count} interaction collider(s) on {id}'s ghost");
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("remote-player.restore-interaction-colliders", exception);
+        }
+        return restored;
+    }
+
+    private static void RestoreAsTrigger(Collider collider, List<Collider> restored)
+    {
+        if (collider == null) return;
+        collider.isTrigger = true;
+        collider.enabled = true;
+        restored.Add(collider);
+    }
+
+    private static CapsuleCollider AddPlayerCollider(GameObject ghost)
     {
         try
         {
@@ -743,7 +833,9 @@ internal static class RemotePlayerManager
             // being unloaded (or while a ghost spawns mid-transition) crashes the engine
             // inside the pruner. A kinematic Rigidbody makes the capsule a moving actor,
             // which is the supported way to carry a collider that changes position.
-            var body = ghost.AddComponent<Rigidbody>();
+            // A prefab that already brings a body gets ours folded into it: a second
+            // AddComponent<Rigidbody> returns nothing and would leave the capsule out.
+            var body = ghost.GetComponent<Rigidbody>() ?? ghost.AddComponent<Rigidbody>();
             body.isKinematic = true;
             body.useGravity = false;
             body.interpolation = RigidbodyInterpolation.None;
@@ -754,10 +846,12 @@ internal static class RemotePlayerManager
             col.radius = 0.3f;
             col.height = 1.8f;
             col.direction = 1;
+            return col;
         }
         catch (Exception ex)
         {
             ModLog.Warning($"[Ghost] AddPlayerCollider failed: {ex.Message}");
+            return null;
         }
     }
 
@@ -772,7 +866,10 @@ internal static class RemotePlayerManager
 
         try
         {
-            entry.Collider ??= entry.Root?.GetComponent<CapsuleCollider>();
+            if (entry.InteractionColliders != null)
+                foreach (var collider in entry.InteractionColliders)
+                    if (collider != null) collider.enabled = active;
+
             if (entry.Collider == null) return;
 
             entry.Collider.enabled = active;

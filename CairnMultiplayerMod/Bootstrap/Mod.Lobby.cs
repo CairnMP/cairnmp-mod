@@ -48,11 +48,11 @@ public partial class Mod
         ExtraConstraints = (int)rules.ExtraConstraints,
     };
 
-    private async void OnHostRequested(HostConfig config)
+    private void OnHostRequested(HostConfig config)
     {
         config = WithLocalSteamIdentity(config);
         LoggerInstance.Msg($"Creating Steam lobby '{config.LobbyName}' as '{config.PlayerName}' " +
-                           $"(max {config.MaxPlayers}, {config.Visibility})...");
+                           $"(max {config.MaxPlayers}, {config.Visibility}, {config.Mode})...");
         ModConfig.PlayerName.Value = config.PlayerName;
         ModConfig.MaxPlayers.Value = config.MaxPlayers;
         MelonPreferences.Save();
@@ -62,13 +62,46 @@ public partial class Mod
 
         try
         {
-            var succeeded = await Lobby.CreateLobby(config);
-            if (!succeeded)
-                FinishFailedConnection("Failed to create lobby.");
+            TrackConnectionRequest(Lobby.CreateLobby(config), "CreateLobby", "Failed to create lobby.");
         }
         catch (Exception exception)
         {
             ReportLobbyException("CreateLobby", exception);
+        }
+    }
+
+    private Task<bool> _connectionRequest;
+    private string _connectionOperation;
+    private string _connectionFailureMessage;
+
+    /// <summary>
+    /// Watched from OnUpdate instead of awaited, for the same reason as the lobby browser:
+    /// with no Unity SynchronizationContext an await continuation runs on a worker, and the
+    /// failure path drives the panel's Unity objects.
+    /// </summary>
+    private void TrackConnectionRequest(Task<bool> request, string operation, string failureMessage)
+    {
+        _connectionRequest = request;
+        _connectionOperation = operation;
+        _connectionFailureMessage = failureMessage;
+        // A request refused on the spot (Steam unavailable, busy) is answered right away,
+        // still on the Unity thread.
+        CompleteConnectionRequest();
+    }
+
+    private void CompleteConnectionRequest()
+    {
+        if (_connectionRequest?.IsCompleted != true) return;
+        var request = _connectionRequest;
+        _connectionRequest = null;
+        try
+        {
+            if (!request.GetAwaiter().GetResult())
+                FinishFailedConnection(_connectionFailureMessage);
+        }
+        catch (Exception exception)
+        {
+            ReportLobbyException(_connectionOperation, exception);
         }
     }
 
@@ -78,6 +111,7 @@ public partial class Mod
         LobbyName = config.LobbyName,
         MaxPlayers = config.MaxPlayers,
         Visibility = config.Visibility,
+        Mode = config.Mode,
     };
 
     private Task<List<LobbyEntry>> _browserRequest;
@@ -113,15 +147,13 @@ public partial class Mod
         }
     }
 
-    private async void OnJoinByLobbyIdRequested(ulong lobbyId)
+    private void OnJoinByLobbyIdRequested(ulong lobbyId)
     {
         LoggerInstance.Msg($"[Browse] Joining lobby {lobbyId}...");
         BeginConnecting("Joining lobby");
         try
         {
-            var succeeded = await Lobby.JoinById(lobbyId);
-            if (!succeeded)
-                FinishFailedConnection("Failed to join lobby.");
+            TrackConnectionRequest(Lobby.JoinById(lobbyId), "JoinById", "Failed to join lobby.");
         }
         catch (Exception exception)
         {
@@ -129,7 +161,7 @@ public partial class Mod
         }
     }
 
-    private async void OnJoinByCodeRequested(string roomCode)
+    private void OnJoinByCodeRequested(string roomCode)
     {
         string playerName = GetSteamPlayerName();
         LoggerInstance.Msg($"Joining lobby '{roomCode}' as '{playerName}'...");
@@ -138,9 +170,7 @@ public partial class Mod
 
         try
         {
-            var succeeded = await Lobby.JoinByCode(roomCode);
-            if (!succeeded)
-                FinishFailedConnection($"Lobby {roomCode} not found.");
+            TrackConnectionRequest(Lobby.JoinByCode(roomCode), "JoinByCode", $"Lobby {roomCode} not found.");
         }
         catch (Exception exception)
         {
@@ -174,6 +204,7 @@ public partial class Mod
     {
         SetMultiplayerModeActive(false);
         StartGame.Cancel();
+        _runtimeState.ModeRules = MultiplayerModes.RopeTeam;
         Lobby.Leave();
         Network.Disconnect();
         WeatherInterop.ResetRemoteState();

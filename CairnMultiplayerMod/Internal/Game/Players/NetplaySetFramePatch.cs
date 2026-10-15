@@ -153,16 +153,9 @@ internal static class NetplaySetFramePatch
     {
         var safeName = playerName ?? "";
 
-        try
-        {
-            var nameMesh = instance.nameMesh;
-            if (nameMesh != null)
-                nameMesh.text = safeName;
-        }
-        catch (Exception exception)
-        {
-            ModLog.SuppressedException("netplay.update-name-label", exception);
-        }
+        // The floating name is left alone: RemotePlayerManager owns that label (speaking icon
+        // included) and only rewrites it when it changes. Writing the bare name here on every
+        // frame erased the icon one frame after it appeared.
 
         try
         {

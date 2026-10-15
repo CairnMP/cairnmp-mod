@@ -25,3 +25,6 @@ update('CairnMultiplayerShared/Protocol.cs', [
 update('CairnMultiplayerMod/Bootstrap/Mod.cs', [
   [/(MelonInfo\(typeof\(CairnMultiplayerMod.Bootstrap.Mod\), "Cairn Multiplayer Mod", ")[^"]+(".*)/, `$1${version.mod}$2`]
 ]);
+update('README.md', [
+  [/(protocol is \*\*)\d+(\*\*)/, `$1${version.protocol}$2`]
+]);

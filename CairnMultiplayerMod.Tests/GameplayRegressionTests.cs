@@ -80,6 +80,28 @@ public sealed class GameplayRegressionTests
     }
 
     [Fact]
+    public void AClimberWhoRestartsAndRejoinsCanShareAgain()
+    {
+        var (runtime, _, game) = Create(new ShareItemsFeature());
+        var offer = new ShareItemOffer
+        {
+            TransferId = 1,
+            TargetPlayerId = 1,
+            DefinitionId = 104,
+            Count = 1,
+            ItemName = "energy bar",
+        };
+        Assert.Equal(CommandStatus.Committed, runtime.ExecuteHostCommand(2, Command("share-items.offer", offer)).Status);
+
+        // Back after a restart: same player id, numbering from 1 again.
+        runtime.NotifyPlayerLeft(new MultiplayerPlayer(2, "Guest", false, false));
+        var again = runtime.ExecuteHostCommand(2, Command("share-items.offer", offer));
+
+        Assert.Equal(CommandStatus.Committed, again.Status);
+        Assert.Equal(7, game.InventoryImpl.Count);
+    }
+
+    [Fact]
     public void HostRecipientCanAcknowledgeDeliveryDuringOfferCommit()
     {
         var (runtime, _, game) = Create(new ShareItemsFeature());
@@ -184,6 +206,30 @@ public sealed class GameplayRegressionTests
 
         Assert.Equal(CommandStatus.Committed, receipt.Status);
         Assert.Equal(id, Assert.Single(game.InventoryImpl.GroundItems).Id);
+    }
+
+    [Fact]
+    public void AnItemBeingPickedUpKeepsItsPlaceOnAFullGround()
+    {
+        var (runtime, _, game) = Create(new ShareItemsFeature());
+        for (uint request = 1; request <= GroundItemsState.MaxItems; request++)
+            runtime.ExecuteHostCommand(2, Command("share-items.drop",
+                new DropItemRequest { RequestId = request, DefinitionId = 104, ItemName = "Ration" }));
+        Assert.Equal(GroundItemsState.MaxItems, game.InventoryImpl.GroundItems.Count);
+        var id = game.InventoryImpl.GroundItems[0].Id;
+        runtime.ExecuteHostCommand(2, Command("share-items.pickup",
+            new PickupGroundItemRequest { GroundItemId = id }));
+
+        // The slot it left is not free: a refused pickup puts the item back, and the ground
+        // state cannot hold one item more than the cap.
+        var drop = runtime.ExecuteHostCommand(2, Command("share-items.drop",
+            new DropItemRequest { RequestId = 100, DefinitionId = 104, ItemName = "Ration" }));
+        Assert.NotEqual(CommandStatus.Committed, drop.Status);
+
+        var receipt = runtime.ExecuteHostCommand(2, Command("share-items.pickup-receipt",
+            new GroundItemReceipt { GroundItemId = id, Accepted = false, Reason = "Backpack full." }));
+        Assert.Equal(CommandStatus.Committed, receipt.Status);
+        Assert.Equal(GroundItemsState.MaxItems, game.InventoryImpl.GroundItems.Count);
     }
 
     [Fact]
@@ -345,8 +391,8 @@ public sealed class GameplayRegressionTests
     [Fact]
     public void CampCallsTheFallenBackAndSitsThemByTheFire()
     {
-        var (runtime, host, game) = Create(new ReviveFeature(), MultiplayerMode.FreeSolo);
-        game.PlayersImpl.InGame = new[] { 2 };
+        var (runtime, host, game) = Create(new ReviveFeature());
+        game.PlayersImpl.Camping = new[] { 2 };
         Assert.True(game.LifeImpl.ReportDeath());
 
         runtime.ExecuteHostCommand(2, Command("revive.recall",
@@ -363,8 +409,8 @@ public sealed class GameplayRegressionTests
     [Fact]
     public void ARecalledClimberIsStillMovedWhenTheFirstAttemptIsRefused()
     {
-        var (runtime, host, game) = Create(new ReviveFeature(), MultiplayerMode.FreeSolo);
-        game.PlayersImpl.InGame = new[] { 2 };
+        var (runtime, host, game) = Create(new ReviveFeature());
+        game.PlayersImpl.Camping = new[] { 2 };
         Assert.True(game.LifeImpl.ReportDeath());
         game.WorldImpl.TeleportAllowed = false;
 
@@ -380,9 +426,215 @@ public sealed class GameplayRegressionTests
     }
 
     [Fact]
-    public void TheCampPromptOnlyShowsWhereItCanBeUsed()
+    public void PressingTheKeyAtCampCallsTheFallenBackToIt()
+    {
+        var bridge = new Bridge();
+        var (runtime, host, game) = Create(new ReviveFeature(), bridge: bridge);
+        runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
+        game.StateImpl.InBivouac = true;
+        game.StateImpl.Camp = new WorldPosition(10, 20, 30);
+        // As in the game: a camper has no player location, only a camp.
+        game.PlayersImpl.LocalLocationKnown = false;
+
+        game.InputImpl.Press(GameKey.R);
+        host.Tick(FeaturePhase.Always);
+
+        Assert.Contains("revive.recall.relayed", bridge.Events);
+    }
+
+    [Fact]
+    public void ATeammateAtCampStillCountsAsStanding()
+    {
+        var (_, host, game) = Create(new ReviveFeature());
+        // The only climber still up is sitting by the fire — exactly the one who can call
+        // the fallen back — so going down must not end the run.
+        game.PlayersImpl.Camping = new[] { 2 };
+
+        Assert.True(game.LifeImpl.ReportDeath());
+        host.Tick(FeaturePhase.Always);
+
+        Assert.True(game.LifeImpl.IsDown);
+        Assert.False(game.LifeImpl.RunEnded);
+    }
+
+    [Fact]
+    public void InFreeSoloNoCampBringsTheDeadBack()
     {
         var (runtime, host, game) = Create(new ReviveFeature(), MultiplayerMode.FreeSolo);
+        game.PlayersImpl.Camping = new[] { 2 };
+        Assert.True(game.LifeImpl.ReportDeath());
+
+        runtime.ExecuteHostCommand(2, Command("revive.recall",
+            new BivouacRecall(new WorldPosition(10, 20, 30))));
+        host.Tick(FeaturePhase.Always);
+
+        Assert.True(game.LifeImpl.IsDown);
+        Assert.Null(game.WorldImpl.TeleportedTo);
+    }
+
+    [Fact]
+    public void InFreeSoloTheCampOffersNoRecall()
+    {
+        var (runtime, host, game) = Create(new ReviveFeature(), MultiplayerMode.FreeSolo);
+        runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
+        game.StateImpl.InBivouac = true;
+
+        host.Tick(FeaturePhase.Always);
+
+        Assert.False(game.HudImpl.Messages.ContainsKey("revive.recall"));
+        Assert.Equal("Guest is out of the climb.", game.HudImpl.Messages["revive.notice"]);
+    }
+
+    [Fact]
+    public void ACallBackToCampFromSomeoneNotCampingIsIgnored()
+    {
+        var (runtime, _, game) = Create(new ReviveFeature());
+        game.PlayersImpl.InGame = new[] { 2 };
+        Assert.True(game.LifeImpl.ReportDeath());
+
+        runtime.ExecuteHostCommand(2, Command("revive.recall",
+            new BivouacRecall(new WorldPosition(1, 2, 3))));
+
+        Assert.True(game.LifeImpl.IsDown);
+        Assert.Equal(-1, game.LifeImpl.RevivedAtRatio);
+    }
+
+    [Fact]
+    public void ACallBackToNowhereIsIgnored()
+    {
+        var (runtime, _, game) = Create(new ReviveFeature());
+        game.PlayersImpl.Camping = new[] { 2 };
+        Assert.True(game.LifeImpl.ReportDeath());
+
+        runtime.ExecuteHostCommand(2, Command("revive.recall",
+            new BivouacRecall(new WorldPosition(float.NaN, 2, 3))));
+
+        Assert.True(game.LifeImpl.IsDown);
+    }
+
+    [Fact]
+    public void TheLastClimberToFallStillTellsTheOthers()
+    {
+        var bridge = new Bridge();
+        var (runtime, host, game) = Create(new ReviveFeature(), bridge: bridge);
+        game.PlayersImpl.InGame = new[] { 2 };
+        runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
+
+        // Nobody left to help: the death plays out, and the guest must stop counting on us.
+        Assert.False(game.LifeImpl.ReportDeath());
+
+        Assert.True(TryGetCondition(runtime, 1, out var condition));
+        Assert.Equal(ClimberCondition.Out, condition);
+    }
+
+    [Fact]
+    public void ARunThatEndsDoesNotAnnounceTheClimberStanding()
+    {
+        var (runtime, host, game) = Create(new ReviveFeature());
+        game.PlayersImpl.InGame = new[] { 2 };
+        Assert.True(game.LifeImpl.ReportDeath());
+
+        game.TimeImpl.Now += 121f;
+        host.Tick(FeaturePhase.Always);
+
+        Assert.True(game.LifeImpl.RunEnded);
+        Assert.True(TryGetCondition(runtime, 1, out var condition));
+        Assert.Equal(ClimberCondition.Out, condition);
+    }
+
+    [Fact]
+    public void AClimberWhoseDeathPlayedOutIsNotWaitedFor()
+    {
+        var (runtime, host, game) = Create(new ReviveFeature());
+        game.PlayersImpl.InGame = new[] { 2 };
+        runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(ClimberCondition.Out)));
+
+        // The only other climber is at their death screen: nobody can come.
+        Assert.False(game.LifeImpl.ReportDeath());
+    }
+
+    [Fact]
+    public void AClimberBackFromTheDeathScreenCountsAgain()
+    {
+        var (runtime, host, game) = Create(new ReviveFeature());
+        game.PlayersImpl.InGame = new[] { 2 };
+        runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
+        Assert.False(game.LifeImpl.ReportDeath());
+
+        // The game reloads us; alive and in the world again, we are standing.
+        host.NotifySceneReset();
+        host.Tick(FeaturePhase.Always);
+
+        Assert.True(TryGetCondition(runtime, 1, out var condition));
+        Assert.Equal(ClimberCondition.Standing, condition);
+    }
+
+    [Fact]
+    public void ALatecomerKnowsWhoIsLyingOnTheFace()
+    {
+        var (runtime, _, game) = Create(new ReviveFeature(), bridge: new Bridge(isHost: false));
+        // A body is not enough: nobody said this one is waiting for help.
+        Assert.False(game.LifeImpl.CanRevive(2));
+
+        // Replayed on arrival: the guest went down before we joined.
+        runtime.ApplyState(new ServerExtensionState
+        {
+            ExtensionId = FeatureHost.CoreExtensionId,
+            StateId = "revive.conditions",
+            ScopePlayerId = 2,
+            Revision = 1,
+            Payload = Bytes(new DownedChanged(true)),
+        });
+
+        Assert.True(game.LifeImpl.CanRevive(2));
+    }
+
+    [Fact]
+    public void TwoRescuersReachingTheSameBodySpendOneItem()
+    {
+        var bridge = new Bridge();
+        bridge.Others.Add(new MultiplayerPlayer(3, "Third", false, false));
+        var (runtime, _, game) = Create(new ReviveFeature(), bridge: bridge);
+        runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
+
+        // A third climber's rescue was granted first...
+        var first = runtime.ExecuteHostCommand(3, Command("revive.request", new ReviveRequest(2)));
+        Assert.True(first.Committed);
+
+        // ...so ours is turned away before anything is spent.
+        game.LifeImpl.OnRevive(2);
+        Assert.Equal(1, game.InventoryImpl.HealingItems);
+    }
+
+    [Fact]
+    public void ARescueFromAcrossTheMountainIsRefused()
+    {
+        var (runtime, _, game) = Create(new ReviveFeature());
+        runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
+        game.PlayersImpl.TargetX = 500f;
+
+        game.LifeImpl.OnRevive(2);
+
+        Assert.Equal(1, game.InventoryImpl.HealingItems);
+        Assert.Contains("out of reach", game.HudImpl.Messages["revive.notice"]);
+    }
+
+    [Fact]
+    public void ASessionEndingWhileDownLetsTheDeathPlayOut()
+    {
+        var (_, host, game) = Create(new ReviveFeature());
+        game.PlayersImpl.InGame = new[] { 2 };
+        Assert.True(game.LifeImpl.ReportDeath());
+
+        host.NotifySessionEnded();
+
+        Assert.True(game.LifeImpl.RunEnded);
+    }
+
+    [Fact]
+    public void TheCampPromptOnlyShowsWhereItCanBeUsed()
+    {
+        var (runtime, host, game) = Create(new ReviveFeature());
         game.PlayersImpl.InGame = new[] { 2 };
         runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
 
@@ -531,13 +783,84 @@ public sealed class GameplayRegressionTests
         game.PlayersImpl.LocalY = 0f;
         host.Tick(FeaturePhase.Always);
 
-        runtime.ExecuteHostCommand(2, Command("race.won", new RaceWon(900f)));
+        runtime.ExecuteHostCommand(2, Command("race.finish", new RaceFinish(900f)));
         game.StateImpl.Summit = true;
         host.Tick(FeaturePhase.Always);
 
         Assert.Equal("RACE - FINISHED", game.HudImpl.StandingsTitle);
         Assert.Contains(game.HudImpl.Standings, row => row.Name.Contains("Guest") && row.Name.Contains("*"));
         Assert.DoesNotContain(game.HudImpl.Standings, row => row.IsLocal && row.Name.Contains("*"));
+    }
+
+    [Fact]
+    public void ToppingOutIsAClaimTheHostDecides()
+    {
+        var (runtime, host, game) = Create(new RaceFeature(), MultiplayerMode.Race, new Bridge(isHost: false));
+        runtime.ApplyState(HostState("race.started", new RaceStarted()));
+        game.PlayersImpl.LocalY = 0f;
+        host.Tick(FeaturePhase.Always);
+
+        // On this screen we were first; the host heard the guest first.
+        game.StateImpl.Summit = true;
+        host.Tick(FeaturePhase.Always);
+        Assert.NotEqual("RACE - FINISHED", game.HudImpl.StandingsTitle);
+        Assert.DoesNotContain(game.HudImpl.Standings, row => row.Name.Contains("*"));
+
+        runtime.ApplyState(HostState("race.result", new RaceResult(2, 300f)));
+        host.Tick(FeaturePhase.Always);
+
+        Assert.Equal("RACE - FINISHED", game.HudImpl.StandingsTitle);
+        Assert.Contains(game.HudImpl.Standings, row => row.Name.Contains("Guest") && row.Name.Contains("*"));
+        Assert.DoesNotContain(game.HudImpl.Standings, row => row.IsLocal && row.Name.Contains("*"));
+    }
+
+    [Fact]
+    public void ASecondClaimIsTurnedDown()
+    {
+        var (runtime, host, game) = Create(new RaceFeature(), MultiplayerMode.Race);
+        game.PlayersImpl.LocalY = 0f;
+        host.Tick(FeaturePhase.Always);
+
+        runtime.ExecuteHostCommand(2, Command("race.finish", new RaceFinish(500f)));
+        game.StateImpl.Summit = true;
+        host.Tick(FeaturePhase.Always);
+        var late = runtime.ExecuteHostCommand(2, Command("race.finish", new RaceFinish(600f)));
+
+        Assert.False(late.Committed);
+        Assert.Equal("Guest topped out first.", late.Reason);
+        Assert.Single(game.HudImpl.Standings, row => row.Name.Contains("*"));
+    }
+
+    [Fact]
+    public void ARaceHeardBeforeTheLobbyRulesIsNotLost()
+    {
+        var mode = MultiplayerMode.RopeTeam;
+        var (runtime, host, game) = Create(new RaceFeature(), bridge: new Bridge(isHost: false),
+            currentMode: () => mode);
+
+        // A latecomer: the replayed start lands before their own launch sets the mode.
+        runtime.ApplyState(HostState("race.started", new RaceStarted()));
+        host.Tick(FeaturePhase.Always);
+        Assert.Empty(game.HudImpl.Standings);
+
+        mode = MultiplayerMode.Race;
+        host.Tick(FeaturePhase.Always);
+
+        Assert.NotEmpty(game.HudImpl.Standings);
+        Assert.StartsWith("RACE - ", game.HudImpl.StandingsTitle);
+    }
+
+    [Fact]
+    public void ALatecomerHearsWhoAlreadyWon()
+    {
+        var (runtime, host, game) = Create(new RaceFeature(), MultiplayerMode.Race, new Bridge(isHost: false));
+
+        runtime.ApplyState(HostState("race.result", new RaceResult(2, 300f)));
+        runtime.ApplyState(HostState("race.started", new RaceStarted()));
+        host.Tick(FeaturePhase.Always);
+
+        Assert.Equal("RACE - FINISHED", game.HudImpl.StandingsTitle);
+        Assert.Contains(game.HudImpl.Standings, row => row.Name.Contains("Guest") && row.Name.Contains("*"));
     }
 
     [Fact]
@@ -686,6 +1009,18 @@ public sealed class GameplayRegressionTests
     }
 
     [Fact]
+    public void MarksStayOnTheFaceAcrossASceneBoundary()
+    {
+        var (runtime, host, game) = Create(new TrailMarksFeature());
+        runtime.ExecuteHostCommand(2, Command("marks.edit",
+            new TrailMarkEdit(new WorldPosition(1, 2, 3))));
+
+        host.NotifySceneReset();
+
+        Assert.Single(game.WorldImpl.Marks[2]);
+    }
+
+    [Fact]
     public void APartnerHangingOnYourRopeIsWeightYouCarry()
     {
         var (runtime, host, game) = Create(new ReviveFeature());
@@ -759,6 +1094,21 @@ public sealed class GameplayRegressionTests
     }
 
     [Fact]
+    public void ATallyIsAnsweredOncePerRecapRatherThanOncePerTally()
+    {
+        var bridge = new Bridge();
+        var (runtime, _, _) = Create(new AscentLogFeature(), bridge: bridge);
+
+        // Somebody asks, then another climber's answer arrives. Both are plain tallies, and
+        // answering every one of them kept two listeners replying to each other forever.
+        runtime.ExecuteHostCommand(2, Command("ascent.tally", new AscentTally(10f, 1, 0, 0)));
+        runtime.ExecuteHostCommand(2, Command("ascent.tally", new AscentTally(12f, 1, 0, 0)));
+
+        // Both tallies relayed, and a single answer of our own.
+        Assert.Equal(3, bridge.Events.Count(id => id == "ascent.tally.relayed"));
+    }
+
+    [Fact]
     public void EveryClimbersRouteIsRecordedWhetherOrNotItIsShown()
     {
         var (_, host, game) = Create(new ClimbTrailsFeature());
@@ -797,35 +1147,74 @@ public sealed class GameplayRegressionTests
     }
 
     private static (ExtensionRuntime runtime, FeatureHost host, Game game) Create(
-        MultiplayerFeature feature, MultiplayerMode mode = MultiplayerMode.RopeTeam)
+        MultiplayerFeature feature, MultiplayerMode mode = MultiplayerMode.RopeTeam, Bridge bridge = null,
+        Func<MultiplayerMode> currentMode = null)
     {
         var runtime = new ExtensionRuntime();
         var game = new Game();
-        var host = new FeatureHost(runtime, game, rules: () => MultiplayerModes.RulesFor(mode));
+        currentMode ??= () => mode;
+        var host = new FeatureHost(runtime, game, rules: () => MultiplayerModes.RulesFor(currentMode()));
         host.RegisterAll(new[] { feature }, new Version(1, 0));
-        runtime.Attach(new Bridge());
+        runtime.Attach(bridge ?? new Bridge());
         return (runtime, host, game);
     }
 
     private static ClientExtensionCommand Command(string id, IPacket payload)
+        => new() { RequestId = 1, ExtensionId = FeatureHost.CoreExtensionId, CommandId = id, Payload = Bytes(payload) };
+
+    /// <summary>What a client receives when the host publishes <paramref name="value"/>.</summary>
+    private static ServerExtensionState HostState(string id, IPacket value, ulong revision = 1)
+        => new() { ExtensionId = FeatureHost.CoreExtensionId, StateId = id, Revision = revision, Payload = Bytes(value) };
+
+    /// <summary>What a client receives when the host emits <paramref name="payload"/>.</summary>
+    private static ServerExtensionEvent HostEvent(string id, IPacket payload, int fromPlayerId = 2)
+        => new() { ExtensionId = FeatureHost.CoreExtensionId, EventId = id, SourcePlayerId = fromPlayerId, Payload = Bytes(payload) };
+
+    /// <summary>The condition the host holds for <paramref name="playerId"/>, as latecomers get it.</summary>
+    private static bool TryGetCondition(ExtensionRuntime runtime, int playerId, out ClimberCondition condition)
+    {
+        foreach (var state in runtime.SnapshotFor(FeatureHost.CoreExtensionId))
+        {
+            if (state.StateId != "revive.conditions" || state.ScopePlayerId != playerId || state.Removed) continue;
+            var message = new DownedChanged();
+            using var reader = new BinaryReader(new MemoryStream(state.Payload));
+            message.Deserialize(reader);
+            condition = message.Condition;
+            return true;
+        }
+        condition = default;
+        return false;
+    }
+
+    private static byte[] Bytes(IPacket payload)
     {
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
         payload.Serialize(writer);
-        return new ClientExtensionCommand { RequestId = 1, ExtensionId = FeatureHost.CoreExtensionId, CommandId = id, Payload = stream.ToArray() };
+        writer.Flush();
+        return stream.ToArray();
     }
 
     private sealed class Bridge : IExtensionNetworkBridge
     {
+        internal Bridge(bool isHost = true) => IsHost = isHost;
+
+        /// <summary>Every event the host relayed to the other peers, by event id.</summary>
+        internal readonly List<string> Events = new();
+        /// <summary>Every command a client sent to the host, by command id.</summary>
+        internal readonly List<string> Commands = new();
         public bool IsConnected => true;
-        public bool IsHost => true;
+        public bool IsHost { get; }
         public int LocalPlayerId => 1;
-        public MultiplayerPlayer LocalPlayer => new(1, "Host", true, true);
-        public IReadOnlyList<MultiplayerPlayer> Players => new[] { LocalPlayer, new MultiplayerPlayer(2, "Guest", false, false) };
+        public MultiplayerPlayer LocalPlayer => new(1, "Host", true, IsHost);
+        /// <summary>Everyone in the session but us. The guest by default.</summary>
+        internal readonly List<MultiplayerPlayer> Others = new();
+        public IReadOnlyList<MultiplayerPlayer> Players
+            => new[] { LocalPlayer, new MultiplayerPlayer(2, "Guest", false, !IsHost) }.Concat(Others).ToArray();
         public bool IsExtensionEnabled(string extensionId, int playerId) => true;
-        public void SendCommand(ClientExtensionCommand command) { }
+        public void SendCommand(ClientExtensionCommand command) => Commands.Add(command.CommandId);
         public void SendCommandResult(int targetPlayerId, ServerExtensionCommandResult result) { }
-        public void BroadcastEvent(ServerExtensionEvent message, string extensionId) { }
+        public void BroadcastEvent(ServerExtensionEvent message, string extensionId) => Events.Add(message.EventId);
         public void BroadcastState(ServerExtensionState state, string extensionId) { }
         public void ReportExtensionFailure(string extensionId, string message) { }
     }
@@ -866,6 +1255,12 @@ public sealed class GameplayRegressionTests
         public bool IsLocalPlayerInBivouac => InBivouac;
         internal bool Summit;
         public bool HasReachedSummit => Summit;
+        internal WorldPosition? Camp;
+        public bool TryGetCampPosition(out WorldPosition position)
+        {
+            position = Camp ?? default;
+            return Camp.HasValue;
+        }
     }
 
     private sealed class Spectator : ISpectatorApi
@@ -1073,9 +1468,15 @@ public sealed class GameplayRegressionTests
     {
         internal float TargetX = 2;
         internal IReadOnlyList<int> InGame = Array.Empty<int>();
+        internal IReadOnlyList<int> Camping = Array.Empty<int>();
         internal float LocalY;
         public IReadOnlyList<int> RemotePlayersInGame => InGame;
         public IReadOnlyList<int> RemoteSleepParticipants => new[] { 2 };
+        public IReadOnlyList<int> RemotePlayersInGameOrBivouac => InGame.Concat(Camping).ToArray();
+        public bool IsRemotePlayerInBivouac(int playerId) => Camping.Contains(playerId);
+        /// <summary>False while the local climber is camped: the real adapter has no location
+        /// for them then, because gameplay sync stands down in a bivouac.</summary>
+        internal bool LocalLocationKnown = true;
         public bool TryGetLocation(int playerId, out PlayerLocation location)
         {
             location = playerId switch
@@ -1084,7 +1485,7 @@ public sealed class GameplayRegressionTests
                 2 => new PlayerLocation(TargetX, 0, 0, "Test", PlayerState.InGame),
                 _ => default,
             };
-            return playerId is 1 or 2;
+            return (playerId == 1 && LocalLocationKnown) || playerId == 2;
         }
         public bool TryCaptureHandPose(out byte[] packed) { packed = null; return false; }
         public bool TryCaptureAppearance(out int packed) { packed = 0; return false; }

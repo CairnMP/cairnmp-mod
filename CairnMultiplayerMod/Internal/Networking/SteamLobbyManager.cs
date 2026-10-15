@@ -566,6 +566,12 @@ namespace CairnMultiplayerMod.Internal.Networking
             if (string.IsNullOrWhiteSpace(code))
                 return Task.FromResult(false);
 
+            if (IsInLobby)
+            {
+                ModLog.Warning("[SteamLobby] JoinByCode called while already in a lobby — leaving first.");
+                Leave();
+            }
+
             _joinTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             BeginOperation("Join lobby by code");
             _pendingJoinCode = NormalizeCode(code);
@@ -592,6 +598,17 @@ namespace CairnMultiplayerMod.Internal.Networking
             if (_joinTcs != null) return _joinTcs.Task;
             if (HasPendingOperation())
                 return BusyBoolTask("Another Steam lobby operation is already running.");
+            if (IsInLobby && CurrentLobbyId.m_SteamID == lobbyId64)
+                return Task.FromResult(true);
+
+            if (IsInLobby)
+            {
+                // A Steam overlay invite lands here mid-session. Joining on top of the current
+                // lobby never left it: a failed join then reset our state while Steam still
+                // held us there — as owner, freezing everyone else in it.
+                ModLog.Warning("[SteamLobby] JoinById called while already in a lobby — leaving first.");
+                Leave();
+            }
 
             _joinTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             BeginOperation("Join lobby");

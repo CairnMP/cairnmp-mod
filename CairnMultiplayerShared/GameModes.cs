@@ -97,7 +97,7 @@ public static class MultiplayerModes
         GameDifficulty.FreeSolo,
         ClimbConstraints.PermaDeath,
         teammateRevive: false,
-        bivouacRevive: true,
+        bivouacRevive: false,
         spectateAfterDeath: true);
 
     public static readonly MultiplayerModeRules Race = new(

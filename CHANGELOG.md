@@ -39,6 +39,69 @@ All notable CairnMP changes are documented here. Releases follow
 
 ---
 
+## [Unreleased]
+
+> Protocol **15**. Taking up someone else's piton is now reported to the host, and the
+> race and revive features changed their messages: every player in a lobby must run the
+> same build.
+
+### Changed
+
+- Free solo keeps its word: death is final. A camp no longer brings the fallen back in
+  this mode; they keep watching, as the mode says.
+
+### Fixed
+
+- The game mode picked in the panel is applied: every lobby used to be created as Rope
+  team. Every client now knows the lobby's mode from the moment it joins.
+- `/recap` with three or more players no longer starts a stream of replies that never
+  ends.
+- Race: the host referees the finish, so two climbers topping out together no longer
+  each see themselves as the winner. A latecomer no longer misses the start, and is told
+  who already won.
+- Downed climbers stay clipped to their partner, so carrying them costs endurance as
+  intended. The revive prompt's collider is kept on ghosts, and a ghost that spawned as
+  a placeholder is rebuilt as the real climber once the game can provide it.
+- Who is down is known to latecomers too. The last climber to fall now tells the others,
+  and a run that ends no longer announces the climber back on their feet.
+- Rescues are confirmed by the host before the healing item is spent: two rescuers
+  reaching the same body no longer lose an item each, and a rescue from out of reach is
+  refused. A call back to camp is only accepted from a climber actually at one.
+- Calling the fallen back to camp with **R** works, and a teammate sitting at camp counts
+  as still standing.
+- Ending a session while down plays the death out instead of leaving the climber in a
+  dead body with no menu.
+- Pitons: taking up a piton someone else placed removes it for everyone, so it can no
+  longer end up in two bags. Pitons placed while a player is loading, camping or still in
+  the menu are no longer lost. After a reload, saved pitons are recognised instead of
+  being announced again as duplicates.
+- A client that restarts its game and rejoins can give and drop items again straight
+  away.
+- Ground items: an item being picked up keeps its place, so a full ground no longer
+  destroys it. Stale ground-item icons are cleaned up.
+- Trail marks are drawn again after a camp or a reload, and climb trails are kept.
+- A camping player's ghost is hidden instead of standing at the world origin, and
+  players who left no longer come back as frozen ghosts.
+- A stuck bivouac flag no longer suspends synchronization every few seconds.
+- Voice: output is kept for 30 seconds of silence, so the start of a sentence is no
+  longer lost; mutes survive scene changes; the speaking icon stays visible.
+- The CairnMP settings button is no longer duplicated after a camp, and the fallback
+  panel no longer leaks resources each time it opens.
+- Quitting to the main menu from the pause menu no longer leaves the chat closed and the
+  main menu counted as gameplay.
+- One malformed packet no longer stops the host from reading the others, and animation
+  positions are bounded like every other position.
+- Accepting a Steam invite while already in a lobby leaves that lobby first. A failed
+  create or join updates the panel from the game thread.
+
+### Compatibility
+
+- Protocol **14 → 15**: `ClientPitonRecovered` and `ServerPitonRecovered` are new, and
+  the `race` and `revive` feature contracts changed. All lobby members must use the same
+  build.
+
+---
+
 ## [2.3.0] — 2026-09-18 (beta)
 
 > This beta uses protocol 14. Every player in a lobby must run CairnMP 2.3.0;

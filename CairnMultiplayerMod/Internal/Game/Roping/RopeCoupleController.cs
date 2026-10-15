@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Internal.Diagnostics;
+using CairnMultiplayerMod.Internal.Game.Life;
 using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Networking;
 using Il2CppTheGameBakers.Cairn.Netplay;
@@ -12,6 +13,11 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 internal sealed class RopeCoupleController
 {
     private const float RopeClipRangeMeters = 3f;
+
+    /// <summary>How long a fresh death counts as undecided: the game rules on the death screen
+    /// a moment after the body goes limp, and the rope must not be cut before it has.</summary>
+    private const float DeathDecisionGraceSeconds = 2f;
+
     internal const string ToggleKeyName = "L";
     private static readonly Key ToggleKey = System.Enum.Parse<Key>(ToggleKeyName);
 
@@ -20,6 +26,7 @@ internal sealed class RopeCoupleController
 
     // Hard teardown is broadcast once per episode to avoid reliable-packet spam.
     private bool _ropeHardTornDown;
+    private float _deadSince = -1f;
 
     internal RopeCoupleController(NetworkManager network, RuntimeState state)
     {
@@ -56,7 +63,15 @@ internal sealed class RopeCoupleController
                         && lifecycle == CairnGameLifecycleState.GameOver;
         bool atMainMenu = SceneRoles.IsMainMenuArea(_state.CurrentScene);
 
-        bool hardUnsafe = !connected || dead || gameOver || atMainMenu;
+        if (!dead) _deadSince = -1f;
+        else if (_deadSince < 0f) _deadSince = Time.unscaledTime;
+        // A climber down and waiting for help has not left the rope: Cairn's own rope teams
+        // carry a corpse, and the partner pays for it in endurance. Only a death that plays
+        // out breaks the link.
+        bool downed = dead && (DeathScreenPatch.IsHoldingDeath
+                               || Time.unscaledTime - _deadSince < DeathDecisionGraceSeconds);
+
+        bool hardUnsafe = !connected || (dead && !downed) || gameOver || atMainMenu;
 
         if (hardUnsafe)
         {
@@ -77,9 +92,11 @@ internal sealed class RopeCoupleController
 
         _ropeHardTornDown = false;
 
-        if (!inGame && RopeInterop.HasRopeTeamAnchors)
+        // The body keeps its link but not its anchors: a dead pawn is no harness to hang
+        // the rope from. The partner's side still holds it.
+        if ((downed || !inGame) && RopeInterop.HasRopeTeamAnchors)
             RopeInterop.ReleaseAllAnchors();
-        return inGame;
+        return inGame && !downed;
     }
 
     private void TearDownAllLocalRopeLinks(string reason)

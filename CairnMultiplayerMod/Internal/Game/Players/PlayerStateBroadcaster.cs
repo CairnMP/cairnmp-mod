@@ -82,31 +82,7 @@ internal sealed class PlayerStateBroadcaster
 
 
             if (_state.LocalPlayerState == PlayerState.InGame)
-            {
-                for (var discovered = 0; discovered < 32 && RopeInterop.CheckForNewPiton(out var pitonId, out var pitonPos,
-                    out var pitonRot, out var pitonQuality, out var pitonHp, out var pitonItemId); discovered++)
-                {
-                    _network.SendPitonPlaced(new ClientPitonPlaced
-                    {
-                        PitonId = pitonId,
-                        PosX = pitonPos.x,
-                        PosY = pitonPos.y,
-                        PosZ = pitonPos.z,
-                        RotX = pitonRot.x,
-                        RotY = pitonRot.y,
-                        RotZ = pitonRot.z,
-                        RotW = pitonRot.w,
-                        Quality = pitonQuality,
-                        PitonHp = pitonHp,
-                        ItemId = pitonItemId,
-                    });
-                }
-
-                for (var removed = 0; removed < 32 && RopeInterop.CheckForRemovedPiton(out var removedPitonId); removed++)
-                {
-                    _network.SendPitonRemoved(removedPitonId);
-                }
-            }
+                RopeInterop.SyncPitons(_network);
 
             RemotePlayerManager.Reconcile(_network, _state.LocalPlayerState);
             RemotePlayerManager.UpdateAll(_network, _state.LocalPlayerState, _isSpeaking);

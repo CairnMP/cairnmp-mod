@@ -120,10 +120,12 @@ internal sealed class InventoryAdapter : IInventoryApi
                 if (!_groundVisuals.ContainsKey(item.Id)) CreateGroundVisual(item);
             }
 
-        if (_groundVisuals.Count == keep.Count) return;
-        var removed = new List<uint>();
+        // No count shortcut: a kept item whose visual could not be built yet and a removed
+        // one whose visual still exists balance out, and the stale one was never destroyed.
+        List<uint> removed = null;
         foreach (var pair in _groundVisuals)
-            if (!keep.Contains(pair.Key)) removed.Add(pair.Key);
+            if (!keep.Contains(pair.Key)) (removed ??= new List<uint>()).Add(pair.Key);
+        if (removed == null) return;
         foreach (var id in removed) DestroyGroundVisual(id);
     }
 

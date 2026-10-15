@@ -9,6 +9,16 @@ internal interface IPlayersApi
     IReadOnlyList<int> RemotePlayersInGame { get; }
     IReadOnlyList<int> RemoteSleepParticipants { get; }
 
+    /// <summary>
+    /// Remote climbers still in the run: on the wall, or camped in a bivouac. A camper is
+    /// missing from <see cref="RemotePlayersInGame"/> — gameplay sync stands down at camp —
+    /// yet they are exactly the teammate who can call the fallen back.
+    /// </summary>
+    IReadOnlyList<int> RemotePlayersInGameOrBivouac { get; }
+
+    /// <summary>True while that remote player is camped in a bivouac.</summary>
+    bool IsRemotePlayerInBivouac(int playerId);
+
     bool TryGetLocation(int playerId, out PlayerLocation location);
 
     bool TryCaptureHandPose(out byte[] packed);

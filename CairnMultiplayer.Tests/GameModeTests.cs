@@ -51,6 +51,9 @@ public class GameModeTests
         var rules = MultiplayerModes.RulesFor(MultiplayerMode.FreeSolo);
 
         Assert.False(rules.TeammateRevive);
+        // "Death is final": no camp brings anyone back either.
+        Assert.False(rules.BivouacRevive);
+        Assert.Equal(new[] { "Watch after death" }, MultiplayerModeText.Promises(rules));
         Assert.True(rules.SpectateAfterDeath);
         Assert.True(rules.ExtraConstraints.HasFlag(ClimbConstraints.PermaDeath));
         Assert.Equal(GameDifficulty.FreeSolo, rules.Difficulty);

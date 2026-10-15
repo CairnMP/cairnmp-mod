@@ -28,6 +28,7 @@ internal sealed class AscentLogFeature : MultiplayerFeature
     private float _startHeight, _startedAt, _climbed;
     private int _falls, _times;
     private float _showUntil;
+    private float _answeredUntil;
 
     public override string Id => "ascent";
 
@@ -104,9 +105,16 @@ internal sealed class AscentLogFeature : MultiplayerFeature
     private void OnTeamTally(int fromPlayerId, AscentTally tally)
     {
         _team[fromPlayerId] = tally;
-        // Somebody asking pulls everyone's tally, so answer with ours unless we just asked.
-        if (Game.Time.UnscaledTime > _showUntil) _tally.Send(Snapshot());
-        if (_showUntil > Game.Time.UnscaledTime) ShowRecap();
+        var now = Game.Time.UnscaledTime;
+        // Somebody asking pulls everyone's tally, so answer with ours unless we just asked —
+        // and only once per recap. The answers are tallies too: answering those as well kept
+        // every pair of listeners replying to each other for the rest of the session.
+        if (now > _showUntil && now > _answeredUntil)
+        {
+            _answeredUntil = now + RecapSeconds;
+            _tally.Send(Snapshot());
+        }
+        if (_showUntil > now) ShowRecap();
     }
 
     private void TickRecap()
@@ -148,6 +156,7 @@ internal sealed class AscentLogFeature : MultiplayerFeature
         _falls = 0;
         _times = 0;
         _showUntil = 0f;
+        _answeredUntil = 0f;
         Game.Hud.HideStandings();
     }
 }

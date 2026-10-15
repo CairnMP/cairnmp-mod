@@ -6,6 +6,14 @@ namespace CairnMultiplayerMod.Internal.Networking;
 
 internal sealed partial class NetworkManager
 {
+    /// <summary>
+    /// Only a lobby member may be created from a relayed packet. The host keeps forwarding a
+    /// leaver's frames until it sees the leave itself, and recreating them from those
+    /// stragglers left a frozen ghost that no membership refresh ever removed — the refresh
+    /// only walks the players it knows from the lobby.
+    /// </summary>
+    private bool IsLobbyPlayer(int playerId) => _steamIdsByPlayerId.ContainsKey(playerId);
+
     private void HandlePlayerState(BinaryReader reader)
     {
         var packet = new ServerPlayerState();
@@ -14,6 +22,7 @@ internal sealed partial class NetworkManager
 
         if (!_remotePlayers.TryGetValue(packet.PlayerId, out var player))
         {
+            if (!IsLobbyPlayer(packet.PlayerId)) return;
             player = new RemotePlayer { Id = packet.PlayerId, Name = $"Player{packet.PlayerId}" };
             _remotePlayers[packet.PlayerId] = player;
         }
@@ -64,6 +73,7 @@ internal sealed partial class NetworkManager
 
         if (!_remotePlayers.TryGetValue(playerId, out var player))
         {
+            if (!IsLobbyPlayer(playerId)) return;
             player = new RemotePlayer
             {
                 Id = playerId,

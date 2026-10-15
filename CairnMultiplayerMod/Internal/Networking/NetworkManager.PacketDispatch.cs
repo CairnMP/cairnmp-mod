@@ -76,6 +76,9 @@ internal sealed partial class NetworkManager
             case PacketId.ServerPitonRemoved:
                 HandlePitonRemoved(reader);
                 break;
+            case PacketId.ServerPitonRecovered:
+                HandlePitonRecovered(reader);
+                break;
             case PacketId.ServerTeleport:
                 HandleTeleport(reader);
                 break;

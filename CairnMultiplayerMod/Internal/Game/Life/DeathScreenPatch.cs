@@ -65,9 +65,16 @@ internal static class DeathScreenPatch
     {
         _keepHolding = null;
         _onWentDown = null;
+        IsHoldingDeath = false;
     }
 
     internal static bool IsHolding => _keepHolding != null;
+
+    /// <summary>
+    /// True from the moment a death is held back until it plays out. Standing back up does
+    /// not clear it — the climber simply stops being dead — so read it alongside the pawn.
+    /// </summary>
+    internal static bool IsHoldingDeath { get; private set; }
 
     /// <summary>
     /// Replays the death the game already decided on. The hold is bypassed for this one call
@@ -90,6 +97,7 @@ internal static class DeathScreenPatch
                 return;
             }
 
+            IsHoldingDeath = false;
             _replaying = true;
             try { _onDeath.Invoke(menu, null); }
             finally { _replaying = false; }
@@ -105,6 +113,7 @@ internal static class DeathScreenPatch
     {
         if (_replaying) return true;
 
+        IsHoldingDeath = false;
         var keepHolding = _keepHolding;
         if (keepHolding == null) return true;
 
@@ -119,6 +128,7 @@ internal static class DeathScreenPatch
 
         if (!hold) return true;
 
+        IsHoldingDeath = true;
         try { _onWentDown?.Invoke(); }
         catch (Exception exception) { ModLog.SuppressedException("life.went-down", exception); }
         return false;

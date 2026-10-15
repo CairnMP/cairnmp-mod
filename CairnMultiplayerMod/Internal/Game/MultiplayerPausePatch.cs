@@ -90,6 +90,13 @@ internal static unsafe class MultiplayerPausePatch
         }
     }
 
+    /// <summary>
+    /// Arriving at the main menu ends any pause menu. "Quit to main menu" can leave without
+    /// the menu's closing callback, and a pause state left behind made the real main menu
+    /// count as gameplay for the network and kept the chat closed.
+    /// </summary>
+    internal static void OnMainMenuLoaded() => Suppression.Reset();
+
     public static void Uninstall()
     {
         try { MpPauseHarmony.UnpatchSelf(); }

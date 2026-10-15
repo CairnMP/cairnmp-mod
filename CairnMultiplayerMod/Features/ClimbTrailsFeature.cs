@@ -31,7 +31,8 @@ internal sealed class ClimbTrailsFeature : MultiplayerFeature
 
         feature.EveryFrame(Tick, FeaturePhase.Always);
         feature.OnPlayerLeft((playerId, _) => Game.World.ForgetTrail(playerId));
-        feature.OnSceneReset(() => Game.World.ClearTrails());
+        // No scene-reset clear: those fire on zone streaming and every bivouac, and the
+        // routes belong to the session. The lines survive scene loads on their own.
         feature.OnSessionEnded(() =>
         {
             Game.World.SetTrailsVisible(false);

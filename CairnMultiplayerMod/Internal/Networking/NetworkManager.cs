@@ -42,6 +42,8 @@ namespace CairnMultiplayerMod.Internal.Networking
         public event Action<ServerStartGame> OnStartGameReceived;
         public event Action<ServerPitonPlaced> OnPitonPlaced;
         public event Action<ServerPitonRemoved> OnPitonRemoved;
+        /// <summary>Another climber took up one of our pitons; carries our own id for it.</summary>
+        public event Action<uint> OnOwnPitonRecovered;
         public event Action<ServerTeleport> OnTeleport;
 
         public event Action<int, ushort, byte[]> OnFeatureStream;
@@ -133,6 +135,13 @@ namespace CairnMultiplayerMod.Internal.Networking
         {
             if (IsSteamTransportActive)
                 SendSteamPitonRemoved(pitonId);
+        }
+
+        /// <summary>Reports taking up someone else's piton, by the host's id for it.</summary>
+        public void SendPitonRecovered(uint pitonId)
+        {
+            if (IsSteamTransportActive)
+                SendSteamPitonRecovered(pitonId);
         }
 
         /// <summary>
