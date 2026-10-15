@@ -186,7 +186,7 @@ Generated references remain local and must never be committed.
 
 Select **CairnMP** in Rider’s run-configuration menu. The shared profiles build in
 Debug, deploy the DLLs and PDBs, then start `Cairn.exe` with
-`--cairnloader.debug`.
+`--melonloader.debug`.
 
 | Profile or action | Result |
 | --- | --- |
@@ -194,7 +194,7 @@ Debug, deploy the DLLs and PDBs, then start `Cairn.exe` with
 | **Debug** (`Shift+F9`) | Launch with the CoreCLR debugger |
 | **CairnMP - Build Debug** | Build and deploy without launching |
 
-Although Cairn uses IL2CPP, CairnLoader hosts the mod in **.NET 6**. Keep Rider’s
+Although Cairn uses IL2CPP, MelonLoader hosts the mod in **.NET 6**. Keep Rider’s
 runtime set to **.NET / .NET Core** (`RUNTIME_TYPE=coreclr`), not Auto, .NET
 Framework, or Unity/Mono. CoreCLR debugging has been verified at
 `Mod.OnInitializeMelon`, including local values; it does not restore the original
@@ -222,7 +222,7 @@ Choose one setup:
 The default IL2CPP location is:
 
 ```text
-%LOCALAPPDATA%\CairnMultiplayerData\game\CairnLoader\Il2CppAssemblies
+%LOCALAPPDATA%\CairnMultiplayerData\game\MelonLoader\Il2CppAssemblies
 ```
 
 ## Build and test

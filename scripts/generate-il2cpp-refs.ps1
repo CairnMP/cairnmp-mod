@@ -3,10 +3,10 @@ $ErrorActionPreference = "Stop"
 $Root = Resolve-Path "$PSScriptRoot/.."
 $GameDir = "$env:LOCALAPPDATA\CairnMultiplayerData\game"
 
-if ($env:CAIRNLOADER_OUTPUT_DIR) {
-    $CairnLoaderSrc = $env:CAIRNLOADER_OUTPUT_DIR
+if ($env:MELONLOADER_OUTPUT_DIR) {
+    $MelonLoaderSrc = $env:MELONLOADER_OUTPUT_DIR
 } else {
-    $CairnLoaderSrc = Join-Path $Root "..\cairnmp-launcher\launcher\cairnloader\Output\Release\win-x64"
+    $MelonLoaderSrc = Join-Path $Root "..\MelonLoader\Output\Release\win-x64"
 }
 $OutputDir = Join-Path $Root "game-refs\Il2CppAssemblies"
 
@@ -20,23 +20,20 @@ if (-not (Test-Path "$GameDir\Cairn.exe")) {
     throw "Game directory not found"
 }
 
-if (-not (Test-Path "$CairnLoaderSrc\version.dll")) {
-    Write-Host "  ERROR: CairnLoader not built at $CairnLoaderSrc" -ForegroundColor Red
-    Write-Host "  Build it in the cairnmp-launcher repo:" -ForegroundColor Yellow
-    Write-Host "    dotnet build launcher/cairnloader/MelonLoader.sln -c Release -p:Platform=x64" -ForegroundColor Yellow
-    Write-Host "  Or set CAIRNLOADER_OUTPUT_DIR to its output directory." -ForegroundColor Yellow
-    throw "CairnLoader build output not found"
+if (-not (Test-Path "$MelonLoaderSrc\version.dll")) {
+    Write-Host "  ERROR: MelonLoader not found at $MelonLoaderSrc" -ForegroundColor Red
+    Write-Host "  Build the cairnmp branch of github.com/yutho-o/MelonLoader beside this repo:" -ForegroundColor Yellow
+    Write-Host "    dotnet build -c Release -p:Platform=x64" -ForegroundColor Yellow
+    Write-Host "  Or extract its MelonLoader.x64.zip release and set MELONLOADER_OUTPUT_DIR to it." -ForegroundColor Yellow
+    throw "MelonLoader build output not found"
 }
 
-Write-Host "  [1/4] Installing CairnLoader into game directory..." -ForegroundColor DarkGray
-Copy-Item -Force "$CairnLoaderSrc\version.dll" "$GameDir\version.dll"
+Write-Host "  [1/4] Installing MelonLoader into game directory..." -ForegroundColor DarkGray
+Copy-Item -Force "$MelonLoaderSrc\version.dll" "$GameDir\version.dll"
 if (Test-Path "$GameDir\dobby.dll") { Remove-Item -Force "$GameDir\dobby.dll" }
-if (Test-Path "$CairnLoaderSrc\dobby.dll") {
-    Copy-Item -Force "$CairnLoaderSrc\dobby.dll" "$GameDir\dobby.dll"
-}
-$LoaderDir = Join-Path $GameDir "CairnLoader"
+$LoaderDir = Join-Path $GameDir "MelonLoader"
 if (Test-Path $LoaderDir) { Remove-Item -Recurse -Force $LoaderDir }
-Copy-Item -Recurse -Force "$CairnLoaderSrc\CairnLoader" "$LoaderDir"
+Copy-Item -Recurse -Force "$MelonLoaderSrc\MelonLoader" "$LoaderDir"
 Write-Host "  Done." -ForegroundColor Green
 
 Write-Host "  [2/4] Launching Cairn to generate Il2Cpp assemblies..." -ForegroundColor DarkGray
