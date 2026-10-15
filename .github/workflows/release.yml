@@ -1,0 +1,130 @@
+# Publishes the mod when a `v*` tag is pushed. The GitHub release it creates is all the
+# launcher needs: players are offered it as soon as it is published, with no other step.
+#
+#   1. bump versions.json, run `node scripts/sync-versions.js`;
+#   2. turn `## [Unreleased]` into `## [x.y.z] — date (beta|stable)` in CHANGELOG.md;
+#   3. commit, `git tag vx.y.z`, push the tag.
+#
+# A "(beta)" heading publishes a pre-release, which only the launcher's beta channel
+# installs. Promoting it later is a matter of unticking "pre-release" on GitHub.
+#
+# Building needs the game's generated assemblies, which cannot be public: they come from
+# the private CairnMP/cairnmp-game-refs repository (filled by scripts/export-game-refs.ps1),
+# read with the GAME_REFS_DEPLOY_KEY secret. The loader references come from the public
+# MelonLoader archive the launcher installs (keep MELONLOADER_URL/SHA256 in step with it).
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      MELONLOADER_URL: https://github.com/yutho-o/MelonLoader/releases/download/v0.7.2-cairnmp.1/MelonLoader.x64.zip
+      MELONLOADER_SHA256: ce75f04ae966f64e26b1761f1164f1ac8464cee05b35ba541c3e6875fa2f5d98
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      # Fails in seconds, before any build, when the tag, versions.json and the
+      # changelog disagree.
+      - name: Read the release from versions.json and CHANGELOG.md
+        id: info
+        shell: bash
+        run: |
+          node scripts/sync-versions.js --check
+          node scripts/release-info.js "$TAG" "$RUNNER_TEMP/release-notes.md" >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
+      # The mod targets net6.0 and its tests run on it; the SDK comes from global.json.
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+          dotnet-version: 6.0.x
+
+      - name: Fetch the loader references
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'melonloader.zip'
+          Invoke-WebRequest -Uri $env:MELONLOADER_URL -OutFile $zip
+          $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          if ($hash -ne $env:MELONLOADER_SHA256) { throw "MelonLoader archive checksum mismatch ($hash)" }
+          $out = New-Item -ItemType Directory -Force 'game-refs/MelonLoader'
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead($zip)
+          try {
+            foreach ($name in 'MelonLoader.dll', 'Il2CppInterop.Runtime.dll', '0Harmony.dll') {
+              # Separators differ between archivers: compare normalised names.
+              $entry = $archive.Entries | Where-Object { $_.FullName.Replace('\', '/') -eq "MelonLoader/net6/$name" } | Select-Object -First 1
+              if (-not $entry) { throw "MelonLoader/net6/$name is missing from the loader archive" }
+              [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, (Join-Path $out $name), $true)
+            }
+          } finally { $archive.Dispose() }
+
+      - name: Check the game references are reachable
+        shell: bash
+        env:
+          HAS_KEY: ${{ secrets.GAME_REFS_DEPLOY_KEY != '' }}
+        run: |
+          if [ "$HAS_KEY" != "true" ]; then
+            echo "::error::The GAME_REFS_DEPLOY_KEY secret is missing: the build cannot reach CairnMP/cairnmp-game-refs (see README, Publish a release)."
+            exit 1
+          fi
+
+      - name: Fetch the game references
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: CairnMP/cairnmp-game-refs
+          ssh-key: ${{ secrets.GAME_REFS_DEPLOY_KEY }}
+          path: game-refs/Il2CppAssemblies
+          persist-credentials: false
+
+      - name: Restore locked dependencies
+        run: dotnet restore CairnMultiplayer.sln --locked-mode
+
+      - name: Build and test
+        run: dotnet test CairnMultiplayer.sln -c Release --no-restore -p:DeployMod=false -p:PackageOnSolutionBuild=false --nologo -v minimal
+
+      - name: Package
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.info.outputs.version }}
+        run: |
+          ./scripts/package-mod.ps1 -SkipBuild -OutputDirectory dist
+          $name = "cairnmp-mod-$env:VERSION.zip"
+          $hash = (Get-FileHash -Algorithm SHA256 "dist/$name").Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText("dist/$name.sha256", "$hash  $name`n")
+
+      - name: Publish the GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.info.outputs.version }}
+          TITLE: ${{ steps.info.outputs.title }}
+          PRERELEASE: ${{ steps.info.outputs.prerelease }}
+        run: |
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" \
+            "dist/cairnmp-mod-$VERSION.zip" "dist/cairnmp-mod-$VERSION.zip.sha256" \
+            --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "$TITLE" --notes-file "$RUNNER_TEMP/release-notes.md" \
+            "${flags[@]}"
