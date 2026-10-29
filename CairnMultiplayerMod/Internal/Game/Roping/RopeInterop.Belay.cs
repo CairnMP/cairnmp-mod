@@ -67,12 +67,6 @@ internal static partial class RopeInterop
         ReleaseAllAnchors();
         return false; // Never enter native physics after disposing its attachments.
     }
-    internal static bool ProvidesBelay(Lifeline lifeline)
-        => IsNativeBelayEngaged && _ropeBinding?.Owns(lifeline) == true && _ropeBinding.CanProvideBelay;
-    internal static bool BeginPersonalRopeOperation(Lifeline lifeline)
-        => _ropeBinding?.BeginPersonalOperation(lifeline) == true;
-    internal static void EndPersonalRopeOperation(Lifeline lifeline)
-        => _ropeBinding?.EndPersonalOperation(lifeline);
 
     public static void ReleaseAllAnchors()
     {
@@ -97,7 +91,6 @@ internal static partial class RopeInterop
     {
         private readonly Harness _local, _partner;
         private readonly Lifeline _lifeline;
-        private LogicalRope _personalRope;
         private readonly LogicalRope _source;
         private readonly float _length;
         private GameObject _root;
@@ -106,22 +99,20 @@ internal static partial class RopeInterop
         private LogicalRopeRenderer _renderer;
         private GameObject _outfitWithHarness, _outfitWithoutHarness;
         private bool _outfitWithHarnessWasActive, _outfitWithoutHarnessWasActive;
-        private int _createdFrame, _personalOperationDepth;
+        private int _createdFrame;
         private Vector3 _lastLocal, _lastPartner;
         private bool _attached, _disposed;
 
         internal NativeRopeBinding(Harness local, Harness partner, Lifeline lifeline, LogicalRope source, float length)
         {
             _local = local; _partner = partner; _lifeline = lifeline;
-            _personalRope = lifeline.securingRope; _source = source; _length = length;
+            _source = source; _length = length;
         }
         internal bool Matches(Harness local, Harness partner)
             => _local != null && _partner != null && _local.Pointer == local.Pointer && _partner.Pointer == partner.Pointer;
         internal bool Owns(LogicalRope rope) => _rope != null && rope != null && _rope.Pointer == rope.Pointer;
-        internal bool Owns(Lifeline lifeline) => _lifeline != null && lifeline != null && _lifeline.Pointer == lifeline.Pointer;
         internal bool HasBothAttachments => !_disposed && _attached && _rope != null && _local != null && _partner != null
             && _rope.IsAttached(_local.Cast<IRopeHolder>()) && _rope.IsAttached(_partner.Cast<IRopeHolder>());
-        internal bool CanProvideBelay => _personalOperationDepth == 0 && HasBothAttachments;
 
         public bool IsReady
         {
@@ -216,9 +207,9 @@ internal static partial class RopeInterop
             _rope.SyncRenderer();
             _attached = true;
             if (!HasBothAttachments) return false;
-            // Cairn's shared-rope mode selects its dedicated rope on the Lifeline.
-            // Secured-fall code reads this property again to calculate rope length.
-            _lifeline.securingRope = _rope;
+            // Never the Lifeline's securing rope. Cairn would hang new quickdraws on it, measure
+            // the rope left from a piton it does not hold (shown as "0 m") and look for that
+            // piton in a secured fall. The climber's own rope and pitons keep protecting them.
             _rope.enabled = true;
             SetHarnessVisual();
             ModLog.Info("[RopeTeam] Direct harness rope attached (no piton), max=" + _length
@@ -262,8 +253,8 @@ internal static partial class RopeInterop
         {
             try
             {
-                // Once our direct rope is detached, IsSecured reports real pitons only.
-                // A piton placed during the link must keep its native harness appearance.
+                // IsSecured counts real pitons only: one placed during the link keeps its
+                // native harness appearance.
                 var keepHarness = _lifeline != null && _lifeline.IsSecured(1);
                 if (_outfitWithHarness != null)
                 {
@@ -308,34 +299,10 @@ internal static partial class RopeInterop
             if (body != null) { body.position = marker.position; body.rotation = marker.rotation; }
         }
 
-        internal bool BeginPersonalOperation(Lifeline lifeline)
-        {
-            if (!Owns(lifeline) || !_attached || _disposed) return false;
-            if (_personalOperationDepth == 0) _lifeline.securingRope = _personalRope;
-            _personalOperationDepth++;
-            return true;
-        }
-        internal void EndPersonalOperation(Lifeline lifeline)
-        {
-            if (!Owns(lifeline) || _personalOperationDepth <= 0) return;
-            if (--_personalOperationDepth == 0)
-            {
-                _personalRope = _lifeline.securingRope;
-                if (!_disposed && _attached) _lifeline.securingRope = _rope;
-            }
-        }
-
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true; _attached = false;
-            try
-            {
-                if (_lifeline != null && _rope != null && _lifeline.securingRope != null
-                    && _lifeline.securingRope.Pointer == _rope.Pointer)
-                    _lifeline.securingRope = _personalRope;
-            }
-            catch (Exception ex) { ModLog.Warning("[RopeTeam] Personal rope restoration failed: " + ex.Message); }
             try { if (_rope != null && _rope.IsInitialized) _rope.DetachAll(); }
             catch (Exception ex) { ModLog.Warning("[RopeTeam] Native detach failed: " + ex.Message); }
             finally
