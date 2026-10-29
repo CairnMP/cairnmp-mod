@@ -37,12 +37,12 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 | Area | Included functionality |
 | --- | --- |
-| Climbing | Roped climbing and belay synchronization |
+| Climbing | A cooperative rope between partners; your own pitons protect your falls |
 | Players | Position, animation, cosmetics, lamps, hand and finger poses |
 | World | Weather, time of day, pitons, shared ground items, and world pings |
 | Communication | In-game chat, completion, host commands, and experimental proximity voice |
 | Sessions | Steam relay hosting, late-join state, and host-authoritative validation |
-| Modes | Playable FreeRoam and synchronized bivouac behavior |
+| Modes | Rope team, free solo and race, with synchronized bivouac behavior |
 | Reliability | Local crash reports, bounded diagnostics, and isolated feature failures |
 
 ## Player guide
