@@ -63,7 +63,7 @@ internal static partial class BivouacDiagnostics
                    $"inputHandle={DescribeNull(taping.inputHandle)} prompts={DescribeNull(taping.inputPromptGroup)} " +
                    $"stick={DescribeNull(taping.stickGroup)} bandage={DescribeNull(taping.bandageCanvasGroup)} " +
                    $"pushNearClip={DescribeNull(taping.pushNearClip)} fingerStates={DescribeNull(taping.fingersGameStates)} " +
-                   $"models={DescribeNull(taping.models)} parameters={DescribeNull(taping.tapingParametersPerFinger)}";
+                   $"parameters={DescribeNull(taping.tapingParametersPerFinger)}";
         }
         catch (Exception ex)
         {
@@ -106,7 +106,7 @@ internal static partial class BivouacDiagnostics
             var stackText = stack == null ? "null" : $"count={stack.Count}";
             return "input=" +
                    $"context={manager.CurrentInputContext} mouse={manager.CurrentInputContextUsesMouse} " +
-                   $"disabled={manager.disableInputs} stack={stackText} " +
+                   $"disabled={manager.disabledInputs} stack={stackText} " +
                    $"fingerMap={DescribeMap(manager.fingersTapingMap)} " +
                    $"gameplayUiMap={DescribeMap(manager.gameplayUIActionMap)} " +
                    $"mainMenuMap={DescribeMap(manager.mainMenuUIMap)}";

@@ -31,15 +31,15 @@ internal static class InputInterop
 
             if (wantBlocked)
             {
-                _savedDisableInputs = mgr.disableInputs;
-                mgr.disableInputs = true;
+                _savedDisableInputs = mgr.disabledInputs;
+                mgr.disabledInputs = true;
                 mgr.SetIgnoreInputEvents(true);
                 _blockApplied = true;
             }
             else
             {
                 mgr.SetIgnoreInputEvents(false);
-                mgr.disableInputs = _savedDisableInputs;
+                mgr.disabledInputs = _savedDisableInputs;
                 mgr.EnableInputs();
                 mgr.UpdateInputContext();
                 _blockApplied = false;
@@ -133,7 +133,7 @@ internal static class InputInterop
             if (mgr != null)
             {
                 mgr.SetIgnoreInputEvents(false);
-                mgr.disableInputs = false;
+                mgr.disabledInputs = false;
                 mgr.EnableInputs();
                 mgr.UpdateInputContext();
             }

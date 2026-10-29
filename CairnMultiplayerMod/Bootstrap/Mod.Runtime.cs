@@ -34,10 +34,6 @@ public partial class Mod
         var isMainMenu = SceneRoles.IsMainMenu(sceneName);
         if (isMainMenu) MultiplayerPausePatch.OnMainMenuLoaded();
 
-        // FreeRoam unlock: available to every player at the MainMenu. Forcing the flag
-        // during boot or in game sends Cairn onto an unready init path -> black screen.
-        FreeRoamUnlockPatch.SetActive(isMainMenu);
-
         if (!isMainMenu)
             _panel.DestroyResources();
 
@@ -199,11 +195,6 @@ public partial class Mod
         {
             using var performance = Measure(PerformanceArea.Ui);
             _mainMenu.Tick();
-            // Unlock FreeRoam: force the tweakable field as soon as it's loaded (no-op
-            // once it succeeds). Complements the Harmony postfix on the public property.
-            FreeRoamUnlockPatch.SetActive(true);
-            FreeRoamUnlockPatch.TryForceTweakableField();
-            FreeRoamUnlockPatch.TryUnhideDifficulty();
         }
 
         using (Measure(PerformanceArea.Network))
