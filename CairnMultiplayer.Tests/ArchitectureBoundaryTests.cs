@@ -208,22 +208,23 @@ public sealed class ArchitectureBoundaryTests
     }
 
     [Fact]
-    public void CooperativeRopeSelectsNativeBelayButScopesPersonalPitonOperations()
+    public void CooperativeRopeStaysATetherAndLeavesProtectionToRealPitons()
     {
         var interop = File.ReadAllText(Path.Combine(
             ProjectDirectory, "Internal", "Game", "Roping", "RopeInterop.Belay.cs"));
         var patch = File.ReadAllText(Path.Combine(
             ProjectDirectory, "Internal", "Game", "Roping", "RopeTeamFallPatch.cs"));
 
-        Assert.Contains("_lifeline.securingRope = _rope", interop, StringComparison.Ordinal);
-        Assert.Contains("_lifeline.securingRope = _personalRope", interop, StringComparison.Ordinal);
+        // Cairn counts quickdraws on the Lifeline's securing rope as protection. Handing it
+        // the cooperative rope, or answering IsSecured for it, showed "0 m" in red and left
+        // secured falls looking for a piton that does not exist.
+        Assert.DoesNotMatch(@"\.securingRope\s*=(?!=)", interop);
+        Assert.DoesNotContain("typeof(Lifeline)", patch, StringComparison.Ordinal);
         Assert.Contains("TryGetInitialLength", interop, StringComparison.Ordinal);
         Assert.Contains("renderer.parts = _rope.ropeParts", interop, StringComparison.Ordinal);
         Assert.Contains("SetHarnessVisual", interop, StringComparison.Ordinal);
         Assert.Contains("RestoreHarnessVisual", interop, StringComparison.Ordinal);
         Assert.Contains("MC_Outift_NoHarness", interop, StringComparison.Ordinal);
-        Assert.Contains("BeginPersonalRopeOperation", patch, StringComparison.Ordinal);
-        Assert.Contains("AfterPersonalOperation", patch, StringComparison.Ordinal);
     }
 
     [Fact]

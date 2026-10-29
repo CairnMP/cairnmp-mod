@@ -23,8 +23,7 @@ internal static partial class BivouacDiagnostics
         "TapingActivateException",
         "TapingActivationCleanup",
         "TapingStartBypass",
-        "TapingStartBypassFailed",
-        "TapingCurrentModelFailed"
+        "TapingStartBypassFailed"
     };
 
     internal static void Install()
@@ -116,13 +115,11 @@ internal static partial class BivouacDiagnostics
             // game locks up.
             SafeLog("TapingActivate", () => DescribeTaping(__instance));
 
-            // Repair the preconditions just in case (hand selection + current
-            // model) without calling StartTaping ourselves: the original Activate
-            // is what drives the rest.
+            // Repair the hand selection just in case, without calling StartTaping
+            // ourselves: the original Activate is what drives the rest.
             if (EnsureTapingManagerReady(__instance))
             {
                 PrepareTapingSelection(__instance);
-                _ = EnsureCurrentModel(__instance);
             }
             else
             {
@@ -221,7 +218,6 @@ internal static partial class BivouacDiagnostics
                    && manager.tapeRenderer != null
                    && manager.armsOffsetForTransition != null
                    && manager.fingersGameStates != null
-                   && manager.models != null
                    && manager.tapingParametersPerFinger != null;
         }
 
@@ -243,7 +239,6 @@ internal static partial class BivouacDiagnostics
                    $" bandage={DescribeNull(manager.bandageCanvasGroup)}" +
                    $" pushNearClip={DescribeNull(manager.pushNearClip)}" +
                    $" fingerStates={DescribeNull(manager.fingersGameStates)}" +
-                   $" models={DescribeNull(manager.models)}" +
                    $" parameters={DescribeNull(manager.tapingParametersPerFinger)}";
         }
 
@@ -260,29 +255,6 @@ internal static partial class BivouacDiagnostics
             catch (Exception ex)
             {
                 ModLog.Warning($"[BivouacDebug] SelectHand repair failed: {ex.GetType().Name}:{GameInterop.FirstLine(ex.Message)}");
-            }
-        }
-
-        private static bool EnsureCurrentModel(TapingFingersManager manager)
-        {
-            if (manager == null || manager.Pointer == IntPtr.Zero)
-                return false;
-
-            if (GetCurrentModelSafe(manager) != null)
-                return true;
-
-            try
-            {
-                var models = manager.models;
-                if (models == null || models.Length <= 0 || models[0] == null) return false;
-
-                manager.CurrentModel = models[0];
-                return GetCurrentModelSafe(manager) != null;
-            }
-            catch (Exception ex)
-            {
-                SafeLog("TapingCurrentModelFailed", () => $"{ex.GetType().Name}:{GameInterop.FirstLine(ex.Message)}");
-                return false;
             }
         }
 

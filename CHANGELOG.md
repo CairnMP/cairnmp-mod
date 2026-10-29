@@ -13,6 +13,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.3.2](#232--2026-10-29-beta) | 2026-10-29 | Beta | Cairn 1.1.593 support and a rope that no longer reads 0 m |
 | [2.3.1](#231--2026-10-15-beta) | 2026-10-15 | Beta | Game modes, races and rescues that keep their word |
 | [2.3.0](#230--2026-09-18-beta) | 2026-09-18 | Beta | Game modes, downed climbers and a rebuilt panel |
 | [2.2.17](#2217--2026-09-18-stable) | 2026-09-18 | Stable | Streaming crash mitigation and realistic voice occlusion |
@@ -37,6 +38,33 @@ All notable CairnMP changes are documented here. Releases follow
 | [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
 | [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.3.2] — 2026-10-29 (beta)
+
+> Built for Cairn **1.1.593**, the Free Roam update that came with the *On the Trail:
+> Deep Water* DLC (2026-10-29). Earlier builds of CairnMP do not run on it, so every
+> player in a lobby needs 2.3.2. The protocol stays **15**.
+
+### Removed
+
+- The Free Roam unlock. Cairn now ships Free Roam itself, for saves that have finished
+  the climb. The old unlock forced a hidden game setting, and in the main menu it also
+  turned on 72 unrelated game settings that share its code.
+
+### Fixed
+
+- Updated for Cairn 1.1.593. The game moved survival out of `GameDataManager`, renamed
+  its input lock and rebuilt finger taping around one model per character. Deaths,
+  revives, race summits, chat input blocking and the bivouac taping safety net use the
+  new names.
+- Roped to a partner, the rope length no longer shows **0 m** in red. CairnMP used to
+  tell the game the partner was belaying, but the game only belays from pitons: it then
+  measured the rope from a piton that did not exist, and a fall had nothing to hang from.
+- The cooperative rope is now a tether between two harnesses. Your own pitons protect
+  you, exactly as when climbing alone. Pitons placed while roped go on your own rope, so
+  your climbot can take them up again and they still hold you once you unrope.
 
 ---
 

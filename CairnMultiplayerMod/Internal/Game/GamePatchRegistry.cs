@@ -32,7 +32,6 @@ internal static class GamePatchRegistry
         new("direct rope team", RopeTeamFallPatch.Install, RopeTeamFallPatch.Uninstall),
         new("multiplayer pause", MultiplayerPausePatch.Install, MultiplayerPausePatch.Uninstall),
         new("main-menu buttons", MainMenuButtonIntegration.Install, MainMenuButtonIntegration.Uninstall),
-        new("free-roam unlock", FreeRoamUnlockPatch.Install, FreeRoamUnlockPatch.Uninstall),
         new("savegame piton guard", SavegamePitonGuardPatch.Install, SavegamePitonGuardPatch.Uninstall),
         new("native performance probe", NativePerformanceProbe.Install, NativePerformanceProbe.Uninstall),
         new("downed climbers", DeathScreenPatch.Install, DeathScreenPatch.Uninstall),

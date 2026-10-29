@@ -1,6 +1,7 @@
 using System;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2Cpp;
+using Il2CppTheGameBakers.Cairn;
 using Il2CppTheGameBakers.Cairn.Netplay;
 
 namespace CairnMultiplayerMod.Internal.Game.Life;
@@ -23,8 +24,8 @@ internal static class LifeInterop
     {
         try
         {
-            var data = GameDataManager.Instance;
-            return data != null && data.IsDead;
+            var survival = SurvivalManager.Instance;
+            return survival != null && survival.IsDead;
         }
         catch (Exception exception)
         {
@@ -45,7 +46,7 @@ internal static class LifeInterop
         if (amount <= 0f) return;
         try
         {
-            GameDataManager.Instance?.Exhaust(amount, true);
+            SurvivalManager.Instance?.Exhaust(amount, true);
         }
         catch (Exception exception)
         {
@@ -83,8 +84,8 @@ internal static class LifeInterop
     {
         try
         {
-            var data = GameDataManager.Instance;
-            return data != null && (data.InSummitEnd || data.IsGameFinishedNoGoingBack);
+            var story = StoryEventManager.Instance;
+            return story != null && (story.InSummitEnd || story.IsGameFinishedNoGoingBack);
         }
         catch (Exception exception)
         {
@@ -125,10 +126,10 @@ internal static class LifeInterop
         if (healthRatio >= 1f) return;
         try
         {
-            var data = GameDataManager.Instance;
-            if (data == null) return;
-            var target = Math.Max(MinimumReviveHealth, data.CurrentMaxHp * Math.Max(0f, healthRatio));
-            data.SetCurrentHp(target);
+            var survival = SurvivalManager.Instance;
+            if (survival == null) return;
+            var target = Math.Max(MinimumReviveHealth, survival.CurrentMaxHp * Math.Max(0f, healthRatio));
+            survival.SetCurrentHp(target);
         }
         catch (Exception exception)
         {

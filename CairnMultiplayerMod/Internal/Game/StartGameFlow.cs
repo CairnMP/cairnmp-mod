@@ -25,8 +25,7 @@ internal sealed class StartGameFlow
     private ServerStartGame? _forceNewGameOpts;
 
     // Always enter through Cairn's save manager so players can resume an existing save.
-    // Choosing an empty slot continues through the native new-game/difficulty flow, where
-    // Free Roam is already made available by FreeRoamUnlockPatch.
+    // Choosing an empty slot continues through the native new-game/difficulty flow.
     internal static MainMenuInterop.MainMenuStep MultiplayerLaunchEntryStep =>
         MainMenuInterop.MainMenuStep.StoryModeManageSave;
 
