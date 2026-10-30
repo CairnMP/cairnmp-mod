@@ -13,6 +13,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.4.0](#240--2026-10-30-beta) | 2026-10-30 | Beta | Lobbies that climb the Deep Water DLC worlds |
 | [2.3.2](#232--2026-10-29-beta) | 2026-10-29 | Beta | Cairn 1.1.593 support and a rope that no longer reads 0 m |
 | [2.3.1](#231--2026-10-15-beta) | 2026-10-15 | Beta | Game modes, races and rescues that keep their word |
 | [2.3.0](#230--2026-09-18-beta) | 2026-09-18 | Beta | Game modes, downed climbers and a rebuilt panel |
@@ -41,7 +42,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 ---
 
-## [Unreleased]
+## [2.4.0] — 2026-10-30 (beta)
 
 > The host now picks where the lobby climbs. Lobbies carry the destination, so every
 > player needs this build: the protocol moves to **16**.
