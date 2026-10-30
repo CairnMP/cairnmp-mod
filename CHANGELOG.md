@@ -13,6 +13,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.4.1](#241--2026-10-30-stable) | 2026-10-30 | Stable | First stable build for Cairn 1.1.593 |
 | [2.4.0](#240--2026-10-30-beta) | 2026-10-30 | Beta | Lobbies that climb the Deep Water DLC worlds |
 | [2.3.2](#232--2026-10-29-beta) | 2026-10-29 | Beta | Cairn 1.1.593 support and a rope that no longer reads 0 m |
 | [2.3.1](#231--2026-10-15-beta) | 2026-10-15 | Beta | Game modes, races and rescues that keep their word |
@@ -39,6 +40,21 @@ All notable CairnMP changes are documented here. Releases follow
 | [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
 | [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.4.1] — 2026-10-30 (stable)
+
+> The first stable build for Cairn **1.1.593**. It brings the stable channel everything
+> from the 2.3.0 to 2.4.0 betas: game modes, races and rescues, the 1.1.593 port and
+> the DLC destinations. The protocol is **16**: every player in a lobby needs this build.
+
+### Fixed
+
+- CairnMP no longer crashes on Cairn 1.1.593 for players on the stable channel. That
+  channel still installed 2.2.17, built for the previous Cairn, which fails with
+  `Method not found: 'Void Il2Cpp.InputManager.set_disableInputs(Boolean)'`: the
+  update renamed that field. 2.3.2 had the fix, but only on the beta channel.
 
 ---
 
