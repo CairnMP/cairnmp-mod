@@ -120,7 +120,7 @@ internal static unsafe class GameOptionsInterop
             $"{rules.Difficulty} yet; mode '{rules.Name}' will be applied once it loads.");
     }
 
-    private static Il2CppTheGameBakers.Cairn.UI.MainMenu FindMainMenuComponent()
+    internal static Il2CppTheGameBakers.Cairn.UI.MainMenu FindMainMenuComponent()
     {
         var menuGo = GameObject.Find("MainMenu");
         if (menuGo == null) return null;

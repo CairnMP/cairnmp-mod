@@ -16,12 +16,14 @@ internal static class MainMenuInterop
         ModeSelect = 2,
         StoryModeManageSave = 3,
         LaunchNewStoryGame = 4,
+        SummitModeWorldSelect = 6,
         Loading = 12,
         LaunchSavedGame = 16,
         Settings = 13,
         DifficultySelect = 20,
         DifficultyCustomization = 21,
         ActivateTutorials = 22,
+        SummitModeOnboarding = 28,
     }
 
     /// <summary>Cairn consumes and clears this nullable value from its next Update.</summary>

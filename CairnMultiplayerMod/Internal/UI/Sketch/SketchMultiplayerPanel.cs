@@ -29,8 +29,11 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     private static readonly LobbyVisibility[] VisValues =
         { LobbyVisibility.Public, LobbyVisibility.FriendsOnly, LobbyVisibility.Private };
     private static readonly IReadOnlyList<MultiplayerModeRules> ModeValues = MultiplayerModes.Available;
+    private static readonly IReadOnlyList<ClimbWorld> WorldValues = ClimbWorlds.Available;
+    private static readonly Color Refusal = new(0.82f, 0.38f, 0.33f, 1f);
 
     private readonly SteamLobbyManager _lobby;
+    private readonly Func<ClimbWorld, string> _whyUnavailable;
 
     private GameObject _canvasGo;
     private GameObject _contentGo;
@@ -45,7 +48,8 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     private string _lobbyName = "";
     private IReadOnlyList<LobbyEntry> _lobbies;
     private string _codeDraft = "";
-    private int _modeIndex;
+    private int _modeIndex, _worldIndex;
+    private string _worldIssue;
     private int _browsePage;
     private bool _isBrowsing;
     private float _copyFeedbackSeconds, _memberRefreshSeconds;
@@ -60,7 +64,8 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     private TMP_InputField _codeInput;
     private string _autoLobbyName = "";
     private int _slots = MaxSlots, _visIndex;
-    private TextMeshProUGUI _slotsLabel, _visLabel, _createLabel, _joinLabel, _refreshLabel;
+    private TextMeshProUGUI _slotsLabel, _visLabel, _worldLabel, _worldNote, _createLabel, _joinLabel, _refreshLabel;
+    private TextMeshProUGUI _subtitleLabel, _bannerBadge;
     private Button _createBtn, _joinBtn, _refreshBtn, _previousPage, _nextPage, _copyBtn;
     private Transform _browseList;
     private GameObject _browseEmpty;
@@ -77,13 +82,15 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
 
     public bool IsVisible => _visible;
 
-    internal SketchMultiplayerPanel(SteamLobbyManager lobby)
+    internal SketchMultiplayerPanel(SteamLobbyManager lobby, Func<ClimbWorld, string> whyUnavailable)
     {
         _lobby = lobby ?? throw new ArgumentNullException(nameof(lobby));
+        _whyUnavailable = whyUnavailable ?? throw new ArgumentNullException(nameof(whyUnavailable));
         _slots = Mathf.Clamp(ModConfig.MaxPlayers?.Value ?? MaxSlots, MinSlots, MaxSlots);
     }
 
     private MultiplayerModeRules SelectedMode => ModeValues[Mathf.Clamp(_modeIndex, 0, ModeValues.Count - 1)];
+    private ClimbWorld SelectedWorld => WorldValues[Mathf.Clamp(_worldIndex, 0, WorldValues.Count - 1)];
 
     public void Show()
     {
@@ -219,7 +226,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
 
         SketchUiKit.LabelBox(title.transform, "Title", new Vector2(0f, 26f), new Vector2(620f, 44f),
             HeadlineOf(screen), 30f, SketchUiKit.TextCream, TextAlignmentOptions.Center, logo: true);
-        SketchUiKit.LabelBox(title.transform, "Subtitle", new Vector2(0f, -22f), new Vector2(660f, 30f),
+        _subtitleLabel = SketchUiKit.LabelBox(title.transform, "Subtitle", new Vector2(0f, -22f), new Vector2(660f, 30f),
             SubtitleOf(screen), 16f, SketchUiKit.TextDim, TextAlignmentOptions.Center);
 
         if (screen != Screen.Home) BuildBackButton(title.transform, BackTargetOf(screen));
@@ -237,7 +244,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     private string SubtitleOf(Screen screen) => screen switch
     {
         Screen.ModeSelect => "Everyone plays by the rules you pick here",
-        Screen.Create => $"{SelectedMode.Name} - {DifficultyLabel(SelectedMode.Difficulty)}",
+        Screen.Create => $"{SelectedMode.Name} - {MultiplayerModeText.Badge(SelectedMode, SelectedWorld)}",
         Screen.Join => "Ask your friend for their lobby code",
         Screen.Browse => "Open lobbies looking for climbers",
         _ => "Climb together",
@@ -365,25 +372,63 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     {
         BuildModeBanner(body.transform, 210f, showChange: true);
 
+        // Where comes first: it is the one choice a guest may not be able to follow.
+        var worldCell = SketchUiKit.RowStrip(body.transform, "Destination", 122f);
+        _worldLabel = SketchUiKit.Stepper(worldCell, ClimbWorlds.Name(SelectedWorld),
+            (UnityAction)(() => CycleWorld(-1)), (UnityAction)(() => CycleWorld(+1)));
+
         _autoLobbyName = $"{GetLocalPlayerName()}'s climb";
-        var nameCell = SketchUiKit.RowStrip(body.transform, "Lobby name", 116f, 420f);
+        var nameCell = SketchUiKit.RowStrip(body.transform, "Lobby name", 58f, 420f);
         SketchUiKit.Label(nameCell, "Value", _autoLobbyName, 16f, SketchUiKit.TextCream, TextAlignmentOptions.Right);
 
-        var slotsCell = SketchUiKit.RowStrip(body.transform, "Slots", 46f);
+        var slotsCell = SketchUiKit.RowStrip(body.transform, "Slots", -6f);
         _slotsLabel = SketchUiKit.Stepper(slotsCell, _slots.ToString(),
             (UnityAction)(() => AdjustSlots(-1)), (UnityAction)(() => AdjustSlots(+1)));
 
-        var visCell = SketchUiKit.RowStrip(body.transform, "Visibility", -24f);
+        var visCell = SketchUiKit.RowStrip(body.transform, "Visibility", -70f);
         _visLabel = SketchUiKit.Stepper(visCell, VisLabels[_visIndex],
             (UnityAction)(() => CycleVisibility(-1)), (UnityAction)(() => CycleVisibility(+1)));
 
+        foreach (var button in worldCell.GetComponentsInChildren<Button>()) _settingButtons.Add(button);
         foreach (var button in slotsCell.GetComponentsInChildren<Button>()) _settingButtons.Add(button);
         foreach (var button in visCell.GetComponentsInChildren<Button>()) _settingButtons.Add(button);
 
-        _createBtn = PrimaryButton(body.transform, new Vector2(0f, -120f), new Vector2(420f, 70f),
+        _createBtn = PrimaryButton(body.transform, new Vector2(0f, -146f), new Vector2(420f, 70f),
             "CREATE LOBBY", out _createLabel, (UnityAction)OnCreateClicked);
 
+        _worldNote = SketchUiKit.LabelBox(body.transform, "DestinationNote", new Vector2(0f, -202f),
+            new Vector2(680f, 28f), "", 14f, SketchUiKit.TextDim, TextAlignmentOptions.Center);
+
         BuildStatus(body.transform);
+        RefreshDestination();
+    }
+
+    private void CycleWorld(int d)
+    {
+        if (_isConnecting || _isConnected) return;
+        _worldIndex = ((_worldIndex + d) % WorldValues.Count + WorldValues.Count) % WorldValues.Count;
+        RefreshDestination();
+    }
+
+    /// <summary>
+    /// Asks the game whether this player could launch the chosen destination, and says so
+    /// before the lobby exists: a host who cannot go would only find out once everyone else
+    /// had left the menu. A Summit world that can be launched still gets a word on what
+    /// changes there.
+    /// </summary>
+    private void RefreshDestination()
+    {
+        var world = SelectedWorld;
+        _worldIssue = _whyUnavailable(world);
+        if (_worldLabel != null) _worldLabel.text = ClimbWorlds.Name(world);
+        if (_subtitleLabel != null) _subtitleLabel.text = SubtitleOf(Screen.Create);
+        if (_bannerBadge != null) _bannerBadge.text = MultiplayerModeText.Badge(SelectedMode, world);
+        if (_worldNote != null)
+        {
+            _worldNote.text = _worldIssue ?? (ClimbWorlds.IsStory(world) ? "" : ClimbWorlds.SummitNote(world));
+            _worldNote.color = _worldIssue != null ? Refusal : SketchUiKit.TextDim;
+        }
+        UpdateInteractable();
     }
 
     /// <summary>
@@ -393,6 +438,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     private void BuildModeBanner(Transform parent, float y, bool showChange)
     {
         var rules = _isConnected ? _lobby.CurrentModeRules : SelectedMode;
+        var world = _isConnected ? _lobby.CurrentWorld : SelectedWorld;
 
         var banner = SketchUiKit.Make("ModeBanner", parent);
         SketchUiKit.Box(banner, new Vector2(0f, y), new Vector2(660f, 84f));
@@ -402,8 +448,8 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
             rules.Name.ToUpperInvariant(), 21f, SketchUiKit.TextCream, TextAlignmentOptions.Left, logo: true);
         SketchUiKit.LabelBox(banner.transform, "Rules", new Vector2(-8f, -12f), new Vector2(460f, 24f),
             RulesLine(rules), 13f, SketchUiKit.TextDim, TextAlignmentOptions.Left);
-        SketchUiKit.LabelBox(banner.transform, "Difficulty", new Vector2(236f, 20f), new Vector2(160f, 26f),
-            DifficultyLabel(rules.Difficulty), 15f, SketchUiKit.Accent, TextAlignmentOptions.Right);
+        _bannerBadge = SketchUiKit.LabelBox(banner.transform, "Difficulty", new Vector2(236f, 20f), new Vector2(160f, 26f),
+            MultiplayerModeText.Badge(rules, world), 15f, SketchUiKit.Accent, TextAlignmentOptions.Right);
 
         if (!showChange) return;
 
@@ -498,11 +544,14 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
 
             SketchUiKit.LabelBox(row.transform, "Name", new Vector2(-80f, 12f), new Vector2(536f, 26f),
                 entry.Name, 19f, SketchUiKit.TextCream, TextAlignmentOptions.Left);
-            // The mode is what the lobby is, so it sits next to the host's name rather than
-            // behind a click: it decides how the whole climb will be played.
+            // The mode and the destination are what the lobby is, so they sit next to the
+            // host's name rather than behind a click. A destination this player's game cannot
+            // open is flagged here, before they join a climb they could not follow.
             var rules = MultiplayerModes.RulesFor(entry.Mode);
+            var blocked = _whyUnavailable(entry.World) != null;
             SketchUiKit.LabelBox(row.transform, "Host", new Vector2(-80f, -14f), new Vector2(536f, 20f),
-                $"{rules.Name}  -  hosted by {entry.HostName}", 12f, SketchUiKit.TextDim,
+                $"{rules.Name}  -  {ClimbWorlds.Name(entry.World)}{(blocked ? " (not available to you)" : "")}" +
+                $"  -  hosted by {entry.HostName}", 12f, blocked ? Refusal : SketchUiKit.TextDim,
                 TextAlignmentOptions.Left);
             bool full = entry.MaxPlayers > 0 && entry.PlayerCount >= entry.MaxPlayers;
             SketchUiKit.LabelBox(row.transform, "Count", new Vector2(280f, 0f), new Vector2(120f, 28f),
@@ -570,8 +619,13 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
 
         _connStart = PrimaryButton(body.transform, new Vector2(0f, -212f), new Vector2(420f, 60f),
             "START CLIMB", out _, (UnityAction)(() => OnStartRequested?.Invoke())).gameObject;
-        _connStartHint = SketchUiKit.LabelBox(body.transform, "StartHint", new Vector2(0f, -212f), new Vector2(600f, 30f),
-            "Waiting for the host to start", 15f, SketchUiKit.TextDim, TextAlignmentOptions.Center).gameObject;
+        // A guest whose game cannot open the destination reads why here, while there is still
+        // time to sort it out or leave, instead of being the one left behind at the start.
+        var worldIssue = _whyUnavailable(_lobby.CurrentWorld);
+        var startHint = SketchUiKit.LabelBox(body.transform, "StartHint", new Vector2(0f, -212f),
+            new Vector2(680f, 30f), worldIssue ?? "Waiting for the host to start", worldIssue != null ? 14f : 15f,
+            worldIssue != null ? Refusal : SketchUiKit.TextDim, TextAlignmentOptions.Center);
+        _connStartHint = startHint.gameObject;
 
         var leave = SketchUiKit.Make("LeaveLobby", body.transform);
         SketchUiKit.Box(leave, new Vector2(0f, -262f), new Vector2(260f, 38f));
@@ -611,14 +665,19 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
             _memberRows[i].SetActive(member != null);
             if (member == null) continue;
             _memberNames[i].text = string.IsNullOrEmpty(member.Name) ? "Player" : member.Name;
-            _memberRoles[i].text = member.IsSelf && member.IsHost ? "YOU / HOST"
+            var role = member.IsSelf && member.IsHost ? "YOU / HOST"
                 : member.IsHost ? "HOST" : member.IsSelf ? "YOU" : "";
+            // Each player tells the lobby whether their game can open its destination; the
+            // host should know who would stay behind before pressing start.
+            _memberRoles[i].text = !member.WorldUnavailable ? role
+                : string.IsNullOrEmpty(role) ? "CAN'T GO" : $"{role} - CAN'T GO";
+            _memberRoles[i].color = member.WorldUnavailable ? Refusal : SketchUiKit.Accent;
         }
     }
 
     private void OnCreateClicked()
     {
-        if (_isConnecting || _isConnected) return;
+        if (_isConnecting || _isConnected || _worldIssue != null) return;
         var cfg = new HostConfig
         {
             PlayerName = GetLocalPlayerName(),
@@ -626,6 +685,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
             MaxPlayers = _slots,
             Visibility = VisValues[_visIndex],
             Mode = SelectedMode.Mode,
+            World = SelectedWorld,
         };
         OnHostRequested?.Invoke(cfg);
     }
@@ -808,7 +868,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         Color c = _isConnected ? new Color(0.38f, 0.76f, 0.45f, 1f)
             : _isConnecting ? new Color(0.86f, 0.73f, 0.29f, 1f)
             : (_statusText.StartsWith("Failed") || _statusText.StartsWith("Rejected"))
-                ? new Color(0.82f, 0.38f, 0.33f, 1f) : SketchUiKit.TextDim;
+                ? Refusal : SketchUiKit.TextDim;
         _statusLabel.color = c;
         _statusLabel.text = string.IsNullOrEmpty(_statusText) ? "Disconnected" : _statusText;
     }
@@ -817,7 +877,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     {
         bool enabled = !_isConnecting && !_isConnected;
         if (_codeInput != null) _codeInput.interactable = enabled;
-        if (_createBtn != null) _createBtn.interactable = enabled;
+        if (_createBtn != null) _createBtn.interactable = enabled && _worldIssue == null;
         if (_joinBtn != null) _joinBtn.interactable = enabled && !string.IsNullOrWhiteSpace(_codeInput?.text);
         foreach (var button in _navigationButtons) button.interactable = enabled;
         foreach (var button in _settingButtons) button.interactable = enabled;
@@ -845,6 +905,8 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     {
         _statusLabel = null; _codeInput = null;
         _slotsLabel = null; _visLabel = null; _createLabel = null; _joinLabel = null; _refreshLabel = null;
+        _worldLabel = null; _worldNote = null; _subtitleLabel = null; _bannerBadge = null;
+        _worldIssue = null;
         _createBtn = null; _joinBtn = null; _browseList = null; _browseEmpty = null;
         _connCodeLabel = null; _connCountLabel = null; _connCopyLabel = null;
         _titleLabel = null; _pageLabel = null; _browseSummary = null;

@@ -13,6 +13,7 @@ namespace CairnMultiplayerMod.Internal.UI.Toolkit;
 internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
 {
     private readonly SteamLobbyManager _lobby;
+    private readonly Func<ClimbWorld, string> _whyUnavailable;
     private enum Screen
     {
         Home,
@@ -45,6 +46,12 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
     private StepperControl _slotsStepper;
     private SegmentControl _modeSegment;
     private Label _modeSummary;
+    private SegmentControl _worldSegment;
+    private Label _worldNote;
+    private string _worldIssue;
+    // The connected screen refreshes every frame; the game is asked once per destination.
+    private ClimbWorld? _lobbyWorldChecked;
+    private string _lobbyWorldIssue;
     private Label _connectedMode;
     private SegmentControl _visibilitySegment;
 
@@ -77,9 +84,10 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
 
     public bool IsVisible => _visible;
 
-    public UiToolkitMultiplayerPanel(SteamLobbyManager lobby)
+    public UiToolkitMultiplayerPanel(SteamLobbyManager lobby, Func<ClimbWorld, string> whyUnavailable)
     {
         _lobby = lobby ?? throw new ArgumentNullException(nameof(lobby));
+        _whyUnavailable = whyUnavailable ?? throw new ArgumentNullException(nameof(whyUnavailable));
     }
 
     public void Show()
@@ -197,6 +205,11 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         _slotsStepper = null;
         _modeSegment = null;
         _modeSummary = null;
+        _worldSegment = null;
+        _worldNote = null;
+        _worldIssue = null;
+        _lobbyWorldChecked = null;
+        _lobbyWorldIssue = null;
         _connectedMode = null;
         _visibilitySegment = null;
         _lobbyList = null;
@@ -383,15 +396,26 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         _modeSegment = new SegmentControl(ModeNames(), 0);
         _modeSegment.Changed += _ =>
         {
-            if (_modeSummary != null) _modeSummary.text = DescribeMode(SelectedMode());
+            if (_modeSummary != null) _modeSummary.text = DescribeMode(SelectedMode(), SelectedWorld());
         };
         modeCol.Add(_modeSegment.Root);
-        _modeSummary = CairnUi.Label(DescribeMode(MultiplayerModes.Available[0]), 11, CairnUi.TextMuted,
-            FontStyle.Italic);
+        _modeSummary = CairnUi.Label(DescribeMode(MultiplayerModes.Available[0], ClimbWorld.Kami), 11,
+            CairnUi.TextMuted, FontStyle.Italic);
         _modeSummary.style.marginTop = 4;
         _modeSummary.style.marginBottom = 10;
         modeCol.Add(_modeSummary);
         card.Add(modeCol);
+
+        var worldCol = Column();
+        worldCol.Add(CairnUi.MicroLabel("DESTINATION"));
+        _worldSegment = new SegmentControl(WorldNames(), 0);
+        _worldSegment.Changed += _ => RefreshDestination();
+        worldCol.Add(_worldSegment.Root);
+        _worldNote = CairnUi.Label("", 11, CairnUi.TextMuted, FontStyle.Italic);
+        _worldNote.style.marginTop = 4;
+        _worldNote.style.marginBottom = 10;
+        worldCol.Add(_worldNote);
+        card.Add(worldCol);
 
         var configRow = CairnUi.Row();
         card.Add(configRow);
@@ -411,7 +435,7 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         visibilityCol.Add(_visibilitySegment.Root);
         configRow.Add(visibilityCol);
 
-        var saveNote = CairnUi.Label("Everyone picks new or existing save in Cairn's menu when the host starts.",
+        var saveNote = CairnUi.Label("When the host starts, everyone picks their own save, or Summit run, in Cairn's menu.",
             11, CairnUi.TextMuted, FontStyle.Italic);
         saveNote.style.marginTop = 8;
         saveNote.style.marginBottom = 12;
@@ -420,6 +444,22 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         _createButton = CairnUi.Button("CREATE LOBBY", OnCreateClicked, primary: true);
         _createButton.style.marginTop = 4;
         card.Add(_createButton);
+        RefreshDestination();
+    }
+
+    /// <summary>Asks the game whether this player could launch the chosen destination, and
+    /// says so before the lobby exists, as the main panel does.</summary>
+    private void RefreshDestination()
+    {
+        var world = SelectedWorld();
+        _worldIssue = _whyUnavailable(world);
+        if (_modeSummary != null) _modeSummary.text = DescribeMode(SelectedMode(), world);
+        if (_worldNote != null)
+        {
+            _worldNote.text = _worldIssue ?? (ClimbWorlds.IsStory(world) ? "" : ClimbWorlds.SummitNote(world));
+            _worldNote.style.color = _worldIssue != null ? CairnUi.Error : CairnUi.TextMuted;
+        }
+        UpdateInteractable();
     }
 
     private void BuildJoinCard()
@@ -570,7 +610,7 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         _connectedPlayers.style.marginTop = 8;
         playersCard.Add(_connectedPlayers);
 
-        var saveHint = CairnUi.Label("Everyone picks new or existing save in Cairn's menu when the host starts.",
+        var saveHint = CairnUi.Label("When the host starts, everyone picks their own save, or Summit run, in Cairn's menu.",
             11, CairnUi.TextMuted, FontStyle.Italic);
         saveHint.style.marginTop = 12;
         saveHint.style.height = 18;
@@ -700,10 +740,25 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
             : ModConfig.PlayerName.Value.Trim();
     }
 
-    /// <summary>The mode in one line: what it is worth, and what it owes a climber who falls.</summary>
-    private static string DescribeMode(MultiplayerModeRules rules)
-        => $"{rules.Summary} ({MultiplayerModeText.DifficultyName(rules.Difficulty)} - " +
+    /// <summary>The mode in one line: what it is worth there, and what it owes a climber who falls.</summary>
+    private static string DescribeMode(MultiplayerModeRules rules, ClimbWorld world)
+        => $"{rules.Summary} ({MultiplayerModeText.Badge(rules, world)} - " +
            $"{MultiplayerModeText.PromiseLine(rules, ", ")})";
+
+    private static string[] WorldNames()
+    {
+        var worlds = ClimbWorlds.Available;
+        var names = new string[worlds.Count];
+        for (var index = 0; index < worlds.Count; index++) names[index] = ClimbWorlds.Name(worlds[index]);
+        return names;
+    }
+
+    private ClimbWorld SelectedWorld()
+    {
+        var worlds = ClimbWorlds.Available;
+        var index = _worldSegment?.SelectedIndex ?? 0;
+        return index >= 0 && index < worlds.Count ? worlds[index] : worlds[0];
+    }
 
     private static string[] ModeNames()
     {
@@ -722,7 +777,7 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
 
     private void OnCreateClicked()
     {
-        if (_isConnecting) return;
+        if (_isConnecting || _worldIssue != null) return;
 
         var lobbyName = _lobbyNameField.value?.Trim() ?? "";
         if (string.IsNullOrWhiteSpace(lobbyName))
@@ -742,6 +797,7 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
             MaxPlayers = _slotsStepper.Value,
             Visibility = visibility,
             Mode = SelectedMode().Mode,
+            World = SelectedWorld(),
         });
     }
 
@@ -808,7 +864,12 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
             row.style.marginBottom = 8;
             row.style.backgroundColor = CairnUi.SurfaceSoft;
             row.style.unityTextAlign = TextAnchor.MiddleLeft;
-            row.text = $"{lobby.Name}\nHosted by {lobby.HostName} - {lobby.PlayerCount}/{lobby.MaxPlayers}";
+            var rules = MultiplayerModes.RulesFor(lobby.Mode);
+            var blocked = _whyUnavailable(lobby.World) != null;
+            row.text = $"{lobby.Name}\n{rules.Name} - {ClimbWorlds.Name(lobby.World)}" +
+                       $"{(blocked ? " (not available to you)" : "")} - hosted by {lobby.HostName} - " +
+                       $"{lobby.PlayerCount}/{lobby.MaxPlayers}";
+            if (blocked) row.style.color = CairnUi.Error;
             _lobbyList.Add(row);
         }
     }
@@ -819,7 +880,8 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
 
         _connectedLobbyTitle.text = string.IsNullOrWhiteSpace(_lobbyName) ? "Lobby" : _lobbyName;
         _connectedCode.text = string.IsNullOrWhiteSpace(lobby.CurrentRoomCode) ? "----" : lobby.CurrentRoomCode;
-        if (_connectedMode != null) _connectedMode.text = DescribeMode(lobby.CurrentModeRules);
+        var world = lobby.CurrentWorld;
+        if (_connectedMode != null) _connectedMode.text = DescribeMode(lobby.CurrentModeRules, world);
 
         var sb = new StringBuilder();
         var count = 0;
@@ -836,6 +898,7 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
             if (member.IsSelf && member.IsHost) sb.Append("  (you, host)");
             else if (member.IsSelf) sb.Append("  (you)");
             else if (member.IsHost) sb.Append("  (host)");
+            if (member.WorldUnavailable) sb.Append("  - can't go");
             count++;
         }
 
@@ -851,6 +914,14 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         var isHost = lobby.IsHost;
         CairnUi.Show(_startButton, isHost);
         CairnUi.Show(_startHint, !isHost);
+        if (_lobbyWorldChecked != world)
+        {
+            _lobbyWorldChecked = world;
+            _lobbyWorldIssue = _whyUnavailable(world);
+        }
+        var worldIssue = isHost ? null : _lobbyWorldIssue;
+        _startHint.text = worldIssue ?? "Waiting for host to start";
+        _startHint.style.color = worldIssue != null ? CairnUi.Error : CairnUi.TextMuted;
         _copyButton.text = "COPY";
         _copyButton.style.color = CairnUi.TextPrimary;
     }
@@ -865,7 +936,8 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         _visibilitySegment?.SetEnabled(enabled);
         _joinButton?.SetEnabled(enabled);
         _browseButton?.SetEnabled(enabled);
-        _createButton?.SetEnabled(enabled);
+        _worldSegment?.SetEnabled(enabled);
+        _createButton?.SetEnabled(enabled && _worldIssue == null);
 
         if (_createButton != null)
             _createButton.text = _isConnecting ? "CONNECTING..." : "CREATE LOBBY";

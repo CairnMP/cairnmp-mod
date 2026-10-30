@@ -41,6 +41,44 @@ All notable CairnMP changes are documented here. Releases follow
 
 ---
 
+## [Unreleased]
+
+> The host now picks where the lobby climbs. Lobbies carry the destination, so every
+> player needs this build: the protocol moves to **16**.
+
+### Added
+
+- DLC destinations. Next to the mode, a new lobby picks a destination: Mount Kami, or
+  one of the Summit-mode worlds of the free *On the Trail: Deep Water* DLC (Lamu gym,
+  Haken, Ruka). On start, each player lands on Cairn's own world selection, opened on
+  that world, and starts or continues their own run there, the way a story launch
+  leaves the save choice to each player. A player who has never opened Summit mode
+  reads its introduction pages first, as with the main menu's button.
+- The panel says who cannot follow before anyone leaves the menu. The host cannot
+  create a lobby for a world their own game cannot open, and is told why: the DLC is
+  missing, or the world is still locked. The lobby browser flags those lobbies, a guest
+  reads the reason in the lobby, and the host sees **CAN'T GO** beside that player.
+
+### Changed
+
+- On a DLC world, the game sets the difficulty: Summit mode has its own. The mode keeps
+  its rules (rescues, spectating, the race). The panel shows the world where it used to
+  show the difficulty.
+- A race on a DLC world is decided on height alone. The top-out comes from the story's
+  summit sequence, which Summit-mode worlds do not have.
+- Opening Summit mode from the main menu by hand leaves the lobby, as Story already
+  did. Without the DLC that button only opens the store, so it does not.
+
+### Fixed
+
+- Launching a lobby always went to Mount Kami, even for a player who meant to climb the
+  DLC: the start only knew the story's save selection.
+- The DLC worlds count as gameplay scenes. Before, CairnMP did not recognise their
+  scene names (`Crux_01_TowerGym`…), so the sync reset, the player's network scene and
+  the bivouac safety net all misread them.
+
+---
+
 ## [2.3.2] — 2026-10-29 (beta)
 
 > Built for Cairn **1.1.593**, the Free Roam update that came with the *On the Trail:

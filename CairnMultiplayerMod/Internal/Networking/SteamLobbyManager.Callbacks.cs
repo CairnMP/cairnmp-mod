@@ -43,6 +43,8 @@ namespace CairnMultiplayerMod.Internal.Networking
                 SteamMatchmaking.SetLobbyData(lobbyId, KeyVisibility, cfg.Visibility.ToString());
                 SteamMatchmaking.SetLobbyData(lobbyId, KeyMode,
                     ((byte)cfg.Mode).ToString(CultureInfo.InvariantCulture));
+                SteamMatchmaking.SetLobbyData(lobbyId, KeyWorld,
+                    ((int)cfg.World).ToString(CultureInfo.InvariantCulture));
                 SteamMatchmaking.SetLobbyData(lobbyId, KeyStartNonce, "");
                 SteamMatchmaking.SetLobbyMemberLimit(lobbyId, Math.Max(2, Math.Min(cfg.MaxPlayers, 16)));
                 SteamMatchmaking.SetLobbyJoinable(lobbyId, true);
@@ -205,6 +207,7 @@ namespace CairnMultiplayerMod.Internal.Networking
                         MaxPlayers = cap,
                         Region = "",
                         Mode = ReadLobbyMode(id),
+                        World = ReadLobbyWorld(id),
                     });
                 }
                 var tcs = _listTcs;
@@ -281,8 +284,54 @@ namespace CairnMultiplayerMod.Internal.Networking
                 AssistEnabled = ParseBoolLobbyData(KeyStartAssistEnabled, false),
                 Mode = (byte)ParseIntLobbyData(KeyStartMode, (int)MultiplayerMode.RopeTeam),
                 ExtraConstraints = ParseIntLobbyData(KeyStartConstraints, 0),
+                World = (int)ClimbWorlds.Parse(SafeLobbyData(CurrentLobbyId, KeyStartWorld)),
             };
             RaiseStartSignal(nonce, start);
+        }
+
+        /// <summary>Where the current lobby climbs. Fixed when the lobby is created, like the
+        /// mode, and read back from Steam for the same reason.</summary>
+        public ClimbWorld CurrentWorld => IsInLobby ? ReadLobbyWorld(CurrentLobbyId) : ClimbWorld.Kami;
+
+        private static ClimbWorld ReadLobbyWorld(CSteamID lobbyId)
+        {
+            try
+            {
+                return ClimbWorlds.Parse(SteamMatchmaking.GetLobbyData(lobbyId, KeyWorld));
+            }
+            catch (Exception exception)
+            {
+                ModLog.SuppressedException("steam-lobby.read-world", exception);
+                return ClimbWorld.Kami;
+            }
+        }
+
+        /// <summary>Tells the lobby whether this player's game can open its destination, so the
+        /// host sees who would be left behind before starting.</summary>
+        public void PublishWorldAvailability(bool available)
+        {
+            if (!IsInLobby) return;
+            try
+            {
+                SteamMatchmaking.SetLobbyMemberData(CurrentLobbyId, KeyMemberWorldUnavailable, available ? "" : "1");
+            }
+            catch (Exception exception)
+            {
+                ModLog.SuppressedException("steam-lobby.publish-world-availability", exception);
+            }
+        }
+
+        private bool ReadMemberWorldUnavailable(CSteamID memberId)
+        {
+            try
+            {
+                return SteamMatchmaking.GetLobbyMemberData(CurrentLobbyId, memberId, KeyMemberWorldUnavailable) == "1";
+            }
+            catch (Exception exception)
+            {
+                ModLog.SuppressedException("steam-lobby.read-world-availability", exception);
+                return false;
+            }
         }
 
         /// <summary>
@@ -318,7 +367,7 @@ namespace CairnMultiplayerMod.Internal.Networking
 
             _lastStartNonce = nonce;
             ModLog.Info($"[SteamLobby] Start received nonce={nonce} mode={(MultiplayerMode)start.Mode} " +
-                $"difficulty={(GameDifficulty)start.Difficulty}.");
+                $"difficulty={(GameDifficulty)start.Difficulty} world={(ClimbWorld)start.World}.");
             OnStartRequested?.Invoke(start);
         }
 

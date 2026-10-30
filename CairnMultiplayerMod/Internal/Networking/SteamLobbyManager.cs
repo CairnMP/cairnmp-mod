@@ -18,6 +18,10 @@ namespace CairnMultiplayerMod.Internal.Networking
         public string Name { get; init; } = "";
         public bool IsHost { get; init; }
         public bool IsSelf { get; init; }
+
+        /// <summary>This player's game cannot open the lobby's destination: the DLC is
+        /// missing or the world still locked.</summary>
+        public bool WorldUnavailable { get; init; }
     }
 
     /// <summary>
@@ -44,6 +48,9 @@ namespace CairnMultiplayerMod.Internal.Networking
         private const string KeyVisibility = "visibility";
         private const string KeyStartNonce = "start_nonce";
         private const string KeyMode = "mode";
+        private const string KeyWorld = "world";
+        private const string KeyStartWorld = "start_world";
+        private const string KeyMemberWorldUnavailable = "world_unavailable";
         private const string KeyStartDifficulty = "start_difficulty";
         private const string KeyStartMode = "start_mode";
         private const string KeyStartConstraints = "start_constraints";
@@ -709,9 +716,11 @@ namespace CairnMultiplayerMod.Internal.Networking
                     start.Mode.ToString(CultureInfo.InvariantCulture));
                 SteamMatchmaking.SetLobbyData(CurrentLobbyId, KeyStartConstraints,
                     start.ExtraConstraints.ToString(CultureInfo.InvariantCulture));
+                SteamMatchmaking.SetLobbyData(CurrentLobbyId, KeyStartWorld,
+                    start.World.ToString(CultureInfo.InvariantCulture));
                 SteamMatchmaking.SetLobbyData(CurrentLobbyId, KeyStartNonce, nonce);
                 ModLog.Info($"[SteamLobby] Start broadcast nonce={nonce} mode={(MultiplayerMode)start.Mode} " +
-                    $"difficulty={(GameDifficulty)start.Difficulty}.");
+                    $"difficulty={(GameDifficulty)start.Difficulty} world={(ClimbWorld)start.World}.");
                 RaiseStartSignal(nonce, start);
                 return true;
             }
@@ -751,6 +760,7 @@ namespace CairnMultiplayerMod.Internal.Networking
                     Name = name,
                     IsHost = memberId.m_SteamID == HostSteamId,
                     IsSelf = memberId.m_SteamID == selfId,
+                    WorldUnavailable = ReadMemberWorldUnavailable(memberId),
                 });
             }
         }

@@ -14,6 +14,7 @@ internal static class SceneRoles
     private const string BivouacScene = "BivouacIndoor";
     private const string LoadingScene = "LoadingScreen";
     private const string CommonBaseScene = "CommonBaseScene";
+    private const string SummitWorldPrefix = "Crux_";
 
     // Additive layers streamed on top of a gameplay root — never a root themselves.
     private static readonly string[] AdditiveSuffixes =
@@ -36,9 +37,13 @@ internal static class SceneRoles
     public static bool IsBivouac(string sceneName)
         => string.Equals(sceneName, BivouacScene, StringComparison.Ordinal);
 
+    /// <summary>A story zone ("2_Kami") or a DLC world ("Crux_01_TowerGym"), never one of the
+    /// layers streamed on top of either.</summary>
     public static bool IsGameplayRoot(string sceneName)
     {
-        if (string.IsNullOrEmpty(sceneName) || !char.IsDigit(sceneName[0]))
+        if (string.IsNullOrEmpty(sceneName)) return false;
+        if (IsSummitWorldRoot(sceneName)) return true;
+        if (!char.IsDigit(sceneName[0]))
             return false;
 
         if (sceneName.Contains("_Holds", StringComparison.Ordinal))
@@ -50,6 +55,21 @@ internal static class SceneRoles
                 return false;
         }
 
+        return true;
+    }
+
+    /// <summary>
+    /// The DLC worlds are Summit-mode scenes named "Crux_&lt;number&gt;_&lt;Name&gt;". Their
+    /// layers add one more part ("Crux_01_TowerGym_Holds2", "..._Background"), so the root is
+    /// the name made of exactly those three.
+    /// </summary>
+    private static bool IsSummitWorldRoot(string sceneName)
+    {
+        if (!sceneName.StartsWith(SummitWorldPrefix, StringComparison.Ordinal)) return false;
+        var parts = sceneName.Split('_');
+        if (parts.Length != 3 || parts[1].Length == 0 || parts[2].Length == 0) return false;
+        foreach (var c in parts[1])
+            if (!char.IsDigit(c)) return false;
         return true;
     }
 

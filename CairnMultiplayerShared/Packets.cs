@@ -448,9 +448,8 @@ public struct ServerPlayerState : IPacket
 }
 
 /// <summary>
-/// The server tells the client to immediately start a new story game with the given
-/// difficulty and gameplay flags. Sent right after the handshake ACK, and again
-/// every time the server decides to restart the session.
+/// The host tells every player to start the climb: where, under which mode, and with
+/// which launch flags.
 /// </summary>
 public struct ServerStartGame : IPacket
 {
@@ -467,6 +466,9 @@ public struct ServerStartGame : IPacket
     /// <see cref="ClimbConstraints"/>.</summary>
     public int ExtraConstraints;
 
+    /// <summary>Where the lobby climbs, cast from <see cref="ClimbWorld"/>.</summary>
+    public int World;
+
     public void Serialize(BinaryWriter w)
     {
         w.Write(Difficulty);
@@ -475,6 +477,7 @@ public struct ServerStartGame : IPacket
         w.Write(AssistEnabled);
         w.Write(Mode);
         w.Write(ExtraConstraints);
+        w.Write(World);
     }
 
     public void Deserialize(BinaryReader r)
@@ -485,6 +488,7 @@ public struct ServerStartGame : IPacket
         AssistEnabled = r.ReadBoolean();
         Mode = r.ReadByte();
         ExtraConstraints = r.ReadInt32();
+        World = r.ReadInt32();
     }
 }
 

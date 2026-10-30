@@ -21,19 +21,29 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
     private readonly List<MonoBehaviour> _suspendedMenuBehaviours = new();
     private readonly List<bool> _suspendedMenuStates = new();
     private readonly UnityAction _onStorySelected;
+    private readonly UnityAction _onSummitSelected;
 
     private GameObject _modeSelectContainer;
     private Button _storyButton;
+    private Button _summitButton;
+    private MainMenuModeSelectElement _summitMenu;
     private GameObject _suspendedArrow;
     private bool _suspendedArrowWasActive;
     private int _frameCounter;
     private int _notReadyWarnFrames;
     private bool _disposed;
 
-    internal MainMenuAdapter(Action onStorySelected = null)
+    /// <param name="onSoloModeSelected">Called when the player picks one of Cairn's own modes
+    /// by hand -- Story, or Summit when it leads somewhere -- to play on their own.</param>
+    internal MainMenuAdapter(Action onSoloModeSelected = null)
     {
-        if (onStorySelected != null)
-            _onStorySelected = (UnityAction)(() => onStorySelected());
+        if (onSoloModeSelected == null) return;
+        _onStorySelected = (UnityAction)(() => onSoloModeSelected());
+        // Without a Summit pack the button opens the store page instead: nothing is played.
+        _onSummitSelected = (UnityAction)(() =>
+        {
+            if (HasSummitContent()) onSoloModeSelected();
+        });
     }
 
     public IGameRegistration AddButton(string id, string label, Action onClick)
@@ -57,7 +67,7 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
     {
         if (!SceneRoles.IsMainMenu(sceneName)) return;
 
-        DetachStoryListener();
+        DetachSoloListeners();
         _modeSelectContainer = null;
         _suspendedArrow = null;
         _frameCounter = 0;
@@ -167,6 +177,7 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
         }
 
         AttachStoryListener(template.GetComponent<Button>());
+        AttachSummitListener(container.GetComponentInParent<MainMenuModeSelectElement>());
 
         _modeSelectContainer = container.gameObject;
         var siblingIndex = template.GetSiblingIndex() + 1;
@@ -182,22 +193,51 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
     private void AttachStoryListener(Button storyButton)
     {
         if (_onStorySelected == null || storyButton == null || storyButton == _storyButton) return;
-        DetachStoryListener();
+        DetachListener(ref _storyButton, _onStorySelected, "main-menu.remove-story-listener");
         storyButton.onClick.AddListener(_onStorySelected);
         _storyButton = storyButton;
     }
 
-    private void DetachStoryListener()
+    private void AttachSummitListener(MainMenuModeSelectElement menu)
     {
-        if (_storyButton != null && _onStorySelected != null)
+        var summitButton = menu?.summitButton;
+        if (_onSummitSelected == null || summitButton == null || summitButton == _summitButton) return;
+        DetachListener(ref _summitButton, _onSummitSelected, "main-menu.remove-summit-listener");
+        summitButton.onClick.AddListener(_onSummitSelected);
+        _summitButton = summitButton;
+        _summitMenu = menu;
+    }
+
+    private void DetachSoloListeners()
+    {
+        DetachListener(ref _storyButton, _onStorySelected, "main-menu.remove-story-listener");
+        DetachListener(ref _summitButton, _onSummitSelected, "main-menu.remove-summit-listener");
+        _summitMenu = null;
+    }
+
+    private static void DetachListener(ref Button button, UnityAction listener, string context)
+    {
+        if (button != null && listener != null)
         {
-            try { _storyButton.onClick.RemoveListener(_onStorySelected); }
+            try { button.onClick.RemoveListener(listener); }
             catch (Exception exception)
             {
-                ModLog.SuppressedException("main-menu.remove-story-listener", exception);
+                ModLog.SuppressedException(context, exception);
             }
         }
-        _storyButton = null;
+        button = null;
+    }
+
+    /// <summary>The same test the Summit button runs before choosing between the mode and
+    /// the store page.</summary>
+    private bool HasSummitContent()
+    {
+        try { return _summitMenu != null && _summitMenu.HasAnySummitDLC(); }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("main-menu.read-summit-dlc", exception);
+            return true;
+        }
     }
 
     private void OnButtonClicked(ButtonRegistration registration)
@@ -274,7 +314,7 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
     public void Dispose()
     {
         if (_disposed) return;
-        DetachStoryListener();
+        DetachSoloListeners();
         RestoreNativeMenu();
         for (var i = _registrations.Count - 1; i >= 0; i--)
         {

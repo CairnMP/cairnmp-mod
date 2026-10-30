@@ -18,6 +18,9 @@ namespace CairnMultiplayerMod.Features;
 /// Measuring gain rather than altitude is what makes it work at all: in CairnMP everyone
 /// launches their own save, so two climbers are rarely standing in the same place when the
 /// race starts. Height gained is theirs alone and needs no common start line.
+///
+/// The top out is read from the story's summit sequence. A DLC world is a Summit-mode run
+/// with no such sequence, so a race there is decided on height alone.
 /// </summary>
 internal sealed class RaceFeature : MultiplayerFeature
 {

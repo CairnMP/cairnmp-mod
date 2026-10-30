@@ -31,4 +31,33 @@ public sealed class SceneRolesTests
     [InlineData("BivouacIndoor", false)]
     public void GameplayContextIncludesAdditiveLayersButNotRealBoundaries(string scene, bool expected)
         => Assert.Equal(expected, SceneRoles.HasGameplayContext(scene, "2_Kami"));
+
+    [Theory]
+    [InlineData("Crux_01_TowerGym", true)]
+    [InlineData("Crux_02_DeepWaterPiton", true)]
+    [InlineData("Crux_03_Mallorca", true)]
+    [InlineData("Crux_01_TowerGym_Holds2", false)]
+    [InlineData("Crux_01_TowerGym_Art", false)]
+    [InlineData("Crux_01_TowerGym_Background", false)]
+    [InlineData("Crux_Common", false)]
+    [InlineData("Crux_A1_TowerGym", false)]
+    [InlineData("Crux__TowerGym", false)]
+    public void ADlcWorldIsAGameplayRootButItsLayersAreNot(string scene, bool expected)
+        => Assert.Equal(expected, SceneRoles.IsGameplayRoot(scene));
+
+    [Fact]
+    public void DlcLayersResolveToTheirWorld()
+        => Assert.Equal("Crux_01_TowerGym", SceneRoles.ResolveNetworkScene(
+            "Crux_01_TowerGym_Holds2", "Crux_01_TowerGym"));
+
+    [Fact]
+    public void EnteringADlcWorldResetsTheSync()
+        => Assert.True(SceneRoles.IsSyncResetPoint("Crux_01_TowerGym"));
+
+    [Theory]
+    [InlineData("Crux_01_TowerGym_Art", true)]
+    [InlineData("MainMenu", false)]
+    [InlineData("BivouacIndoor", false)]
+    public void ADlcWorldKeepsItsGameplayContext(string scene, bool expected)
+        => Assert.Equal(expected, SceneRoles.HasGameplayContext(scene, "Crux_01_TowerGym"));
 }

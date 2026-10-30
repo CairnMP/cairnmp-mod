@@ -81,7 +81,7 @@ public class ProtocolVersionTests
     {
         // When you bump Protocol.Version, update this value AND the release notes
         // to signal to clients that they need to update.
-        Assert.Equal(15, Protocol.Version);
+        Assert.Equal(16, Protocol.Version);
     }
 
     [Fact]

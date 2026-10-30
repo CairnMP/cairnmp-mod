@@ -17,6 +17,7 @@ public class GameModeTests
             AssistEnabled = false,
             Mode = (byte)MultiplayerMode.FreeSolo,
             ExtraConstraints = (int)ClimbConstraints.PermaDeath,
+            World = (int)ClimbWorld.Haken,
         };
 
         using var stream = new MemoryStream();
@@ -32,6 +33,8 @@ public class GameModeTests
         Assert.Equal(sent.ExtraConstraints, received.ExtraConstraints);
         Assert.Equal(sent.SkipTutorials, received.SkipTutorials);
         Assert.Equal(sent.SkipPractice, received.SkipPractice);
+        Assert.Equal(sent.AssistEnabled, received.AssistEnabled);
+        Assert.Equal(sent.World, received.World);
     }
 
     [Fact]

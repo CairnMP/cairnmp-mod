@@ -31,7 +31,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **15**; lobby admission may also require the exact mod version.
+> protocol is **16**; lobby admission may also require the exact mod version.
 
 ## Features
 
@@ -43,6 +43,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 | Communication | In-game chat, completion, host commands, and experimental proximity voice |
 | Sessions | Steam relay hosting, late-join state, and host-authoritative validation |
 | Modes | Rope team, free solo and race, with synchronized bivouac behavior |
+| Destinations | Mount Kami from your own save, or a Summit-mode world from the free *On the Trail: Deep Water* DLC |
 | Reliability | Local crash reports, bounded diagnostics, and isolated feature failures |
 
 ## Player guide

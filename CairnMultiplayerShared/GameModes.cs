@@ -144,6 +144,13 @@ public static class MultiplayerModeText
         _ => "Unknown",
     };
 
+    /// <summary>
+    /// The short label beside a lobby's mode. On Mount Kami it is the difficulty the mode
+    /// sets; a DLC world runs at Summit mode's own difficulty, so there it names the world.
+    /// </summary>
+    public static string Badge(MultiplayerModeRules rules, ClimbWorld world)
+        => ClimbWorlds.IsStory(world) ? DifficultyName(rules.Difficulty) : ClimbWorlds.Name(world);
+
     /// <summary>What the mode promises a climber who falls, in reading order.</summary>
     public static IReadOnlyList<string> Promises(MultiplayerModeRules rules)
     {

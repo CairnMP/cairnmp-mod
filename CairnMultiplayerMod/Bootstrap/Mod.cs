@@ -146,8 +146,8 @@ public partial class Mod : MelonMod
         _disconnectKey = ParseKey(ModConfig.DisconnectKey.Value, Key.F6);
         Network = new NetworkManager(RopeLinkState.Links);
         Lobby = new SteamLobbyManager();
-        _panel = MultiplayerPanelFactory.Create(Lobby);
-        _mainMenu = new MainMenuAdapter(OnStoryModeSelected);
+        _panel = MultiplayerPanelFactory.Create(Lobby, SummitWorldInterop.WhyUnavailable);
+        _mainMenu = new MainMenuAdapter(OnSoloModeSelected);
         _hud = new HudAdapter();
         _voice = new VoiceAdapter(() => Network, () => LocalState == PlayerState.InGame);
         _inventory = new InventoryAdapter();
@@ -182,6 +182,8 @@ public partial class Mod : MelonMod
             // The launch signal sets the rules again, but not before features start: a
             // latecomer's session runs for seconds before their own launch goes through.
             _runtimeState.ModeRules = Lobby.CurrentModeRules;
+            // Lets the host see, before starting, who could not follow to a DLC destination.
+            Lobby.PublishWorldAvailability(SummitWorldInterop.WhyUnavailable(Lobby.CurrentWorld) == null);
             var code = Lobby.CurrentRoomCode;
             _panel.SetCurrentLobbyName(Lobby.CurrentLobbyName);
             _panel.SetStatus(string.IsNullOrEmpty(code) ? "Connected" : $"Connected — code {code}", true);

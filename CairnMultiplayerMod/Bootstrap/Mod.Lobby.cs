@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Internal;
 using CairnMultiplayerMod.Internal.Game;
+using CairnMultiplayerMod.Internal.Game.MainMenu;
 using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Game.World;
 using CairnMultiplayerMod.Internal.Networking;
@@ -32,13 +33,22 @@ public partial class Mod
         }
 
         var rules = Lobby.CurrentModeRules;
-        _panel.SetStatus($"Starting {rules.Name}...", true);
-        Lobby.BroadcastStart(BuildStartGame(rules));
+        var world = Lobby.CurrentWorld;
+        // The host's own launch would fail after everyone else's had begun.
+        var blocked = SummitWorldInterop.WhyUnavailable(world);
+        if (blocked != null)
+        {
+            _panel.SetStatus(blocked, true);
+            return;
+        }
+
+        _panel.SetStatus($"Starting {rules.Name} on {ClimbWorlds.Name(world)}...", true);
+        Lobby.BroadcastStart(BuildStartGame(rules, world));
     }
 
-    /// <summary>The mode decides the difficulty; the rest are launch conveniences that have
-    /// always been the same for every lobby.</summary>
-    private static ServerStartGame BuildStartGame(MultiplayerModeRules rules) => new()
+    /// <summary>The mode decides the difficulty and the lobby the destination; the rest are
+    /// launch conveniences that have always been the same for every lobby.</summary>
+    private static ServerStartGame BuildStartGame(MultiplayerModeRules rules, ClimbWorld world) => new()
     {
         Difficulty = (int)rules.Difficulty,
         SkipTutorials = true,
@@ -46,13 +56,14 @@ public partial class Mod
         AssistEnabled = false,
         Mode = (byte)rules.Mode,
         ExtraConstraints = (int)rules.ExtraConstraints,
+        World = (int)world,
     };
 
     private void OnHostRequested(HostConfig config)
     {
         config = WithLocalSteamIdentity(config);
         LoggerInstance.Msg($"Creating Steam lobby '{config.LobbyName}' as '{config.PlayerName}' " +
-                           $"(max {config.MaxPlayers}, {config.Visibility}, {config.Mode})...");
+                           $"(max {config.MaxPlayers}, {config.Visibility}, {config.Mode}, {config.World})...");
         ModConfig.PlayerName.Value = config.PlayerName;
         ModConfig.MaxPlayers.Value = config.MaxPlayers;
         MelonPreferences.Save();
@@ -112,6 +123,7 @@ public partial class Mod
         MaxPlayers = config.MaxPlayers,
         Visibility = config.Visibility,
         Mode = config.Mode,
+        World = config.World,
     };
 
     private Task<List<LobbyEntry>> _browserRequest;
@@ -218,14 +230,14 @@ public partial class Mod
     /// <summary>The native Story choice is an explicit opt-out from CairnMP gameplay.
     /// Leave any lobby before Cairn opens the solo save flow, and keep every feature
     /// dormant until a new multiplayer handshake succeeds.</summary>
-    private void OnStoryModeSelected()
+    private void OnSoloModeSelected()
     {
         var wasInMultiplayer = _multiplayerModeActive || Lobby.IsInLobby || Network.IsConnected;
         OnDisconnectRequested();
         _panel.Hide();
         _mainMenu.RestoreNativeMenu();
         if (wasInMultiplayer)
-            LoggerInstance.Msg("[CairnMP] Story selected — multiplayer features disabled for vanilla play.");
+            LoggerInstance.Msg("[CairnMP] Solo mode selected — multiplayer features disabled for vanilla play.");
     }
 
     private void SetMultiplayerModeActive(bool active)

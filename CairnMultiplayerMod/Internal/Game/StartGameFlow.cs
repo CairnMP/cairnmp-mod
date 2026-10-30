@@ -8,10 +8,14 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>
-/// Keeps launch on Cairn's native save-selection path so every player owns their save choice.
+/// Keeps launch on Cairn's native menus so every player owns their save choice: the story
+/// save selection for Mount Kami, the Summit world selection for a DLC destination.
 /// </summary>
 internal sealed class StartGameFlow
 {
+    /// <summary>How long a DLC launch waits for the Summit screens to load before giving up.</summary>
+    private const float SummitMenuWaitSeconds = 5f;
+
     private readonly IMultiplayerPanel _panel;
     private readonly Action _restoreMainMenuInput;
     private readonly RuntimeState _state;
@@ -24,8 +28,8 @@ internal sealed class StartGameFlow
     // until loading begins.
     private ServerStartGame? _forceNewGameOpts;
 
-    // Always enter through Cairn's save manager so players can resume an existing save.
-    // Choosing an empty slot continues through the native new-game/difficulty flow.
+    // A story launch always enters through Cairn's save manager so players can resume an
+    // existing save. Choosing an empty slot continues through the native new-game flow.
     internal static MainMenuInterop.MainMenuStep MultiplayerLaunchEntryStep =>
         MainMenuInterop.MainMenuStep.StoryModeManageSave;
 
@@ -59,7 +63,10 @@ internal sealed class StartGameFlow
         _pendingStart = pkt;
         _pendingStartRetries = 0;
         _pendingStartRetryTimer = 1.0f;
-        _panel.SetStatus("Opening save selection...", true);
+        var world = (ClimbWorld)pkt.World;
+        _panel.SetStatus(ClimbWorlds.IsStory(world)
+            ? "Opening save selection..."
+            : $"Opening {ClimbWorlds.Name(world)}...", true);
     }
 
     internal void Tick()
@@ -104,25 +111,84 @@ internal sealed class StartGameFlow
             else if (_pendingStartRetries == 3 && _pendingStartRetryTimer >= 0.5f)
             {
                 var start = _pendingStart.Value;
-                var rules = RulesOf(start);
-                if (!GameOptionsInterop.SetNextGameMode(rules, start.SkipTutorials,
-                        start.SkipPractice, start.AssistEnabled))
-                {
-                    GameOptionsInterop.SetNextGameSkipOptions(
-                        start.SkipTutorials, start.SkipPractice, start.AssistEnabled);
-                }
-                _state.ModeRules = rules;
-
-                _forceNewGameOpts = start;
-
-                MainMenuInterop.ForceMainMenuStep(MultiplayerLaunchEntryStep);
-                ModLog.Info("[StartGame] Opened native save selection — player chooses an existing or new save (options re-applied each frame)");
-
-                _pendingStart = null;
-                _pendingStartRetries = 0;
-                _pendingStartRetryTimer = 0f;
-                _panel.Hide();
+                var world = (ClimbWorld)start.World;
+                if (ClimbWorlds.IsStory(world)) LaunchStory(start);
+                else LaunchSummit(start, world);
             }
         }
+    }
+
+    private void LaunchStory(ServerStartGame start)
+    {
+        var rules = RulesOf(start);
+        if (!GameOptionsInterop.SetNextGameMode(rules, start.SkipTutorials,
+                start.SkipPractice, start.AssistEnabled))
+        {
+            GameOptionsInterop.SetNextGameSkipOptions(
+                start.SkipTutorials, start.SkipPractice, start.AssistEnabled);
+        }
+        _state.ModeRules = rules;
+
+        _forceNewGameOpts = start;
+
+        MainMenuInterop.ForceMainMenuStep(MultiplayerLaunchEntryStep);
+        ModLog.Info("[StartGame] Opened native save selection — player chooses an existing or new save (options re-applied each frame)");
+
+        ClearPendingStart();
+        _panel.Hide();
+    }
+
+    /// <summary>
+    /// A DLC destination is a Summit-mode world. Its difficulty is the game's own -- the run
+    /// is set up by the world selection, not by the new-game options a story launch forces --
+    /// so the mode only brings its session rules there: revives, spectating, the race.
+    /// </summary>
+    private void LaunchSummit(ServerStartGame start, ClimbWorld world)
+    {
+        if (!ClimbWorlds.IsKnown(world))
+        {
+            FailLaunch($"This lobby climbs somewhere this version of CairnMP does not know ({(int)world}).");
+            return;
+        }
+
+        var access = SummitWorldInterop.Check(world);
+        // The retry timer kept running since the launch began, so it doubles as the wait.
+        if (access == SummitWorldAccess.MenuNotReady && _pendingStartRetryTimer < SummitMenuWaitSeconds)
+            return;
+
+        var name = ClimbWorlds.Name(world);
+        if (access != SummitWorldAccess.Ready)
+        {
+            FailLaunch(SummitWorldInterop.Explain(world, access)
+                ?? $"Summit mode did not open for {name}. Ask the host to start again.");
+            return;
+        }
+
+        _state.ModeRules = RulesOf(start);
+        if (!SummitWorldInterop.TryOpenWorldSelect(world))
+        {
+            FailLaunch($"Summit mode did not open for {name}. Ask the host to start again.");
+            return;
+        }
+
+        ModLog.Info($"[StartGame] Opened the Summit world selection on {world} — player starts or continues their run");
+        ClearPendingStart();
+        _panel.Hide();
+    }
+
+    /// <summary>The panel stays open with the reason: the player is still in the lobby and
+    /// can leave it, or fix what is missing and wait for the host's next start.</summary>
+    private void FailLaunch(string reason)
+    {
+        ModLog.Warning($"[StartGame] Launch refused: {reason}");
+        ClearPendingStart();
+        _panel.SetStatus(reason, true);
+    }
+
+    private void ClearPendingStart()
+    {
+        _pendingStart = null;
+        _pendingStartRetries = 0;
+        _pendingStartRetryTimer = 0f;
     }
 }

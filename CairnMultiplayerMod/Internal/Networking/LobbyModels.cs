@@ -19,6 +19,9 @@ internal sealed class HostConfig
 
     /// <summary>The rules everyone in the lobby will play by.</summary>
     public MultiplayerMode Mode { get; init; } = MultiplayerMode.RopeTeam;
+
+    /// <summary>Where everyone in the lobby will climb.</summary>
+    public ClimbWorld World { get; init; } = ClimbWorld.Kami;
 }
 
 internal sealed class LobbyEntry
@@ -32,4 +35,7 @@ internal sealed class LobbyEntry
 
     /// <summary>Advertised by the host, so the mode is visible before joining.</summary>
     public MultiplayerMode Mode { get; init; } = MultiplayerMode.RopeTeam;
+
+    /// <summary>Advertised with the mode: a guest without the DLC sees it before joining.</summary>
+    public ClimbWorld World { get; init; } = ClimbWorld.Kami;
 }
