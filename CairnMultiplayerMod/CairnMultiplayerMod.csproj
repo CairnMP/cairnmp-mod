@@ -23,7 +23,7 @@
 
   <ItemGroup>
     <PackageReference Include="Concentus" Version="2.2.2" />
-    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.4.0" />
     <Reference Include="Il2CppTheGameBakers.TGBTools.UI.Runtime">
       <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.TGBTools.UI.Runtime.dll</HintPath>
       <Private>false</Private>
