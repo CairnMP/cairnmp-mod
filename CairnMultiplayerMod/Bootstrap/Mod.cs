@@ -162,7 +162,7 @@ public partial class Mod : MelonMod
             new ClockAdapter(),
             new PlayersAdapter(() => Network, _runtimeState),
             new WeatherAdapter(),
-            new WorldAdapter(), _voice, new LifeAdapter(), new SpectatorAdapter());
+            new WorldAdapter(), _voice, new LifeAdapter(), new SpectatorAdapter(), new ManualBelayAdapter(), new BelayPanelAdapter());
 
         Rope = new RopeCoupleController(Network, _runtimeState);
         Player = new PlayerStateBroadcaster(

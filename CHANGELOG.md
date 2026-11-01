@@ -9,6 +9,23 @@ All notable CairnMP changes are documented here. Releases follow
 > even when the wire-protocol number is unchanged. Read the compatibility note
 > for the release you install.
 
+## Unreleased
+
+### Added
+- Opt-in manual-belay pilot: an anchored player requests brake/release on a
+  consenting climber's existing protection route. Host-accepted intent and
+  climber-applied suspension telemetry are separate; expired input cannot reopen
+  payout. Native two-client and shared station-routing validation remain pending.
+- Partner-belay panel on L, with requests from either role, explicit acceptance,
+  decline/cancel, brake and end actions. Multiple native protection segments can
+  rebind while unloaded after a settling interval. Added a solo route exercise and
+  a geometric planner for the intended shared station/protection/climber path;
+  neither establishes native shared routing or two-client physics validation.
+
+### Changed
+- Development protocol is now **18**. Every peer needs the same experimental
+  build; published 2.4.1/protocol 16 clients cannot join these sessions.
+
 ## Releases
 
 | Version | Date | Channel | Highlights |

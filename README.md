@@ -31,7 +31,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **16**; lobby admission may also require the exact mod version.
+> protocol is **18**; lobby admission may also require the exact mod version.
 
 ## Features
 
@@ -115,6 +115,44 @@ instead of being destroyed or duplicated.
 > Quest items, containers, charms, unique objects, and equipment with individual
 > state cannot be shared. Items can only leave the selected backpack stack; there
 > is no chat command for giving or dropping.
+
+### Manual belay experiment
+
+Development builds can opt in through `Debug.BelayRemoteExperiment`. Every peer
+must use the same experimental build (protocol **18**, incompatible with the
+published 2.4.1/protocol 16 and M1/protocol 17 builds). This pilot controls the climber's existing
+protection route; routing the physical rope through the belayer's station remains
+future work. It does not create or replace the cooperative harness tether.
+
+Press **L** to choose a nearby player, ask for belay or offer belay. The recipient
+accepts or declines in the panel; closing it does not accept the invitation. The
+belayer must be secured at a native piton station and remain still. Both players
+must initially be within 6 m in the same scene. Chat fallbacks remain available:
+`/belay request <player>`, `/belay offer <player>`, `/belay accept`, `/belay stop`.
+**Space** (or F7) toggles the latched brake, starting with free rope. Only one pair
+can use this pilot at a time. In this opt-in mode L replaces the old direct-tether shortcut.
+
+Multiple protection pitons are now accepted. Adding/removing them while unloaded
+waits for a stable ordered segment/holder snapshot before rebinding the controller;
+it does not require another invitation. A topology change during suspension ends
+ownership instead of switching the loaded constraint to an unverified route. Native
+piton failure is observed once and retains its original result. Returning to the
+wall rearms the next fall with a new application generation and current intent.
+
+The HUD distinguishes host-accepted intent from the climber's measured suspension
+readback. Input permission expires after three seconds without renewal. A valid
+owned suspension requests hold at its current geometry before ownership ends;
+scene/invalid loaded-topology changes invalidate old native references without restoring an old
+radius. Sessions last at most two minutes. Native two-client braking, station
+integration, damage/failure coherence and crash stability still require testing.
+Remote control does not depend on a diagnostic capture or its recording limits.
+
+`Debug.BelayRouteExperiment` also enables an independent solo exercise: Ctrl+F11
+starts/ends control and Space/F7 brakes/releases. It uses the same native adapter
+and shows piton count, route generation and applied distance. A geometric preview
+calculates station -> ordered pitons -> climber capacity, with the first piton
+standing in for a simulated station. That preview does not attach or reroute the
+physical rope. Native multi-piton and panel rendering remain unverified in-game.
 
 ### Proximity voice
 

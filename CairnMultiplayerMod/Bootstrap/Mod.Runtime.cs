@@ -143,6 +143,8 @@ public partial class Mod
         try
         {
             TickPerformance();
+            TickBelayRouteInput();
+            _game?.Belay.Tick(); // Complete a pending hold even after leaving multiplayer.
             NativePerformanceProbe.Tick();
             GameTuning.Tick();
             using var performance = Measure(PerformanceArea.ModUpdate);
@@ -377,6 +379,7 @@ public partial class Mod
 
     private void DrawModUi()
     {
+        DrawLocalBelayExercise();
         using var performance = Measure(PerformanceArea.Ui);
         _panel?.OnGUI();
         Features?.DrawHud();
@@ -428,6 +431,7 @@ public partial class Mod
         _runtimeStopped = true;
 
         SafeStop("performance diagnostics", StopPerformance);
+        SafeStop("manual belay", () => _game?.Belay.Shutdown());
         SafeStop("input", InputInterop.ForceClearBlock);
         SafeStop("panel", () =>
         {
