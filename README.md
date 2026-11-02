@@ -142,6 +142,10 @@ anchor or retrieve the piton. Releasing the native anchor, losing/breaking/movin
 the piton, leaving Belay Team or changing scenes invalidates the station. Offering
 belay or accepting a request still records the current anchor when needed.
 Defining a station does not automatically create a pair or exchange roles.
+With the L panel open, **K** performs its visible Define/Remove station action
+without needing the mouse. One press performs one action; holding K does not
+toggle repeatedly. Outside the panel, the shortcut does not consume K. The panel
+keeps the cursor visible/unlocked while open and restores its previous state on close.
 
 Multiple protection pitons are now accepted. Adding/removing them while unloaded
 waits for a stable ordered segment/holder snapshot before rebinding the controller;

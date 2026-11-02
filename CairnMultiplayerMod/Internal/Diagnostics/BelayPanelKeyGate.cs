@@ -5,10 +5,10 @@ internal sealed class BelayPanelKeyGate
 {
     private bool _down;
 
-    internal bool Observe(bool down)
+    internal bool Observe(bool down, bool eligible = true)
     {
         var pressed = down && !_down;
         _down = down;
-        return pressed;
+        return pressed && eligible;
     }
 }

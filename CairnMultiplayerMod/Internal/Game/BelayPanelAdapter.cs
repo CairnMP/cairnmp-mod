@@ -10,8 +10,10 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
     private Action<BelayPanelAction, int> _onAction;
     private BelayPanelView _view = new();
     private readonly BelayPanelKeyGate _toggleKey = new();
+    private readonly BelayPanelKeyGate _stationKey = new();
     private int _page;
     private bool _firstDrawCompleted;
+    private int _cursorRepairsLogged;
     private GUIStyle _title, _body, _button, _name;
     private bool _previousCursorVisible;
     private CursorLockMode _previousLock;
@@ -30,9 +32,10 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
         ModLog.Info("[BelayPanel] Opening; phase=" + _view.Phase);
         _previousCursorVisible = Cursor.visible; _previousLock = Cursor.lockState;
         _firstDrawCompleted = false;
+        _cursorRepairsLogged = 0;
         IsOpen = true; InputCaptureState.IsBelayPanelCaptured = true;
-        Cursor.lockState = CursorLockMode.None; Cursor.visible = true;
         InputInterop.ReconcileGameplayInput(InputCaptureState.WantsGameplayBlocked);
+        MaintainCursor();
         ModLog.Info("[BelayPanel] Opened; gameplay input captured.");
     }
 
@@ -40,8 +43,8 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
     {
         if (!IsOpen) return;
         IsOpen = false; InputCaptureState.IsBelayPanelCaptured = false;
-        Cursor.lockState = _previousLock; Cursor.visible = _previousCursorVisible;
         InputInterop.ReconcileGameplayInput(InputCaptureState.WantsGameplayBlocked);
+        Cursor.lockState = _previousLock; Cursor.visible = _previousCursorVisible;
         ModLog.Info("[BelayPanel] Closed; gameplay input reconciled.");
     }
 
@@ -67,7 +70,23 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
                 if (IsOpen != wasOpen) keyEvent.Use();
             }
         }
+        if (_onAction != null && keyEvent != null && keyEvent.keyCode == KeyCode.K
+            && keyEvent.type is EventType.KeyDown or EventType.KeyUp)
+        {
+            var eligible = IsOpen && Application.isFocused && !keyEvent.control && !keyEvent.alt
+                && !keyEvent.command && !keyEvent.shift
+                && (_view.StationDefined || _view.Phase == BelayPanelPhase.Partners);
+            if (_stationKey.Observe(keyEvent.type == EventType.KeyDown, eligible))
+            {
+                var action = _view.StationDefined ? BelayPanelAction.RemoveStation : BelayPanelAction.DefineStation;
+                ModLog.Info("[BelayPanel] Station shortcut; action=" + action);
+                Act(action);
+                keyEvent.Use();
+            }
+            else if (IsOpen) keyEvent.Use();
+        }
         if (!IsOpen) return;
+        MaintainCursor();
         var trace = !_firstDrawCompleted;
         if (trace) ModLog.Info("[BelayPanel] First draw started.");
         var previousEnabled = GUI.enabled;
@@ -86,6 +105,21 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
             if (trace) ModLog.Info("[BelayPanel] First draw completed.");
         }
         finally { GUI.enabled = previousEnabled; }
+    }
+
+    private void MaintainCursor()
+    {
+        if (!IsOpen || !Application.isFocused) return;
+        var previousLock = Cursor.lockState;
+        var previousVisible = Cursor.visible;
+        if (previousLock == CursorLockMode.None && previousVisible) return;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+        if (_cursorRepairsLogged < 3)
+        {
+            _cursorRepairsLogged++;
+            ModLog.Info("[BelayPanel] Cursor released; previousLock=" + previousLock + ", previousVisible=" + previousVisible);
+        }
     }
 
     private void DrawContent(Rect rect)
@@ -108,7 +142,7 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
             GUI.Label(new Rect(x, rect.y + 140f, half, 40f),
                 view.StationDefined ? "Station: your current piton anchor" : "Use your existing piton anchor", _body);
             if (Button(new Rect(x + half + 10f, rect.y + 140f, half, 40f),
-                view.StationDefined ? "Remove station" : "Define station",
+                view.StationDefined ? "Remove station (K)" : "Define station (K)",
                 view.StationDefined ? BelayPanelAction.RemoveStation : BelayPanelAction.DefineStation)) return;
         }
         if (view.Phase == BelayPanelPhase.Partners)
