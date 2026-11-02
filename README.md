@@ -174,6 +174,14 @@ The end-knot capacity remains the cap even during native stretch. This avoids
 rewinding a falling body to an older, shorter geometric measurement; actual catch
 motion and rebound still require native validation.
 
+For the local ascent/take-in exercise, Ctrl+Down toggles a simulated belayer
+holding take-in for at most 20 seconds, leaving the mouse and movement keys free.
+The HUD shows the remaining time. Ctrl+Down again or a manual arrow interrupts it;
+pause, lost focus/input capture and ending the exercise also cancel it. This
+supplies the same bounded take-in command and does not automate the brake or
+change character movement. Native route rejections name the failed mapping guard,
+and bounded samples include the actual securing-point position for this trial.
+
 This experiment controls the final segment of the existing native protection
 route. The HUD separates released length, estimated straight-line slack, geometric
 reserve, native rest/particle measurements and the suspension readback. Rope and

@@ -137,7 +137,7 @@ internal sealed partial class ManualBelayAdapter
     private bool CanWriteLocalRopeGoal(ObiRopeLengthController controller)
     {
         if (controller.obiRope == null || Id(controller.obiRope) != _localObiRope) return false;
-        if (!MappingMatches()) { EndLocalRope("Protection route changed during a native length update."); return false; }
+        if (!MappingMatches(out var reason)) { EndLocalRope("Protection route changed during a native length update. " + reason); return false; }
         if (!ContextValid || _lease.IsExpired(Now)) { Stop(_lease.Session); return false; }
         if (controller.ropeLengthOverride > 0)
         { EndLocalRope("The native rope has a fixed-length override. End that interaction before starting."); return false; }
@@ -199,6 +199,7 @@ internal sealed partial class ManualBelayAdapter
         var stretchScale = part.obiRope.stretchingScale;
         var compression = part.obiRope.maxCompression;
         var body = _lifeline.harness.GetAttachPosition();
+        var anchor = _lifeline.GetSecuringPitonPosition(true);
         ModLog.Info("[BelayRope] Sample; brake=" + _ropeControl.Braked + ", motion=" + _ropeControl.Motion
             + ", catchPending=" + _ropeControl.CaptureBrakeDistance
             + ", released=" + _ropeControl.Released + ", geometry=" + _ropeControl.Distance
@@ -207,7 +208,8 @@ internal sealed partial class ManualBelayAdapter
             + ", stretchScale=" + stretchScale + ", maxCompression=" + compression
             + ", capacity=" + _ropeControl.Capacity + ", measuredCapacity=" + _measuredRopeCapacity + ", refreshes=" + _ropeRefreshCount
             + ", limit=" + _actual + ", swingReal=" + _real + ", suspended=" + (_pivot != 0)
-            + ", x=" + body.x + ", y=" + body.y + ", z=" + body.z);
+            + ", x=" + body.x + ", y=" + body.y + ", z=" + body.z
+            + ", anchorX=" + anchor.x + ", anchorY=" + anchor.y + ", anchorZ=" + anchor.z);
     }
 
     private void EndLocalRope(string reason)

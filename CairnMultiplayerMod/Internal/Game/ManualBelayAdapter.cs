@@ -398,14 +398,31 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     }
 
     private bool MappingMatches()
+        => MappingMatches(out _);
+
+    private bool MappingMatches(out string reason)
     {
         var route = _topology?.Current;
-        if (route == null || _rebinding || !RopeIdentityValid() || !_lifeline.IsSecured(1)
-            || Id(_lifeline.GetLastSecuringPiton()) != route.LastPiton
-            || _rope.ropeParts?.Count != route.Parts.Length || _rope.ropeHolders?.Count != route.Holders.Length) return false;
-        for (var i = 0; i < route.Parts.Length; i++) if (Id(_rope.ropeParts[i]) != route.Parts[i]) return false;
+        reason = "Protection snapshot unavailable.";
+        if (route == null) return false;
+        reason = "Protection route is settling.";
+        if (_rebinding) return false;
+        reason = "Native rope identity or cooperative-rope ownership changed.";
+        if (!RopeIdentityValid()) return false;
+        reason = "Native lifeline no longer reports a securing piton.";
+        if (!_lifeline.IsSecured(1)) return false;
+        reason = "Last securing piton changed.";
+        if (Id(_lifeline.GetLastSecuringPiton()) != route.LastPiton) return false;
+        reason = "Protection segment count changed.";
+        if (_rope.ropeParts?.Count != route.Parts.Length) return false;
+        reason = "Protection holder count changed.";
+        if (_rope.ropeHolders?.Count != route.Holders.Length) return false;
+        for (var i = 0; i < route.Parts.Length; i++)
+            if (Id(_rope.ropeParts[i]) != route.Parts[i]) { reason = $"Protection segment {i + 1} changed."; return false; }
         for (var i = 0; i < route.Holders.Length; i++)
-            if (_rope.ropeHolders[i] == null || _rope.ropeHolders[i].Pointer.ToInt64() != route.Holders[i]) return false;
+            if (_rope.ropeHolders[i] == null || _rope.ropeHolders[i].Pointer.ToInt64() != route.Holders[i])
+            { reason = $"Protection holder {i + 1} changed."; return false; }
+        reason = "";
         return true;
     }
 

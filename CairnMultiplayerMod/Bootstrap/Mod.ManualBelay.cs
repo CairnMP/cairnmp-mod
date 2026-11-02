@@ -1,5 +1,6 @@
 using System;
 using CairnMultiplayerMod.Internal;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -10,6 +11,7 @@ public partial class Mod
     private string _localBelayNotice;
     private double _localBelayNoticeUntil;
     private GUIStyle _localBelayStyle;
+    private readonly BelayExerciseInput _localBelayExerciseInput = new();
 
     private void TickBelayRouteInput()
     {
@@ -17,29 +19,39 @@ public partial class Mod
         _game?.Belay.SetLocalRopeMotion(0);
         if (_game?.Belay.IsLocalExercise == true && (Network?.IsConnected == true || _multiplayerModeActive))
         {
+            _localBelayExerciseInput.Reset();
             _game.Belay.ToggleLocalExercise(out _);
             return;
         }
         if (_game == null || (ModConfig.BelayRouteExperiment?.Value != true && ModConfig.BelayRopeExperiment?.Value != true)
             || Network?.IsConnected == true
-            || _multiplayerModeActive || !Application.isFocused || _game.Input.IsKeyboardCaptured) return;
+            || _multiplayerModeActive || !Application.isFocused || _game.Input.IsKeyboardCaptured || !(Time.timeScale > 0))
+        { _localBelayExerciseInput.Reset(); return; }
         var keyboard = Keyboard.current;
-        if (keyboard == null) return;
+        if (keyboard == null) { _localBelayExerciseInput.Reset(); return; }
         try
         {
             if (keyboard.f11Key.wasPressedThisFrame && (keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed))
             {
                 var started = _game.Belay.ToggleLocalExercise(out var reason);
+                _localBelayExerciseInput.Reset();
                 _localBelayNotice = reason;
                 _localBelayNoticeUntil = Time.realtimeSinceStartupAsDouble + 15;
                 if (!started) LoggerInstance.Warning("[ManualBelay] " + reason);
             }
             if (keyboard.spaceKey.wasPressedThisFrame || keyboard.f7Key.wasPressedThisFrame) _game.Belay.ToggleLocalBrake();
-            var motion = (keyboard.upArrowKey.isPressed ? 1 : 0) - (keyboard.downArrowKey.isPressed ? 1 : 0);
+            var takingIn = _localBelayExerciseInput.TakingIn;
+            var toggleTakeIn = keyboard.downArrowKey.wasPressedThisFrame
+                && (keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed);
+            var motion = _localBelayExerciseInput.Resolve(_game.Belay.IsLocalExercise && _game.Belay.LocalRopeStatus.HasValue,
+                toggleTakeIn, keyboard.upArrowKey.isPressed, keyboard.downArrowKey.isPressed, Time.realtimeSinceStartupAsDouble);
             _game.Belay.SetLocalRopeMotion(motion);
+            if (takingIn != _localBelayExerciseInput.TakingIn)
+                LoggerInstance.Msg("[BelayRope] Test belayer take-in=" + _localBelayExerciseInput.TakingIn);
         }
         catch (Exception ex)
         {
+            _localBelayExerciseInput.Reset();
             _localBelayNotice = "Local exercise could not start: " + ex.Message;
             _localBelayNoticeUntil = Time.realtimeSinceStartupAsDouble + 15;
             LoggerInstance.Warning("[ManualBelay] " + _localBelayNotice);
@@ -69,13 +81,16 @@ public partial class Mod
         if (rope.HasValue)
         {
             var length = rope.Value;
-            rect.height = 178;
+            rect.height = 202;
             GUI.Box(rect, "Local rope-budget exercise — Ctrl+F11: end | Space/F7: brake/release\n"
                 + "Hold Up: feed | Down: take in slack (1 m/s) | Fixed protection route\n"
                 + (length.Braked ? "BRAKED — feed blocked; take-in removes slack only" : "FREE — a fall runs rope until braking or the rope end")
                 + $"\nFinal segment: released {length.Released:F2} m | slack {length.Slack:F2} m | reserve {length.Reserve:F2} m"
                 + $"\nGeometry {length.Distance:F2} m | native rest {length.RestLength:F2} m | particles {length.ParticleLength:F2} m"
                 + (length.LengthApplied ? "\nLength readback matches target" : "\nWAITING for native rope length — do not start a fall comparison")
+                + (_localBelayExerciseInput.TakingIn
+                    ? $"\nTEST BELAYER: taking in ({_localBelayExerciseInput.RemainingSeconds(Time.realtimeSinceStartupAsDouble):F0}s left) | Ctrl+Down: stop"
+                    : "\nCtrl+Down: simulate belayer take-in for 20 seconds; manual arrows cancel")
                 + (status.Suspended ? $"\nSuspension: applied {status.Limit:F2} m | real {status.RealDistance:F2} m"
                     : "\nClimbing — length is retained for the next suspension"), _localBelayStyle);
             return;
