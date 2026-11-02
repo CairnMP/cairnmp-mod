@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace CairnMultiplayerMod.GameApi;
 
-internal enum BelayPanelAction { Request, Offer, Accept, Decline, Cancel, ToggleBrake, Close }
+internal enum BelayPanelAction { Request, Offer, Accept, Decline, Cancel, ToggleBrake, Close, Toggle }
 internal enum BelayPanelPhase { Partners, Waiting, Invitation, Active }
 internal readonly record struct BelayPartnerRow(int Id, string Name, float Distance);
 

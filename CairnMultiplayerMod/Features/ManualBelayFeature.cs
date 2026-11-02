@@ -107,6 +107,12 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
     {
         switch (action)
         {
+            case BelayPanelAction.Toggle:
+                if (!IsBelayMode || !IsConnected || !Game.State.IsLocalPlayerInGame
+                    || Game.Chat.IsTyping || Game.Input.IsPauseMenuActive) return;
+                if (Game.BelayPanel.IsOpen) Game.BelayPanel.Close();
+                else if (!KeyboardCaptured) { RefreshPanel(); Game.BelayPanel.Show(); }
+                return;
             case BelayPanelAction.Request: HandleChat("request " + target); break;
             case BelayPanelAction.Offer: HandleChat("offer " + target); break;
             case BelayPanelAction.Accept: HandleChat("accept"); break;
@@ -115,7 +121,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             case BelayPanelAction.ToggleBrake:
                 if (_active?.Belayer == LocalPlayerId) { _desiredBrake = !_desiredBrake; _nextIntent = 0; }
                 break;
-            case BelayPanelAction.Close: Game.BelayPanel.Close(); break;
+            case BelayPanelAction.Close: Game.BelayPanel.Close(); return;
         }
         RefreshPanel();
     }
@@ -337,11 +343,6 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         if (!IsBelayMode || !IsConnected || !Game.State.IsLocalPlayerInGame)
         { Game.BelayPanel.Close(); if (_active != null || _offer != null) RequestStop(); return; }
         if (Game.Input.WasPressed(GameInputAction.Panic) || Game.Input.IsPauseMenuActive || Game.Chat.IsTyping) Game.BelayPanel.Close();
-        else if ((!KeyboardCaptured || Game.BelayPanel.IsOpen) && Game.Input.WasKeyPressed(GameKey.L))
-        {
-            if (Game.BelayPanel.IsOpen) Game.BelayPanel.Close();
-            else { RefreshPanel(); Game.BelayPanel.Show(); }
-        }
         if (Game.BelayPanel.IsOpen && now >= _nextPanelRefresh) { _nextPanelRefresh = now + .2f; RefreshPanel(); }
         if (_offer != null && now >= _localUntil) { _offer = null; Game.Belay.EndStation(); _offeredTarget = -1; }
         if (_active == null) return;

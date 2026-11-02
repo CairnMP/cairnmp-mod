@@ -9,6 +9,7 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
 {
     private Action<BelayPanelAction, int> _onAction;
     private BelayPanelView _view = new();
+    private readonly BelayPanelKeyGate _toggleKey = new();
     private int _page;
     private bool _firstDrawCompleted;
     private GUIStyle _title, _body, _button, _name;
@@ -53,6 +54,19 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
 
     public void Draw()
     {
+        // Like the chat, handle the GUI key event while this UI owns gameplay
+        // input. A single event path avoids opening and closing on the same key.
+        var keyEvent = Event.current;
+        if (_onAction != null && keyEvent != null && keyEvent.keyCode == KeyCode.L
+            && keyEvent.type is EventType.KeyDown or EventType.KeyUp)
+        {
+            if (_toggleKey.Observe(keyEvent.type == EventType.KeyDown))
+            {
+                var wasOpen = IsOpen;
+                Act(BelayPanelAction.Toggle);
+                if (IsOpen != wasOpen) keyEvent.Use();
+            }
+        }
         if (!IsOpen) return;
         var trace = !_firstDrawCompleted;
         if (trace) ModLog.Info("[BelayPanel] First draw started.");

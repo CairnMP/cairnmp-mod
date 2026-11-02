@@ -22,7 +22,7 @@ public sealed class ManualBelayFeatureTests
     {
         using var world = new World { Mode = mode };
         var game = world.Nodes[1].Game;
-        game.Keys.Key = GameKey.L; game.Keys.Pressed = true;
+        game.PanelImpl.Act(BelayPanelAction.Toggle);
         world.Tick();
         Assert.False(game.PanelImpl.IsOpen);
         game.ChatImpl.Run("offer 2");
@@ -51,13 +51,30 @@ public sealed class ManualBelayFeatureTests
     {
         using var world = new World(participants: 1);
         var game = world.Nodes[1].Game;
-        game.Keys.Key = GameKey.L; game.Keys.Pressed = true;
+        game.PanelImpl.Act(BelayPanelAction.Toggle);
         world.Tick();
         Assert.True(game.PanelImpl.IsOpen);
         Assert.Empty(game.PanelImpl.View.Partners);
         Assert.False(game.PanelImpl.View.CanOffer);
         Assert.False(game.PanelImpl.View.CanRequest);
         Assert.Equal(0, game.BelayImpl.ReadinessChecks);
+    }
+
+    [Fact]
+    public void PanelHotkeyClosesItsOwnCaptureButDoesNotOpenOverAnotherCapture()
+    {
+        using var world = new World(participants: 1);
+        var game = world.Nodes[1].Game;
+        game.PanelImpl.Act(BelayPanelAction.Toggle);
+        Assert.True(game.PanelImpl.IsOpen);
+        game.Keys.Captured = true;
+        game.PanelImpl.Act(BelayPanelAction.Toggle);
+        Assert.False(game.PanelImpl.IsOpen);
+        game.PanelImpl.Act(BelayPanelAction.Toggle);
+        Assert.False(game.PanelImpl.IsOpen);
+        game.Keys.Captured = false;
+        game.PanelImpl.Act(BelayPanelAction.Toggle);
+        Assert.True(game.PanelImpl.IsOpen);
     }
 
     [Theory]
@@ -294,7 +311,7 @@ public sealed class ManualBelayFeatureTests
     {
         using var world = new World();
         var climber = world.Nodes[2].Game;
-        climber.Keys.Key = GameKey.L; climber.Keys.Pressed = true; world.Tick();
+        climber.PanelImpl.Act(BelayPanelAction.Toggle); world.Tick();
         Assert.True(climber.PanelImpl.IsOpen);
         Assert.True(climber.PanelImpl.View.CanRequest);
         Assert.Contains(climber.PanelImpl.View.Partners, row => row.Id == 1);
@@ -331,7 +348,7 @@ public sealed class ManualBelayFeatureTests
         using var world = new World();
         var game = world.Nodes[2].Game;
         game.BelayImpl.Anchored = game.BelayImpl.ProtectionReady = false;
-        game.Keys.Key = GameKey.L; game.Keys.Pressed = true; world.Tick();
+        game.PanelImpl.Act(BelayPanelAction.Toggle); world.Tick();
         Assert.False(game.PanelImpl.View.CanOffer);
         Assert.False(game.PanelImpl.View.CanRequest);
         game.PanelImpl.Act(BelayPanelAction.Request, 1);
@@ -561,7 +578,7 @@ public sealed class ManualBelayFeatureTests
     private sealed class Keys : IGameInputApi
     {
         internal bool Captured, Pressed;
-        internal GameKey? Key;
+        internal GameKey? Key = GameKey.Space;
         public bool IsKeyboardCaptured => Captured;
         public bool IsPauseMenuActive => false;
         public bool WasPressed(GameInputAction action) => false;
