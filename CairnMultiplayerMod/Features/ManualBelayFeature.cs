@@ -114,6 +114,19 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
                 else if (!KeyboardCaptured) { RefreshPanel(); Game.BelayPanel.Show(); }
                 return;
             case BelayPanelAction.Request: HandleChat("request " + target); break;
+            case BelayPanelAction.DefineStation:
+                if (!IsBelayMode || !IsConnected || !Game.State.IsLocalPlayerInGame) return;
+                if (_active != null || _offer != null || _offeredTarget >= 0)
+                { Notice("End the current invitation or belay before changing the station."); break; }
+                Game.Belay.BeginStation(out var stationReason);
+                Notice(stationReason);
+                break;
+            case BelayPanelAction.RemoveStation:
+                if (!IsBelayMode || !IsConnected || !Game.State.IsLocalPlayerInGame || !Game.Belay.HasStation) return;
+                RequestStop();
+                Game.Belay.EndStation();
+                Notice("Station removed. Your personal piton anchor remains attached.");
+                break;
             case BelayPanelAction.Offer: HandleChat("offer " + target); break;
             case BelayPanelAction.Accept: HandleChat("accept"); break;
             case BelayPanelAction.Decline:
@@ -135,6 +148,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             var state = updating ? "Updating protection route" : _active.Braked ? "Brake requested" : "Rope free";
             Game.BelayPanel.SetView(new BelayPanelView { Phase = BelayPanelPhase.Active,
                 PartnerName = GetPlayerName(partner), LocalBelayer = _active.Belayer == LocalPlayerId,
+                StationDefined = Game.Belay.HasStation,
                 Braked = _desiredBrake, Description = $"{state}. Protection pitons: {_telemetry?.ProtectionCount ?? 0}." });
             return;
         }
@@ -148,12 +162,14 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
                 : "Your partner offers to belay. Accept to give them brake control.";
             if (incoming && !ready) description += " " + reason;
             Game.BelayPanel.SetView(new BelayPanelView { Phase = incoming ? BelayPanelPhase.Invitation : BelayPanelPhase.Waiting,
+                StationDefined = Game.Belay.HasStation,
                 PartnerName = GetPlayerName(partner), Description = description, CanAccept = ready });
             return;
         }
         if (_offeredTarget >= 0)
         {
             Game.BelayPanel.SetView(new BelayPanelView { Phase = BelayPanelPhase.Waiting,
+                StationDefined = Game.Belay.HasStation,
                 PartnerName = GetPlayerName(_offeredTarget), Description = _cancelPending ? "Cancelling invitation..." : "Sending invitation..." });
             return;
         }
@@ -168,7 +184,8 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         if (partners.Count == 0)
         {
             Game.BelayPanel.SetView(new BelayPanelView { Phase = BelayPanelPhase.Partners,
-                Partners = partners, Description = "Choose a nearby partner when they join this area." });
+                StationDefined = Game.Belay.HasStation,
+                Partners = partners, Description = "You can define your current piton anchor as a station before a partner joins." });
             return;
         }
         var canRequest = Game.Belay.CanClimb(out var protectionReason);
@@ -177,6 +194,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         if (!canRequest) instructions += " To ask: " + protectionReason;
         if (!canOffer) instructions += " To offer: " + stationReason;
         Game.BelayPanel.SetView(new BelayPanelView { Phase = BelayPanelPhase.Partners, Partners = partners,
+            StationDefined = Game.Belay.HasStation,
             CanRequest = canRequest, CanOffer = canOffer, Description = instructions });
     }
 
@@ -341,7 +359,12 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             || ((_hostSession.Started || _hostSession.Initiator == _hostSession.Belayer)
                 && DistanceSquared(hostStation, _hostSession.Station) > .25f))) EndHost();
         if (!IsBelayMode || !IsConnected || !Game.State.IsLocalPlayerInGame)
-        { Game.BelayPanel.Close(); if (_active != null || _offer != null) RequestStop(); return; }
+        { Game.BelayPanel.Close(); if (_active != null || _offer != null) RequestStop(); Game.Belay.EndStation(); return; }
+        if (Game.Belay.HasStation && !Game.Belay.StationValid)
+        { RequestStop(); Game.Belay.EndStation(); }
+        if (_offer?.Belayer == LocalPlayerId
+            && (_offer.Initiator == LocalPlayerId || _accepted == _offer.Session) && !Game.Belay.StationValid)
+        { RequestStop(); return; }
         if (Game.Input.WasPressed(GameInputAction.Panic) || Game.Input.IsPauseMenuActive || Game.Chat.IsTyping) Game.BelayPanel.Close();
         if (Game.BelayPanel.IsOpen && now >= _nextPanelRefresh) { _nextPanelRefresh = now + .2f; RefreshPanel(); }
         if (_offer != null && now >= _localUntil) { _offer = null; Game.Belay.EndStation(); _offeredTarget = -1; }

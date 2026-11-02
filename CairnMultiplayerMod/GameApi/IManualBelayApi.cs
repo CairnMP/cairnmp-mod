@@ -9,6 +9,7 @@ internal interface IManualBelayApi
     bool CanBeginStation(out string reason) { reason = "Station unavailable."; return false; }
     bool CanClimb(out string reason) { reason = "Protection unavailable."; return false; }
     bool BeginStation(out string reason);
+    bool HasStation => false;
     bool StationValid { get; }
     void EndStation();
     bool BeginClimber(Guid session, out string reason);
@@ -24,12 +25,17 @@ internal interface IManualBelayApi
     void SetLocalRopeMotion(int motion) { }
     LocalBelayRopeStatus? LocalRopeStatus => null;
     string LocalExerciseNotice => null;
+    bool ToggleLocalStation(out string reason) { reason = "Local station rehearsal unavailable."; return false; }
+    LocalBelayStationStatus? LocalStationStatus => null;
     SharedBelayRoutePreview? LocalRoutePreview => null;
     bool TryPreviewRoute(WorldPosition station, out SharedBelayRoutePreview preview) { preview = default; return false; }
 }
 
 internal readonly record struct LocalBelayRopeStatus(float Capacity, float Released, float Distance,
     float Slack, float Reserve, float RestLength, float ParticleLength, int Motion, bool Braked, bool LengthApplied);
+
+internal readonly record struct LocalBelayStationStatus(bool Valid, float FixedLength,
+    float AvailableToClimber, int IntermediateProtections, string Notice);
 
 internal readonly record struct SharedBelayRoutePreview(float FixedLength, float AvailableToClimber,
     float ClimberDistance, int ProtectionCount, bool ReachesClimber);

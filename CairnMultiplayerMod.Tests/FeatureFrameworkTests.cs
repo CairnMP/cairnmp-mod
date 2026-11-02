@@ -186,7 +186,7 @@ public sealed class FeatureFrameworkTests : IDisposable
             typeof(IWeatherApi), typeof(IWorldApi), typeof(WorldPosition),
             typeof(IManualBelayApi), typeof(ManualBelayStatus),
             typeof(IBelayPanelApi), typeof(BelayPanelView), typeof(BelayPartnerRow),
-            typeof(SharedBelayRoutePreview),
+            typeof(SharedBelayRoutePreview), typeof(LocalBelayRopeStatus), typeof(LocalBelayStationStatus),
         };
         var exposedTypes = contractTypes.SelectMany(TypesInPublicSignatures)
             .SelectMany(FlattenType).ToArray();

@@ -31,6 +31,13 @@ public partial class Mod
         if (keyboard == null) { _localBelayExerciseInput.Reset(); return; }
         try
         {
+            if (keyboard.f10Key.wasPressedThisFrame && (keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed))
+            {
+                var recorded = _game.Belay.ToggleLocalStation(out var stationReason);
+                _localBelayNotice = stationReason;
+                _localBelayNoticeUntil = Time.realtimeSinceStartupAsDouble + 20;
+                if (!recorded) LoggerInstance.Warning("[BelayStation] " + stationReason);
+            }
             if (keyboard.f11Key.wasPressedThisFrame && (keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed))
             {
                 var started = _game.Belay.ToggleLocalExercise(out var reason);
@@ -72,7 +79,9 @@ public partial class Mod
             var hasNotice = Time.realtimeSinceStartupAsDouble < _localBelayNoticeUntil && !string.IsNullOrEmpty(_localBelayNotice);
             if ((!_game.State.IsLocalPlayerInGame && !hasNotice) || Network?.IsConnected == true || _multiplayerModeActive) return;
             var notice = hasNotice ? _localBelayNotice : _game.Belay.LocalExerciseNotice
-                ?? "Connect your rope to a protection piton, then press Ctrl+F11 to start.";
+                ?? (_game.Belay.LocalStationStatus.HasValue
+                    ? "Station recorded. Release your personal anchor and keep the station piton on your rope; Ctrl+F11 starts the rehearsal. Ctrl+F10 clears the station."
+                    : "Connect your rope to a protection piton, then Ctrl+F11 starts. To record a station: anchor yourself on a piton and press Ctrl+F10 first.");
             GUI.Box(rect, "Local protection exercise — NOT ACTIVE\n" + notice, _localBelayStyle);
             return;
         }
@@ -81,7 +90,8 @@ public partial class Mod
         if (rope.HasValue)
         {
             var length = rope.Value;
-            rect.height = 202;
+            var station = _game.Belay.LocalStationStatus;
+            rect.height = station.HasValue ? 254 : 202;
             GUI.Box(rect, "Local rope-budget exercise — Ctrl+F11: end | Space/F7: brake/release\n"
                 + "Hold Up: feed | Down: take in slack (1 m/s) | Fixed protection route\n"
                 + (length.Braked ? "BRAKED — climbing away stops at the paid-out rope limit; release/feed for more" : "FREE — a fall runs rope until braking or the rope end")
@@ -92,7 +102,11 @@ public partial class Mod
                     ? $"\nTEST BELAYER: taking in ({_localBelayExerciseInput.RemainingSeconds(Time.realtimeSinceStartupAsDouble):F0}s left) | Ctrl+Down: stop"
                     : "\nCtrl+Down: simulate belayer take-in for 20 seconds; manual arrows cancel")
                 + (status.Suspended ? $"\nSuspension: applied {status.Limit:F2} m | real {status.RealDistance:F2} m"
-                    : "\nClimbing — length is retained for the next suspension"), _localBelayStyle);
+                    : "\nClimbing — length is retained for the next suspension")
+                + (station.HasValue
+                    ? $"\nSTATION REHEARSAL: fixed path {station.Value.FixedLength:F2} m | intermediate protections {station.Value.IntermediateProtections}"
+                        + "\nReal piton on native route; local controls simulate the absent belayer"
+                    : ""), _localBelayStyle);
             return;
         }
         var preview = _game.Belay.LocalRoutePreview;

@@ -135,6 +135,14 @@ must initially be within 6 m in the same scene. Chat fallbacks remain available:
 can use this pilot at a time. L opens this panel only in Belay Team; Rope team
 keeps its direct-tether shortcut.
 
+The existing personal piton anchor can also be explicitly marked with **Define
+station** in the L panel, even before a partner joins. **Remove station** clears
+that role and ends any pending/active belay; it does not detach the personal
+anchor or retrieve the piton. Releasing the native anchor, losing/breaking/moving
+the piton, leaving Belay Team or changing scenes invalidates the station. Offering
+belay or accepting a request still records the current anchor when needed.
+Defining a station does not automatically create a pair or exchange roles.
+
 Multiple protection pitons are now accepted. Adding/removing them while unloaded
 waits for a stable ordered segment/holder snapshot before rebinding the controller;
 it does not require another invitation. A topology change during suspension ends
@@ -188,7 +196,25 @@ at the paid-out limit. Movement toward it remains possible, including upward
 climbing below an upper piton. Release the brake and feed more rope to continue.
 The filter preserves native denials and neither changes the coil's total capacity
 nor sets character position/velocity. This new native integration needs a separate
-above-piton movement test; it does not yet extend the remote partner pilot.
+above-piton movement test for each changed integration; a scoped offline
+block/retreat/release-payout-resume trial passed on local `667fb93`. It does not
+yet extend the remote partner pilot.
+
+For an opt-in **local station rehearsal**, anchor yourself on a healthy piton
+already attached to your native protection rope, then press Ctrl+F10 to record
+it. Release your personal anchor, keep that piton on the same rope and use Ctrl+F11
+to start the rope-budget exercise. The captured station must occur exactly once
+on the ordered holder walk; intermediate protections retain their order and
+repeated occurrences. The HUD reports the station-to-last-protection path.
+Its remaining capacity is intersected with the native final-segment allowance,
+so station accounting cannot grant additional rope. This rehearsal uses the
+existing physical protection chain; it does not attach a partner endpoint or
+replace the Climbot. The recorded piton stands in for the absent anchored belayer.
+Unlike a real player's station, this solo test marker remains after releasing
+your personal anchor. End Ctrl+F11 before Ctrl+F10 clears it; scene changes and
+native identity loss invalidate it. Adding/removing pitons during the active
+fixed-route exercise still ends control. Station capture/routing needs native
+validation separately from the earlier final-segment trials.
 
 This experiment controls the final segment of the existing native protection
 route. The HUD separates released length, estimated straight-line slack, geometric

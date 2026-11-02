@@ -32,20 +32,21 @@ internal sealed partial class ManualBelayAdapter
         if (!_ropeControl.TrySetMotion(motion)) return;
     }
 
-    private static bool TryPrepareLocalRope(Lifeline lifeline, BelayTopologySnapshot route, bool local,
+    private bool TryPrepareLocalRope(Lifeline lifeline, BelayTopologySnapshot route, bool local,
         out BelayRopeControl control, out string reason)
     {
         control = null;
         reason = "";
         if (!local || ModConfig.BelayRopeExperiment?.Value != true) return true;
+        if (!TryMeasureLocalStation(lifeline, route.Available, out var available, out reason)) return false;
         reason = "Start the rope-budget exercise while stable on the wall, before a fall.";
         if (lifeline.pawn.IsFalling || lifeline.SwingHasPivotAndExtremity()) return false;
         if (!TryReadRopeDistance(lifeline, out var distance)) { reason = "The piton-to-harness distance is not ready."; return false; }
         var parts = lifeline.securingRope.ropeParts;
         var rest = parts[parts.Count - 1].obiRope.restLength;
         reason = "The final segment exceeds the current rope capacity or has an invalid rest length.";
-        if (!float.IsFinite(rest) || rest <= 0 || rest > route.Available || distance > route.Available) return false;
-        control = new BelayRopeControl(route.Available, rest, distance);
+        if (!float.IsFinite(rest) || rest <= 0 || rest > available || distance > available) return false;
+        control = new BelayRopeControl(available, rest, distance);
         reason = "";
         return true;
     }
@@ -60,6 +61,8 @@ internal sealed partial class ManualBelayAdapter
     {
         if (_ropeControl == null) return true;
         _measuredRopeCapacity = available;
+        if (!TryMeasureLocalStation(_lifeline, available, out available, out var reason))
+        { EndLocalRope(reason); return false; }
         if (_ropeControl.TryObserveCapacity(available)) return true;
         EndLocalRope("The available rope no longer covers the paid-out segment. Check protection before restarting.");
         return false;
@@ -211,6 +214,12 @@ internal sealed partial class ManualBelayAdapter
             + ", limit=" + _actual + ", swingReal=" + _real + ", suspended=" + (_pivot != 0)
             + ", x=" + body.x + ", y=" + body.y + ", z=" + body.z
             + ", anchorX=" + anchor.x + ", anchorY=" + anchor.y + ", anchorZ=" + anchor.z);
+        if (LocalStationStatus.HasValue)
+        {
+            var station = LocalStationStatus.Value;
+            ModLog.Info("[BelayStation] Sample; valid=" + station.Valid + ", fixed=" + station.FixedLength
+                + ", finalCapacity=" + station.AvailableToClimber + ", protections=" + station.IntermediateProtections);
+        }
     }
 
     private void EndLocalRope(string reason)

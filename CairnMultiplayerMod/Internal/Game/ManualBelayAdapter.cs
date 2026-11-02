@@ -24,6 +24,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     private LogicalRope _rope;
     private long _piton, _pivot, _stationPiton;
     private Vector3 _stationPosition;
+    private BelayStationAnchor _stationAnchor;
     private BelayBrakeControl _control;
     private BelayInputLease _lease;
     private uint _appliedSequence;
@@ -47,6 +48,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         _control?.Braked == true, _lease?.Sequence ?? 0, _appliedSequence, _actual, _real,
         _topology?.Current?.ProtectionCount ?? 0, _topology?.Revision ?? 0, _rebinding);
     public bool IsLocalExercise => _localExercise && _control != null;
+    public bool HasStation => _stationAnchor != null;
 
     private static double Now => Time.realtimeSinceStartupAsDouble;
     private static long Id(UnityEngine.Object value) => value == null ? 0 : value.Pointer.ToInt64();
@@ -75,15 +77,24 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     public bool BeginStation(out string reason)
     {
-        EndStation();
+        if (HasStation)
+        {
+            if (StationValid) { reason = "Station already defined on your current anchor."; return true; }
+            EndStation();
+            reason = "The previous station is no longer anchored. Define the current anchor again.";
+            return false;
+        }
         if (!CanBeginStation(out reason)) return false;
         var lifeline = LocalLifeline();
         var piton = lifeline.OffBelayPiton;
         var position = lifeline.harness.GetAttachPosition();
+        var anchor = new BelayStationAnchor(Id(lifeline), Id(lifeline.securingRope), Id(piton), ToNumerics(piton.transform.position));
         _stationLifeline = lifeline;
         _stationPiton = Id(piton);
         _stationPosition = position;
-        reason = "";
+        _stationAnchor = anchor;
+        ModLog.Info("[BelayStation] Defined on the player's existing native piton anchor.");
+        reason = "Station defined. Remain anchored; you can remove the station in the partner panel.";
         return true;
     }
 
@@ -93,7 +104,8 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         if (!Enabled || !ContextValid || _control != null || RopeInterop.IsNativeBelayEngaged) return false;
         var lifeline = LocalLifeline();
         var piton = lifeline != null ? lifeline.OffBelayPiton : null;
-        return piton != null && piton.pitonHp > 0 && lifeline.pawn != null && lifeline.harness != null
+        return piton != null && piton.pitonHp > 0 && lifeline.securingRope != null
+            && lifeline.pawn != null && lifeline.harness != null
             && !lifeline.pawn.IsFalling && Vector3.Distance(lifeline.harness.GetAttachPosition(), piton.transform.position) <= 1.5f;
     }
 
@@ -104,6 +116,8 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         if (!TryGetActiveContext(out reason)) return false;
         reason = "End the current rope control before starting another.";
         if (_control != null) return false;
+        reason = "Remove your belay station before becoming the climber.";
+        if (HasStation) return false;
         reason = "Disconnect the existing cooperative rope first.";
         if (RopeInterop.IsNativeBelayEngaged) return false;
         var lifeline = LocalLifeline();
@@ -114,16 +128,30 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     {
         get
         {
-            if (!Enabled || !ContextValid || _stationLifeline == null || _stationLifeline.pawn == null
-                || _stationLifeline.harness == null || RopeInterop.IsNativeBelayEngaged) return false;
-            var piton = _stationLifeline.OffBelayPiton;
-            return piton != null && Id(piton) == _stationPiton && piton.pitonHp > 0
-                && !_stationLifeline.pawn.IsFalling
-                && Vector3.Distance(_stationLifeline.harness.GetAttachPosition(), _stationPosition) <= .25f;
+            try
+            {
+                if (!HasStation || !Enabled || !ContextValid || _stationLifeline == null || _stationLifeline.pawn == null
+                    || _stationLifeline.harness == null || RopeInterop.IsNativeBelayEngaged) return false;
+                var piton = _stationLifeline.OffBelayPiton;
+                return piton != null && Id(piton) == _stationPiton && piton.pitonHp > 0
+                    && _stationAnchor.Matches(Id(_stationLifeline), Id(_stationLifeline.securingRope), Id(piton),
+                        piton.pitonHp, ToNumerics(piton.transform.position))
+                    && !_stationLifeline.pawn.IsFalling
+                    && Vector3.Distance(_stationLifeline.harness.GetAttachPosition(), _stationPosition) <= .25f;
+            }
+            catch (Exception ex)
+            {
+                ModLog.SuppressedException("belay.station-validity", ex);
+                return false;
+            }
         }
     }
 
-    public void EndStation() { _stationLifeline = null; _stationPiton = 0; }
+    public void EndStation()
+    {
+        if (HasStation) ModLog.Info("[BelayStation] Removed; personal native anchoring unchanged.");
+        _stationLifeline = null; _stationPiton = 0; _stationAnchor = null;
+    }
 
     public bool BeginClimber(Guid session, out string reason)
         => BeginClimber(session, false, out reason);
@@ -175,6 +203,8 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         }
         _nextTopologyPoll = _lastValidTopology = Now;
         _owner = this;
+        if (localExercise && _localStation != null)
+            ModLog.Info("[BelayStation] Rehearsal started on the captured native route; no partner endpoint attached.");
         ModLog.Info("[ManualBelay] Acquired protection; session=" + session + ", end=" + snapshot.Available
             + ", pitons=" + snapshot.ProtectionCount);
         reason = "";
@@ -324,6 +354,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     public void Tick()
     {
+        if (HasStation && !StationValid) EndStation();
         if (_unpatchPending && _control == null)
         {
             _harmony.UnpatchSelf();
@@ -417,6 +448,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         if (!_lifeline.IsSecured(1)) return false;
         reason = "Last securing piton changed.";
         if (Id(_lifeline.GetLastSecuringPiton()) != route.LastPiton) return false;
+        if (_localExercise && !LocalStationMatches(_lifeline, out reason)) return false;
         reason = "Protection segment count changed.";
         if (_rope.ropeParts?.Count != route.Parts.Length) return false;
         reason = "Protection holder count changed.";
@@ -544,7 +576,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     }
 
     private bool _unpatchPending;
-    public void ResetScene() { EndStation(); ClearControl(); }
+    public void ResetScene() { EndStation(); ClearControl(); ClearLocalStation(); }
     public void Shutdown()
     {
         ResetScene();

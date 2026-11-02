@@ -26,10 +26,14 @@ internal static class BelayRoutePlanner
             || !float.IsFinite(capacity) || capacity <= 0 || capacity > 200) return false;
         var previous = station;
         var fixedLength = 0f;
-        var seen = new HashSet<uint>();
+        var seen = new Dictionary<uint, Vector3>();
         foreach (var point in protections)
         {
-            if (point.Id == 0 || !seen.Add(point.Id) || !Finite(point.Position)) return false;
+            if (point.Id == 0 || !Finite(point.Position)) return false;
+            // A native holder walk can visit the same protection more than once.
+            // Retain its occurrences, but never give one identity two positions.
+            if (seen.TryGetValue(point.Id, out var known) && known != point.Position) return false;
+            seen[point.Id] = point.Position;
             fixedLength += Vector3.Distance(previous, point.Position);
             previous = point.Position;
         }
@@ -37,6 +41,34 @@ internal static class BelayRoutePlanner
         if (!float.IsFinite(fixedLength) || !float.IsFinite(lastDistance) || fixedLength > capacity) return false;
         plan = new BelayRoutePlan(fixedLength, lastDistance, capacity - fixedLength, protections.Count);
         return true;
+    }
+
+    internal static bool TryPlanFromStation(uint stationId, IReadOnlyList<BelayProtectionPoint> protections,
+        Vector3 climber, float capacity, out BelayRoutePlan plan)
+    {
+        plan = default;
+        if (stationId == 0 || protections == null || protections.Count > 63) return false;
+        var stationIndex = -1;
+        for (var i = 0; i < protections.Count; i++)
+            if (protections[i].Id == stationId)
+            {
+                // Picking a different occurrence silently changes the route.
+                if (stationIndex >= 0) return false;
+                stationIndex = i;
+            }
+        if (stationIndex < 0) return false;
+        var afterStation = new BelayProtectionPoint[protections.Count - stationIndex - 1];
+        for (var i = 0; i < afterStation.Length; i++) afterStation[i] = protections[stationIndex + i + 1];
+        return TryPlan(protections[stationIndex].Position, afterStation, climber, capacity, out plan);
+    }
+
+    internal static bool TryLimitFinalCapacity(BelayRoutePlan plan, float nativeAvailable, out float available)
+    {
+        available = 0;
+        if (!float.IsFinite(plan.AvailableToClimber) || plan.AvailableToClimber <= 0 || plan.AvailableToClimber > 200
+            || !float.IsFinite(nativeAvailable) || nativeAvailable <= 0 || nativeAvailable > 200) return false;
+        available = Math.Min(plan.AvailableToClimber, nativeAvailable);
+        return available > 0 && available <= 200;
     }
 
     private static bool Finite(Vector3 point)

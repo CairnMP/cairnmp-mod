@@ -61,6 +61,114 @@ public sealed class ManualBelayFeatureTests
     }
 
     [Fact]
+    public void ExistingAnchorCanBecomeAndStopBeingAStationWithoutAPartner()
+    {
+        using var world = new World(participants: 1);
+        var game = world.Nodes[1].Game;
+        game.PanelImpl.Act(BelayPanelAction.Toggle);
+        game.PanelImpl.Act(BelayPanelAction.DefineStation);
+        Assert.True(game.BelayImpl.HasStation);
+        Assert.True(game.PanelImpl.View.StationDefined);
+        Assert.Empty(world.Messages);
+        Assert.Equal(0, game.BelayImpl.BeginCalls);
+        game.PanelImpl.Act(BelayPanelAction.RemoveStation);
+        Assert.False(game.BelayImpl.HasStation);
+        Assert.False(game.PanelImpl.View.StationDefined);
+        Assert.True(game.BelayImpl.Anchored);
+        Assert.True(game.PanelImpl.IsOpen);
+        game.PanelImpl.Act(BelayPanelAction.DefineStation);
+        Assert.True(game.BelayImpl.HasStation);
+    }
+
+    [Fact]
+    public void UnanchoredPlayerCannotDefineAStation()
+    {
+        using var world = new World(participants: 1);
+        var game = world.Nodes[1].Game;
+        game.BelayImpl.Anchored = false;
+        game.PanelImpl.Act(BelayPanelAction.DefineStation);
+        Assert.False(game.BelayImpl.HasStation);
+        Assert.False(game.PanelImpl.View.StationDefined);
+        Assert.Empty(world.Messages);
+    }
+
+    [Theory]
+    [InlineData(MultiplayerMode.RopeTeam)]
+    [InlineData(MultiplayerMode.FreeSolo)]
+    [InlineData(MultiplayerMode.Race)]
+    public void OtherModesCannotDefineAStation(MultiplayerMode mode)
+    {
+        using var world = new World(participants: 1) { Mode = mode };
+        var game = world.Nodes[1].Game;
+        game.PanelImpl.Act(BelayPanelAction.DefineStation);
+        Assert.False(game.BelayImpl.HasStation);
+    }
+
+    [Fact]
+    public void ReleasingPersonalAnchorRemovesAnIdleStation()
+    {
+        using var world = new World(participants: 1);
+        var game = world.Nodes[1].Game;
+        game.PanelImpl.Act(BelayPanelAction.DefineStation);
+        game.BelayImpl.Anchored = false;
+        world.Tick();
+        Assert.False(game.BelayImpl.HasStation);
+    }
+
+    [Fact]
+    public void RemovingAnActiveBelayersStationEndsControlAndRejectsItsOldInput()
+    {
+        using var world = World.Started();
+        var belayer = world.Nodes[1].Game;
+        var session = world.Last(ManualBelayPhase.Started).Session;
+        belayer.PanelImpl.Act(BelayPanelAction.RemoveStation);
+        world.Tick();
+        Assert.False(belayer.BelayImpl.HasStation);
+        Assert.True(belayer.BelayImpl.Anchored);
+        Assert.False(world.Nodes[2].Game.BelayImpl.Active);
+        Assert.Equal(ManualBelayPhase.Ended, world.Messages.Last().Phase);
+        Assert.False(world.Execute(1, new() { Operation = ManualBelayOperation.Intent, Session = session, Sequence = 999 }).Committed);
+    }
+
+    [Fact]
+    public void LosingStationBeforeInvitationAcceptanceCancelsTheOffer()
+    {
+        using var world = new World();
+        world.Nodes[1].Game.ChatImpl.Run("offer 2");
+        var session = world.Last(ManualBelayPhase.Offered).Session;
+        world.Nodes[1].Game.BelayImpl.Anchored = false;
+        world.Tick();
+        Assert.Equal(ManualBelayPhase.Ended, world.Messages.Last().Phase);
+        Assert.False(world.Execute(2, new() { Operation = ManualBelayOperation.Accept, Session = session }).Committed);
+        Assert.Equal(0, world.Nodes[2].Game.BelayImpl.BeginCalls);
+    }
+
+    [Fact]
+    public void RemovingStationCancelsAPendingOfferWithoutDetachingThePersonalAnchor()
+    {
+        using var world = new World();
+        var game = world.Nodes[1].Game;
+        game.ChatImpl.Run("offer 2");
+        var session = world.Last(ManualBelayPhase.Offered).Session;
+        game.PanelImpl.Act(BelayPanelAction.RemoveStation);
+        Assert.False(game.BelayImpl.HasStation);
+        Assert.True(game.BelayImpl.Anchored);
+        Assert.False(world.Execute(2, new() { Operation = ManualBelayOperation.Accept, Session = session }).Committed);
+    }
+
+    [Fact]
+    public void LeavingBelayTeamRemovesAnIdleStation()
+    {
+        using var world = new World(participants: 1);
+        var game = world.Nodes[1].Game;
+        game.PanelImpl.Act(BelayPanelAction.DefineStation);
+        world.Mode = MultiplayerMode.RopeTeam;
+        world.Tick();
+        Assert.False(game.BelayImpl.HasStation);
+        Assert.True(game.BelayImpl.Anchored);
+    }
+
+    [Fact]
     public void PanelHotkeyClosesItsOwnCaptureButDoesNotOpenOverAnotherCapture()
     {
         using var world = new World(participants: 1);
@@ -542,16 +650,17 @@ public sealed class ManualBelayFeatureTests
     }
     private sealed class Belay : IManualBelayApi
     {
-        internal bool OptIn = true, Anchored = true, CanBegin = true, ProtectionReady = true, Active, LastBrake;
+        internal bool OptIn = true, Anchored = true, CanBegin = true, ProtectionReady = true, Active, LastBrake, StationRecorded;
         internal int BeginCalls, SetCalls, StopCalls, ReadinessChecks;
         internal uint Sequence;
         private Guid _session;
         public bool Enabled => OptIn;
         public bool CanBeginStation(out string reason) { ReadinessChecks++; reason = "Need station"; return Anchored; }
-        public bool CanClimb(out string reason) { ReadinessChecks++; reason = "Need protection"; return ProtectionReady; }
-        public bool StationValid => Anchored;
-        public bool BeginStation(out string reason) { reason = "Need station"; return Anchored; }
-        public void EndStation() { }
+        public bool CanClimb(out string reason) { ReadinessChecks++; reason = "Need protection"; return ProtectionReady && !StationRecorded; }
+        public bool HasStation => StationRecorded;
+        public bool StationValid => Anchored && StationRecorded;
+        public bool BeginStation(out string reason) { reason = "Need station"; return StationRecorded = Anchored; }
+        public void EndStation() => StationRecorded = false;
         public bool BeginClimber(Guid id, out string reason) { BeginCalls++; reason = "No native rope"; _session = id; return Active = CanBegin; }
         public bool SetBrake(Guid id, uint sequence, bool braked)
         { if (!Active || id != _session || sequence <= Sequence) return false; Sequence = sequence; LastBrake = braked; SetCalls++; return true; }

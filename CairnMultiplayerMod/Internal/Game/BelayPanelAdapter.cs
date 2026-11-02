@@ -96,12 +96,21 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
         var x = rect.x + 20f;
         var width = rect.width - 40f;
         var half = (width - 10f) * .5f;
-        var contentY = rect.y + 146f;
+        var stationRow = view.StationDefined || view.Phase == BelayPanelPhase.Partners;
+        var contentY = rect.y + (stationRow ? 190f : 146f);
         var footerY = rect.yMax - 78f;
         var available = Math.Max(48f, footerY - 42f - contentY);
         GUI.Box(rect, GUIContent.none);
         GUI.Label(new Rect(x, rect.y + 16f, width, 32f), "Partner belay", _title);
         GUI.Label(new Rect(x, rect.y + 56f, width, 80f), view.Description, _body);
+        if (stationRow)
+        {
+            GUI.Label(new Rect(x, rect.y + 140f, half, 40f),
+                view.StationDefined ? "Station: your current piton anchor" : "Use your existing piton anchor", _body);
+            if (Button(new Rect(x + half + 10f, rect.y + 140f, half, 40f),
+                view.StationDefined ? "Remove station" : "Define station",
+                view.StationDefined ? BelayPanelAction.RemoveStation : BelayPanelAction.DefineStation)) return;
+        }
         if (view.Phase == BelayPanelPhase.Partners)
         {
             if (view.Partners.Count == 0)
