@@ -75,7 +75,7 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
         _suspendedMenuBehaviours.Clear();
         _suspendedMenuStates.Clear();
         for (var i = 0; i < _registrations.Count; i++)
-            _registrations[i].ForgetNativeButton();
+            _registrations[i].DestroyNativeButton();
     }
 
     internal void Tick()
@@ -351,9 +351,15 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
 
         internal void Attach(Transform template, Transform parent, int siblingIndex)
         {
+            var cloneName = $"CairnMP.{Id}";
+            DestroyStaleClones(parent, cloneName);
+
             var clone = UnityEngine.Object.Instantiate(template.gameObject, parent);
-            clone.name = $"CairnMP.{Id}";
+            clone.name = cloneName;
             clone.transform.SetSiblingIndex(siblingIndex);
+            // The clone inherits Story's localization binding, which writes "Story" back over
+            // our label whenever the game refreshes its text.
+            DisableTextBindings(clone);
 
             var label = clone.GetComponentInChildren<TextMeshProUGUI>(true);
             var button = clone.GetComponent<Button>();
@@ -383,6 +389,39 @@ internal sealed class MainMenuAdapter : IMainMenuApi, IDisposable
             _nativeMenu = menu;
             _button = button;
             ModLog.Info($"[GameApi:MainMenu] Added '{Id}' to the main menu.");
+        }
+
+        private static void DestroyStaleClones(Transform parent, string cloneName)
+        {
+            for (var i = parent.childCount - 1; i >= 0; i--)
+            {
+                var child = parent.GetChild(i);
+                if (child.name != cloneName) continue;
+                child.gameObject.SetActive(false);
+                UnityEngine.Object.Destroy(child.gameObject);
+                ModLog.Info($"[GameApi:MainMenu] Removed a stale '{cloneName}' left over from an earlier menu.");
+            }
+        }
+
+        private static void DisableTextBindings(GameObject clone)
+        {
+            try
+            {
+                var behaviours = clone.GetComponentsInChildren<MonoBehaviour>(true);
+                for (var i = 0; i < behaviours.Length; i++)
+                {
+                    var behaviour = behaviours[i];
+                    if (behaviour == null) continue;
+                    var typeName = behaviour.GetIl2CppType().Name;
+                    if (typeName.IndexOf("Locali", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    behaviour.enabled = false;
+                    ModLog.Info($"[GameApi:MainMenu] Disabled '{typeName}' on the cloned button label.");
+                }
+            }
+            catch (Exception exception)
+            {
+                ModLog.SuppressedException("main-menu.disable-text-bindings", exception);
+            }
         }
 
         internal void SetSiblingIndex(int index)
