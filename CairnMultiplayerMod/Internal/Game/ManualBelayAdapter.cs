@@ -52,8 +52,22 @@ internal sealed class ManualBelayAdapter : IManualBelayApi
         return player?.GetComponent<Lifeline>() ?? player?.GetComponentInChildren<Lifeline>(true);
     }
 
-    private static bool ContextValid => Application.isFocused && Time.timeScale > 0
-        && SurvivalManager.Instance != null && SurvivalManager.Instance.CurrentHp > 0;
+    private static bool ContextValid => TryGetActiveContext(out _);
+
+    private static bool TryGetActiveContext(out string reason)
+    {
+        reason = "Return focus to the game before starting the exercise.";
+        if (!Application.isFocused) return false;
+        reason = "Unpause the game before starting the exercise.";
+        if (!(Time.timeScale > 0)) return false;
+        reason = "Wait for the local character to finish loading.";
+        var survival = SurvivalManager.Instance;
+        if (survival == null) return false;
+        reason = "The character must be alive before starting the exercise.";
+        if (!(survival.CurrentHp > 0)) return false;
+        reason = "";
+        return true;
+    }
 
     public bool BeginStation(out string reason)
     {
@@ -83,19 +97,13 @@ internal sealed class ManualBelayAdapter : IManualBelayApi
     {
         reason = "Enable the belay experiment first.";
         if (!(Enabled || ModConfig.BelayRouteExperiment?.Value == true)) return false;
-        reason = "Return to the active game before requesting belay.";
-        if (!ContextValid) return false;
+        if (!TryGetActiveContext(out reason)) return false;
         reason = "End the current rope control before starting another.";
         if (_control != null) return false;
         reason = "Disconnect the existing cooperative rope first.";
         if (RopeInterop.IsNativeBelayEngaged) return false;
         var lifeline = LocalLifeline();
-        reason = "Connect your protection rope to a piton first.";
-        if (lifeline == null || !lifeline.IsSecured(1)) return false;
-        reason = "Protection is updating; wait for the rope to settle.";
-        if (!TrySnapshot(lifeline, out _)) return false;
-        reason = "";
-        return true;
+        return TrySnapshot(lifeline, out _, out reason);
     }
 
     public bool StationValid
@@ -118,13 +126,19 @@ internal sealed class ManualBelayAdapter : IManualBelayApi
 
     private bool BeginClimber(Guid session, bool localExercise, out string reason)
     {
-        reason = "Enable the experiment and connect protection pitons without another rope controller.";
-        if (!(localExercise ? ModConfig.BelayRouteExperiment?.Value == true : Enabled)
-            || session == Guid.Empty || !ContextValid || _control != null
-            || (_owner != null && !ReferenceEquals(_owner, this)) || _stationLifeline != null
-            || RopeInterop.IsNativeBelayEngaged) return false;
+        reason = "Enable the selected belay experiment first.";
+        if (!(localExercise ? ModConfig.BelayRouteExperiment?.Value == true : Enabled)) return false;
+        reason = "The belay session identifier is invalid.";
+        if (session == Guid.Empty) return false;
+        if (!TryGetActiveContext(out reason)) return false;
+        reason = "End the current rope control before starting another.";
+        if (_control != null || (_owner != null && !ReferenceEquals(_owner, this))) return false;
+        reason = "End your anchored belayer role before controlling the climbing rope.";
+        if (_stationLifeline != null) return false;
+        reason = "Disconnect the existing cooperative rope before starting this exercise.";
+        if (RopeInterop.IsNativeBelayEngaged) return false;
         var lifeline = LocalLifeline();
-        if (!TrySnapshot(lifeline, out var snapshot)) return false;
+        if (!TrySnapshot(lifeline, out var snapshot, out reason)) return false;
         Install();
         _lifeline = lifeline; _rope = lifeline.securingRope;
         _topology = new BelayTopologyTracker();
@@ -184,31 +198,68 @@ internal sealed class ManualBelayAdapter : IManualBelayApi
     }
 
     private static bool TrySnapshot(Lifeline lifeline, out BelayTopologySnapshot snapshot)
+        => TrySnapshot(lifeline, out snapshot, out _);
+
+    private static bool TrySnapshot(Lifeline lifeline, out BelayTopologySnapshot snapshot, out string reason)
     {
         snapshot = null;
-        var rope = lifeline != null ? lifeline.securingRope : null;
-        var piton = lifeline != null ? lifeline.GetLastSecuringPiton() : null;
-        if (rope == null || !rope.IsInitialized || lifeline.pawn == null || lifeline.harness == null
-            || !lifeline.IsSecured(1) || piton == null || piton.pitonHp <= 0
-            || rope.ropeParts == null || rope.ropeParts.Count < 2 || rope.ropeParts.Count > 64
-            || rope.ropeHolders == null || rope.ropeHolders.Count < 1 || rope.ropeHolders.Count > 66) return false;
+        reason = "The local character's lifeline is not available yet.";
+        if (lifeline == null) return false;
+        var rope = lifeline.securingRope;
+        reason = "Wait for the protection rope to initialize.";
+        if (rope == null || !rope.IsInitialized) return false;
+        reason = "The character or harness is not available yet.";
+        if (lifeline.pawn == null || lifeline.harness == null) return false;
+        reason = "Connect your protection rope to a piton first.";
+        if (!lifeline.IsSecured(1)) return false;
+        var piton = lifeline.GetLastSecuringPiton();
+        reason = "The last protection piton is missing or broken.";
+        if (piton == null || piton.pitonHp <= 0) return false;
+        var partCount = rope.ropeParts?.Count ?? 0;
+        if (partCount < 2 || partCount > 64)
+        {
+            reason = $"Protection route is not ready: {partCount} segments (expected 2 to 64).";
+            return false;
+        }
+        var holderCount = rope.ropeHolders?.Count ?? 0;
+        if (holderCount < 1 || holderCount > 66)
+        {
+            reason = $"Protection route is not ready: {holderCount} holders (expected 1 to 66).";
+            return false;
+        }
         var parts = new long[rope.ropeParts.Count];
         for (var i = 0; i < parts.Length; i++) parts[i] = Id(rope.ropeParts[i]);
         var last = rope.ropeParts[parts.Length - 1];
+        reason = "Wait for the final protection segment's physics to load.";
         if (last?.obiRope == null || !last.obiRope.isLoaded) return false;
         var holders = new long[rope.ropeHolders.Count];
         var protectionCount = 0;
         for (var i = 0; i < holders.Length; i++)
         {
             var holder = rope.ropeHolders[i];
-            if (holder == null) return false;
+            if (holder == null)
+            {
+                reason = $"Protection route is updating: holder {i + 1} of {holders.Length} is unavailable.";
+                return false;
+            }
             holders[i] = holder.Pointer.ToInt64();
             if (holder.TryCast<LogicalQuickdraw>()?.Piton != null) protectionCount++;
         }
         var available = rope.GetRemainingSlackMeters(false);
-        if (!float.IsFinite(rope.MaxLengthMeters) || available > rope.MaxLengthMeters) return false;
+        if (!float.IsFinite(rope.MaxLengthMeters) || available > rope.MaxLengthMeters)
+        {
+            reason = $"Invalid rope capacity: remaining {available:F2} m, maximum {rope.MaxLengthMeters:F2} m.";
+            return false;
+        }
         snapshot = new BelayTopologySnapshot(Id(rope), Id(piton), parts, holders, available, protectionCount);
-        return snapshot.IsValid;
+        if (!snapshot.IsValid)
+        {
+            reason = $"Protection route is not ready: {protectionCount} pitons, {parts.Length} segments, "
+                + $"{holders.Length} holders, {available:F2} m remaining.";
+            return false;
+        }
+        reason = "";
+        return true;
     }
 
     private void BindTopology(BelayTopologySnapshot snapshot)

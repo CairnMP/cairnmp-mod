@@ -149,7 +149,9 @@ Remote control does not depend on a diagnostic capture or its recording limits.
 
 `Debug.BelayRouteExperiment` also enables an independent solo exercise: Ctrl+F11
 starts/ends control and Space/F7 brakes/releases. It uses the same native adapter
-and shows piton count, route generation and applied distance. A geometric preview
+and shows piton count, route generation and applied distance.
+The inactive banner shows any rejected start reason for 15 seconds, so a failed
+Ctrl+F11 attempt is visible without opening the log. A geometric preview
 calculates station -> ordered pitons -> climber capacity, with the first piton
 standing in for a simulated station. That preview does not attach or reroute the
 physical rope. Native multi-piton and panel rendering remain unverified in-game.
