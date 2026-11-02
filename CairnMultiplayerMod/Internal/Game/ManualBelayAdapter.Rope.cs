@@ -207,6 +207,7 @@ internal sealed partial class ManualBelayAdapter
             + ", rest=" + _restLength + ", particles=" + _particleLength
             + ", stretchScale=" + stretchScale + ", maxCompression=" + compression
             + ", capacity=" + _ropeControl.Capacity + ", measuredCapacity=" + _measuredRopeCapacity + ", refreshes=" + _ropeRefreshCount
+            + ", climbQueries=" + _climbLimitQueries + ", climbBlocks=" + _climbLimitBlocks + ", climbBlocked=" + _climbMovementBlocked
             + ", limit=" + _actual + ", swingReal=" + _real + ", suspended=" + (_pivot != 0)
             + ", x=" + body.x + ", y=" + body.y + ", z=" + body.z
             + ", anchorX=" + anchor.x + ", anchorY=" + anchor.y + ", anchorZ=" + anchor.z);

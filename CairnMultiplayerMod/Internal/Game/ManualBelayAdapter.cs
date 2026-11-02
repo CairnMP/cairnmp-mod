@@ -158,6 +158,9 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         _localExercise = localExercise; _localSequence = 0; _nextLocalIntent = 0;
         _ropeControl = ropeControl;
         _localRopeNotice = null;
+        _climbLimitQueries = _climbLimitBlocks = 0;
+        _climbMovementBlocked = false;
+        _nextClimbLimitLog = 0;
         _nextRopeSample = Now;
         if (_ropeControl != null)
         {
@@ -293,6 +296,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         {
             _control.ToggleBrake();
             _ropeControl?.SetBrake(braked);
+            if (!braked) _climbMovementBlocked = false;
             ModLog.Info("[ManualBelay] Requested session=" + session + ", sequence=" + sequence + ", brake=" + braked);
         }
         return true;
@@ -443,6 +447,8 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
             _harmony.Patch(AccessTools.Method(typeof(ObiRopeLengthController), nameof(ObiRopeLengthController.RefreshRopeLength)),
                 prefix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(BeforeLocalRopeRefresh)),
                 postfix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(AfterLocalRopeLength)));
+            _harmony.Patch(AccessTools.Method(typeof(Harness), nameof(Harness.LifelineCanGoToward)),
+                postfix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(AfterClimbingPermission)));
             _installed = true;
         }
         catch { _harmony.UnpatchSelf(); throw; }

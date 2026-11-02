@@ -182,6 +182,14 @@ supplies the same bounded take-in command and does not automate the brake or
 change character movement. Native route rejections name the failed mapping guard,
 and bounded samples include the actual securing-point position for this trial.
 
+The local experiment also restricts the native climbing-permission decision while
+braked: existing slack can be used, but movement farther from the last piton stops
+at the paid-out limit. Movement toward it remains possible, including upward
+climbing below an upper piton. Release the brake and feed more rope to continue.
+The filter preserves native denials and neither changes the coil's total capacity
+nor sets character position/velocity. This new native integration needs a separate
+above-piton movement test; it does not yet extend the remote partner pilot.
+
 This experiment controls the final segment of the existing native protection
 route. The HUD separates released length, estimated straight-line slack, geometric
 reserve, native rest/particle measurements and the suspension readback. Rope and
