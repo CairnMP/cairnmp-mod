@@ -31,7 +31,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **18**; lobby admission may also require the exact mod version.
+> protocol is **19**; lobby admission may also require the exact mod version.
 
 ## Features
 
@@ -42,7 +42,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 | World | Weather, time of day, pitons, shared ground items, and world pings |
 | Communication | In-game chat, completion, host commands, and experimental proximity voice |
 | Sessions | Steam relay hosting, late-join state, and host-authoritative validation |
-| Modes | Rope team, free solo and race, with synchronized bivouac behavior |
+| Modes | Rope team, Belay Team, free solo and race, with synchronized bivouac behavior |
 | Destinations | Mount Kami from your own save, or a Summit-mode world from the free *On the Trail: Deep Water* DLC |
 | Reliability | Local crash reports, bounded diagnostics, and isolated feature failures |
 
@@ -116,11 +116,13 @@ instead of being destroyed or duplicated.
 > state cannot be shared. Items can only leave the selected backpack stack; there
 > is no chat command for giving or dropping.
 
-### Manual belay experiment
+### Belay Team experiment
 
-Development builds can opt in through `Debug.BelayRemoteExperiment`. Every peer
-must use the same experimental build (protocol **18**, incompatible with the
-published 2.4.1/protocol 16 and M1/protocol 17 builds). This pilot controls the climber's existing
+Choose **Belay Team** when creating a lobby to enable partner belay. Rope team
+keeps its original direct harness tether; Belay Team rejects that tether in input,
+host validation, received packets and late-join snapshots. Every peer
+must use the same experimental build (protocol **19**, incompatible with the
+published 2.4.1/protocol 16 and earlier protocol 17/18 pilots). This pilot controls the climber's existing
 protection route; routing the physical rope through the belayer's station remains
 future work. It does not create or replace the cooperative harness tether.
 
@@ -130,7 +132,8 @@ belayer must be secured at a native piton station and remain still. Both players
 must initially be within 6 m in the same scene. Chat fallbacks remain available:
 `/belay request <player>`, `/belay offer <player>`, `/belay accept`, `/belay stop`.
 **Space** (or F7) toggles the latched brake, starting with free rope. Only one pair
-can use this pilot at a time. In this opt-in mode L replaces the old direct-tether shortcut.
+can use this pilot at a time. L opens this panel only in Belay Team; Rope team
+keeps its direct-tether shortcut.
 
 Multiple protection pitons are now accepted. Adding/removing them while unloaded
 waits for a stable ordered segment/holder snapshot before rebinding the controller;

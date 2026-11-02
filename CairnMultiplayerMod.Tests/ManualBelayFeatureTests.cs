@@ -15,6 +15,52 @@ namespace CairnMultiplayerMod.Tests;
 public sealed class ManualBelayFeatureTests
 {
     [Theory]
+    [InlineData(MultiplayerMode.RopeTeam)]
+    [InlineData(MultiplayerMode.FreeSolo)]
+    [InlineData(MultiplayerMode.Race)]
+    public void OtherModesCannotOpenThePanelOrStartPartnerBelay(MultiplayerMode mode)
+    {
+        using var world = new World { Mode = mode };
+        var game = world.Nodes[1].Game;
+        game.Keys.Key = GameKey.L; game.Keys.Pressed = true;
+        world.Tick();
+        Assert.False(game.PanelImpl.IsOpen);
+        game.ChatImpl.Run("offer 2");
+        Assert.Empty(world.Messages);
+        Assert.False(world.Execute(1, new() { Operation = ManualBelayOperation.Offer, Target = 2 }).Committed);
+        Assert.Equal(0, world.Nodes[2].Game.BelayImpl.BeginCalls);
+    }
+
+    [Fact]
+    public void LeavingBelayTeamEndsTheControllerAndRejectsOldSessionEvents()
+    {
+        using var world = World.Started();
+        var started = world.Events.Last(e => Decode(e).Phase == ManualBelayPhase.Started);
+        world.Mode = MultiplayerMode.RopeTeam;
+        world.Tick();
+        var game = world.Nodes[2].Game;
+        Assert.False(game.BelayImpl.Active);
+        Assert.False(game.PanelImpl.IsOpen);
+        var calls = game.BelayImpl.BeginCalls;
+        world.Nodes[2].Runtime.ApplyEvent(started);
+        Assert.Equal(calls, game.BelayImpl.BeginCalls);
+    }
+
+    [Fact]
+    public void AnEmptyLobbyPanelDoesNotQueryNativeRopeOrStationReadiness()
+    {
+        using var world = new World(participants: 1);
+        var game = world.Nodes[1].Game;
+        game.Keys.Key = GameKey.L; game.Keys.Pressed = true;
+        world.Tick();
+        Assert.True(game.PanelImpl.IsOpen);
+        Assert.Empty(game.PanelImpl.View.Partners);
+        Assert.False(game.PanelImpl.View.CanOffer);
+        Assert.False(game.PanelImpl.View.CanRequest);
+        Assert.Equal(0, game.BelayImpl.ReadinessChecks);
+    }
+
+    [Theory]
     [InlineData(1, 2)]
     [InlineData(2, 1)]
     public void ConsentAndRoleReversalApplyOnlyOnTheClimber(int belayer, int climber)
@@ -365,6 +411,7 @@ public sealed class ManualBelayFeatureTests
 
     private sealed class World : IDisposable
     {
+        internal MultiplayerMode Mode = MultiplayerMode.BelayTeam;
         internal float Time = 1;
         internal readonly Dictionary<int, Node> Nodes = new();
         internal readonly Dictionary<int, PlayerLocation> Locations = new();
@@ -373,9 +420,9 @@ public sealed class ManualBelayFeatureTests
         internal readonly List<string> Failures = new();
         internal bool DeferCommands;
         internal readonly Queue<(int Sender, ClientExtensionCommand Packet)> Pending = new();
-        internal World()
+        internal World(int participants = 3)
         {
-            for (var id = 1; id <= 3; id++) { Locations[id] = new PlayerLocation(id - 1, 0, 0, "Wall", PlayerState.InGame); Nodes[id] = new Node(this, id); }
+            for (var id = 1; id <= participants; id++) { Locations[id] = new PlayerLocation(id - 1, 0, 0, "Wall", PlayerState.InGame); Nodes[id] = new Node(this, id); }
         }
         internal static World Started()
         { var world = new World(); world.Nodes[1].Game.ChatImpl.Run("offer 2"); world.Nodes[2].Game.ChatImpl.Run("accept"); world.Tick(); return world; }
@@ -407,7 +454,7 @@ public sealed class ManualBelayFeatureTests
         internal readonly FeatureHost Host;
         internal Node(World world, int id)
         {
-            Game = new Game(world); Host = new FeatureHost(Runtime, Game);
+            Game = new Game(world); Host = new FeatureHost(Runtime, Game, rules: () => MultiplayerModes.RulesFor(world.Mode));
             Host.RegisterAll(new[] { new ManualBelayFeature() }, new Version(1, 0));
             Runtime.Attach(new Bridge(world, this, id));
         }
@@ -420,7 +467,7 @@ public sealed class ManualBelayFeatureTests
         public bool IsHost => LocalPlayerId == 1;
         public int LocalPlayerId { get; }
         public MultiplayerPlayer LocalPlayer => new(LocalPlayerId, "P" + LocalPlayerId, true, IsHost);
-        public IReadOnlyList<MultiplayerPlayer> Players => Enumerable.Range(1, 3).Select(id => new MultiplayerPlayer(id, "P" + id, id == LocalPlayerId, id == 1)).ToArray();
+        public IReadOnlyList<MultiplayerPlayer> Players => _world.Nodes.Keys.Select(id => new MultiplayerPlayer(id, "P" + id, id == LocalPlayerId, id == 1)).ToArray();
         public bool IsExtensionEnabled(string extensionId, int playerId) => _world.Nodes.ContainsKey(playerId);
         public void SendCommand(ClientExtensionCommand command)
         {
@@ -479,12 +526,12 @@ public sealed class ManualBelayFeatureTests
     private sealed class Belay : IManualBelayApi
     {
         internal bool OptIn = true, Anchored = true, CanBegin = true, ProtectionReady = true, Active, LastBrake;
-        internal int BeginCalls, SetCalls, StopCalls;
+        internal int BeginCalls, SetCalls, StopCalls, ReadinessChecks;
         internal uint Sequence;
         private Guid _session;
         public bool Enabled => OptIn;
-        public bool CanBeginStation(out string reason) { reason = "Need station"; return Anchored; }
-        public bool CanClimb(out string reason) { reason = "Need protection"; return ProtectionReady; }
+        public bool CanBeginStation(out string reason) { ReadinessChecks++; reason = "Need station"; return Anchored; }
+        public bool CanClimb(out string reason) { ReadinessChecks++; reason = "Need protection"; return ProtectionReady; }
         public bool StationValid => Anchored;
         public bool BeginStation(out string reason) { reason = "Need station"; return Anchored; }
         public void EndStation() { }

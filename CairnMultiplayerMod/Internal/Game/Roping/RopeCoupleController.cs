@@ -39,6 +39,17 @@ internal sealed class RopeCoupleController
         if (_network == null)
             return;
 
+        if (_state.ModeRules.UsesPartnerBelay)
+        {
+            if (!_ropeHardTornDown)
+            {
+                TearDownAllLocalRopeLinks("Belay Team uses the protection-rope brake");
+                _ropeHardTornDown = true;
+            }
+            if (RopeInterop.HasRopeTeamAnchors) RopeInterop.ReleaseAllAnchors();
+            return;
+        }
+
         // Teardown must remain reachable outside InGame.
         if (!TickRopeSafety()) return;
 
@@ -125,9 +136,6 @@ internal sealed class RopeCoupleController
 
     private void HandleRopeClipInput()
     {
-        // In the opt-in pilot, L opens the consent/role panel instead of attaching
-        // an unrelated direct tether behind the new belay controller.
-        if (ModConfig.BelayRemoteExperiment?.Value == true) return;
         var keyboard = Keyboard.current;
         var keyboardPressed = keyboard != null && keyboard[ToggleKey].wasPressedThisFrame;
         if (!keyboardPressed && !ModControllerInput.WasPressed(ControllerShortcut.ToggleRope))

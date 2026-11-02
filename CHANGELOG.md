@@ -12,7 +12,7 @@ All notable CairnMP changes are documented here. Releases follow
 ## Unreleased
 
 ### Added
-- Opt-in manual-belay pilot: an anchored player requests brake/release on a
+- Dedicated **Belay Team** mode: an anchored player requests brake/release on a
   consenting climber's existing protection route. Host-accepted intent and
   climber-applied suspension telemetry are separate; expired input cannot reopen
   payout. Native two-client and shared station-routing validation remain pending.
@@ -21,10 +21,14 @@ All notable CairnMP changes are documented here. Releases follow
   rebind while unloaded after a settling interval. Added a solo route exercise and
   a geometric planner for the intended shared station/protection/climber path;
   neither establishes native shared routing or two-client physics validation.
+- Belay Team isolates partner belay from the existing direct harness tether.
+  Empty partner lists do not query native anchor readiness. The partner panel
+  uses explicit GUI rectangles and records opening/drawing stages while its
+  native crash investigation and validation continue.
 
 ### Changed
-- Development protocol is now **18**. Every peer needs the same experimental
-  build; published 2.4.1/protocol 16 clients cannot join these sessions.
+- Development protocol is now **19**. Every peer needs the same experimental
+  build; published 2.4.1/protocol 16 and earlier protocol 17/18 pilots cannot join.
 
 ## Releases
 

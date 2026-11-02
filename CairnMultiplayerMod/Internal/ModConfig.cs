@@ -19,7 +19,6 @@ internal static class ModConfig
 
     public static MelonPreferences_Entry<bool> VerboseLogging;
     public static MelonPreferences_Entry<bool> PerformanceDiagnostics;
-    public static MelonPreferences_Entry<bool> BelayRemoteExperiment;
     public static MelonPreferences_Entry<bool> BelayRouteExperiment;
     public static MelonPreferences_Entry<bool> NativeProfiling;
     public static MelonPreferences_Entry<int> JobWorkerCount;
@@ -41,8 +40,7 @@ internal static class ModConfig
         var debug = MelonPreferences.CreateCategory(CategoryDebug);
         VerboseLogging = debug.CreateEntry("VerboseLogging", false);
         PerformanceDiagnostics = debug.CreateEntry("PerformanceDiagnostics", false);
-        // Opt-in remote manual belay and independent solo route exercise.
-        BelayRemoteExperiment = debug.CreateEntry("BelayRemoteExperiment", false);
+        // Independent solo route exercise; partner belay is selected through the lobby mode.
         BelayRouteExperiment = debug.CreateEntry("BelayRouteExperiment", false);
         // Times the native methods flagged by the reverse-engineering audit. Adds Harmony
         // hooks to per-frame game code, so it stays off unless someone is measuring.

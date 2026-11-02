@@ -17,6 +17,7 @@ namespace CairnMultiplayerMod.Internal.Game;
 internal sealed class ManualBelayAdapter : IManualBelayApi
 {
     private static ManualBelayAdapter _owner;
+    private readonly Func<bool> _remoteEnabled;
     private readonly HarmonyLib.Harmony _harmony = new("CairnMultiplayerMod.ManualBelay");
     private bool _installed, _stopping, _holdApplied;
     private Lifeline _lifeline, _stationLifeline;
@@ -38,7 +39,10 @@ internal sealed class ManualBelayAdapter : IManualBelayApi
     public SharedBelayRoutePreview? LocalRoutePreview { get; private set; }
     internal static bool IsControlling => _owner?._control != null;
 
-    public bool Enabled => ModConfig.BelayRemoteExperiment?.Value == true;
+    internal ManualBelayAdapter(Func<bool> remoteEnabled)
+        => _remoteEnabled = remoteEnabled ?? throw new ArgumentNullException(nameof(remoteEnabled));
+
+    public bool Enabled => _remoteEnabled();
     public ManualBelayStatus Status => new(_control != null && !_stopping, _control?.Attached == true,
         _control?.Braked == true, _lease?.Sequence ?? 0, _appliedSequence, _actual, _real,
         _topology?.Current?.ProtectionCount ?? 0, _topology?.Revision ?? 0, _rebinding);

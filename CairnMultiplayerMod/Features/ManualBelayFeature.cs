@@ -37,6 +37,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
     private float _nextPanelRefresh;
     private bool _cancelPending;
     public override string Id => "manual-belay";
+    private bool IsBelayMode => Rules.UsesPartnerBelay && Game.Belay.Enabled;
 
     protected internal override void OnRegister(FeatureBuilder feature)
     {
@@ -59,8 +60,8 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
     private void HandleChat(string args)
     {
         args = (args ?? "").Trim();
-        if (!Game.Belay.Enabled || !IsConnected)
-        { Notice("Enable the remote belay experiment on both clients and connect first."); return; }
+        if (!IsBelayMode || !IsConnected)
+        { Notice("Join a Belay Team lobby before requesting partner belay."); return; }
         if (args.Equals("stop", StringComparison.OrdinalIgnoreCase)) { RequestStop(); return; }
         if (args.Equals("accept", StringComparison.OrdinalIgnoreCase))
         {
@@ -158,6 +159,12 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             if (squared <= 36) partners.Add(new BelayPartnerRow(player.Id, player.Name, MathF.Sqrt(squared)));
         }
         partners.Sort((a, b) => a.Distance.CompareTo(b.Distance));
+        if (partners.Count == 0)
+        {
+            Game.BelayPanel.SetView(new BelayPanelView { Phase = BelayPanelPhase.Partners,
+                Partners = partners, Description = "Choose a nearby partner when they join this area." });
+            return;
+        }
         var canRequest = Game.Belay.CanClimb(out var protectionReason);
         var canOffer = Game.Belay.CanBeginStation(out var stationReason);
         var instructions = "Choose a nearby partner.";
@@ -188,7 +195,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
     {
         var message = request.Message;
         var now = Game.Time.UnscaledTime;
-        if (!Game.Belay.Enabled || !Enum.IsDefined(typeof(ManualBelayOperation), message.Operation))
+        if (!IsBelayMode || !Enum.IsDefined(typeof(ManualBelayOperation), message.Operation))
         { request.Reject("Manual belay experiment unavailable."); return; }
         if (message.Operation is ManualBelayOperation.Offer or ManualBelayOperation.Request)
         {
@@ -274,6 +281,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
 
     private void Receive(ManualBelayMessage message)
     {
+        if (!IsBelayMode) { ClearLocal(); return; }
         if (message.Session == Guid.Empty || (message.Belayer != LocalPlayerId && message.Climber != LocalPlayerId)) return;
         if (message.Phase == ManualBelayPhase.Offered)
         {
@@ -322,11 +330,11 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
     private void Tick()
     {
         var now = Game.Time.UnscaledTime;
-        if (IsHost && _hostSession != null && (!Game.Belay.Enabled || now >= _hostSession.Until
+        if (IsHost && _hostSession != null && (!IsBelayMode || now >= _hostSession.Until
             || !TryLocations(_hostSession.Belayer, _hostSession.Climber, out var hostStation, out _)
             || ((_hostSession.Started || _hostSession.Initiator == _hostSession.Belayer)
                 && DistanceSquared(hostStation, _hostSession.Station) > .25f))) EndHost();
-        if (!Game.Belay.Enabled || !IsConnected || !Game.State.IsLocalPlayerInGame)
+        if (!IsBelayMode || !IsConnected || !Game.State.IsLocalPlayerInGame)
         { Game.BelayPanel.Close(); if (_active != null || _offer != null) RequestStop(); return; }
         if (Game.Input.WasPressed(GameInputAction.Panic) || Game.Input.IsPauseMenuActive || Game.Chat.IsTyping) Game.BelayPanel.Close();
         else if ((!KeyboardCaptured || Game.BelayPanel.IsOpen) && Game.Input.WasKeyPressed(GameKey.L))
@@ -337,7 +345,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         if (Game.BelayPanel.IsOpen && now >= _nextPanelRefresh) { _nextPanelRefresh = now + .2f; RefreshPanel(); }
         if (_offer != null && now >= _localUntil) { _offer = null; Game.Belay.EndStation(); _offeredTarget = -1; }
         if (_active == null) return;
-        if (!Game.Belay.Enabled || !IsConnected || !Game.State.IsLocalPlayerInGame || now >= _localUntil)
+        if (!IsBelayMode || !IsConnected || !Game.State.IsLocalPlayerInGame || now >= _localUntil)
         { RequestStop(); return; }
         if (_active.Belayer == LocalPlayerId)
         {

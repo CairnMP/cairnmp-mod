@@ -307,6 +307,7 @@ internal sealed partial class NetworkManager
                 {
                     var pkt = new ClientRopeClip();
                     pkt.Deserialize(r);
+                    if (!IsRopeClipAllowedByMode(pkt.Clip)) break;
                     var fromId = EnsureSteamRemotePlayer(remoteSteamId);
                     if (!RopeRequests.IsAllowed(fromId, pkt.TargetPlayerId, pkt.Clip, _ropeLinks(), IsAdmittedPlayer)) break;
                     if (pkt.Clip && !_ropeCreationBudget.Take(fromId)) break;
@@ -481,6 +482,7 @@ internal sealed partial class NetworkManager
 
     private void SendSteamRopeClip(int targetPlayerId, bool clip)
     {
+        if (!IsRopeClipAllowedByMode(clip)) return;
         if (!IsHandshakeComplete || targetPlayerId == LocalPlayerId) return;
 
         if (_steamLobby != null && _steamLobby.IsHost)
@@ -508,6 +510,9 @@ internal sealed partial class NetworkManager
            && _steamIdsByPlayerId.TryGetValue(playerId, out var steamId)
            && _steamMembersPresent.Contains(steamId);
 
+    private bool IsRopeClipAllowedByMode(bool clip)
+        => !clip || (_steamLobby?.CurrentModeRules ?? MultiplayerModes.RopeTeam).AllowsDirectRope;
+
     public bool SendTeleportToPlayer(int targetPlayerId, float x, float y, float z, float yaw)
     {
         if (!_steamTransportActive || _steamLobby == null || !_steamLobby.IsHost) return false;
@@ -528,6 +533,8 @@ internal sealed partial class NetworkManager
         var target = new CSteamID(steamId);
 
         Pitons.SendSnapshotTo(EnsureSteamRemotePlayer(steamId));
+
+        if (!IsRopeClipAllowedByMode(true)) return;
 
         foreach (var (a, b) in _ropeLinks())
             SendSteamPayload(target, BuildPayload(PacketId.ServerRopeClip,
