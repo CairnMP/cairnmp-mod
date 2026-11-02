@@ -33,7 +33,9 @@ internal static class InputInterop
             {
                 _savedDisableInputs = mgr.disabledInputs;
                 mgr.disabledInputs = true;
-                mgr.SetIgnoreInputEvents(true);
+                // While the game ignores input events, the gamepad's own state can stop updating,
+                // and the radial menu reads that state directly. Only the chat needs the flag.
+                if (InputCaptureState.IsKeyboardCaptured) mgr.SetIgnoreInputEvents(true);
                 _blockApplied = true;
             }
             else

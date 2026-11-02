@@ -17,6 +17,20 @@ public sealed class ControllerShortcutTests
         Assert.Equal("View/Share", ControllerShortcutBindings.ModifierDisplayName);
     }
 
+    [Fact]
+    public void EveryShortcutHasAnOnScreenLabel()
+    {
+        foreach (var shortcut in Enum.GetValues<ControllerShortcut>())
+        {
+            var label = ControllerShortcutBindings.LabelFor(shortcut);
+            Assert.StartsWith("View/Share + ", label);
+            Assert.False(string.IsNullOrWhiteSpace(ControllerShortcutBindings.DescriptionFor(shortcut)));
+        }
+
+        Assert.Equal("View/Share + Y/Triangle: Attach or detach rope",
+            ControllerShortcutBindings.LabelFor(ControllerShortcut.ToggleRope));
+    }
+
     [Theory]
     [InlineData((int)ControllerShortcut.ToggleRope, (int)ControllerButton.North)]
     [InlineData((int)ControllerShortcut.PickupSharedItem, (int)ControllerButton.South)]
