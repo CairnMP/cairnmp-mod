@@ -21,19 +21,42 @@ internal sealed class BelayTopologySnapshot
         Available = available; ProtectionCount = protectionCount;
     }
 
-    internal bool IsValid
+    internal bool IsValid => TryValidate(out _);
+
+    internal bool TryValidate(out string reason)
     {
-        get
+        reason = "The rope or last piton identity is unavailable.";
+        if (Rope == 0 || LastPiton == 0) return false;
+        reason = "The protection route exceeds the supported segment or holder bounds.";
+        if (Parts.Length < 2 || Parts.Length > 64 || Holders.Length < 1 || Holders.Length > 66
+            || ProtectionCount < 1 || ProtectionCount > 63) return false;
+        reason = "The remaining rope capacity is invalid.";
+        if (!float.IsFinite(Available) || Available <= 0 || Available > 200) return false;
+        var seen = new HashSet<long>();
+        for (var i = 0; i < Parts.Length; i++)
         {
-            if (Rope == 0 || LastPiton == 0 || Parts.Length < 2 || Parts.Length > 64
-                || Holders.Length < 1 || Holders.Length > 66 || ProtectionCount < 1 || ProtectionCount > 63
-                || !float.IsFinite(Available) || Available <= 0 || Available > 200) return false;
-            var seen = new HashSet<long>();
-            foreach (var part in Parts) if (part == 0 || !seen.Add(part)) return false;
-            seen.Clear();
-            foreach (var holder in Holders) if (holder == 0 || !seen.Add(holder)) return false;
-            return true;
+            if (Parts[i] == 0)
+            {
+                reason = $"Protection segment {i + 1} has no live identity.";
+                return false;
+            }
+            if (!seen.Add(Parts[i]))
+            {
+                reason = $"Protection segment {i + 1} repeats another physical segment.";
+                return false;
+            }
         }
+        // Holders describe an ordered walk, not a set of physical constraints.
+        // A native endpoint can occur more than once; retain every occurrence so
+        // Matches still detects changes in order, position and multiplicity.
+        for (var i = 0; i < Holders.Length; i++)
+            if (Holders[i] == 0)
+            {
+                reason = $"Protection holder {i + 1} has no live identity.";
+                return false;
+            }
+        reason = "";
+        return true;
     }
 
     internal bool Matches(BelayTopologySnapshot other)

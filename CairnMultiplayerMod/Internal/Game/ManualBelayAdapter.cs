@@ -252,9 +252,9 @@ internal sealed class ManualBelayAdapter : IManualBelayApi
             return false;
         }
         snapshot = new BelayTopologySnapshot(Id(rope), Id(piton), parts, holders, available, protectionCount);
-        if (!snapshot.IsValid)
+        if (!snapshot.TryValidate(out var validationReason))
         {
-            reason = $"Protection route is not ready: {protectionCount} pitons, {parts.Length} segments, "
+            reason = validationReason + $" Route: {protectionCount} pitons, {parts.Length} segments, "
                 + $"{holders.Length} holders, {available:F2} m remaining.";
             return false;
         }

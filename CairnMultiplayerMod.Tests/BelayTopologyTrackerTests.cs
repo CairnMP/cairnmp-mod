@@ -55,8 +55,42 @@ public sealed class BelayTopologyTrackerTests
         Assert.Equal(BelayTopologyChange.Invalid, tracker.Observe(Route(parts: new long[] { 11, 0 }), false, 1));
         Assert.Equal(BelayTopologyChange.Invalid, tracker.Observe(new(999, 30, new long[] { 11, 12 }, new long[] { 20, 21 }, 36, 1), false, 1));
         Assert.Equal(BelayTopologyChange.Invalid, tracker.Observe(Route(parts: new long[] { 11, 11 }), false, 1));
-        Assert.Equal(BelayTopologyChange.Invalid, tracker.Observe(Route(holders: new long[] { 20, 20 }), false, 1));
+        Assert.Equal(BelayTopologyChange.Invalid, tracker.Observe(Route(holders: new long[] { 20, 0 }), false, 1));
         Assert.Equal(1u, tracker.Revision);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RepeatedEndpointHoldersPreserveAValidOrderedNativeRoute(bool twoPitons)
+    {
+        var parts = twoPitons ? new long[] { 11, 13, 14 } : new long[] { 11, 12 };
+        var holders = twoPitons ? new long[] { 20, 21, 23, 22, 20 } : new long[] { 20, 21, 22, 20 };
+        var route = Route(parts: parts, holders: holders);
+        var tracker = new BelayTopologyTracker();
+        Assert.Equal(BelayTopologyChange.Rebound, tracker.Observe(route, false, 0));
+        Assert.Equal(holders, tracker.Current.Holders);
+        Assert.Equal(twoPitons ? 2 : 1, tracker.Current.ProtectionCount);
+        Assert.Equal(BelayTopologyChange.Unchanged, tracker.Observe(route, true, .1));
+        Assert.Equal(1u, tracker.Revision);
+    }
+
+    [Fact]
+    public void RepeatedHolderOrderAndMultiplicityStillRequireAnUnloadedStableRebind()
+    {
+        var tracker = new BelayTopologyTracker();
+        var original = Route(holders: new long[] { 20, 21, 22, 20 });
+        tracker.Observe(original, false, 0);
+        var reordered = Route(holders: new long[] { 20, 22, 21, 20 });
+        Assert.Equal(BelayTopologyChange.Invalid, tracker.Observe(reordered, true, 1));
+        Assert.Equal(original.Holders, tracker.Current.Holders);
+        Assert.Equal(BelayTopologyChange.Settling, tracker.Observe(reordered, false, 1));
+        Assert.Equal(BelayTopologyChange.Rebound, tracker.Observe(reordered, false, 1.2));
+        var anotherOccurrence = Route(holders: new long[] { 20, 22, 21, 20, 20 });
+        Assert.Equal(BelayTopologyChange.Invalid, tracker.Observe(anotherOccurrence, true, 2));
+        Assert.Equal(BelayTopologyChange.Settling, tracker.Observe(anotherOccurrence, false, 2));
+        Assert.Equal(BelayTopologyChange.Rebound, tracker.Observe(anotherOccurrence, false, 2.2));
+        Assert.Equal(3u, tracker.Revision);
     }
 
     [Fact]
