@@ -13,12 +13,15 @@ public partial class Mod
 
     private void TickBelayRouteInput()
     {
+        // Held commands expire every input frame, including pause/focus/capture.
+        _game?.Belay.SetLocalRopeMotion(0);
         if (_game?.Belay.IsLocalExercise == true && (Network?.IsConnected == true || _multiplayerModeActive))
         {
             _game.Belay.ToggleLocalExercise(out _);
             return;
         }
-        if (ModConfig.BelayRouteExperiment?.Value != true || Network?.IsConnected == true
+        if (_game == null || (ModConfig.BelayRouteExperiment?.Value != true && ModConfig.BelayRopeExperiment?.Value != true)
+            || Network?.IsConnected == true
             || _multiplayerModeActive || !Application.isFocused || _game.Input.IsKeyboardCaptured) return;
         var keyboard = Keyboard.current;
         if (keyboard == null) return;
@@ -32,6 +35,8 @@ public partial class Mod
                 if (!started) LoggerInstance.Warning("[ManualBelay] " + reason);
             }
             if (keyboard.spaceKey.wasPressedThisFrame || keyboard.f7Key.wasPressedThisFrame) _game.Belay.ToggleLocalBrake();
+            var motion = (keyboard.upArrowKey.isPressed ? 1 : 0) - (keyboard.downArrowKey.isPressed ? 1 : 0);
+            _game.Belay.SetLocalRopeMotion(motion);
         }
         catch (Exception ex)
         {
@@ -43,7 +48,7 @@ public partial class Mod
 
     private void DrawLocalBelayExercise()
     {
-        if (ModConfig.BelayRouteExperiment?.Value != true || _game == null) return;
+        if ((ModConfig.BelayRouteExperiment?.Value != true && ModConfig.BelayRopeExperiment?.Value != true) || _game == null) return;
         _localBelayStyle ??= new GUIStyle(GUI.skin.box)
         {
             fontSize = 14, wordWrap = true, alignment = TextAnchor.UpperLeft,
@@ -54,11 +59,26 @@ public partial class Mod
         {
             var hasNotice = Time.realtimeSinceStartupAsDouble < _localBelayNoticeUntil && !string.IsNullOrEmpty(_localBelayNotice);
             if ((!_game.State.IsLocalPlayerInGame && !hasNotice) || Network?.IsConnected == true || _multiplayerModeActive) return;
-            var notice = hasNotice ? _localBelayNotice : "Connect your rope to a protection piton, then press Ctrl+F11 to start.";
+            var notice = hasNotice ? _localBelayNotice : _game.Belay.LocalExerciseNotice
+                ?? "Connect your rope to a protection piton, then press Ctrl+F11 to start.";
             GUI.Box(rect, "Local protection exercise — NOT ACTIVE\n" + notice, _localBelayStyle);
             return;
         }
         var status = _game.Belay.Status;
+        var rope = _game.Belay.LocalRopeStatus;
+        if (rope.HasValue)
+        {
+            var length = rope.Value;
+            rect.height = 178;
+            GUI.Box(rect, "Local rope-budget exercise — Ctrl+F11: end | Space/F7: brake/release\n"
+                + "Hold Up: feed | Down: take in slack (1 m/s) | Fixed protection route\n"
+                + (length.Braked ? "BRAKED — feed blocked; take-in removes slack only" : "FREE — a fall runs rope until braking or the rope end")
+                + $"\nFinal segment: released {length.Released:F2} m | slack {length.Slack:F2} m | reserve {length.Reserve:F2} m"
+                + $"\nGeometry {length.Distance:F2} m | native rest {length.RestLength:F2} m | particles {length.ParticleLength:F2} m"
+                + (status.Suspended ? $"\nSuspension: applied {status.Limit:F2} m | real {status.RealDistance:F2} m"
+                    : "\nClimbing — length is retained for the next suspension"), _localBelayStyle);
+            return;
+        }
         var preview = _game.Belay.LocalRoutePreview;
         GUI.Box(rect, "Local protection exercise — Ctrl+F11: end | Space: brake/release\n"
             + (status.Rebinding ? "Updating protection route..." : status.RequestedBrake ? "BRAKED" : "FREE ROPE")

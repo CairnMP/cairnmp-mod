@@ -157,7 +157,28 @@ The inactive banner shows any rejected start reason for 15 seconds, so a failed
 Ctrl+F11 attempt is visible without opening the log. A geometric preview
 calculates station -> ordered pitons -> climber capacity, with the first piton
 standing in for a simulated station. That preview does not attach or reroute the
-physical rope. Native multi-piton and panel rendering remain unverified in-game.
+physical rope. The earlier solo brake trial and empty-panel trial provide partial
+native evidence; populated panels and real partner operation remain unverified.
+
+`Debug.BelayRopeExperiment` enables a separate **local rope-budget exercise**,
+off by default. It takes precedence over the previous solo exercise. Start/end
+with Ctrl+F11 while stable on the wall; Space/F7 toggles the brake. Hold Up to feed
+rope or Down to take in slack at 1 m/s. An open brake permits passive payout in a
+fall up to the rope-end cap. Closing the brake preserves the released length,
+including existing slack. Take-in is one-way and cannot shorten a loaded segment;
+the brake blocks additional manual feed. Releasing either arrow stops that command.
+
+This experiment controls the final segment of the existing native protection
+route. The HUD separates released length, estimated straight-line slack, geometric
+reserve, native rest/particle measurements and the suspension readback. Rope and
+suspension coordinates are translated at each new suspension; that experimental
+mapping needs matched native fall tests. The budget persists when returning to the
+wall. A route or final-segment capacity change ends this exercise rather than silently resetting
+the paid-out length. Kinematic wall movement beyond a locked budget also ends the
+exercise instead of pulling the character back. These limits do not change the
+existing multi-piton remote pilot. Sampling is bounded to two records per second.
+No remote take-in, shared station attachment or protected role transfer is added
+by this local exercise. Native damage/piton coherence is still unverified.
 
 ### Proximity voice
 

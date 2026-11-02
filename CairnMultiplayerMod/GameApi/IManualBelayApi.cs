@@ -21,9 +21,15 @@ internal interface IManualBelayApi
     bool IsLocalExercise => false;
     bool ToggleLocalExercise(out string reason) { reason = "Local exercise unavailable."; return false; }
     void ToggleLocalBrake() { }
+    void SetLocalRopeMotion(int motion) { }
+    LocalBelayRopeStatus? LocalRopeStatus => null;
+    string LocalExerciseNotice => null;
     SharedBelayRoutePreview? LocalRoutePreview => null;
     bool TryPreviewRoute(WorldPosition station, out SharedBelayRoutePreview preview) { preview = default; return false; }
 }
+
+internal readonly record struct LocalBelayRopeStatus(float Capacity, float Released, float Distance,
+    float Slack, float Reserve, float RestLength, float ParticleLength, int Motion, bool Braked);
 
 internal readonly record struct SharedBelayRoutePreview(float FixedLength, float AvailableToClimber,
     float ClimberDistance, int ProtectionCount, bool ReachesClimber);
