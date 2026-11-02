@@ -173,10 +173,17 @@ route. The HUD separates released length, estimated straight-line slack, geometr
 reserve, native rest/particle measurements and the suspension readback. Rope and
 suspension coordinates are translated at each new suspension; that experimental
 mapping needs matched native fall tests. The budget persists when returning to the
-wall. A route or final-segment capacity change ends this exercise rather than silently resetting
-the paid-out length. Kinematic wall movement beyond a locked budget also ends the
+wall. The geometric capacity can change while unloaded without resetting paid-out
+length or the current command; suspension retains a fixed capacity until unloaded.
+An invalid capacity or one below the paid-out length ends control. A route change
+also ends this exercise rather than silently resetting the budget.
+Kinematic wall movement beyond a locked budget also ends the
 exercise instead of pulling the character back. These limits do not change the
-existing multi-piton remote pilot. Sampling is bounded to two records per second.
+existing multi-piton remote pilot. Native `RefreshRopeLength` consumes the owned
+length goal in its normal solver phase, even when Climbot stops issuing instant
+setters. The HUD reports whether native rest-length readback matches the requested
+length; this is not a fall/visual-equilibrium confirmation. Sampling is bounded
+to two records per second, including read-only stretch/compression observations.
 No remote take-in, shared station attachment or protected role transfer is added
 by this local exercise. Native damage/piton coherence is still unverified.
 

@@ -130,6 +130,54 @@ public sealed class BelayRopeControlTests
     }
 
     [Fact]
+    public void UpstreamGeometryChangesDoNotResetPaidOutLengthBrakeOrHeldCommand()
+    {
+        var rope = new BelayRopeControl(36.61846f, 6.346119f, 1.226f);
+        rope.SetBrake(true);
+        rope.TrySetMotion(-1);
+        foreach (var capacity in new[] { 36.55f, 36.7f, 36.45f, 36.8f })
+        {
+            Assert.True(rope.TryObserveCapacity(capacity));
+            Assert.Equal(6.346119f, rope.Released);
+            Assert.True(rope.Braked);
+            Assert.Equal(-1, rope.Motion);
+        }
+        Assert.True(rope.TryStep(1.226f, 1.226f, .1f));
+        Assert.Equal(6.246119f, rope.Released, 4);
+        Assert.Equal(36.8f - rope.Released, rope.Reserve, 4);
+    }
+
+    [Theory]
+    [InlineData(5f)]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(0f)]
+    [InlineData(201f)]
+    public void InvalidCapacityOrInsufficientRopeDoesNotClampAnExistingTarget(float capacity)
+    {
+        var rope = new BelayRopeControl(40, 8, 5);
+        Assert.False(rope.TryObserveCapacity(capacity));
+        Assert.Equal(40, rope.Capacity);
+        Assert.Equal(8, rope.Released);
+    }
+
+    [Fact]
+    public void LoadedCapacityIsFrozenUntilTheSuspensionEnds()
+    {
+        var rope = new BelayRopeControl(40, 8, 5);
+        Assert.True(rope.TryAttachSuspension(2, out var target));
+        Assert.Equal(37, target);
+        Assert.True(rope.TryObserveCapacity(39));
+        Assert.Equal(40, rope.Capacity);
+        Assert.True(rope.TryGetSuspensionTarget(out target));
+        Assert.Equal(37, target);
+        rope.EndSuspension();
+        Assert.True(rope.TryObserveCapacity(39));
+        Assert.Equal(39, rope.Capacity);
+        Assert.Equal(8, rope.Released);
+    }
+
+    [Fact]
     public void NewSuspensionUsesItsOwnOriginWithoutResettingPaidOutRope()
     {
         var rope = new BelayRopeControl(40, 8, 5);

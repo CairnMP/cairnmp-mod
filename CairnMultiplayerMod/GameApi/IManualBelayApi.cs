@@ -29,7 +29,7 @@ internal interface IManualBelayApi
 }
 
 internal readonly record struct LocalBelayRopeStatus(float Capacity, float Released, float Distance,
-    float Slack, float Reserve, float RestLength, float ParticleLength, int Motion, bool Braked);
+    float Slack, float Reserve, float RestLength, float ParticleLength, int Motion, bool Braked, bool LengthApplied);
 
 internal readonly record struct SharedBelayRoutePreview(float FixedLength, float AvailableToClimber,
     float ClimberDistance, int ProtectionCount, bool ReachesClimber);

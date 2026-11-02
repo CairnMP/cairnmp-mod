@@ -304,6 +304,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         _stopping = true;
         if (_ropeControl != null)
         {
+            ReleaseLocalRopeGoal();
             _localRopeNotice ??= "Local rope exercise ended. Native rope control resumed; restart only when stable.";
             // Ending the experiment hands off at current geometry, never at a
             // previously paid-out length that could pull the suspended body.
@@ -349,11 +350,6 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
                 }
                 else
                 {
-                    if (_ropeControl != null && Math.Abs(snapshot.Available - _ropeControl.Capacity) > .05f)
-                    {
-                        EndLocalRope("Available final-segment capacity changed. Restart the exercise when stable.");
-                        return;
-                    }
                     var change = _topology.Observe(snapshot, hasSwing, Now);
                     if (change == BelayTopologyChange.Invalid) { ClearControl(); return; }
                     _lastValidTopology = Now;
@@ -369,6 +365,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
                         ModLog.Info("[ManualBelay] Protection route rebound; revision=" + _topology.Revision
                             + ", pitons=" + snapshot.ProtectionCount + ", end=" + snapshot.Available);
                     }
+                    if (!ObserveLocalRopeCapacity(snapshot.Available)) return;
                 }
                 if (_localExercise)
                     LocalRoutePreview = TryPreviewRoute(new WorldPosition(_localPreviewStation.x, _localPreviewStation.y, _localPreviewStation.z), out var plan)
@@ -424,7 +421,11 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
             _harmony.Patch(AccessTools.Method(typeof(Piton), nameof(Piton.ShouldDetach)),
                 postfix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(AfterPitonDecision)));
             _harmony.Patch(AccessTools.Method(typeof(ObiRopeLengthController), nameof(ObiRopeLengthController.SetRopeLengthInstant)),
-                prefix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(BeforeLocalRopeLength)));
+                prefix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(BeforeLocalRopeLength)),
+                postfix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(AfterLocalRopeLength)));
+            _harmony.Patch(AccessTools.Method(typeof(ObiRopeLengthController), nameof(ObiRopeLengthController.RefreshRopeLength)),
+                prefix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(BeforeLocalRopeRefresh)),
+                postfix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(AfterLocalRopeLength)));
             _installed = true;
         }
         catch { _harmony.UnpatchSelf(); throw; }
@@ -444,11 +445,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         try
         {
             if (!owner.MappingMatches() || !TrySnapshot(__instance, out var snapshot)) { owner.ClearControl(); return; }
-            if (owner._ropeControl != null && Math.Abs(snapshot.Available - owner._ropeControl.Capacity) > .05f)
-            {
-                owner.EndLocalRope("Available final-segment capacity changed before the fall. Native control resumed.");
-                return;
-            }
+            if (!owner.ObserveLocalRopeCapacity(snapshot.Available)) return;
             // Refresh the geometric stock once when a new suspension starts.
             // Never chase a moving capacity estimate while the body is loaded.
             owner.BindTopology(snapshot);
@@ -507,6 +504,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     private void ClearControl()
     {
+        ReleaseLocalRopeGoal();
         if (ReferenceEquals(_owner, this)) _owner = null;
         _control = null; _lease = null; _lifeline = null; _rope = null; _pivot = 0;
         if (_ropeControl != null)

@@ -13,6 +13,9 @@ internal sealed partial class ManualBelayAdapter
     private float _restLength, _particleLength;
     private double _nextRopeSample;
     private string _localRopeNotice;
+    private ObiRopeLengthController _localLengthController;
+    private float _lastLocalRopeGoal = float.NaN, _measuredRopeCapacity;
+    private uint _ropeRefreshCount;
     private static bool LocalExerciseEnabled => ModConfig.BelayRouteExperiment?.Value == true
         || ModConfig.BelayRopeExperiment?.Value == true;
 
@@ -20,7 +23,8 @@ internal sealed partial class ManualBelayAdapter
     public LocalBelayRopeStatus? LocalRopeStatus => _ropeControl == null ? null
         : new(_ropeControl.Capacity, _ropeControl.Released, _ropeControl.Distance,
             _ropeControl.Slack, _ropeControl.Reserve, _restLength, _particleLength,
-            _ropeControl.Motion, _ropeControl.Braked);
+            _ropeControl.Motion, _ropeControl.Braked,
+            float.IsFinite(_restLength) && Math.Abs(_restLength - _ropeControl.Released) <= .05f);
 
     public void SetLocalRopeMotion(int motion)
     {
@@ -50,6 +54,15 @@ internal sealed partial class ManualBelayAdapter
     {
         distance = Vector3.Distance(lifeline.GetSecuringPitonPosition(true), lifeline.harness.GetAttachPosition());
         return float.IsFinite(distance) && distance > 0;
+    }
+
+    private bool ObserveLocalRopeCapacity(float available)
+    {
+        if (_ropeControl == null) return true;
+        _measuredRopeCapacity = available;
+        if (_ropeControl.TryObserveCapacity(available)) return true;
+        EndLocalRope("The available rope no longer covers the paid-out segment. Check protection before restarting.");
+        return false;
     }
 
     private bool StepLocalRope(float elapsed, bool suspended, float swingReal = 0)
@@ -112,17 +125,68 @@ internal sealed partial class ManualBelayAdapter
     private static void BeforeLocalRopeLength(ObiRopeLengthController __instance, ref float __0)
     {
         var owner = _owner;
-        if (owner?._ropeControl == null || owner._stopping || __instance.obiRope == null
-            || Id(__instance.obiRope) != owner._localObiRope) return;
+        if (owner?._ropeControl == null || owner._stopping) return;
         try
         {
-            if (!owner.MappingMatches()) { owner.EndLocalRope("Protection route changed during a native length update."); return; }
-            if (!ContextValid || owner._lease.IsExpired(Now)) { owner.Stop(owner._lease.Session); return; }
-            // Reuse the already-observed native setter phase. Do not enqueue
-            // extra solver writes or derive the target from its own readback.
+            if (!owner.CanWriteLocalRopeGoal(__instance)) return;
             __0 = owner._ropeControl.Released;
         }
         catch (Exception ex) { owner.Fail(ex); }
+    }
+
+    private bool CanWriteLocalRopeGoal(ObiRopeLengthController controller)
+    {
+        if (controller.obiRope == null || Id(controller.obiRope) != _localObiRope) return false;
+        if (!MappingMatches()) { EndLocalRope("Protection route changed during a native length update."); return false; }
+        if (!ContextValid || _lease.IsExpired(Now)) { Stop(_lease.Session); return false; }
+        if (controller.ropeLengthOverride > 0)
+        { EndLocalRope("The native rope has a fixed-length override. End that interaction before starting."); return false; }
+        return true;
+    }
+
+    private static void BeforeLocalRopeRefresh(ObiRopeLengthController __instance)
+    {
+        var owner = _owner;
+        if (owner?._ropeControl == null || owner._stopping) return;
+        try
+        {
+            if (!owner.CanWriteLocalRopeGoal(__instance)) return;
+            // RefreshRopeLength is called by the native Update/FixedUpdate at
+            // the solver's selected phase. It bypasses SetRopeLengthInstant and
+            // otherwise returns early when the old native goal is unchanged.
+            // Supply the goal here; native code remains responsible for particles.
+            owner._localLengthController = __instance;
+            owner._lastLocalRopeGoal = owner._ropeControl.Released;
+            __instance.ropeLength = owner._lastLocalRopeGoal;
+            if (owner._ropeRefreshCount < uint.MaxValue) owner._ropeRefreshCount++;
+        }
+        catch (Exception ex) { owner.Fail(ex); }
+    }
+
+    private static void AfterLocalRopeLength(ObiRopeLengthController __instance)
+    {
+        var owner = _owner;
+        if (owner?._ropeControl == null || owner._stopping) return;
+        try
+        {
+            if (__instance.obiRope != null && Id(__instance.obiRope) == owner._localObiRope)
+                owner._restLength = __instance.obiRope.restLength;
+        }
+        catch (Exception ex) { owner.Fail(ex); }
+    }
+
+    private void ReleaseLocalRopeGoal()
+    {
+        try
+        {
+            var controller = _localLengthController;
+            if (controller == null || controller.obiRope == null || Id(controller.obiRope) != _localObiRope) return;
+            if (Math.Abs(controller.ropeLength - _lastLocalRopeGoal) > .001f) return;
+            var current = controller.obiRope.restLength;
+            if (float.IsFinite(current) && current > 0 && current <= 200) controller.ropeLength = current;
+        }
+        catch (Exception ex) { ModLog.Warning("[BelayRope] Could not release native length goal: " + ex.Message); }
+        finally { _localLengthController = null; _lastLocalRopeGoal = float.NaN; _ropeRefreshCount = 0; }
     }
 
     private void SampleLocalRope()
@@ -132,11 +196,15 @@ internal sealed partial class ManualBelayAdapter
         var part = _rope.ropeParts[_rope.ropeParts.Count - 1];
         _restLength = part.obiRope.restLength;
         _particleLength = _rope.GetLength(true, true);
+        var stretchScale = part.obiRope.stretchingScale;
+        var compression = part.obiRope.maxCompression;
         var body = _lifeline.harness.GetAttachPosition();
         ModLog.Info("[BelayRope] Sample; brake=" + _ropeControl.Braked + ", motion=" + _ropeControl.Motion
             + ", released=" + _ropeControl.Released + ", geometry=" + _ropeControl.Distance
             + ", slack=" + _ropeControl.Slack + ", reserve=" + _ropeControl.Reserve
             + ", rest=" + _restLength + ", particles=" + _particleLength
+            + ", stretchScale=" + stretchScale + ", maxCompression=" + compression
+            + ", capacity=" + _ropeControl.Capacity + ", measuredCapacity=" + _measuredRopeCapacity + ", refreshes=" + _ropeRefreshCount
             + ", limit=" + _actual + ", swingReal=" + _real + ", suspended=" + (_pivot != 0)
             + ", x=" + body.x + ", y=" + body.y + ", z=" + body.z);
     }

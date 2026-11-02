@@ -75,6 +75,7 @@ public partial class Mod
                 + (length.Braked ? "BRAKED — feed blocked; take-in removes slack only" : "FREE — a fall runs rope until braking or the rope end")
                 + $"\nFinal segment: released {length.Released:F2} m | slack {length.Slack:F2} m | reserve {length.Reserve:F2} m"
                 + $"\nGeometry {length.Distance:F2} m | native rest {length.RestLength:F2} m | particles {length.ParticleLength:F2} m"
+                + (length.LengthApplied ? "\nLength readback matches target" : "\nWAITING for native rope length — do not start a fall comparison")
                 + (status.Suspended ? $"\nSuspension: applied {status.Limit:F2} m | real {status.RealDistance:F2} m"
                     : "\nClimbing — length is retained for the next suspension"), _localBelayStyle);
             return;

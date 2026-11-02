@@ -14,7 +14,7 @@ internal sealed class BelayRopeControl
     private double _released;
     private float _swingOffset;
 
-    internal float Capacity { get; }
+    internal float Capacity { get; private set; }
     internal float Released => (float)_released;
     internal float Distance { get; private set; }
     internal float Slack => Math.Max(0, Released - Distance);
@@ -43,6 +43,18 @@ internal sealed class BelayRopeControl
     {
         if (motion < -1 || motion > 1) return false;
         Motion = motion;
+        return true;
+    }
+
+    internal bool TryObserveCapacity(float capacity)
+    {
+        if (!float.IsFinite(capacity) || capacity <= 0 || capacity > 200) return false;
+        // GetRemainingSlackMeters(false) excludes the final segment but still
+        // depends on upstream holder positions. That geometric remainder can
+        // move without a topology change; it must not reset the paid-out length.
+        if (Suspended) return true;
+        if (capacity < Released) return false;
+        Capacity = capacity;
         return true;
     }
 
