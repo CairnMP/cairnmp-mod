@@ -200,6 +200,7 @@ internal sealed partial class ManualBelayAdapter
         var compression = part.obiRope.maxCompression;
         var body = _lifeline.harness.GetAttachPosition();
         ModLog.Info("[BelayRope] Sample; brake=" + _ropeControl.Braked + ", motion=" + _ropeControl.Motion
+            + ", catchPending=" + _ropeControl.CaptureBrakeDistance
             + ", released=" + _ropeControl.Released + ", geometry=" + _ropeControl.Distance
             + ", slack=" + _ropeControl.Slack + ", reserve=" + _ropeControl.Reserve
             + ", rest=" + _restLength + ", particles=" + _particleLength

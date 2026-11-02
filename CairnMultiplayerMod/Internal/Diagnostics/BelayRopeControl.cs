@@ -20,6 +20,7 @@ internal sealed class BelayRopeControl
     internal float Slack => Math.Max(0, Released - Distance);
     internal float Reserve => Math.Max(0, Capacity - Released);
     internal bool Braked { get; private set; }
+    internal bool CaptureBrakeDistance { get; private set; }
     internal int Motion { get; private set; }
     internal bool Suspended { get; private set; }
     internal float SwingOffset => _swingOffset;
@@ -37,7 +38,14 @@ internal sealed class BelayRopeControl
         _released = Math.Max(released, Math.Min(capacity, distance + Clearance));
     }
 
-    internal void SetBrake(bool braked) => Braked = braked;
+    internal void SetBrake(bool braked)
+    {
+        if (Braked == braked) return;
+        Braked = braked;
+        // Input can arrive before the next native physics step. Catch a falling
+        // body at that step's loaded distance, not at an older rope measurement.
+        CaptureBrakeDistance = braked && Suspended;
+    }
 
     internal bool TrySetMotion(int motion)
     {
@@ -66,8 +74,15 @@ internal sealed class BelayRopeControl
         var floor = Math.Min(Capacity, Math.Max(distance, minimumForTakeIn) + Clearance);
         var step = MetersPerSecond * Math.Min(elapsed, MaximumStepSeconds);
 
-        // An open device must not arrest a fall at the manual feed rate.
-        if (!Braked) _released = Math.Min(Capacity, Math.Max(_released, distance + Clearance));
+        // Free payout must cover BOTH the rope geometry and native suspension.
+        // Their origins can diverge during a fall. Capturing a brake only once
+        // prevents a shorter stale target from winching the body upwards, while
+        // subsequent braked steps keep the catch fixed rather than following it.
+        if (!Braked || CaptureBrakeDistance)
+        {
+            _released = Math.Max(_released, floor);
+            CaptureBrakeDistance = false;
+        }
         if (Motion > 0 && !Braked) _released = Math.Min(Capacity, _released + step);
         // One-way take-in removes slack even with the brake engaged. It never
         // shortens an already loaded segment or increases a stretched target.
@@ -89,6 +104,7 @@ internal sealed class BelayRopeControl
     internal void EndSuspension()
     {
         Suspended = false;
+        CaptureBrakeDistance = false;
         _swingOffset = 0;
     }
 

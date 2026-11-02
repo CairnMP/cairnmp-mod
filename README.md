@@ -167,6 +167,12 @@ rope or Down to take in slack at 1 m/s. An open brake permits passive payout in 
 fall up to the rope-end cap. Closing the brake preserves the released length,
 including existing slack. Take-in is one-way and cannot shorten a loaded segment;
 the brake blocks additional manual feed. Releasing either arrow stops that command.
+Open payout follows both geometric and native loaded distance. When braking an
+already falling character, the next physics step captures at least the loaded
+length once, preserving any additional slack; later steps hold that target.
+The end-knot capacity remains the cap even during native stretch. This avoids
+rewinding a falling body to an older, shorter geometric measurement; actual catch
+motion and rebound still require native validation.
 
 This experiment controls the final segment of the existing native protection
 route. The HUD separates released length, estimated straight-line slack, geometric

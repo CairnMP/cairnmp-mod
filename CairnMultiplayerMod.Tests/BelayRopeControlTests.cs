@@ -209,6 +209,77 @@ public sealed class BelayRopeControlTests
     }
 
     [Theory]
+    [InlineData(9.949536f, 12.341015f)]
+    [InlineData(12.951056f, 15.962342f)]
+    [InlineData(17.95201f, 21.62239f)]
+    [InlineData(27.599283f, 32.117237f)]
+    public void FreePayoutTracksNativeSuspensionBeforeBrake(float geometry, float real)
+    {
+        // Native run c619b6d: the rope and moving suspension measurements diverge.
+        // Paying out only straight-line rope distance produced limits metres
+        // shorter than the loaded suspension when the user pressed the brake.
+        var rope = new BelayRopeControl(37.226166f, 4.6508236f, 3.9176006f);
+        Assert.True(rope.TryAttachSuspension(3.6594646f, out _));
+        var loadedMinimum = real + rope.SwingOffset;
+        Assert.True(rope.TryStep(geometry, loadedMinimum, 0));
+        rope.SetBrake(true);
+        Assert.True(rope.TryStep(geometry, loadedMinimum, .02f));
+        Assert.True(rope.TryGetSuspensionTarget(out var target));
+        Assert.True(target >= real, $"Brake target {target} rewinds loaded distance {real}.");
+    }
+
+    [Fact]
+    public void BrakeCapturesOnceAtPhysicsAfterInputThenHoldsThatLength()
+    {
+        var rope = new BelayRopeControl(40, 5.03f, 5);
+        Assert.True(rope.TryAttachSuspension(2, out _));
+        rope.SetBrake(true);
+        Assert.True(rope.CaptureBrakeDistance);
+        // The body advances between input and the native physics callback.
+        Assert.True(rope.TryStep(5.2f, 6.5f, .02f));
+        Assert.Equal(6.53f, rope.Released, 4);
+        Assert.False(rope.CaptureBrakeDistance);
+        Assert.True(rope.TryGetSuspensionTarget(out var target));
+        Assert.Equal(3.53f, target, 4);
+        rope.SetBrake(true); // A heartbeat must not recapture a longer distance.
+        Assert.False(rope.CaptureBrakeDistance);
+        Assert.True(rope.TryStep(8, 10, .02f));
+        Assert.Equal(6.53f, rope.Released, 4);
+    }
+
+    [Fact]
+    public void BrakeCaptureRetainsPreviouslyFedSlackAndRespectsTheRopeEnd()
+    {
+        var rope = new BelayRopeControl(40, 10, 5);
+        Assert.True(rope.TryAttachSuspension(2, out _));
+        rope.SetBrake(true);
+        Assert.True(rope.TryStep(5, 5, .02f));
+        Assert.Equal(10, rope.Released);
+        Assert.Equal(5, rope.Slack);
+        rope = new BelayRopeControl(10, 9, 5);
+        Assert.True(rope.TryAttachSuspension(2, out _));
+        rope.SetBrake(true);
+        Assert.True(rope.TryStep(11, 12, .02f));
+        Assert.Equal(10, rope.Released); // The end knot cannot create extra stock.
+    }
+
+    [Fact]
+    public void InvalidReadbackDoesNotConsumeBrakeCaptureAndReleaseCancelsIt()
+    {
+        var rope = new BelayRopeControl(40, 5.03f, 5);
+        Assert.True(rope.TryAttachSuspension(2, out _));
+        rope.SetBrake(true);
+        Assert.False(rope.TryStep(float.NaN, 7, .02f));
+        Assert.True(rope.CaptureBrakeDistance);
+        rope.SetBrake(false);
+        Assert.False(rope.CaptureBrakeDistance);
+        rope.SetBrake(true);
+        rope.EndSuspension();
+        Assert.False(rope.CaptureBrakeDistance);
+        Assert.Equal(5.03f, rope.Released, 4);
+    }
+
+    [Theory]
     [InlineData(0f, 1f, 1f)]
     [InlineData(201f, 1f, 1f)]
     [InlineData(40f, float.NaN, 1f)]
