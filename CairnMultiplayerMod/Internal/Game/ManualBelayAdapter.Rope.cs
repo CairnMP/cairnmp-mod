@@ -20,7 +20,7 @@ internal sealed partial class ManualBelayAdapter
         || ModConfig.BelayRopeExperiment?.Value == true;
 
     public string LocalExerciseNotice => _localRopeNotice;
-    public LocalBelayRopeStatus? LocalRopeStatus => _ropeControl == null ? null
+    public LocalBelayRopeStatus? LocalRopeStatus => _ropeControl == null || _localRoutePending ? null
         : new(_ropeControl.Capacity, _ropeControl.Released, _ropeControl.Distance,
             _ropeControl.Slack, _ropeControl.Reserve, _restLength, _particleLength,
             _ropeControl.Motion, _ropeControl.Braked,
@@ -28,7 +28,7 @@ internal sealed partial class ManualBelayAdapter
 
     public void SetLocalRopeMotion(int motion)
     {
-        if (_ropeControl == null || !IsLocalExercise || _stopping) return;
+        if (_ropeControl == null || !IsLocalExercise || _stopping || _localRoutePending) return;
         if (!_ropeControl.TrySetMotion(motion)) return;
     }
 
@@ -63,7 +63,8 @@ internal sealed partial class ManualBelayAdapter
         _measuredRopeCapacity = available;
         if (!TryMeasureLocalStation(_lifeline, available, out available, out var reason))
         { EndLocalRope(reason); return false; }
-        if (_ropeControl.TryObserveCapacity(available)) return true;
+        if (_ropeControl.TryObserveCapacity(available))
+        { if (!_localRoutePending) RememberLocalRoute(); return true; }
         EndLocalRope("The available rope no longer covers the paid-out segment. Check protection before restarting.");
         return false;
     }
@@ -139,8 +140,13 @@ internal sealed partial class ManualBelayAdapter
 
     private bool CanWriteLocalRopeGoal(ObiRopeLengthController controller)
     {
+        if (_localRoutePending) return false;
         if (controller.obiRope == null || Id(controller.obiRope) != _localObiRope) return false;
-        if (!MappingMatches(out var reason)) { EndLocalRope("Protection route changed during a native length update. " + reason); return false; }
+        if (!MappingMatches(out var reason))
+        {
+            if (!TryBeginLocalRouteChange(reason)) EndLocalRope("Protection route changed during a native length update. " + reason);
+            return false;
+        }
         if (!ContextValid || _lease.IsExpired(Now)) { Stop(_lease.Session); return false; }
         if (controller.ropeLengthOverride > 0)
         { EndLocalRope("The native rope has a fixed-length override. End that interaction before starting."); return false; }
@@ -194,7 +200,7 @@ internal sealed partial class ManualBelayAdapter
 
     private void SampleLocalRope()
     {
-        if (Now < _nextRopeSample) return;
+        if (_localRoutePending || Now < _nextRopeSample) return;
         _nextRopeSample = Now + .5;
         var part = _rope.ropeParts[_rope.ropeParts.Count - 1];
         _restLength = part.obiRope.restLength;
@@ -210,6 +216,7 @@ internal sealed partial class ManualBelayAdapter
             + ", rest=" + _restLength + ", particles=" + _particleLength
             + ", stretchScale=" + stretchScale + ", maxCompression=" + compression
             + ", capacity=" + _ropeControl.Capacity + ", measuredCapacity=" + _measuredRopeCapacity + ", refreshes=" + _ropeRefreshCount
+            + ", rebinds=" + _localRouteRebinds + ", topologyRevision=" + _topology.Revision
             + ", climbQueries=" + _climbLimitQueries + ", climbBlocks=" + _climbLimitBlocks + ", climbBlocked=" + _climbMovementBlocked
             + ", limit=" + _actual + ", swingReal=" + _real + ", suspended=" + (_pivot != 0)
             + ", x=" + body.x + ", y=" + body.y + ", z=" + body.z
@@ -224,6 +231,7 @@ internal sealed partial class ManualBelayAdapter
 
     private void EndLocalRope(string reason)
     {
+        if (_control == null || _lease == null) return;
         _localRopeNotice = reason;
         ModLog.Info("[BelayRope] Ended; " + reason);
         Stop(_lease.Session);

@@ -71,6 +71,17 @@ internal static class BelayRoutePlanner
         return available > 0 && available <= 200;
     }
 
+    internal static bool IsSingleProtectionAppend(IReadOnlyList<BelayProtectionPoint> previous,
+        IReadOnlyList<BelayProtectionPoint> next)
+    {
+        if (previous == null || next == null || previous.Count < 1 || next.Count > 63
+            || next.Count != previous.Count + 1 || next[next.Count - 1].Id == 0) return false;
+        var added = next[next.Count - 1].Id;
+        for (var i = 0; i < previous.Count; i++)
+            if (previous[i].Id == 0 || previous[i].Id != next[i].Id || previous[i].Id == added) return false;
+        return true;
+    }
+
     private static bool Finite(Vector3 point)
         => float.IsFinite(point.X) && float.IsFinite(point.Y) && float.IsFinite(point.Z);
 }

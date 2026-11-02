@@ -1,0 +1,122 @@
+using System;
+using System.Numerics;
+using CairnMultiplayerMod.Internal.Diagnostics;
+using Xunit;
+
+namespace CairnMultiplayerMod.Tests;
+
+public sealed class BelayRopeRebindTests
+{
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ClippingRedistributesPaidOutRopeAndPreservesBrake(bool braked)
+    {
+        var rope = new BelayRopeControl(35, 6, 2);
+        rope.SetBrake(braked);
+        rope.TrySetMotion(-1);
+        Assert.True(rope.TryRebindRoute(3, 7, 31, 1));
+        Assert.Equal(2, rope.Released);
+        Assert.Equal(9, 7 + rope.Released);
+        Assert.Equal(braked, rope.Braked);
+        Assert.Equal(0, rope.Motion);
+        Assert.Equal(31, rope.Capacity);
+        Assert.Equal(1, rope.Distance);
+    }
+
+    [Fact]
+    public void FreeClippingMayPayOutOnlyEnoughForTheNewGeometry()
+    {
+        var rope = new BelayRopeControl(35, 2, 1);
+        Assert.True(rope.TryRebindRoute(3, 6, 32, .5f));
+        Assert.Equal(.53f, rope.Released, 4);
+        Assert.False(rope.Braked);
+    }
+
+    [Fact]
+    public void ClosedBrakeCannotSilentlyGrantRopeToClipOutOfReach()
+    {
+        var rope = new BelayRopeControl(35, 2, 1);
+        rope.SetBrake(true);
+        rope.TrySetMotion(-1);
+        Assert.False(rope.TryRebindRoute(3, 6, 32, .5f));
+        Assert.Equal(2, rope.Released);
+        Assert.Equal(35, rope.Capacity);
+        Assert.Equal(1, rope.Distance);
+        Assert.True(rope.Braked);
+        Assert.Equal(-1, rope.Motion);
+    }
+
+    [Fact]
+    public void ClosedBrakeCannotShortenTheNewFinalSegmentBelowItsCurrentDistance()
+    {
+        var rope = new BelayRopeControl(35, 2, 1);
+        rope.SetBrake(true);
+        // Positive rope remains, but it cannot span the new piton-to-harness gap.
+        Assert.False(rope.TryRebindRoute(3, 4.9f, 32, .5f));
+        Assert.Equal(2, rope.Released);
+        Assert.Equal(1, rope.Distance);
+        Assert.True(rope.Braked);
+    }
+
+    [Fact]
+    public void RepeatedClipsCannotMultiplySlackOrResetTheBrake()
+    {
+        var rope = new BelayRopeControl(38, 10, 2);
+        rope.SetBrake(true);
+        Assert.True(rope.TryRebindRoute(0, 3, 35, 1));
+        Assert.Equal(7, rope.Released);
+        Assert.True(rope.TryRebindRoute(3, 6, 32, 1));
+        Assert.Equal(4, rope.Released);
+        Assert.Equal(10, 6 + rope.Released);
+        Assert.True(rope.Braked);
+    }
+
+    [Fact]
+    public void ALoadedConstraintCannotBeReboundEvenWithEnoughSlack()
+    {
+        var rope = new BelayRopeControl(35, 6, 2);
+        Assert.True(rope.TryAttachSuspension(2, out _));
+        Assert.False(rope.TryRebindRoute(3, 7, 31, 1));
+        Assert.True(rope.Suspended);
+        Assert.Equal(6, rope.Released);
+    }
+
+    [Theory]
+    [InlineData(float.NaN, 3, 35, 1)]
+    [InlineData(0, float.PositiveInfinity, 35, 1)]
+    [InlineData(-1, 3, 35, 1)]
+    [InlineData(0, -1, 35, 1)]
+    [InlineData(0, 3, float.NaN, 1)]
+    [InlineData(0, 3, 0, 1)]
+    [InlineData(0, 3, 201, 1)]
+    [InlineData(0, 3, 35, float.NaN)]
+    [InlineData(0, 3, 35, 0)]
+    [InlineData(0, 3, 35, 36)]
+    [InlineData(199, 3, 35, 1)]
+    [InlineData(0, 199, 35, 1)]
+    [InlineData(0, 1, 2, 1)]
+    public void InvalidOrInsufficientCapacityNeverClampsExistingPaidOutRope(float previous, float next, float capacity, float distance)
+    {
+        var rope = new BelayRopeControl(35, 6, 2);
+        Assert.False(rope.TryRebindRoute(previous, next, capacity, distance));
+        Assert.Equal(6, rope.Released);
+        Assert.Equal(35, rope.Capacity);
+    }
+
+    [Fact]
+    public void OnlyOneNewProtectionAtTheEndPreservesTheOldOrderedRoute()
+    {
+        var a = Point(1); var b = Point(2); var c = Point(3); var d = Point(4);
+        Assert.True(BelayRoutePlanner.IsSingleProtectionAppend(new[] { a, b }, new[] { a, b, c }));
+        Assert.False(BelayRoutePlanner.IsSingleProtectionAppend(new[] { a, b }, new[] { b, a, c }));
+        Assert.False(BelayRoutePlanner.IsSingleProtectionAppend(new[] { a, b }, new[] { a, c }));
+        Assert.False(BelayRoutePlanner.IsSingleProtectionAppend(new[] { a, b }, new[] { a, b }));
+        Assert.False(BelayRoutePlanner.IsSingleProtectionAppend(new[] { a, b }, new[] { a, b, c, d }));
+        Assert.False(BelayRoutePlanner.IsSingleProtectionAppend(new[] { a, b }, new[] { a, b, a }));
+        Assert.False(BelayRoutePlanner.IsSingleProtectionAppend(Array.Empty<BelayProtectionPoint>(), new[] { a }));
+        Assert.False(BelayRoutePlanner.IsSingleProtectionAppend(null, new[] { a }));
+    }
+
+    private static BelayProtectionPoint Point(uint id) => new(id, new Vector3(0, id, 0));
+}

@@ -216,9 +216,20 @@ existing physical protection chain; it does not attach a partner endpoint or
 replace the Climbot. The recorded piton stands in for the absent anchored belayer.
 Unlike a real player's station, this solo test marker remains after releasing
 your personal anchor. End Ctrl+F11 before Ctrl+F10 clears it; scene changes and
-native identity loss invalidate it. Adding/removing pitons during the active
-fixed-route exercise still ends control. Station capture/routing needs native
-validation separately from the earlier final-segment trials.
+native identity loss invalidate it. With a recorded station, adding one new piton
+while stable on the wall now pauses manual length writes, waits for the ordered
+native route to settle and rebinds its new final segment. The station-to-protection
+geometry plus paid-out final length is conserved; FREE can pay out only the extra
+length needed by the new geometry. BRAKED cannot silently gain rope. The brake
+state is retained and held take-in is cancelled during the transition. Existing
+native permission failures are preserved.
+
+The transition has a three-second deadline. A fall, suspension, missing station,
+removal/reordering, insufficient paid-out rope or invalid capacity ends the local
+controller. It does not roll back pitons or restore an older rope length. The
+exercise without a recorded station still uses a fixed route. This new integration
+needs native validation independently of the already-passed fixed two-piton
+rehearsal on `1234e4e`; no partner endpoint or role transfer is implemented.
 
 This experiment controls the final segment of the existing native protection
 route. The HUD separates released length, estimated straight-line slack, geometric

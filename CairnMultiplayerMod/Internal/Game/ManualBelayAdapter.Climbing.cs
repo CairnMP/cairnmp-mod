@@ -23,7 +23,10 @@ internal sealed partial class ManualBelayAdapter
                 || owner._lifeline.harness == null || Id(__instance) != Id(owner._lifeline.harness)
                 || owner._lifeline.pawn.IsFalling || !ContextValid) return;
             if (!owner.MappingMatches(out var reason))
-            { owner.EndLocalRope("Protection route changed during climbing permission. " + reason); return; }
+            {
+                if (!owner.TryBeginLocalRouteChange(reason)) owner.EndLocalRope("Protection route changed during climbing permission. " + reason);
+                return;
+            }
             var radial = __instance.GetAttachPosition() - owner._lifeline.GetSecuringPitonPosition(true);
             if (!BelayClimbLimit.TryRestrict(__result, true, owner._ropeControl.Released,
                 new NumericsVector3(radial.x, radial.y, radial.z), new NumericsVector3(__0.x, __0.y, __0.z), out var allowed))

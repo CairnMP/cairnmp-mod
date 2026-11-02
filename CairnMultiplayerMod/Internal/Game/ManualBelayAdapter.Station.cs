@@ -13,6 +13,7 @@ internal sealed partial class ManualBelayAdapter
     private BelayStationAnchor _localStation;
     private Piton _localStationPiton;
     private uint _localStationId;
+    private BelayProtectionPoint[] _measuredStationProtections;
     public LocalBelayStationStatus? LocalStationStatus { get; private set; }
 
     public bool ToggleLocalStation(out string reason)
@@ -94,6 +95,7 @@ internal sealed partial class ManualBelayAdapter
             || !BelayRoutePlanner.TryLimitFinalCapacity(plan, nativeAvailable, out available)) return FailLocalStation(reason);
         LocalStationStatus = new LocalBelayStationStatus(true, plan.FixedLength, available,
             plan.ProtectionCount, "Real station piton on the existing native rope; local input stands in for the absent belayer.");
+        _measuredStationProtections = protections.ToArray();
         reason = "";
         return true;
     }
@@ -107,6 +109,7 @@ internal sealed partial class ManualBelayAdapter
     private void ClearLocalStation()
     {
         _localStation = null; _localStationPiton = null; _localStationId = 0;
+        _measuredStationProtections = null;
         LocalStationStatus = null;
     }
 

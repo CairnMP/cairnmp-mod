@@ -3,7 +3,7 @@ using System;
 namespace CairnMultiplayerMod.Internal.Diagnostics;
 
 /// <summary>
-/// Local released-length experiment for one fixed final protection segment.
+/// Local released-length experiment for the currently owned protection segment.
 /// Capacity, released rope and geometric distance are separate measurements.
 /// </summary>
 internal sealed class BelayRopeControl
@@ -63,6 +63,24 @@ internal sealed class BelayRopeControl
         if (Suspended) return true;
         if (capacity < Released) return false;
         Capacity = capacity;
+        return true;
+    }
+
+    internal bool TryRebindRoute(float previousFixedLength, float nextFixedLength, float capacity, float distance)
+    {
+        if (Suspended || !float.IsFinite(previousFixedLength) || previousFixedLength < 0
+            || !float.IsFinite(nextFixedLength) || nextFixedLength < 0
+            || !float.IsFinite(capacity) || capacity <= 0 || capacity > 200
+            || !ValidDistance(distance) || distance > capacity) return false;
+        var total = previousFixedLength + _released;
+        if (total > 200 || nextFixedLength + capacity > 200.001) return false;
+        var released = total - nextFixedLength;
+        // Only an open brake may pay out the extra rope needed to clip a new
+        // protection. A closed brake cannot create stock or shorten loaded rope.
+        if (!Braked) released = Math.Max(released, Math.Min(capacity, distance + Clearance));
+        if (!(released > 0) || released > capacity || released < distance) return false;
+        Capacity = capacity; Distance = distance; _released = released;
+        Motion = 0; CaptureBrakeDistance = false; _swingOffset = 0;
         return true;
     }
 

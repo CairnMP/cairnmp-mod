@@ -93,7 +93,7 @@ public partial class Mod
             var station = _game.Belay.LocalStationStatus;
             rect.height = station.HasValue ? 254 : 202;
             GUI.Box(rect, "Local rope-budget exercise — Ctrl+F11: end | Space/F7: brake/release\n"
-                + "Hold Up: feed | Down: take in slack (1 m/s) | Fixed protection route\n"
+                + "Hold Up: feed | Down: take in slack (1 m/s) | Recorded station: unloaded piton additions can rebind\n"
                 + (length.Braked ? "BRAKED — climbing away stops at the paid-out rope limit; release/feed for more" : "FREE — a fall runs rope until braking or the rope end")
                 + $"\nFinal segment: released {length.Released:F2} m | slack {length.Slack:F2} m | reserve {length.Reserve:F2} m"
                 + $"\nGeometry {length.Distance:F2} m | native rest {length.RestLength:F2} m | particles {length.ParticleLength:F2} m"
@@ -111,10 +111,12 @@ public partial class Mod
         }
         var preview = _game.Belay.LocalRoutePreview;
         GUI.Box(rect, "Local protection exercise — Ctrl+F11: end | Space: brake/release\n"
-            + (status.Rebinding ? "Updating protection route..." : status.RequestedBrake ? "BRAKED" : "FREE ROPE")
+            + (status.Rebinding ? "UPDATING ROUTE — manual length writes paused; remain stable on the wall"
+                : status.RequestedBrake ? "BRAKED" : "FREE ROPE")
             + $" | pitons {status.ProtectionCount} | generation {status.TopologyRevision}\n"
             + $"Applied limit {status.Limit:F2} m | physical distance {status.RealDistance:F2} m\n"
-            + (preview.HasValue ? $"Planned route (simulated station at first piton): {preview.Value.AvailableToClimber:F2} m available"
+            + (status.Rebinding ? "Recorded station retained; wait before continuing or testing a fall."
+                : preview.HasValue ? $"Planned route (simulated station at first piton): {preview.Value.AvailableToClimber:F2} m available"
                 : "Planned route: waiting for stable protection"), _localBelayStyle);
     }
 }
