@@ -318,6 +318,10 @@ request was issued in that attempt. The panel distinguishes missing A, invalid
 personal B, route preparation, unloaded segment physics and mismatched A/B pins,
 and displays the specific check. Bounded per-segment pin readbacks stay in the
 local log so an unavailable collider is distinguishable from unloaded physics.
+Quickdraw pin checks use the native `GetAttachEnd()` collider on both neighboring
+rope parts, rather than requiring the separate `attachBegin` field. Both actual
+pin occurrences are required for attached A/B; detached A requires zero, with B
+still present twice.
 The earlier append guide is suppressed while this trial is selected.
 Readiness and the preparation panel use Cairn's native lifecycle rather than
 the multiplayer player-state cache, which can remain Menu during offline Story.

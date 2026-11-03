@@ -171,14 +171,15 @@ internal sealed partial class ManualBelayAdapter
             readback?.Add($"{i + 1}:part={Id(part)},loaded={loaded},handler={Id(handler)},pins={begin}/{end}");
         }
         var backup = _connectionBackup.Quickdraw;
-        var matches = firstUnready < 0 && BelayStationConnectionTrial.PinsAgree(Id(_connectionQuickdraw.attachBegin), Id(_connectionQuickdraw.attachEnd),
-            Id(backup.attachBegin), Id(backup.attachEnd), colliders, stationAttached);
+        var stationCollider = Id(_connectionQuickdraw.GetAttachEnd());
+        var backupCollider = Id(backup.GetAttachEnd());
+        var matches = firstUnready < 0 && BelayStationConnectionTrial.PinsAgree(stationCollider, backupCollider, colliders, stationAttached);
         if (logReadback)
         {
             _nextConnectionPinLog = Now + .5;
             ModLog.Info("[StationConnection] PinReadback; attachedA=" + stationAttached + ", match=" + matches
-                + ", expectedA=" + Id(_connectionQuickdraw.attachBegin) + "/" + Id(_connectionQuickdraw.attachEnd)
-                + ", expectedB=" + Id(backup.attachBegin) + "/" + Id(backup.attachEnd)
+                + ", expectedA=" + stationCollider + ", expectedB=" + backupCollider
+                + ", pinsPerAttachedQuickdraw=2"
                 + "; " + string.Join("; ", readback));
         }
         if (firstUnready >= 0)

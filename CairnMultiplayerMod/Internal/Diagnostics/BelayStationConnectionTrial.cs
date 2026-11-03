@@ -91,22 +91,20 @@ internal sealed class BelayStationConnectionTrial
 
     private bool ValidTime(double now) => double.IsFinite(now) && now >= _last;
 
-    internal static bool PinsAgree(long stationBegin, long stationEnd, long backupBegin, long backupEnd,
+    internal static bool PinsAgree(long stationCollider, long backupCollider,
         IReadOnlyList<long> colliders, bool stationAttached)
     {
-        if (stationBegin == 0 || stationEnd == 0 || backupBegin == 0 || backupEnd == 0 || colliders == null || colliders.Count > 128
-            || stationBegin == backupBegin || stationBegin == backupEnd || stationEnd == backupBegin || stationEnd == backupEnd) return false;
-        var sb = 0; var se = 0; var bb = 0; var be = 0;
+        if (stationCollider == 0 || backupCollider == 0 || stationCollider == backupCollider
+            || colliders == null || colliders.Count > 128) return false;
+        var stationPins = 0; var backupPins = 0;
         foreach (var collider in colliders)
         {
-            if (collider == stationBegin) sb++;
-            if (collider == stationEnd) se++;
-            if (collider == backupBegin) bb++;
-            if (collider == backupEnd) be++;
+            if (collider == stationCollider) stationPins++;
+            if (collider == backupCollider) backupPins++;
         }
-        var backup = backupBegin == backupEnd ? bb >= 2 : bb > 0 && be > 0;
-        var station = stationBegin == stationEnd ? sb >= 2 : sb > 0 && se > 0;
-        return backup && (stationAttached ? station : sb == 0 && se == 0);
+        // Adjacent native rope parts both pin to a quickdraw's GetAttachEnd().
+        // One occurrence is an incomplete split, not a confirmed connection.
+        return backupPins >= 2 && (stationAttached ? stationPins >= 2 : stationPins == 0);
     }
     private bool DetachedRoute(BelayTopologySnapshot snapshot, IReadOnlyList<long> order)
         => snapshot?.IsValid == true && snapshot.Rope == _before.Rope && snapshot.LastPiton == _backup

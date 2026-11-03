@@ -12,33 +12,41 @@ public sealed class BelayStationConnectionTrialTests
     [InlineData(false)]
     public void PhysicalPinReadbackMustAgreeWithTheLogicalStationState(bool attached)
     {
-        Assert.Equal(attached, BelayStationConnectionTrial.PinsAgree(10, 11, 20, 21, new long[] { 10, 11, 20, 21 }, attached));
-        Assert.Equal(!attached, BelayStationConnectionTrial.PinsAgree(10, 11, 20, 21, new long[] { 20, 21 }, attached));
+        Assert.Equal(attached, BelayStationConnectionTrial.PinsAgree(10, 20, new long[] { 100, 10, 10, 20, 20, 200 }, attached));
+        Assert.Equal(!attached, BelayStationConnectionTrial.PinsAgree(10, 20, new long[] { 100, 20, 20, 200 }, attached));
     }
 
     [Fact]
     public void OneStaleStationPinCannotPassAsFullyDetachedOrFullyAttached()
     {
-        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 11, 20, 21, new long[] { 10, 20, 21 }, true));
-        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 11, 20, 21, new long[] { 10, 20, 21 }, false));
-        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 11, 20, 21, new long[] { 10, 11, 20 }, true));
+        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 20, new long[] { 100, 10, 20, 20, 200 }, true));
+        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 20, new long[] { 100, 10, 20, 20, 200 }, false));
+        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 20, new long[] { 100, 10, 10, 20, 200 }, true));
     }
 
     [Fact]
-    public void SharedBeginEndColliderRequiresTwoActualPinOccurrences()
+    public void NativeQuickdrawEndRequiresTwoActualPinOccurrences()
     {
-        Assert.True(BelayStationConnectionTrial.PinsAgree(10, 10, 20, 20, new long[] { 10, 10, 20, 20 }, true));
-        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 10, 20, 20, new long[] { 10, 20, 20 }, true));
-        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 10, 20, 20, new long[] { 10, 10, 20 }, true));
+        Assert.True(BelayStationConnectionTrial.PinsAgree(10, 20, new long[] { 10, 10, 20, 20 }, true));
+        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 20, new long[] { 10, 20, 20 }, true));
+        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 20, new long[] { 10, 10, 20 }, true));
+        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 20, new long[] { 20 }, false));
+    }
+
+    [Fact]
+    public void OtherQuickdrawFieldsCannotSubstituteForTheNativeAttachmentEnd()
+    {
+        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 20, new long[] { 100, 11, 11, 21, 21, 200 }, true));
+        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 20, new long[] { 100, 10, 10, 21, 21, 200 }, true));
     }
 
     [Fact]
     public void MissingAmbiguousAndUnboundedPinReadbackIsRejected()
     {
-        Assert.False(BelayStationConnectionTrial.PinsAgree(0, 11, 20, 21, new long[] { 11, 20, 21 }, true));
-        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 11, 11, 21, new long[] { 10, 11, 21 }, true));
-        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 11, 20, 21, null, true));
-        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 11, 20, 21, new long[129], true));
+        Assert.False(BelayStationConnectionTrial.PinsAgree(0, 20, new long[] { 20, 20 }, true));
+        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 10, new long[] { 10, 10, 10, 10 }, true));
+        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 20, null, true));
+        Assert.False(BelayStationConnectionTrial.PinsAgree(10, 20, new long[129], true));
     }
 
     [Fact]
