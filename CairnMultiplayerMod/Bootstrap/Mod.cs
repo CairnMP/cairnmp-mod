@@ -77,6 +77,7 @@ public partial class Mod : MelonMod
         {
             ModConfig.Register();
             VoicePreferences.Register();
+            ControllerPreferences.Register();
             VerboseLogging = ModConfig.VerboseLogging.Value;
             ModLog.Initialize(
                 message => LoggerInstance.Msg(message),

@@ -68,7 +68,13 @@ choose nothing.
 | Give item | Give the selected backpack item |
 | Drop item | Drop the selected backpack item |
 
-A few actions stay as button combinations because they are held or repeated.
+Prefer button combinations? In the game's settings, open the **CairnMP** page and set
+**Shortcut style** to *Button combos*. Hold `View/Share` and press `Y/Triangle` (rope),
+`D-pad ↑` (names), `A/Cross` (pick up), `X/Square` (give), `B/Circle` (drop),
+`RB/R1` (ping) or `Menu` (multiplayer panel). The same page lists the shortcuts for the
+style you have chosen.
+
+A few actions stay as button combinations in either style because they are held or repeated.
 Hold `View/Share` first, then press the button; the menu steps aside.
 
 | Controller shortcut | Action |

@@ -64,6 +64,7 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
     internal string Status { get; private set; } = "Microphone idle — enable the local test";
     internal VoiceDevice[] Devices { get; private set; } = Array.Empty<VoiceDevice>();
     internal bool SettingsOpen => _settings.IsOpen;
+    internal bool TryGetShortcutGuideRect(out UnityEngine.Rect rect) => _settings.TryGetGuideRect(out rect);
 
     internal VoiceAdapter(Func<NetworkManager> network, Func<bool> inGame)
     {

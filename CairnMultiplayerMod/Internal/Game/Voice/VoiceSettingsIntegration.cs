@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using HarmonyLib;
+using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using Il2CppTheGameBakers.Cairn.UI;
 using Il2CppTGBTools.UI;
@@ -20,6 +21,7 @@ internal sealed class VoiceSettingsIntegration : IDisposable
     private readonly HarmonyLib.Harmony _harmony = new("CairnMultiplayerMod.VoiceSettings");
     private readonly VoiceAdapter _voice;
     private readonly List<Binding> _bindings = new();
+    private const int GuideSpacerRows = 6;
     private const double DeviceCheckIntervalSeconds = .5;
     private double _nextDeviceCheck;
     private const double MinSearchIntervalSeconds = 2;
@@ -29,6 +31,8 @@ internal sealed class VoiceSettingsIntegration : IDisposable
     private double _nextMeter;
     private FieldInfo _status;
     private FieldListDropdown _microphoneField;
+    private FieldListDropdown _shortcutStyleField;
+    private FieldInfo _voiceHeader;
     private List<string> _deviceOptions;
     private string _deviceFingerprint;
     // Called several times per Tick and from VoiceAdapter; a LINQ predicate here allocates a
@@ -289,7 +293,7 @@ internal sealed class VoiceSettingsIntegration : IDisposable
         var currentKey = Enum.TryParse<Key>(VoicePreferences.PushToTalkKey.Value, true, out var parsed) ? parsed : Key.V;
         var fields = new List<Field>
         {
-            new FieldInfo("PROXIMITY VOICE — 40 m outdoors, farther in shared rooms"),
+            (_voiceHeader = new FieldInfo("PROXIMITY VOICE — 40 m outdoors, farther in shared rooms")),
             new FieldListDropdown(new FieldLabel("Voice mode"), Labels(new[] { "Open mic (voice detection)", "Push to talk", "Microphone muted" }),
                 (int)VoicePreferences.CurrentMode, (FieldList.OnValueChangedDelegate)(new Action<int,int>((_, value) => { VoicePreferences.Mode.Value = value; VoicePreferences.Save(); })), new Il2CppSystem.Nullable<int>(0)),
             (_microphoneField = new FieldListDropdown(new FieldLabel("Microphone"), DeviceLabels(options),
@@ -309,6 +313,14 @@ internal sealed class VoiceSettingsIntegration : IDisposable
             (_status = new FieldInfo(_voice.Status)),
             new FieldInfo("The microphone test stays local. Close this page to resume proximity voice."),
         };
+        var controller = new List<Field>();
+        controller.Add(new FieldInfo("CONTROLLER SHORTCUTS"));
+        controller.Add(_shortcutStyleField = new FieldListDropdown(new FieldLabel("Shortcut style"), Labels(new[] { "Radial menu", "Button combos" }),
+            ControllerPreferences.UseRadialMenu ? 0 : 1,
+            (FieldList.OnValueChangedDelegate)(new Action<int,int>((_, value) => { ControllerPreferences.RadialMenu.Value = value == 0; ControllerPreferences.Save(); })), new Il2CppSystem.Nullable<int>(0)));
+        // Blank rows reserve the space the shortcut panel is drawn into (see TryGetGuideRect).
+        for (var i = 0; i < GuideSpacerRows; i++) controller.Add(new FieldInfo(" "));
+        fields.InsertRange(0, controller);
         foreach (var player in _voice.RemotePlayers)
         {
             var id = player.Id;
@@ -337,6 +349,56 @@ internal sealed class VoiceSettingsIntegration : IDisposable
         VoicePreferences.Save();
         return false;
     }
+    /// <summary>
+    /// The on-screen gap between the shortcut-style row and the voice heading, in IMGUI
+    /// coordinates. It moves with the page when it scrolls; false while any part is off screen.
+    /// </summary>
+    internal bool TryGetGuideRect(out Rect rect)
+    {
+        rect = default;
+        if (!IsOpen || _shortcutStyleField == null || _voiceHeader == null) return false;
+        foreach (var binding in _bindings)
+        {
+            if (binding.Menu == null || binding.Menu.currentSettingsPageButton != binding.Button) continue;
+            if (!TryScreenRect(binding.Menu.FieldsUI.GetFieldUI(_shortcutStyleField)?.TryCast<Component>(), out var above)
+                || !TryScreenRect(binding.Menu.FieldsUI.GetFieldUI(_voiceHeader)?.TryCast<Component>(), out var below))
+                return false;
+
+            // Leave room for the dropdown's open list (two options) to show above the panel.
+            var top = above.yMax + above.height * 2.4f;
+            var bottom = below.yMin;
+            if (bottom - top < 80f || top < 0f || bottom > Screen.height) return false;
+            rect = Rect.MinMaxRect(Mathf.Min(above.xMin, below.xMin), top, Mathf.Max(above.xMax, below.xMax), bottom);
+            return true;
+        }
+        return false;
+    }
+
+    private static bool TryScreenRect(Component component, out Rect rect)
+    {
+        rect = default;
+        var transform = component != null ? component.transform.TryCast<RectTransform>() : null;
+        if (transform == null) return false;
+
+        var corners = new Il2CppStructArray<Vector3>(4);
+        transform.GetWorldCorners(corners);
+        var canvas = transform.GetComponentInParent<Canvas>();
+        var camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+
+        float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
+        for (var i = 0; i < 4; i++)
+        {
+            var point = RectTransformUtility.WorldToScreenPoint(camera, corners[i]);
+            minX = Mathf.Min(minX, point.x);
+            maxX = Mathf.Max(maxX, point.x);
+            minY = Mathf.Min(minY, point.y);
+            maxY = Mathf.Max(maxY, point.y);
+        }
+        // IMGUI measures from the top; screen points from the bottom.
+        rect = Rect.MinMaxRect(minX, Screen.height - maxY, maxX, Screen.height - minY);
+        return true;
+    }
+
     /// <summary>Detaches while session-owned UI is still expected to be alive.</summary>
     internal void ResetSession()
     {
@@ -390,6 +452,8 @@ internal sealed class VoiceSettingsIntegration : IDisposable
         _bindings.Clear();
         _status = null;
         _microphoneField = null;
+        _shortcutStyleField = null;
+        _voiceHeader = null;
         _deviceOptions = null;
         _deviceFingerprint = null;
         _nextSearch = 0;

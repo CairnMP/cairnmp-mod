@@ -174,7 +174,7 @@ public partial class Mod
         if (ModControllerInput.RadialMenu.IsVisible) _radialContext = BuildRadialContext();
 
         if (_multiplayerModeActive && ModControllerInput.PressedThisFrame is { } pressedShortcut)
-            _game?.Hud.ShowMessage("controller-shortcut", ControllerShortcutBindings.FeedbackFor(pressedShortcut), 1.5f);
+            _game?.Hud.ShowMessage("controller-shortcut", ControllerShortcutBindings.FeedbackFor(pressedShortcut, ControllerPreferences.UseRadialMenu), 1.5f);
 
         if (_multiplayerModeActive)
         {
@@ -413,6 +413,9 @@ public partial class Mod
         if (_multiplayerModeActive)
             _hud?.Draw();
         RadialMenuView.Draw(ModControllerInput.RadialMenu, _radialContext);
+        if (_voice != null && _voice.TryGetShortcutGuideRect(out var guideRect))
+            ShortcutGuideView.Draw(guideRect, ShortcutGuide.Columns(ControllerPreferences.UseRadialMenu,
+                _connectKey.ToString(), _disconnectKey.ToString(), CairnMultiplayerMod.Internal.Game.Voice.VoicePreferences.PushToTalkKey.Value));
     }
 
     private void TickConnectingStatus()

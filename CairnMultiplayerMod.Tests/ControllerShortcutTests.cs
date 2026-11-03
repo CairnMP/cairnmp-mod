@@ -42,4 +42,42 @@ public sealed class ControllerShortcutTests
     public void GameplayShortcutsKeepTheDocumentedLayout(int shortcut, int expected)
         => Assert.Equal((ControllerButton)expected,
             ControllerShortcutBindings.ButtonFor((ControllerShortcut)shortcut));
+
+    [Fact]
+    public void FeedbackNamesTheButtonOnlyWhenTheRadialMenuIsOff()
+    {
+        Assert.Equal("Attach or detach rope",
+            ControllerShortcutBindings.FeedbackFor(ControllerShortcut.ToggleRope, radialMenu: true));
+        Assert.Equal("View/Share + Y/Triangle: Attach or detach rope",
+            ControllerShortcutBindings.FeedbackFor(ControllerShortcut.ToggleRope, radialMenu: false));
+    }
+
+    [Fact]
+    public void TheGuideShowsBothControllerStylesAndTheKeyboardAtOnce()
+    {
+        var columns = ShortcutGuide.Columns(true, "F5", "F6", "V");
+        Assert.Equal(3, columns.Length);
+
+        var radial = columns[0].Lines;
+        var combos = columns[1].Lines;
+        foreach (var item in ControllerShortcutBindings.RadialItems)
+        {
+            var description = ControllerShortcutBindings.DescriptionFor(item);
+            Assert.Contains(description, radial);
+            Assert.Contains(combos, line => line.EndsWith(description));
+        }
+
+        Assert.Contains("F5: Multiplayer panel", columns[2].Lines);
+        Assert.Contains("V: Push to talk", columns[2].Lines);
+    }
+
+    [Theory]
+    [InlineData(true, "Controller: radial menu (on)", "Controller: button combos")]
+    [InlineData(false, "Controller: radial menu", "Controller: button combos (on)")]
+    public void TheGuideMarksTheActiveStyle(bool radial, string first, string second)
+    {
+        var columns = ShortcutGuide.Columns(radial, "F5", "F6", "V");
+        Assert.Equal(first, columns[0].Title);
+        Assert.Equal(second, columns[1].Title);
+    }
 }

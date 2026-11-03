@@ -48,7 +48,8 @@ internal static class ModControllerInput
                         || WasPressed(ControllerShortcut.NextSharedItem)
                         || WasPressed(ControllerShortcut.Panic);
         var stick = gamepad != null ? gamepad.rightStick.ReadValue() : default;
-        var menuHeld = held && radialMenuAvailable && !InputCaptureState.IsKeyboardCaptured;
+        var menuHeld = held && radialMenuAvailable && ControllerPreferences.UseRadialMenu
+                       && !InputCaptureState.IsKeyboardCaptured;
         var choice = RadialMenu.Update(menuHeld, stick.x, stick.y, deltaSeconds, comboUsed);
         _radialChoice = choice >= 0 ? ControllerShortcutBindings.RadialItems[choice] : null;
 
@@ -64,7 +65,8 @@ internal static class ModControllerInput
     internal static bool WasPressed(ControllerShortcut shortcut)
     {
         // Radial items fire on the frame the menu is released, when the modifier is already up.
-        if (ControllerShortcutBindings.IsRadialItem(shortcut)) return _radialChoice == shortcut;
+        if (ControllerPreferences.UseRadialMenu && ControllerShortcutBindings.IsRadialItem(shortcut))
+            return _radialChoice == shortcut;
 
         var gamepad = Gamepad.current;
         return _shortcutsEnabled && !InputCaptureState.IsKeyboardCaptured && gamepad != null

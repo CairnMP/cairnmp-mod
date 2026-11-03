@@ -103,8 +103,8 @@ internal static class ControllerShortcutBindings
     internal static bool IsRadialItem(ControllerShortcut shortcut) => Array.IndexOf(RadialItems, shortcut) >= 0;
 
     /// <summary>The short text shown when a shortcut fires.</summary>
-    internal static string FeedbackFor(ControllerShortcut shortcut)
-        => IsRadialItem(shortcut) ? DescriptionFor(shortcut) : LabelFor(shortcut);
+    internal static string FeedbackFor(ControllerShortcut shortcut, bool radialMenu)
+        => radialMenu && IsRadialItem(shortcut) ? DescriptionFor(shortcut) : LabelFor(shortcut);
 
     /// <summary>On-screen text for a pressed shortcut, e.g. "View/Share + Y/Triangle: Attach or detach rope".</summary>
     internal static string LabelFor(ControllerShortcut shortcut)
