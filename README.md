@@ -31,7 +31,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **20**; lobby admission may also require the exact mod version.
+> protocol is **21**; lobby admission may also require the exact mod version.
 
 ## Features
 
@@ -121,8 +121,8 @@ instead of being destroyed or duplicated.
 Choose **Belay Team** when creating a lobby to enable partner belay. Rope team
 keeps its original direct harness tether; Belay Team rejects that tether in input,
 host validation, received packets and late-join snapshots. Every peer
-must use the same experimental build (protocol **20**, incompatible with the
-published 2.4.1/protocol 16 and earlier protocol 17-19 pilots). Partner control now
+must use the same experimental build (protocol **21**, incompatible with the
+published 2.4.1/protocol 16 and earlier protocol 17-20 pilots). Partner control now
 requires the belayer's actual station piton to occur once on the climber's existing
 native protection route. Creating a new attachment to a partner's piton remains
 future work. Belay Team does not create or replace the cooperative harness tether.
@@ -135,6 +135,25 @@ must initially be within 6 m in the same scene. Chat fallbacks remain available:
 **Space** (or F7) toggles the latched brake, starting with free rope. Only one pair
 can use this pilot at a time. L opens this panel only in Belay Team; Rope team
 keeps its direct-tether shortcut.
+
+With the panel closed, the belayer holds **Up** to feed rope or **Down** to take
+in slack at up to 1 m/s. Feeding requires FREE; take-in also works while BRAKED,
+but stops at the loaded/geometric rope length rather than hauling the character.
+Release the key to stop; holding both directions cancels motion. Opening the
+panel, typing or captured/paused input sends zero motion. The panel and HUD show
+the climber's reported slack, reserve, motion input and native length readback,
+separately from the host-accepted request. Those reports are not independent
+proof of physics.
+
+Held motion is renewed at up to 10 Hz and expires after 0.4 s without a fresh
+accepted command on the climber. This stops explicit feed/take-in, while retaining
+the latched brake; FREE can still pay out naturally as the climber moves or falls.
+The three-second session lease remains separate. The host permits a two-command
+delivery burst, bounds sustained input and retries the latest sampled keys after
+rate limiting. It never retries a saved old motion. A protection-route transition
+cancels held motion until a fresh post-rebind command arrives. The command path
+and budget/expiry behavior have simulated participant coverage; native keyboard,
+network latency and two-client behavior still need validation.
 
 The existing personal piton anchor can also be explicitly marked with **Define
 station** in the L panel, even before a partner joins. **Remove station** clears
@@ -156,8 +175,8 @@ creates a missing native rope attachment. Both invitation directions use the
 same station-bound controller, independent of the local diagnostic preferences.
 The route budget includes the fixed path from that station through downstream
 protections; FREE pays out as needed and BRAKED limits falls and outward climbing
-using the paid-out length. Remote feed/take-in controls and protected role transfer
-remain pending. The shared station binding has automated coverage but has not
+using the paid-out length. Remote feed/take-in uses this same bounded budget;
+protected role transfer remains pending. The shared station binding has automated coverage but has not
 been exercised in two native clients.
 
 Multiple protection pitons are accepted. Adding one piton while unloaded waits
@@ -270,11 +289,12 @@ suspension coordinates are translated at each new suspension; that experimental
 mapping needs matched native fall tests. The budget persists when returning to the
 wall. The geometric capacity can change while unloaded without resetting paid-out
 length or the current command; suspension retains a fixed capacity until unloaded.
-An invalid capacity or one below the paid-out length ends control. A route change
-also ends this exercise rather than silently resetting the budget.
-Kinematic wall movement beyond a locked budget also ends the
-exercise instead of pulling the character back. These limits do not change the
-existing multi-piton remote pilot. Native `RefreshRopeLength` consumes the owned
+An invalid capacity or one below the paid-out length ends control. Without a
+recorded station, a route change also ends the fixed-route exercise rather than
+silently resetting its budget. With a locked budget, the climbing permission hook
+blocks outward wall movement at the released limit and permits retreat; an
+unexpected overrun still ends control without pulling the character back. These
+budget rules also apply to station-bound partner control. Native `RefreshRopeLength` consumes the owned
 length goal in its normal solver phase, even when Climbot stops issuing instant
 setters. The HUD reports whether native rest-length readback matches the requested
 length; this is not a fall/visual-equilibrium confirmation. Sampling is bounded

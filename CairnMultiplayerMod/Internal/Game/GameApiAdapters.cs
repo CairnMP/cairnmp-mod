@@ -66,6 +66,14 @@ internal sealed class GameInputAdapter : IGameInputApi
                && Enum.TryParse<Key>(key.ToString(), out var unityKey)
                && keyboard[unityKey].wasPressedThisFrame;
     }
+
+    public bool IsKeyHeld(GameKey key)
+    {
+        var keyboard = Keyboard.current;
+        return Application.isFocused && keyboard != null
+            && Enum.TryParse<Key>(key.ToString(), out var unityKey)
+            && keyboard[unityKey].isPressed;
+    }
 }
 
 internal sealed class HudAdapter : IGameHudApi

@@ -72,6 +72,7 @@ internal sealed partial class ManualBelayAdapter
         _localRouteObservationCount = 0;
         _nextTopologyPoll = Now;
         _ropeControl.TrySetMotion(0);
+        _lease.CancelMotion();
         ModLog.Info("[BelayRope] Route waiting; revision=" + _topology.Revision
             + ", total=" + (_localRouteFixedLength + _ropeControl.Released)
             + ", brake=" + _ropeControl.Braked + ", protections=" + ProtectionOrder(_boundStationProtections)

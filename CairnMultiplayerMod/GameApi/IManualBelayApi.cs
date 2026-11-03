@@ -18,6 +18,7 @@ internal interface IManualBelayApi
     bool BeginClimber(Guid session, BelaySharedStation station, out string reason)
     { reason = "Shared station unavailable."; return false; }
     bool SetBrake(Guid session, uint sequence, bool braked);
+    bool SetRopeInput(Guid session, uint sequence, bool braked, int motion) => false;
     ManualBelayStatus Status { get; }
     void Stop(Guid session);
     void Tick();
@@ -50,15 +51,19 @@ internal readonly record struct LocalBelayStationStatus(bool Valid, float FixedL
 internal readonly record struct SharedBelayRoutePreview(float FixedLength, float AvailableToClimber,
     float ClimberDistance, int ProtectionCount, bool ReachesClimber);
 
+internal readonly record struct BelayRopeReadback(int Motion, float Released, float Slack, float Reserve, bool LengthApplied);
+
 internal readonly struct ManualBelayStatus
 {
     internal ManualBelayStatus(bool active, bool suspended, bool requestedBrake, uint requestedSequence,
-        uint appliedSequence, float limit, float realDistance, int protectionCount = 0, uint topologyRevision = 0, bool rebinding = false)
+        uint appliedSequence, float limit, float realDistance, int protectionCount = 0, uint topologyRevision = 0, bool rebinding = false,
+        BelayRopeReadback? rope = null)
     {
         Active = active; Suspended = suspended; RequestedBrake = requestedBrake;
         RequestedSequence = requestedSequence; AppliedSequence = appliedSequence;
         Limit = limit; RealDistance = realDistance;
         ProtectionCount = protectionCount; TopologyRevision = topologyRevision; Rebinding = rebinding;
+        Rope = rope;
     }
     public bool Active { get; }
     public bool Suspended { get; }
@@ -70,6 +75,7 @@ internal readonly struct ManualBelayStatus
     public int ProtectionCount { get; }
     public uint TopologyRevision { get; }
     public bool Rebinding { get; }
+    public BelayRopeReadback? Rope { get; }
 }
 
 internal sealed class UnavailableManualBelayApi : IManualBelayApi

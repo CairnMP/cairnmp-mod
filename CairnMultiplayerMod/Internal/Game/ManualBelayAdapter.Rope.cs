@@ -72,6 +72,7 @@ internal sealed partial class ManualBelayAdapter
     private bool StepLocalRope(float elapsed, bool suspended, float swingReal = 0)
     {
         if (_ropeControl == null) return false;
+        RefreshRemoteRopeMotion();
         if (!TryReadRopeDistance(_lifeline, out var distance))
         { EndLocalRope("The native protection distance is no longer valid."); return false; }
         var minimum = distance;
@@ -93,6 +94,14 @@ internal sealed partial class ManualBelayAdapter
             return false;
         }
         return true;
+    }
+
+    private void RefreshRemoteRopeMotion()
+    {
+        if (_ropeControl == null || _localExercise || !_partnerStation.HasValue) return;
+        var motion = _lease.MotionAt(Now);
+        if (_localRoutePending || (_ropeControl.Braked && motion > 0)) motion = 0;
+        _ropeControl.TrySetMotion(motion);
     }
 
     private bool TryBeginRopeSuspension(float real, out float target)

@@ -46,7 +46,10 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     public bool Enabled => _remoteEnabled();
     public ManualBelayStatus Status => new(_control != null && !_stopping, _control?.Attached == true,
         _control?.Braked == true, _lease?.Sequence ?? 0, _appliedSequence, _actual, _real,
-        _topology?.Current?.ProtectionCount ?? 0, _topology?.Revision ?? 0, _rebinding);
+        _topology?.Current?.ProtectionCount ?? 0, _topology?.Revision ?? 0, _rebinding,
+        _ropeControl == null ? null : new BelayRopeReadback(_ropeControl.Motion,
+            _ropeControl.Released, _ropeControl.Slack, _ropeControl.Reserve,
+            !_localRoutePending && float.IsFinite(_restLength) && Math.Abs(_restLength - _ropeControl.Released) <= .05f));
     public bool IsLocalExercise => _localExercise && _control != null;
     public bool HasStation => _stationAnchor != null;
 
@@ -188,6 +191,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         _pivot = lifeline.SwingHasPivotAndExtremity() ? Id(lifeline.SwingPivotInstance) : 0;
         _localExercise = localExercise; _localSequence = 0; _nextLocalIntent = 0;
         _ropeControl = ropeControl;
+        _restLength = float.NaN; _particleLength = 0;
         _localRoutePending = false; _localRouteRebinds = 0;
         RememberLocalRoute();
         _localRopeNotice = null;
@@ -327,14 +331,31 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     public bool SetBrake(Guid session, uint sequence, bool braked)
     {
         if (_control == null || _stopping || !_lease.TryAccept(session, sequence, braked, Now)) return false;
+        ApplyBrake(braked);
+        return true;
+    }
+
+    public bool SetRopeInput(Guid session, uint sequence, bool braked, int motion)
+    {
+        if (_control == null || _ropeControl == null || !_partnerStation.HasValue || _localExercise || _stopping
+            || !_lease.TryAccept(session, sequence, braked, motion, Now)) return false;
+        ApplyBrake(braked);
+        // Route splitting never carries a held motion across the transition.
+        // A fresh command after rebinding may start it again.
+        if (_localRoutePending) _lease.CancelMotion();
+        RefreshRemoteRopeMotion();
+        return true;
+    }
+
+    private void ApplyBrake(bool braked)
+    {
         if (_control.Braked != braked)
         {
             _control.ToggleBrake();
             _ropeControl?.SetBrake(braked);
             if (!braked) _climbMovementBlocked = false;
-            ModLog.Info("[ManualBelay] Requested session=" + session + ", sequence=" + sequence + ", brake=" + braked);
+            ModLog.Info("[ManualBelay] Requested session=" + _lease.Session + ", sequence=" + _lease.Sequence + ", brake=" + braked);
         }
-        return true;
     }
 
     public void Stop(Guid session)
