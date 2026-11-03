@@ -561,7 +561,8 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             ? (_telemetry.AppliedSequence >= _active.Sequence ? (_telemetry.Braked ? "BRAKED" : "FREE") : "awaiting confirmation")
             : "ready for the next fall";
         Game.Hud.ShowMessage("belay", $"Belay — requested {desired}; climber {applied}. "
-            + RopeReadback() + (_active.Belayer == LocalPlayerId ? " Hold Up/Down: feed/take in; Space: brake/release." : " /belay stop: end"), 1.2f);
+            + RopeReadback() + (_active.Belayer == LocalPlayerId ? " Hold Up/Down: feed/take in; Space: brake/release." : " /belay stop: end")
+            + (Game.Belay.InteractionNotice is { } notice ? "\n" + notice : ""), 1.2f);
     }
 
     private void RequestStop(string reason = "Belay ended by local request.")

@@ -54,6 +54,11 @@ Connection / consent
   C06 Near-coincident pitons: use distinct freshly placed pitons where practical.
       Expected: owner/source identity chooses the agreed piton, not the nearest
       neighbor. Ambiguous/unavailable references refuse control.
+  C07 Personal rope input while receiving belay: ordinary hand grabs and native
+      rope ascent cannot take over the owned protection rope; the climber sees a
+      short notice. Wall grips still work. Unloaded clipping/personal anchoring
+      retain their native handling. After End belay, native rope input works again.
+      The guard is scoped to the local climber and this rope, not other actors.
 
 Stationary controls - remain anchored at P
   R01 FREE + Up for 2 seconds: approximately 2 m paid out; release stops explicit
@@ -78,8 +83,10 @@ Falls - only after C/R cases pass
       no repeated brake input is needed to keep it latched.
       R15 remains unstable when native holder topology changes after the catch;
       a second recorded stop followed a fall during a pending route update.
-      These are unresolved. R16 logs holder types and physical endpoints to
-      distinguish native transitions before changing loaded-route ownership.
+      R17 blocks personal rope-grab/ascent input that can split the controlled
+      rope into temporary hand segments. Native acceptance of this candidate is
+      pending; do not infer stable falls from automated policy tests. Holder-type
+      and physical-endpoint diagnostics remain available for any further failure.
   F03 Suspended release/re-brake and take-in: coherent payout/catch; take-in removes
       slack without winching the loaded character. Stop if the earlier gates fail.
   F04 Rope-end knot: later controlled case with suitable clearance and a prepared

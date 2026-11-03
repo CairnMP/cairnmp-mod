@@ -32,6 +32,7 @@ internal interface IManualBelayApi
     void SetLocalRopeMotion(int motion) { }
     LocalBelayRopeStatus? LocalRopeStatus => null;
     string LocalExerciseNotice => null;
+    string InteractionNotice => null;
     bool ToggleLocalStation(out string reason) { reason = "Local station rehearsal unavailable."; return false; }
     LocalBelayStationStatus? LocalStationStatus => null;
     SharedBelayRoutePreview? LocalRoutePreview => null;
