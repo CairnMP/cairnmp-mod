@@ -11,8 +11,8 @@ using NumericsVector3 = System.Numerics.Vector3;
 namespace CairnMultiplayerMod.Internal.Game;
 
 /// <summary>
-/// Remote-input experiment: a climber retains their own real protection route.
-/// This does not reroute their rope through the belayer's station or create a tether.
+/// Remote input on the climber's native route, bound to an existing station piton.
+/// Station binding does not create a missing rope attachment or a second tether.
 /// </summary>
 internal sealed partial class ManualBelayAdapter : IManualBelayApi
 {
@@ -93,6 +93,8 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         _stationPiton = Id(piton);
         _stationPosition = position;
         _stationAnchor = anchor;
+        var anchorPosition = piton.transform.position;
+        _definedStation = new BelaySharedStation(Guid.NewGuid(), new WorldPosition(anchorPosition.x, anchorPosition.y, anchorPosition.z));
         ModLog.Info("[BelayStation] Defined on the player's existing native piton anchor.");
         reason = "Station defined. Remain anchored; you can remove the station in the partner panel.";
         return true;
@@ -151,6 +153,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     {
         if (HasStation) ModLog.Info("[BelayStation] Removed; personal native anchoring unchanged.");
         _stationLifeline = null; _stationPiton = 0; _stationAnchor = null;
+        _definedStation = default;
     }
 
     public bool BeginClimber(Guid session, out string reason)
@@ -364,7 +367,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         reason = "The selected belay experiment was disabled.";
         if (!(_localExercise ? LocalExerciseEnabled : Enabled)) return true;
         reason = "The local rope-budget experiment was disabled.";
-        if (requireRopeExperiment && ModConfig.BelayRopeExperiment?.Value != true) return true;
+        if (requireRopeExperiment && _localExercise && ModConfig.BelayRopeExperiment?.Value != true) return true;
         if (!TryGetActiveContext(out reason)) return true;
         reason = "The brake-command lease expired.";
         if (_lease.IsExpired(Now)) return true;
@@ -445,7 +448,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
             { Stop(_lease.Session, stopReason); return; }
             if (_ropeControl != null)
             {
-                if (ModConfig.BelayRopeExperiment?.Value != true)
+                if (_localExercise && ModConfig.BelayRopeExperiment?.Value != true)
                 { Stop(_lease.Session, "The local rope-budget experiment was disabled."); return; }
                 if (!hasSwing && !StepLocalRope(Time.deltaTime, false)) return;
                 SampleLocalRope();
@@ -478,7 +481,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         if (!_lifeline.IsSecured(1)) return false;
         reason = "Last securing piton changed.";
         if (Id(_lifeline.GetLastSecuringPiton()) != route.LastPiton) return false;
-        if (_localExercise && !LocalStationMatches(_lifeline, out reason)) return false;
+        if (!LocalStationMatches(_lifeline, out reason)) return false;
         reason = "Protection segment count changed.";
         if (_rope.ropeParts?.Count != route.Parts.Length) return false;
         reason = "Protection holder count changed.";
@@ -608,6 +611,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         _topology = null; _localExercise = _rebinding = false;
         LocalRoutePreview = null;
         _stopping = _holdApplied = false;
+        ClearPartnerStation();
         // Unpatch outside a native callback; Tick continues even outside multiplayer.
         if (_installed) _unpatchPending = true;
     }

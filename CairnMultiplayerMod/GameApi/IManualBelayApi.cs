@@ -8,11 +8,15 @@ internal interface IManualBelayApi
     bool Enabled { get; }
     bool CanBeginStation(out string reason) { reason = "Station unavailable."; return false; }
     bool CanClimb(out string reason) { reason = "Protection unavailable."; return false; }
+    bool TryGetStation(out BelaySharedStation station) { station = default; return false; }
+    bool CanClimb(BelaySharedStation station, out string reason) { reason = "Shared station unavailable."; return false; }
     bool BeginStation(out string reason);
     bool HasStation => false;
     bool StationValid { get; }
     void EndStation();
     bool BeginClimber(Guid session, out string reason);
+    bool BeginClimber(Guid session, BelaySharedStation station, out string reason)
+    { reason = "Shared station unavailable."; return false; }
     bool SetBrake(Guid session, uint sequence, bool braked);
     ManualBelayStatus Status { get; }
     void Stop(Guid session);
@@ -29,6 +33,12 @@ internal interface IManualBelayApi
     LocalBelayStationStatus? LocalStationStatus => null;
     SharedBelayRoutePreview? LocalRoutePreview => null;
     bool TryPreviewRoute(WorldPosition station, out SharedBelayRoutePreview preview) { preview = default; return false; }
+}
+
+internal readonly record struct BelaySharedStation(Guid Id, WorldPosition Position)
+{
+    internal bool IsValid => Id != Guid.Empty && float.IsFinite(Position.X)
+        && float.IsFinite(Position.Y) && float.IsFinite(Position.Z);
 }
 
 internal readonly record struct LocalBelayRopeStatus(float Capacity, float Released, float Distance,

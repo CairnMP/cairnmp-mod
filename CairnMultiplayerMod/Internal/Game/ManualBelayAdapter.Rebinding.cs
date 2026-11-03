@@ -39,7 +39,7 @@ internal sealed partial class ManualBelayAdapter
 
     private void PrepareLocalProtection(LogicalQuickdraw quickdraw, string reason)
     {
-        if (_ropeControl == null || _localStation == null || !_localExercise || _stopping) return;
+        if (_ropeControl == null || _localStation == null || _stopping) return;
         try
         {
             if (quickdraw?.Piton == null) return;
@@ -56,7 +56,7 @@ internal sealed partial class ManualBelayAdapter
     private bool TryBeginLocalRouteChange(string reason, bool refreshOldDistance = false)
     {
         if (_localRoutePending) return true;
-        if (_ropeControl == null || !_localExercise || _localStation == null || _stopping
+        if (_ropeControl == null || _localStation == null || _stopping
             || _boundStationProtections == null || _ropeControl.Suspended || _pivot != 0
             || _control.Attached || !RopeIdentityValid() || _lifeline.pawn == null
             || _lifeline.pawn.IsFalling || !LocalStationMatches(_lifeline, out _)) return false;

@@ -31,7 +31,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **19**; lobby admission may also require the exact mod version.
+> protocol is **20**; lobby admission may also require the exact mod version.
 
 ## Features
 
@@ -121,10 +121,11 @@ instead of being destroyed or duplicated.
 Choose **Belay Team** when creating a lobby to enable partner belay. Rope team
 keeps its original direct harness tether; Belay Team rejects that tether in input,
 host validation, received packets and late-join snapshots. Every peer
-must use the same experimental build (protocol **19**, incompatible with the
-published 2.4.1/protocol 16 and earlier protocol 17/18 pilots). This pilot controls the climber's existing
-protection route; routing the physical rope through the belayer's station remains
-future work. It does not create or replace the cooperative harness tether.
+must use the same experimental build (protocol **20**, incompatible with the
+published 2.4.1/protocol 16 and earlier protocol 17-19 pilots). Partner control now
+requires the belayer's actual station piton to occur once on the climber's existing
+native protection route. Creating a new attachment to a partner's piton remains
+future work. Belay Team does not create or replace the cooperative harness tether.
 
 Press **L** to choose a nearby player, ask for belay or offer belay. The recipient
 accepts or declines in the panel; closing it does not accept the invitation. The
@@ -147,9 +148,22 @@ without needing the mouse. One press performs one action; holding K does not
 toggle repeatedly. Outside the panel, the shortcut does not consume K. The panel
 keeps the cursor visible/unlocked while open and restores its previous state on close.
 
-Multiple protection pitons are now accepted. Adding/removing them while unloaded
-waits for a stable ordered segment/holder snapshot before rebinding the controller;
-it does not require another invitation. A topology change during suspension ends
+Invitations now carry the station selected by the belayer. The climber checks that
+exactly one healthy native piton on their existing protection route matches its
+position within 5 cm; a missing or ambiguous match cannot start control. Replacing
+the station requires a new invitation. Neither accepting nor defining a station
+creates a missing native rope attachment. Both invitation directions use the
+same station-bound controller, independent of the local diagnostic preferences.
+The route budget includes the fixed path from that station through downstream
+protections; FREE pays out as needed and BRAKED limits falls and outward climbing
+using the paid-out length. Remote feed/take-in controls and protected role transfer
+remain pending. The shared station binding has automated coverage but has not
+been exercised in two native clients.
+
+Multiple protection pitons are accepted. Adding one piton while unloaded waits
+for a complete stable native split before rebinding the final segment without a
+new invitation. The same station-route budget rules as the local rehearsal apply;
+removal/reordering is not supported. A topology change during suspension ends
 ownership instead of switching the loaded constraint to an unverified route. Native
 piton failure is observed once and retains its original result. Returning to the
 wall rearms the next fall with a new application generation and current intent.

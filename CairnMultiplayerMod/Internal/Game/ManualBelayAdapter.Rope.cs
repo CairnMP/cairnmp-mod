@@ -37,7 +37,7 @@ internal sealed partial class ManualBelayAdapter
     {
         control = null;
         reason = "";
-        if (!local || ModConfig.BelayRopeExperiment?.Value != true) return true;
+        if (local ? ModConfig.BelayRopeExperiment?.Value != true : !_partnerStation.HasValue) return true;
         if (!TryMeasureLocalStation(lifeline, route.Available, out var available, out reason)) return false;
         reason = "Start the rope-budget exercise while stable on the wall, before a fall.";
         if (lifeline.pawn.IsFalling || lifeline.SwingHasPivotAndExtremity()) return false;

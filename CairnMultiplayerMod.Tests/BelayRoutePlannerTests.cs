@@ -7,6 +7,59 @@ namespace CairnMultiplayerMod.Tests;
 
 public sealed class BelayRoutePlannerTests
 {
+    [Theory]
+    [InlineData(.049f, true)]
+    [InlineData(.051f, false)]
+    public void SharedStationResolutionRequiresOneNativePitonWithinFiveCentimeters(float offset, bool expected)
+    {
+        var protections = new[] { new BelayProtectionPoint(10, new Vector3(offset, 0, 0)),
+            new BelayProtectionPoint(20, Vector3.UnitY) };
+        Assert.Equal(expected, BelayRoutePlanner.TryFindStationPiton(Vector3.Zero, protections, out var id));
+        Assert.Equal(expected ? 10u : 0u, id);
+    }
+
+    [Theory]
+    [InlineData(10u)]
+    [InlineData(20u)]
+    public void CoincidentOrRepeatedStationOccurrencesCannotSelectAnArbitraryEndpoint(uint secondId)
+    {
+        var protections = new[] { new BelayProtectionPoint(10, Vector3.Zero),
+            new BelayProtectionPoint(secondId, new Vector3(.01f, 0, 0)) };
+        Assert.False(BelayRoutePlanner.TryFindStationPiton(Vector3.Zero, protections, out var id));
+        Assert.Equal(0u, id);
+    }
+
+    [Fact]
+    public void RepeatedIntermediatesDoNotMakeAUniqueStationAmbiguous()
+    {
+        var protections = new[] { new BelayProtectionPoint(10, Vector3.Zero),
+            new BelayProtectionPoint(20, Vector3.UnitY), new BelayProtectionPoint(20, Vector3.UnitY) };
+        Assert.True(BelayRoutePlanner.TryFindStationPiton(Vector3.Zero, protections, out var id));
+        Assert.Equal(10u, id);
+    }
+
+    [Fact]
+    public void InvalidProtectionAfterAStationMatchDoesNotReturnAPartialBinding()
+    {
+        var protections = new[] { new BelayProtectionPoint(10, Vector3.Zero),
+            new BelayProtectionPoint(20, new Vector3(float.NaN, 0, 0)) };
+        Assert.False(BelayRoutePlanner.TryFindStationPiton(Vector3.Zero, protections, out var id));
+        Assert.Equal(0u, id);
+        protections[1] = new BelayProtectionPoint(0, Vector3.One);
+        Assert.False(BelayRoutePlanner.TryFindStationPiton(Vector3.Zero, protections, out id));
+        Assert.Equal(0u, id);
+    }
+
+    [Fact]
+    public void MissingNonFiniteAndOversizedStationRoutesAreRejected()
+    {
+        Assert.False(BelayRoutePlanner.TryFindStationPiton(Vector3.Zero, null, out _));
+        Assert.False(BelayRoutePlanner.TryFindStationPiton(Vector3.Zero, Array.Empty<BelayProtectionPoint>(), out _));
+        Assert.False(BelayRoutePlanner.TryFindStationPiton(new Vector3(float.NaN, 0, 0),
+            new[] { new BelayProtectionPoint(1, Vector3.Zero) }, out _));
+        Assert.False(BelayRoutePlanner.TryFindStationPiton(Vector3.Zero, new BelayProtectionPoint[64], out _));
+    }
+
     [Fact]
     public void IntendedSharedRouteAccountsForStationToAllPitonsBeforeTheClimber()
     {

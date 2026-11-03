@@ -395,7 +395,8 @@ public sealed class ManualBelayFeatureTests
     public void PacketRoundTripsRetainIntentAndApplicationSeparately()
     {
         var request = new ManualBelayCommand { Operation = ManualBelayOperation.Report, Session = Guid.NewGuid(),
-            Target = 2, Sequence = 8, AppliedSequence = 7, Braked = true, Suspended = true, Limit = 1.5f, RealDistance = 1.4f };
+            Target = 2, Sequence = 8, AppliedSequence = 7, Braked = true, Suspended = true, Limit = 1.5f, RealDistance = 1.4f,
+            Station = new BelaySharedStation(Guid.NewGuid(), new WorldPosition(1, 2, 3)) };
         var decoded = new ManualBelayCommand();
         using (var reader = new BinaryReader(new MemoryStream(Bytes(request)))) decoded.Deserialize(reader);
         Assert.Equal(request.Session, decoded.Session);
@@ -403,8 +404,11 @@ public sealed class ManualBelayFeatureTests
         Assert.Equal(7u, decoded.AppliedSequence);
         Assert.Equal(1.5f, decoded.Limit);
         Assert.Equal(1.4f, decoded.RealDistance);
+        Assert.Equal(76, Bytes(request).Length);
+        Assert.Equal(request.Station, decoded.Station);
         var message = new ManualBelayMessage { Phase = ManualBelayPhase.Telemetry, Session = request.Session,
-            Belayer = 1, Climber = 2, Sequence = 8, AppliedSequence = 7, Braked = true, Suspended = true, Limit = 1.5f, RealDistance = 1.4f };
+            Belayer = 1, Climber = 2, Sequence = 8, AppliedSequence = 7, Braked = true, Suspended = true, Limit = 1.5f, RealDistance = 1.4f,
+            Station = request.Station };
         var eventCopy = new ManualBelayMessage();
         using (var reader = new BinaryReader(new MemoryStream(Bytes(message)))) eventCopy.Deserialize(reader);
         Assert.Equal(message.Session, eventCopy.Session);
@@ -412,6 +416,149 @@ public sealed class ManualBelayFeatureTests
         Assert.Equal(2, eventCopy.Climber);
         Assert.Equal(7u, eventCopy.AppliedSequence);
         Assert.True(eventCopy.Braked);
+        Assert.Equal(84, Bytes(message).Length);
+        Assert.Equal(message.Station, eventCopy.Station);
+    }
+
+    [Theory]
+    [InlineData(false, 1)]
+    [InlineData(false, 2)]
+    [InlineData(true, 1)]
+    [InlineData(true, 2)]
+    public void BothInvitationDirectionsBindTheSameActualBelayerStation(bool requestBelay, int belayerId)
+    {
+        using var world = new World();
+        var climberId = belayerId == 1 ? 2 : 1;
+        var initiator = requestBelay ? climberId : belayerId;
+        var recipient = requestBelay ? belayerId : climberId;
+        world.Nodes[initiator].Game.ChatImpl.Run((requestBelay ? "request " : "offer ") + recipient);
+        world.Nodes[recipient].Game.ChatImpl.Run("accept");
+        world.Tick();
+        var belayer = world.Nodes[belayerId].Game.BelayImpl;
+        var climber = world.Nodes[climberId].Game.BelayImpl;
+        var station = world.Last(ManualBelayPhase.Started).Station;
+        Assert.True(station.IsValid);
+        Assert.Equal(belayer.StationReference, station);
+        Assert.Equal(station, climber.BoundStation);
+        Assert.True(climber.Active);
+        Assert.Equal(1, climber.StationBeginCalls);
+        Assert.Equal(0, belayer.StationBeginCalls);
+        Assert.All(world.Messages.Where(m => m.Phase is ManualBelayPhase.Intent or ManualBelayPhase.Telemetry),
+            m => Assert.Equal(station, m.Station));
+        Assert.Empty(world.Failures);
+    }
+
+    [Theory]
+    [InlineData(float.NaN, 0f, 0f)]
+    [InlineData(0f, float.PositiveInfinity, 0f)]
+    [InlineData(0f, 0f, float.NegativeInfinity)]
+    [InlineData(3.01f, 0f, 0f)]
+    public void AHostRejectsInvalidOrRemoteStationPositions(float x, float y, float z)
+    {
+        using var world = new World();
+        var result = world.Execute(1, new() { Operation = ManualBelayOperation.Offer, Target = 2,
+            Station = new BelaySharedStation(Guid.NewGuid(), new WorldPosition(x, y, z)) });
+        Assert.False(result.Committed);
+        Assert.Empty(world.Messages);
+    }
+
+    [Fact]
+    public void MissingStationCannotOfferAndAClimberCannotChooseTheBelayersStation()
+    {
+        using var world = new World();
+        Assert.False(world.Execute(1, new() { Operation = ManualBelayOperation.Offer, Target = 2 }).Committed);
+        Assert.False(world.Execute(2, new() { Operation = ManualBelayOperation.Request, Target = 1,
+            Station = new BelaySharedStation(Guid.NewGuid(), default) }).Committed);
+        Assert.Empty(world.Messages);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AcceptCannotReplaceTheOfferedStationOrItsPosition(bool movePosition)
+    {
+        using var world = new World();
+        world.Nodes[1].Game.ChatImpl.Run("offer 2");
+        var offer = world.Last(ManualBelayPhase.Offered);
+        var replaced = movePosition ? offer.Station with { Position = new WorldPosition(.1f, 0, 0) }
+            : offer.Station with { Id = Guid.NewGuid() };
+        Assert.False(world.Execute(2, new() { Operation = ManualBelayOperation.Accept,
+            Session = offer.Session, Station = replaced }).Committed);
+        Assert.Equal(0, world.Nodes[2].Game.BelayImpl.BeginCalls);
+        world.Nodes[2].Game.ChatImpl.Run("accept");
+        Assert.Equal(offer.Station, world.Last(ManualBelayPhase.Started).Station);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReplacingTheNativeStationCancelsConsentInsteadOfRebindingSilently(bool started)
+    {
+        using var world = new World();
+        world.Nodes[1].Game.ChatImpl.Run("offer 2");
+        var session = world.Last(ManualBelayPhase.Offered).Session;
+        if (started) world.Nodes[2].Game.ChatImpl.Run("accept");
+        world.Nodes[1].Game.BelayImpl.StationId = Guid.NewGuid();
+        world.Tick();
+        Assert.Equal(ManualBelayPhase.Ended, world.Messages.Last().Phase);
+        Assert.False(world.Nodes[2].Game.BelayImpl.Active);
+        Assert.False(world.Execute(1, new() { Operation = ManualBelayOperation.Intent, Session = session, Sequence = 999 }).Committed);
+    }
+
+    [Fact]
+    public void AnUnresolvableSharedPitonDisablesAcceptanceWithoutTakingNativeOwnership()
+    {
+        using var world = new World();
+        var climber = world.Nodes[2].Game;
+        climber.BelayImpl.SharedStationReady = false;
+        world.Nodes[1].Game.ChatImpl.Run("offer 2");
+        Assert.False(climber.PanelImpl.View.CanAccept);
+        climber.ChatImpl.Run("accept");
+        Assert.DoesNotContain(world.Messages, m => m.Phase == ManualBelayPhase.Started);
+        Assert.Equal(0, climber.BelayImpl.BeginCalls);
+    }
+
+    [Fact]
+    public void ARequestedStationThatDisappearsBeforeNativeAcquisitionEndsThePair()
+    {
+        using var world = new World();
+        world.Nodes[2].Game.ChatImpl.Run("request 1");
+        world.Nodes[2].Game.BelayImpl.SharedStationReady = false;
+        world.Nodes[1].Game.ChatImpl.Run("accept");
+        world.Tick();
+        Assert.Equal(ManualBelayPhase.Ended, world.Messages.Last().Phase);
+        Assert.False(world.Nodes[2].Game.BelayImpl.Active);
+        Assert.Equal(0, world.Nodes[2].Game.BelayImpl.BeginCalls);
+    }
+
+    [Fact]
+    public void RemovingAndRedefiningAStationUsesANewLifecycleIdentity()
+    {
+        using var world = new World(participants: 1);
+        var game = world.Nodes[1].Game;
+        game.PanelImpl.Act(BelayPanelAction.DefineStation);
+        var first = game.BelayImpl.StationReference;
+        game.PanelImpl.Act(BelayPanelAction.DefineStation);
+        Assert.Equal(first, game.BelayImpl.StationReference);
+        game.PanelImpl.Act(BelayPanelAction.RemoveStation);
+        game.PanelImpl.Act(BelayPanelAction.DefineStation);
+        Assert.NotEqual(first.Id, game.BelayImpl.StationReference.Id);
+    }
+
+    [Theory]
+    [InlineData(-28)]
+    [InlineData(-1)]
+    [InlineData(1)]
+    public void MissingStationTailsAndTrailingMessageDataAreRejected(int delta)
+    {
+        var command = Bytes(new ManualBelayCommand());
+        Array.Resize(ref command, command.Length + delta);
+        using var commandReader = new BinaryReader(new MemoryStream(command));
+        Assert.Throws<InvalidDataException>(() => new ManualBelayCommand().Deserialize(commandReader));
+        var message = Bytes(new ManualBelayMessage());
+        Array.Resize(ref message, message.Length + delta);
+        using var messageReader = new BinaryReader(new MemoryStream(message));
+        Assert.Throws<InvalidDataException>(() => new ManualBelayMessage().Deserialize(messageReader));
     }
 
     [Fact]
@@ -579,7 +726,7 @@ public sealed class ManualBelayFeatureTests
         internal readonly FeatureHost Host;
         internal Node(World world, int id)
         {
-            Game = new Game(world); Host = new FeatureHost(Runtime, Game, rules: () => MultiplayerModes.RulesFor(world.Mode));
+            Game = new Game(world, id); Host = new FeatureHost(Runtime, Game, rules: () => MultiplayerModes.RulesFor(world.Mode));
             Host.RegisterAll(new[] { new ManualBelayFeature() }, new Version(1, 0));
             Runtime.Attach(new Bridge(world, this, id));
         }
@@ -614,7 +761,7 @@ public sealed class ManualBelayFeatureTests
         private readonly World _world;
         internal readonly Belay BelayImpl = new(); internal readonly Chat ChatImpl = new(); internal readonly Keys Keys = new();
         internal readonly Panel PanelImpl = new();
-        internal Game(World world) => _world = world;
+        internal Game(World world, int id) { _world = world; BelayImpl.StationPosition = new WorldPosition(id - 1, 0, 0); }
         public IMainMenuApi MainMenu => UnavailableGameApi.Instance.MainMenu;
         public IGameStateApi State => new State();
         public IGameTimeApi Time => this;
@@ -653,15 +800,31 @@ public sealed class ManualBelayFeatureTests
         internal bool OptIn = true, Anchored = true, CanBegin = true, ProtectionReady = true, Active, LastBrake, StationRecorded;
         internal int BeginCalls, SetCalls, StopCalls, ReadinessChecks;
         internal uint Sequence;
+        internal bool SharedStationReady = true;
+        internal int StationBeginCalls;
+        internal Guid StationId;
+        internal WorldPosition StationPosition;
+        internal BelaySharedStation BoundStation;
+        internal BelaySharedStation StationReference => new(StationId, StationPosition);
         private Guid _session;
         public bool Enabled => OptIn;
         public bool CanBeginStation(out string reason) { ReadinessChecks++; reason = "Need station"; return Anchored; }
         public bool CanClimb(out string reason) { ReadinessChecks++; reason = "Need protection"; return ProtectionReady && !StationRecorded; }
+        public bool CanClimb(BelaySharedStation station, out string reason)
+        { var ready = CanClimb(out reason); return ready && SharedStationReady && station.IsValid; }
         public bool HasStation => StationRecorded;
         public bool StationValid => Anchored && StationRecorded;
-        public bool BeginStation(out string reason) { reason = "Need station"; return StationRecorded = Anchored; }
+        public bool BeginStation(out string reason)
+        { reason = "Need station"; if (Anchored && !StationRecorded) StationId = Guid.NewGuid(); return StationRecorded = Anchored; }
+        public bool TryGetStation(out BelaySharedStation station) { station = StationReference; return StationValid; }
         public void EndStation() => StationRecorded = false;
         public bool BeginClimber(Guid id, out string reason) { BeginCalls++; reason = "No native rope"; _session = id; return Active = CanBegin; }
+        public bool BeginClimber(Guid id, BelaySharedStation station, out string reason)
+        {
+            if (!CanClimb(station, out reason)) return false;
+            StationBeginCalls++; BoundStation = station;
+            return BeginClimber(id, out reason);
+        }
         public bool SetBrake(Guid id, uint sequence, bool braked)
         { if (!Active || id != _session || sequence <= Sequence) return false; Sequence = sequence; LastBrake = braked; SetCalls++; return true; }
         public ManualBelayStatus Status => new(Active, false, LastBrake, Sequence, 0, 0, 0);

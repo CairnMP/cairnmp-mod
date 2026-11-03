@@ -82,6 +82,24 @@ internal static class BelayRoutePlanner
         return true;
     }
 
+    internal static bool TryFindStationPiton(Vector3 position, IReadOnlyList<BelayProtectionPoint> pitons, out uint id)
+    {
+        id = 0;
+        if (!Finite(position) || pitons == null || pitons.Count > 63) return false;
+        uint candidate = 0;
+        foreach (var point in pitons)
+        {
+            if (point.Id == 0 || !Finite(point.Position)) return false;
+            if (Vector3.DistanceSquared(position, point.Position) > BelayStationAnchor.MaximumMovement * BelayStationAnchor.MaximumMovement)
+                continue;
+            // A station must name one occurrence, even if other protections repeat.
+            if (candidate != 0) return false;
+            candidate = point.Id;
+        }
+        id = candidate;
+        return id != 0;
+    }
+
     private static bool Finite(Vector3 point)
         => float.IsFinite(point.X) && float.IsFinite(point.Y) && float.IsFinite(point.Z);
 }

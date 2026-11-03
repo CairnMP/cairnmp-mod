@@ -94,7 +94,8 @@ internal sealed partial class ManualBelayAdapter
             ToNumerics(lifeline.harness.GetAttachPosition()), rope.MaxLengthMeters, out var plan)
             || !BelayRoutePlanner.TryLimitFinalCapacity(plan, nativeAvailable, out available)) return FailLocalStation(reason);
         LocalStationStatus = new LocalBelayStationStatus(true, plan.FixedLength, available,
-            plan.ProtectionCount, "Real station piton on the existing native rope; local input stands in for the absent belayer.");
+            plan.ProtectionCount, _partnerStation.HasValue ? "Partner station piton on the existing native rope."
+                : "Real station piton on the existing native rope; local input stands in for the absent belayer.");
         _measuredStationProtections = protections.ToArray();
         reason = "";
         return true;
