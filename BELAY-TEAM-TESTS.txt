@@ -1,6 +1,6 @@
 BELAY TEAM - COOPERATIVE ACCEPTANCE PLAN
 
-Status: experimental source, protocol 22. Native two-client acceptance is pending.
+Status: experimental source, protocol 23. Native two-client acceptance is pending.
 Both participants must install the exact same build. Automated participants and
 the accepted offline local-station reconnection do not establish multiplayer success.
 
@@ -26,6 +26,10 @@ Setup shared by connection cases
      An empty partner list now reports the rejected state, scene, stale body pose
      or measured distance. Live ghost movement alone does not prove eligibility.
      Proximity uses fresh replicated body positions on both sides, not actor bases.
+     Belay Team compares the game's native world identity, not the last streamed
+     zone callback. Both builds must use protocol 23; different worlds still refuse.
+     If E is missing, close L and check your own fresh piton with firm foot holds.
+     The panel/BelayAnchor log reports native readiness; it never forces anchoring.
 
 Connection / consent
   C01 Installation and mode: verify same build/protocol, L opens/closes, cursor and

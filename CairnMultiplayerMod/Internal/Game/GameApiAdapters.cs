@@ -273,7 +273,7 @@ internal sealed class PlayersAdapter : IPlayersApi
             if (_state.LocalPlayerState != PlayerState.InGame
                 || !LocalPlayerInterop.TryGetPose(out var position, out _)) return false;
             location = new PlayerLocation(position.x, position.y, position.z,
-                SceneRoles.ResolveNetworkScene(_state.CurrentScene, _state.LastGameplayScene),
+                NetworkSceneInterop.Resolve(_state),
                 _state.LocalPlayerState);
             return true;
         }
@@ -305,7 +305,7 @@ internal sealed class PlayersAdapter : IPlayersApi
                 ModLog.Info($"[BelayPartner] Interaction body/actor offset: body=({local.X:F2},{local.Y:F2},{local.Z:F2}) actor=({actor.x:F2},{actor.y:F2},{actor.z:F2}). Using the replicated body point.");
             }
             location = new PlayerLocation(local.X, local.Y, local.Z,
-                SceneRoles.ResolveNetworkScene(_state.CurrentScene, _state.LastGameplayScene), _state.LocalPlayerState);
+                NetworkSceneInterop.Resolve(_state), _state.LocalPlayerState);
             reason = "";
             return true;
         }

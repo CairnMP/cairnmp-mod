@@ -31,6 +31,8 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     private Guid _stationSession;
     private string _stationInvalidReason;
     private double _nextAnchorGuardNotice;
+    private string _lastAnchorReadiness;
+    private double _nextAnchorReadinessLog;
     private BelayBrakeControl _control;
     private BelayInputLease _lease;
     private uint _appliedSequence;
@@ -133,13 +135,47 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     public bool CanBeginStation(out string reason)
     {
-        reason = "Anchor yourself on a piton and remain still.";
-        if (!Enabled || !ContextValid || _control != null || _attachment != null || ConnectionActive || RopeInterop.IsNativeBelayEngaged) return false;
+        reason = "Partner belay is not enabled in this mode.";
+        if (!Enabled) return false;
+        if (!TryGetActiveContext(out reason)) return false;
+        reason = "End the current rope interaction before defining a station.";
+        if (_control != null || _attachment != null || ConnectionActive || RopeInterop.IsNativeBelayEngaged) return false;
         var lifeline = LocalLifeline();
+        reason = "Wait for your character's native harness and protection rope.";
+        if (lifeline?.pawn == null || lifeline.harness == null || lifeline.securingRope == null) return false;
         var piton = PersonalAnchor(lifeline);
-        return piton != null && piton.pitonHp > 0 && lifeline.securingRope != null
-            && lifeline.pawn != null && lifeline.harness != null
-            && !lifeline.pawn.IsFalling && Vector3.Distance(lifeline.harness.GetAttachPosition(), piton.transform.position) <= 1.5f;
+        if (piton == null)
+        { reason = DescribeMissingPersonalAnchor(lifeline); return false; }
+        reason = "Your personal anchor piton is broken.";
+        if (!(piton.pitonHp > 0)) return false;
+        reason = "Remain still on your personal piton anchor before defining a station.";
+        if (lifeline.pawn.IsFalling || Vector3.Distance(lifeline.harness.GetAttachPosition(), piton.transform.position) > 1.5f) return false;
+        reason = "Ready to define a station on your personal anchor.";
+        return true;
+    }
+
+    private string DescribeMissingPersonalAnchor(Lifeline lifeline)
+    {
+        try
+        {
+            var canAnchor = lifeline.pawn.CanOffBelay(out var candidate);
+            var feetReady = lifeline.pawn.HasEnoughFeetHoldingToEnterOffBelay();
+            var detail = $"placed={lifeline.PlacedPitons?.Count ?? 0}; index={lifeline.OffBelayPitonIndex}; "
+                + $"nativeCanAnchor={canAnchor}; candidate={Id(candidate)}; feetReady={feetReady}; guard={_stationSession != Guid.Empty}";
+            if (detail != _lastAnchorReadiness && Now >= _nextAnchorReadinessLog)
+            {
+                _lastAnchorReadiness = detail; _nextAnchorReadinessLog = Now + 2;
+                ModLog.Info("[BelayAnchor] Personal anchor missing; " + detail);
+            }
+            if (canAnchor) return "A native piton is eligible. Close L and use E to anchor; then reopen L and define the station.";
+            if (!feetReady) return "The native anchor requires firmer foot holds. Close L, secure your feet near your piton, then use E.";
+            return "The native game has no eligible personal anchor here. Close L and approach your own fresh piton until its E prompt appears.";
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("belay.anchor-readiness", exception);
+            return "Native anchor readiness is unavailable. Close L and wait for the character and piton to settle.";
+        }
     }
 
     public bool CanClimb(out string reason)
