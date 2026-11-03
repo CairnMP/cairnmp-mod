@@ -62,7 +62,13 @@ internal static partial class RopeInterop
     {
         if (_ropeBinding?.Owns(rope) != true) return true;
         if (!IsNativeBelayEngaged) return false;
-        try { if (_ropeBinding.Maintain()) return true; }
+        try
+        {
+            // SetLengthInstant rejects calls from Update. This prefix is inside the
+            // rope's own FixedUpdate, which is the only place Cairn applies it.
+            _ropeBinding.ApplyPendingSnap();
+            if (_ropeBinding.Maintain()) return true;
+        }
         catch (Exception ex) { ModLog.Warning("[RopeTeam] Physics attachment lost: " + ex.Message); }
         ReleaseAllAnchors();
         return false; // Never enter native physics after disposing its attachments.
@@ -102,6 +108,7 @@ internal static partial class RopeInterop
         private int _createdFrame;
         private Vector3 _lastLocal, _lastPartner;
         private bool _attached, _disposed;
+        private float _pendingSnapLength = -1f;
 
         internal NativeRopeBinding(Harness local, Harness partner, Lifeline lifeline, LogicalRope source, float length)
         {
@@ -197,14 +204,13 @@ internal static partial class RopeInterop
             if (!RopeAttachmentPolicy.TryGetInitialLength(
                     _length, Vector3.Distance(_lastLocal, _lastPartner), out var initialLength))
                 return false;
-            // Cairn queues rope-length changes for LogicalRope.FixedUpdate. Start at
-            // the actual harness separation, plus a small slack, never fully paid out.
-            _rope.RequestSetLength(initialLength, false);
+            // Cairn applies rope length from LogicalRope.FixedUpdate. Calling
+            // SetLengthInstant here, during Update, is rejected and leaves the
+            // cloned part's full-length particles in place. The physics prefix
+            // shortens the rope and lays it between the harnesses.
+            _pendingSnapLength = initialLength;
             _rope.SetCollisionsFilter(_source.category, _source.masks);
-            _rope.TeleportOnAttachPoints();
             _rope.SetVisible(true);
-            _renderer?.SyncFromRope(_rope);
-            _rope.SyncRenderer();
             _attached = true;
             if (!HasBothAttachments) return false;
             // Never the Lifeline's securing rope. Cairn would hang new quickdraws on it, measure
@@ -273,6 +279,18 @@ internal static partial class RopeInterop
                 _outfitWithHarness = null;
                 _outfitWithoutHarness = null;
             }
+        }
+
+        internal void ApplyPendingSnap()
+        {
+            if (_pendingSnapLength < 0f || _rope == null) return;
+            var length = _pendingSnapLength;
+            _pendingSnapLength = -1f;
+            _rope.SetLengthInstant(length);
+            _rope.RequestSetLength(length, false, true);
+            _rope.TeleportOnAttachPoints(RopeTeleportMode.PreTeleportOnLineAndFabrik, false, false);
+            _renderer?.SyncFromRope(_rope);
+            _rope.SyncRenderer();
         }
 
         public bool Maintain()
