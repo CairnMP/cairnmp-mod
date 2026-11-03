@@ -5,6 +5,28 @@ namespace CairnMultiplayerMod.Tests;
 
 public sealed class LocalStationConnectionContextTests
 {
+    [Theory]
+    [InlineData((int)StationConnectionStage.NotReady)]
+    [InlineData((int)StationConnectionStage.Passed)]
+    [InlineData((int)StationConnectionStage.Failed)]
+    public void PreparationRefusalAndStoredResultsDoNotClaimAnActiveNativeTransition(int stage)
+    {
+        var status = new LocalStationConnectionStatus((StationConnectionStage)stage,
+            StationConnectionFailure.NativePinsMismatch, 0, "Physical pin readback differs.");
+        Assert.False(status.Active);
+    }
+
+    [Theory]
+    [InlineData((int)StationConnectionStage.Unclipping)]
+    [InlineData((int)StationConnectionStage.Detached)]
+    [InlineData((int)StationConnectionStage.Connecting)]
+    [InlineData((int)StationConnectionStage.Confirming)]
+    public void IssuedNativeTransitionAndHeldDetachedRouteRemainActive(int stage)
+    {
+        var status = new LocalStationConnectionStatus((StationConnectionStage)stage, StationConnectionFailure.None, 0, "");
+        Assert.True(status.Active);
+    }
+
     [Fact]
     public void OfflineStoryNeedsNoMultiplayerPlayerStateToShowPreparationOrAllowTheTrial()
     {

@@ -25,6 +25,7 @@ internal sealed partial class ManualBelayAdapter
     private LocalStationConnectionContext _connectionContext;
     private double _nextConnectionContext;
     private string _connectionLifecycleDetail;
+    private double _nextConnectionPinLog;
     public LocalStationConnectionContext StationConnectionContext => _connectionContext;
     public LocalStationConnectionStatus? StationConnectionStatus => _connectionTrial == null ? _connectionNotice
         : new(_connectionTrial.Stage, _connectionTrial.Failure, _connectionTrial.ConfirmedSeconds, _connectionDetail ?? "");
@@ -65,24 +66,29 @@ internal sealed partial class ManualBelayAdapter
             reason = "End rope control first. Record A with Ctrl+F10, then anchor yourself at a distinct B.";
             if (_control != null || _stationLifeline != null || Roping.RopeInterop.IsNativeBelayEngaged) return RejectConnection(reason);
             var lifeline = LocalLifeline();
-            if (_localStation == null || !LocalStationMatches(lifeline, out reason)) return RejectConnection(reason);
+            if (_localStation == null) return RejectConnection("Record A with Ctrl+F10 while personally anchored at A, before preparing B.",
+                StationConnectionFailure.StationRequired);
+            if (!LocalStationMatches(lifeline, out reason)) return RejectConnection(reason, StationConnectionFailure.StationLost);
             var backup = lifeline.OffBelayPiton;
             reason = "Remain personally anchored at healthy B, different from recorded A, with exactly A -> B on the rope.";
             if (backup == null || Id(backup) == Id(_localStationPiton) || backup.pitonHp <= 0
                 || lifeline.pawn == null || lifeline.pawn.IsFalling || lifeline.SwingHasPivotAndExtremity()
                 || lifeline.harness == null || Vector3.Distance(lifeline.harness.GetAttachPosition(), backup.transform.position) > 1.5f
-                || Vector3.Distance(_localStationPiton.transform.position, backup.transform.position) > 6) return RejectConnection(reason);
-            if (!TrySnapshot(lifeline, out var before, out reason)) return RejectConnection(reason);
+                || Vector3.Distance(_localStationPiton.transform.position, backup.transform.position) > 6)
+                return RejectConnection(reason, StationConnectionFailure.BackupRequired);
+            if (!TrySnapshot(lifeline, out var before, out reason)) return RejectConnection(reason, StationConnectionFailure.RouteNotReady);
             var initialOrder = ConnectionOrder(lifeline);
             reason = "The trial requires exactly recorded A then personally anchored B, on a stable native rope.";
             if (initialOrder.Length != 2 || initialOrder[0] != Id(_localStationPiton) || initialOrder[1] != Id(backup)
-                || before.LastPiton != Id(backup) || before.Parts.Length < 3 || before.Holders.Length < 3) return RejectConnection(reason);
+                || before.LastPiton != Id(backup) || before.Parts.Length < 3 || before.Holders.Length < 3)
+                return RejectConnection(reason, StationConnectionFailure.RouteNotReady);
             _connectionLifeline = lifeline; _connectionBackup = backup; _connectionQuickdraw = _localStationPiton.Quickdraw;
             _connectionBackupAnchor = new BelayStationAnchor(Id(lifeline), Id(lifeline.securingRope), Id(backup), ToNumerics(backup.transform.position));
             _connectionBody = lifeline.harness.GetAttachPosition();
             _connectionPlaced = ConnectionPlaced(lifeline);
-            if (!TryReadConnection(out _, out _, out var stationAttached, out var ready, out _, out reason) || !stationAttached || !ready)
-                return RejectConnection(reason);
+            _nextConnectionPinLog = 0;
+            if (!TryReadConnection(out _, out _, out var stationAttached, out var ready, out var failure, out reason) || !stationAttached || !ready)
+                return RejectConnection(reason, failure);
             _connectionTrial = new BelayStationConnectionTrial(before, Id(_localStationPiton), Id(backup), Now);
             _nextConnectionPoll = Now;
             _nextConnectionSample = Now;
@@ -97,10 +103,12 @@ internal sealed partial class ManualBelayAdapter
         catch (Exception ex) { FailStationConnection(StationConnectionFailure.NativeRejected, ex.Message); reason = ex.Message; return false; }
     }
 
-    private bool RejectConnection(string reason)
+    private bool RejectConnection(string reason, StationConnectionFailure failure = StationConnectionFailure.Setup)
     {
-        _connectionNotice = new(StationConnectionStage.Failed, StationConnectionFailure.Setup, 0,
+        _connectionNotice = new(StationConnectionStage.NotReady, failure, 0,
             string.IsNullOrEmpty(reason) ? "Record station A before preparing B." : reason);
+        LogStationConnection();
+        ReleaseConnectionReferences();
         return false;
     }
 
@@ -128,28 +136,60 @@ internal sealed partial class ManualBelayAdapter
         var placed = ConnectionPlaced(lifeline);
         if (_connectionPlaced == null || placed == null || !_connectionPlaced.SetEquals(placed)) return false;
         attached = lifeline.securingRope.IsAttached(_connectionQuickdraw.Cast<IRopeHolder>());
+        failure = StationConnectionFailure.RouteNotReady;
         if (!TrySnapshot(lifeline, out snapshot, out reason)) return true; // B is held; allow native splitting to settle.
         order = ConnectionOrder(lifeline);
-        _connectionPinsAgree = ConnectionPinsAgree(lifeline, attached);
-        measured = _connectionPinsAgree && (!attached || TryMeasureLocalStation(lifeline, snapshot.Available, out _, out reason));
-        if (!_connectionPinsAgree) reason = "Wait for loaded native rope parts and matching quickdraw pin colliders.";
+        _connectionPinsAgree = ConnectionPinsAgree(lifeline, attached, out failure, out reason);
+        if (_connectionPinsAgree)
+        {
+            failure = StationConnectionFailure.RouteNotReady;
+            measured = !attached || TryMeasureLocalStation(lifeline, snapshot.Available, out _, out reason);
+        }
         return true;
     }
 
-    private bool ConnectionPinsAgree(Lifeline lifeline, bool stationAttached)
+    private bool ConnectionPinsAgree(Lifeline lifeline, bool stationAttached,
+        out StationConnectionFailure failure, out string reason)
     {
+        failure = StationConnectionFailure.NativePartsNotReady;
+        reason = "The native rope segment collection is not ready.";
         var parts = lifeline.securingRope.ropeParts;
         var colliders = new List<long>();
-        if (parts == null || parts.Count > 64) return false;
-        foreach (var part in parts)
+        if (parts == null || parts.Count == 0 || parts.Count > 64) return false;
+        var logReadback = Now >= _nextConnectionPinLog;
+        var readback = logReadback ? new List<string>() : null;
+        var firstUnready = -1;
+        for (var i = 0; i < parts.Count; i++)
         {
-            if (part?.obiRope == null || !part.obiRope.isLoaded || part.pinConstraintHandler == null) return false;
-            colliders.Add(Id(part.pinConstraintHandler.GetAttachCollider(RopeSide.Begin)));
-            colliders.Add(Id(part.pinConstraintHandler.GetAttachCollider(RopeSide.End)));
+            var part = parts[i];
+            var loaded = part?.obiRope != null && part.obiRope.isLoaded;
+            var handler = part?.pinConstraintHandler;
+            var begin = loaded && handler != null ? Id(handler.GetAttachCollider(RopeSide.Begin)) : 0;
+            var end = loaded && handler != null ? Id(handler.GetAttachCollider(RopeSide.End)) : 0;
+            if ((!loaded || handler == null) && firstUnready < 0) firstUnready = i;
+            colliders.Add(begin); colliders.Add(end);
+            readback?.Add($"{i + 1}:part={Id(part)},loaded={loaded},handler={Id(handler)},pins={begin}/{end}");
         }
         var backup = _connectionBackup.Quickdraw;
-        return BelayStationConnectionTrial.PinsAgree(Id(_connectionQuickdraw.attachBegin), Id(_connectionQuickdraw.attachEnd),
+        var matches = firstUnready < 0 && BelayStationConnectionTrial.PinsAgree(Id(_connectionQuickdraw.attachBegin), Id(_connectionQuickdraw.attachEnd),
             Id(backup.attachBegin), Id(backup.attachEnd), colliders, stationAttached);
+        if (logReadback)
+        {
+            _nextConnectionPinLog = Now + .5;
+            ModLog.Info("[StationConnection] PinReadback; attachedA=" + stationAttached + ", match=" + matches
+                + ", expectedA=" + Id(_connectionQuickdraw.attachBegin) + "/" + Id(_connectionQuickdraw.attachEnd)
+                + ", expectedB=" + Id(backup.attachBegin) + "/" + Id(backup.attachEnd)
+                + "; " + string.Join("; ", readback));
+        }
+        if (firstUnready >= 0)
+            reason = $"Native rope segment {firstUnready + 1}/{parts.Count} has unloaded physics or no pin handler.";
+        else if (!matches)
+        {
+            failure = StationConnectionFailure.NativePinsMismatch;
+            reason = "Loaded rope pins do not match the expected A/B quickdraw colliders. The per-segment readback was recorded.";
+        }
+        else { failure = StationConnectionFailure.None; reason = ""; }
+        return matches;
     }
 
     private static long[] ConnectionOrder(Lifeline lifeline)

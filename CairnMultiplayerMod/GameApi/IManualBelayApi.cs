@@ -46,12 +46,17 @@ internal readonly record struct LocalStationConnectionContext(bool Enabled, bool
     internal bool ShowPanel(bool hasStation, bool hasResult) => Enabled && Offline && (NativeInGame || hasStation || hasResult);
 }
 
-internal enum StationConnectionStage { Unclipping, Detached, Connecting, Confirming, Passed, Failed }
-internal enum StationConnectionFailure { None, Setup, Context, BackupLost, StationLost, RouteChanged, Timeout, NativeRejected }
+internal enum StationConnectionStage { Unclipping, Detached, Connecting, Confirming, Passed, Failed, NotReady }
+internal enum StationConnectionFailure
+{
+    None, Setup, Context, BackupLost, StationLost, RouteChanged, Timeout, NativeRejected,
+    StationRequired, BackupRequired, RouteNotReady, NativePartsNotReady, NativePinsMismatch
+}
 internal readonly record struct LocalStationConnectionStatus(StationConnectionStage Stage, StationConnectionFailure Failure,
     float ConfirmedSeconds, string Detail)
 {
-    internal bool Active => Stage is not (StationConnectionStage.Passed or StationConnectionStage.Failed);
+    internal bool Active => Stage is StationConnectionStage.Unclipping or StationConnectionStage.Detached
+        or StationConnectionStage.Connecting or StationConnectionStage.Confirming;
 }
 
 internal readonly record struct BelaySharedStation(Guid Id, WorldPosition Position)

@@ -313,6 +313,11 @@ geometric reinsertion of the same existing quickdraw, then checks the original
 protection order, loaded rope parts, native pin-collider references for A/B,
 usable station route and five observed seconds of stable connection. The panel
 gives the current instruction and retains PASS/NOT APPROVED.
+An unmet preflight check instead retains NOT STARTED: no unclip or connection
+request was issued in that attempt. The panel distinguishes missing A, invalid
+personal B, route preparation, unloaded segment physics and mismatched A/B pins,
+and displays the specific check. Bounded per-segment pin readbacks stay in the
+local log so an unavailable collider is distinguishable from unloaded physics.
 The earlier append guide is suppressed while this trial is selected.
 Readiness and the preparation panel use Cairn's native lifecycle rather than
 the multiplayer player-state cache, which can remain Menu during offline Story.

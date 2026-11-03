@@ -25,8 +25,10 @@ public partial class Mod
         };
         var passed = status?.Stage == StationConnectionStage.Passed;
         var failed = status?.Stage == StationConnectionStage.Failed;
+        var notReady = status?.Stage == StationConnectionStage.NotReady;
         var title = passed ? TrialText("PASS — STATION RECONNECTION", "APROVADO — RECONEXÃO DA ESTAÇÃO")
             : failed ? TrialText("NOT APPROVED — STATION CONNECTION", "NÃO APROVADO — CONEXÃO DA ESTAÇÃO")
+                : notReady ? TrialText("NOT STARTED — CHECK THE CURRENT STEP", "NÃO INICIADO — CONFIRA A ETAPA ATUAL")
                 : TrialText("SOLO STATION CONNECTION — FOLLOW THE CURRENT STEP", "CONEXÃO SOLO DA ESTAÇÃO — SIGA A ETAPA ATUAL");
         var instruction = !status.HasValue
             ? _game.Belay.LocalStationStatus.HasValue
@@ -48,7 +50,10 @@ public partial class Mod
                     "Esta rodada passou: A foi observado fora da corda e depois no percurso A → B por cinco segundos, mantendo a ancoragem pessoal B. Avise o resultado; não faça uma queda."),
                 _ => StationConnectionFailureText(status.Value.Failure)
             };
-        var footer = failed
+        var footer = notReady
+            ? TrialText("No unclip/connection request was issued in this attempt. Keep B attached. The specific check is recorded in the log.",
+                "Nenhum pedido para soltar/conectar a corda foi enviado nesta tentativa. Mantenha B preso. A checagem está registrada no log.")
+            : failed
             ? TrialText("Keep B attached. Ctrl+F12 retries only if the original anchors and route are still valid. No automatic rollback is performed.",
                 "Mantenha B preso. Ctrl+F12 tenta novamente somente se as ancoragens e o percurso originais ainda forem válidos. O teste não desfaz alterações automaticamente.")
             : passed ? TrialText("Saved result. A new attempt or station action replaces it.", "Resultado guardado. Uma nova tentativa ou ação de estação substitui este resultado.")
@@ -57,10 +62,13 @@ public partial class Mod
         var previous = GUI.contentColor;
         try
         {
-            GUI.contentColor = passed ? new Color(.4f, 1, .5f, 1) : failed ? new Color(1, .55f, .4f, 1) : Color.white;
-            GUI.Box(new Rect(20, 20, Math.Min(840f, Screen.width - 40f), 300),
+            GUI.contentColor = passed ? new Color(.4f, 1, .5f, 1) : failed ? new Color(1, .55f, .4f, 1)
+                : notReady ? new Color(1, .7f, .4f, 1) : Color.white;
+            GUI.Box(new Rect(20, 20, Math.Min(840f, Screen.width - 40f), Math.Min(failed || notReady ? 400f : 300f, Screen.height - 40f)),
                 title + "\n" + TrialText("Piton A: station | Piton B: your personal anchor", "Piton A: estação | Piton B: sua ancoragem pessoal")
-                    + "\n\n" + instruction + "\n\n" + footer, _stationConnectionStyle);
+                    + "\n\n" + instruction
+                    + (failed || notReady ? "\n" + TrialText("Check: ", "Leitura: ") + status.Value.Detail : "")
+                    + "\n\n" + footer, _stationConnectionStyle);
             if (!_stationConnectionUiShown)
             { _stationConnectionUiShown = true; LoggerInstance.Msg("[StationConnection] Panel draw completed."); }
         }
@@ -69,6 +77,16 @@ public partial class Mod
 
     private static string StationConnectionFailureText(StationConnectionFailure failure) => failure switch
     {
+        StationConnectionFailure.StationRequired => TrialText("A has not been recorded. Return to A, personally anchor there and press Ctrl+F10 once before preparing B.",
+            "A ainda não foi registrada. Volte a A, prenda-se nela e pressione Ctrl+F10 uma vez antes de preparar B."),
+        StationConnectionFailure.BackupRequired => TrialText("Personally anchor at a healthy B, different from A and at most 6 m away. Remain still and press Ctrl+F12 again.",
+            "Prenda-se pessoalmente em B saudável, diferente de A e a até 6 m dela. Fique parado e pressione Ctrl+F12 novamente."),
+        StationConnectionFailure.RouteNotReady => TrialText("Keep exactly A then B connected to the rope. Wait for the route to settle before Ctrl+F12 again.",
+            "Mantenha somente A e depois B conectados à corda. Aguarde o percurso estabilizar antes de outro Ctrl+F12."),
+        StationConnectionFailure.NativePartsNotReady => TrialText("A native rope segment's physics is not ready. Keep B attached and wait two seconds before one Ctrl+F12 retry. If this repeats, report it for log analysis.",
+            "A física de um trecho da corda não está pronta. Mantenha B preso e espere dois segundos antes de repetir Ctrl+F12 uma vez. Se persistir, avise para análise do log."),
+        StationConnectionFailure.NativePinsMismatch => TrialText("The physical rope connections do not match the expected A/B quickdraws. Keep B attached and report this result for log analysis.",
+            "As conexões físicas da corda não correspondem ao esperado em A/B. Mantenha B preso e avise este resultado para análise do log."),
         StationConnectionFailure.Context => TrialText("The round stopped after focus, pause, mode or scene changed.", "A rodada parou após mudança de foco, pausa, modo ou cena."),
         StationConnectionFailure.BackupLost => TrialText("B stopped being the same healthy personal anchor, or the character moved. No further rope requests were issued.",
             "B deixou de ser a mesma ancoragem pessoal saudável, ou o personagem se moveu. Nenhum novo comando de conexão foi enviado."),
