@@ -19,6 +19,7 @@ internal sealed class GameStateAdapter : IGameStateApi
 
     public PlayerState LocalPlayerState => _localState();
     public bool IsLocalPlayerInGame => LocalPlayerState == PlayerState.InGame;
+    public bool IsLocalPlayerInCutscene => GameLifecycleService.TryGetRawGameState(out var state) && state == CairnGameLifecycleState.Cutscene;
     public bool IsLocalPlayerInBivouac => GameLifecycleService.IsLocalInBivouac();
     public bool HasReachedSummit => Life.LifeInterop.HasReachedSummit();
 
@@ -42,6 +43,7 @@ internal sealed class GameTimeAdapter : IGameTimeApi
 
 internal sealed class GameInputAdapter : IGameInputApi
 {
+    public bool IsWindowFocused => Application.isFocused;
     public bool IsKeyboardCaptured => InputCaptureState.IsKeyboardCaptured;
     public bool IsPauseMenuActive => MultiplayerPausePatch.IsPauseMenuActive;
 

@@ -12,6 +12,12 @@ All notable CairnMP changes are documented here. Releases follow
 ## Unreleased
 
 ### Added
+- Initial partner-station attachment: invitations identify the exact synchronized
+  piton by its placer and source id. A climber with a separate personal backup
+  requests one native quickdraw insertion, retains the original route and waits
+  for five observed seconds of loaded pin/route confirmation before rope control.
+  Position-only reload identities are refused. Native two-client validation is
+  pending; this does not add protected role transfer.
 - Dedicated **Belay Team** mode: an anchored player requests brake/release on a
   consenting climber's existing protection route. Host-accepted intent and
   climber-applied suspension telemetry are separate; expired input cannot reopen
@@ -27,8 +33,13 @@ All notable CairnMP changes are documented here. Releases follow
   native crash investigation and validation continue.
 
 ### Changed
-- Development protocol is now **19**. Every peer needs the same experimental
-  build; published 2.4.1/protocol 16 and earlier protocol 17/18 pilots cannot join.
+- Pause, cutscene and focus loss explicitly end partner belay. Automatic pair
+  suspension/resume remains future work. The two-minute diagnostic limit now
+  applies only to solo exercises; partner control still requires a fresh lease.
+- Development protocol is now **22**. Piton snapshots retain the placer's source
+  id and belay messages carry that piton's owner/source identity. Every peer needs
+  the same experimental build; published 2.4.1/protocol 16 and earlier development
+  pilots cannot join.
 
 ## Releases
 

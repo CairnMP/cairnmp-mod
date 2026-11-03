@@ -198,6 +198,7 @@ internal sealed partial class ManualBelayAdapter
     {
         try
         {
+            if (!GameLifecycleService.TryGetRawGameState(out var lifecycle) || lifecycle != CairnGameLifecycleState.InGame) return;
             var controller = _localLengthController;
             if (controller == null || controller.obiRope == null || Id(controller.obiRope) != _localObiRope) return;
             if (Math.Abs(controller.ropeLength - _lastLocalRopeGoal) > .001f) return;

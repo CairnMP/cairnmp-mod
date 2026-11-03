@@ -20,6 +20,7 @@ internal enum GameKey
 /// <summary>Managed input queries for feature callbacks.</summary>
 internal interface IGameInputApi
 {
+    bool IsWindowFocused => true;
     bool IsKeyboardCaptured { get; }
     bool IsPauseMenuActive { get; }
     bool WasPressed(GameInputAction action);

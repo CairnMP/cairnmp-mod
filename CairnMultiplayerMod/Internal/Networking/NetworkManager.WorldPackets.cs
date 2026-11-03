@@ -10,7 +10,7 @@ internal sealed partial class NetworkManager
     {
         var packet = new ServerPitonPlaced();
         packet.Deserialize(reader);
-        if (!PacketValidation.IsValidPitonPayload(
+        if (packet.SourcePitonId == 0 || packet.PitonId == 0 || packet.FromPlayerId < 0 || !PacketValidation.IsValidPitonPayload(
                 packet.PosX, packet.PosY, packet.PosZ,
                 packet.RotX, packet.RotY, packet.RotZ, packet.RotW,
                 packet.Quality, packet.PitonHp, packet.ItemId))

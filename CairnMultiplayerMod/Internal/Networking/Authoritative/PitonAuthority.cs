@@ -108,6 +108,13 @@ internal sealed class PitonAuthority
     public void HandleHostPitonRecovered(int hostPlayerId, uint pitonId)
         => Recover(hostPlayerId, pitonId, requesterIsHost: true);
 
+    internal bool TryGetPiton(int owner, uint sourceId, out ServerPitonPlaced placed)
+    {
+        placed = default;
+        return sourceId != 0 && _authIdByClient.TryGetValue((owner, sourceId), out var authoritativeId)
+            && _pitons.TryGetValue(authoritativeId, out placed) && placed.PitonHp > 0;
+    }
+
     public void Reset()
     {
         _pitons.Clear();
@@ -137,6 +144,7 @@ internal sealed class PitonAuthority
         foreach (var key in _authIdByClient.Keys)
             if (key.playerId == playerId) owned++;
         if (owned >= MaxPitonsPerPlayer || !_placementBudget.Take(playerId)) return;
+        fields.SourcePitonId = clientId;
         fields.PitonId = ResolveAuthId(playerId, clientId);
         _pitons[fields.PitonId] = fields;
         if (!spawnLocalGhost) _hostOwned.Add(fields.PitonId);

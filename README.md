@@ -31,7 +31,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **21**; lobby admission may also require the exact mod version.
+> protocol is **22**; lobby admission may also require the exact mod version.
 
 ## Features
 
@@ -121,11 +121,11 @@ instead of being destroyed or duplicated.
 Choose **Belay Team** when creating a lobby to enable partner belay. Rope team
 keeps its original direct harness tether; Belay Team rejects that tether in input,
 host validation, received packets and late-join snapshots. Every peer
-must use the same experimental build (protocol **21**, incompatible with the
-published 2.4.1/protocol 16 and earlier protocol 17-20 pilots). Partner control now
-requires the belayer's actual station piton to occur once on the climber's existing
-native protection route. Creating a new attachment to a partner's piton remains
-future work. Belay Team does not create or replace the cooperative harness tether.
+must use the same experimental build (protocol **22**, incompatible with the
+published 2.4.1/protocol 16 and earlier pilots). A missing station attachment can
+now be requested on the climber's synchronized native copy of that exact piton.
+This implementation has automated coverage; its initial attachment still needs
+native two-client validation. Belay Team does not create the direct harness tether.
 
 Press **L** to choose a nearby player, ask for belay or offer belay. The recipient
 accepts or declines in the panel; closing it does not accept the invitation. The
@@ -140,7 +140,7 @@ With the panel closed, the belayer holds **Up** to feed rope or **Down** to take
 in slack at up to 1 m/s. Feeding requires FREE; take-in also works while BRAKED,
 but stops at the loaded/geometric rope length rather than hauling the character.
 Release the key to stop; holding both directions cancels motion. Opening the
-panel, typing or captured/paused input sends zero motion. The panel and HUD show
+panel, typing or captured input sends zero motion. The panel and HUD show
 the climber's reported slack, reserve, motion input and native length readback,
 separately from the host-accepted request. Those reports are not independent
 proof of physics.
@@ -167,17 +167,30 @@ without needing the mouse. One press performs one action; holding K does not
 toggle repeatedly. Outside the panel, the shortcut does not consume K. The panel
 keeps the cursor visible/unlocked while open and restores its previous state on close.
 
-Invitations now carry the station selected by the belayer. The climber checks that
-exactly one healthy native piton on their existing protection route matches its
-position within 5 cm; a missing or ambiguous match cannot start control. Replacing
-the station requires a new invitation. Neither accepting nor defining a station
-creates a missing native rope attachment. Both invitation directions use the
-same station-bound controller, independent of the local diagnostic preferences.
+Invitations carry the station's placer/source id and its lifecycle reference. The
+host checks that identity against its live piton registry; the climber resolves
+the corresponding native copy, with position used only as a secondary check.
+For a missing attachment, the climber must first be personally anchored at a
+separate healthy backup, within 6 m of the station. Acceptance requests one native
+quickdraw insertion ahead of the existing protection route. The panel reports
+preparation while the original backup, ordered holders, native piton collection
+and loaded pin connections are checked for five observed seconds. Feed/take-in
+remain inactive during preparation; only fresh commands after confirmation can
+move rope. No extra piton is spawned by this attachment and cancellation does not
+rewind an operation already queued in the game. Replacing the station requires
+a new invitation. Both invitation directions use this station-bound controller.
+An already attached station can bind directly after its existing route validates.
 The route budget includes the fixed path from that station through downstream
 protections; FREE pays out as needed and BRAKED limits falls and outward climbing
 using the paid-out length. Remote feed/take-in uses this same bounded budget;
-protected role transfer remains pending. The shared station binding has automated coverage but has not
-been exercised in two native clients.
+protected role transfer remains pending. Initial partner attachment and shared
+station control have not yet been exercised in two native clients.
+
+Piton synchronization also creates native copies that may be saved by the game.
+Existing save duplication is not repaired by this pilot. References inferred only
+from position after a reload cannot define/bind a station; use a freshly placed
+piton rather than selecting a nearby duplicate. Save/reload and duplication checks
+are included in [the cooperative test plan](BELAY-TEAM-TESTS.txt).
 
 Multiple protection pitons are accepted. Adding one piton while unloaded waits
 for a complete stable native split before rebinding the final segment without a
@@ -191,9 +204,15 @@ The HUD distinguishes host-accepted intent from the climber's measured suspensio
 readback. Input permission expires after three seconds without renewal. A valid
 owned suspension requests hold at its current geometry before ownership ends;
 scene/invalid loaded-topology changes invalidate old native references without restoring an old
-radius. Sessions last at most two minutes. Native two-client braking, station
+radius. Pause, cutscene or focus loss ends the invitation/session; return to
+gameplay, re-anchor and send a new invitation. Automatic suspension/resume is a
+later milestone, not a function of this pilot. The two-minute diagnostic limit
+applies to solo exercises; partner sessions instead require fresh input permission.
+Native two-client braking, station
 integration, damage/failure coherence and crash stability still require testing.
 Remote control does not depend on a diagnostic capture or its recording limits.
+Shared fall damage and a belayer ragdoll reaction are future balancing work after
+multiplayer validation; this build keeps native damage/failure decisions.
 
 `Debug.BelayRouteExperiment` also enables an independent solo exercise: Ctrl+F11
 starts/ends control and Space/F7 brakes/releases. It uses the same native adapter

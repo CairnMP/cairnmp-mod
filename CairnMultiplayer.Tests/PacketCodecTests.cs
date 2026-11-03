@@ -74,6 +74,20 @@ public class PacketCodecTests
 
 public class ProtocolVersionTests
 {
+    [Fact]
+    public void PitonSnapshotRetainsSourceIdentitySeparatelyFromTheHostId()
+    {
+        var packet = new ServerPitonPlaced { FromPlayerId = 12, PitonId = 42, SourcePitonId = 7, PosX = 1, RotW = 1, PitonHp = 100, ItemId = 5 };
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, true)) packet.Serialize(writer);
+        stream.Position = 0;
+        var copy = new ServerPitonPlaced();
+        using var reader = new BinaryReader(stream);
+        copy.Deserialize(reader);
+        Assert.Equal(12, copy.FromPlayerId); Assert.Equal(42u, copy.PitonId); Assert.Equal(7u, copy.SourcePitonId);
+        Assert.Equal(stream.Length, stream.Position);
+    }
+
     // Safeguard: if someone bumps the version by mistake without changing the format,
     // this test is a reminder that the change must also be documented in the mod and the launcher.
     [Fact]
@@ -81,7 +95,7 @@ public class ProtocolVersionTests
     {
         // When you bump Protocol.Version, update this value AND the release notes
         // to signal to clients that they need to update.
-        Assert.Equal(21, Protocol.Version);
+        Assert.Equal(22, Protocol.Version);
     }
 
     [Fact]

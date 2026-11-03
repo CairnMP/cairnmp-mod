@@ -1,7 +1,7 @@
 using System;
-using System.Collections.Generic;
 using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal.Diagnostics;
+using CairnMultiplayerMod.Internal.Game.Roping;
 using Il2Cpp;
 
 namespace CairnMultiplayerMod.Internal.Game;
@@ -10,6 +10,8 @@ internal sealed partial class ManualBelayAdapter
 {
     private BelaySharedStation _definedStation;
     private BelaySharedStation? _partnerStation;
+
+    public bool IsStationKnown(BelaySharedStation station) => station.IsValid && _stationKnown(station);
 
     public bool TryGetStation(out BelaySharedStation station)
     {
@@ -20,11 +22,19 @@ internal sealed partial class ManualBelayAdapter
     }
 
     public bool CanClimb(BelaySharedStation station, out string reason)
-        => CanClimb(out reason) && TryResolveSharedStation(station, out _, out reason);
+    {
+        if (!CanClimb(out reason) || !TryResolveSharedStation(station, out var piton, out var attached, out reason)) return false;
+        return attached || CanAttachStation(LocalLifeline(), piton, out reason);
+    }
 
     public bool BeginClimber(Guid session, BelaySharedStation station, out string reason)
     {
-        if (!CanClimb(out reason) || !TryResolveSharedStation(station, out var piton, out reason)) return false;
+        if (!CanClimb(out reason) || !TryResolveSharedStation(station, out var piton, out var attached, out reason)) return false;
+        return attached ? BindPartnerStation(session, station, piton, out reason) : BeginStationAttachment(session, station, piton, out reason);
+    }
+
+    private bool BindPartnerStation(Guid session, BelaySharedStation station, Piton piton, out string reason)
+    {
         var lifeline = LocalLifeline();
         var anchor = new BelayStationAnchor(Id(lifeline), Id(lifeline.securingRope), Id(piton), ToNumerics(piton.transform.position));
         _partnerStation = station;
@@ -44,31 +54,25 @@ internal sealed partial class ManualBelayAdapter
         catch { ClearPartnerStation(); throw; }
     }
 
-    private bool TryResolveSharedStation(BelaySharedStation station, out Piton selected, out string reason)
+    private bool TryResolveSharedStation(BelaySharedStation station, out Piton selected, out bool attached, out string reason)
     {
-        selected = null;
+        selected = null; attached = false;
         reason = "The partner station reference is invalid.";
         if (!Enabled || !station.IsValid) return false;
         var lifeline = LocalLifeline();
         if (!TrySnapshot(lifeline, out _, out reason)) return false;
-        var holders = lifeline.securingRope.ropeHolders;
-        var candidates = new List<BelayProtectionPoint>();
-        var native = new Dictionary<uint, Piton>();
-        for (var i = 0; i < holders.Count; i++)
-        {
-            var piton = holders[i]?.TryCast<LogicalQuickdraw>()?.Piton;
-            if (piton == null) continue;
-            reason = "A protection on the station route is broken.";
-            if (!float.IsFinite(piton.pitonHp) || !(piton.pitonHp > 0)) return false;
-            var id = unchecked((uint)piton.GetInstanceID());
-            candidates.Add(new BelayProtectionPoint(id, ToNumerics(piton.transform.position)));
-            native[id] = piton;
-        }
-        reason = "Connect the climber's protection rope to the belayer's station piton first. Missing or ambiguous stations cannot start belay.";
-        var position = station.Position;
-        if (!BelayRoutePlanner.TryFindStationPiton(new System.Numerics.Vector3(position.X, position.Y, position.Z), candidates, out var stationId))
-            return false;
-        selected = native[stationId];
+        reason = "The station's exact session piton is not synchronized. Wait for its native copy; position-only reload matches cannot start belay.";
+        if (!RopeInterop.TryResolvePitonReference(lifeline, station.PitonOwner, station.PitonId, _localPlayerId(), out selected)) return false;
+        reason = "The agreed station piton moved, broke or has no quickdraw.";
+        if (!float.IsFinite(selected.pitonHp) || selected.pitonHp <= 0 || selected.Quickdraw == null
+            || System.Numerics.Vector3.DistanceSquared(ToNumerics(selected.transform.position),
+                new System.Numerics.Vector3(station.Position.X, station.Position.Y, station.Position.Z)) > .05f * .05f) return false;
+        var order = ConnectionOrder(lifeline);
+        var occurrences = 0;
+        foreach (var id in order) if (id == Id(selected)) occurrences++;
+        attached = lifeline.securingRope.IsAttached(selected.Quickdraw.Cast<IRopeHolder>());
+        reason = "The station's logical attachment and protection route disagree or repeat the same piton.";
+        if (occurrences != (attached ? 1 : 0)) return false;
         reason = "";
         return true;
     }

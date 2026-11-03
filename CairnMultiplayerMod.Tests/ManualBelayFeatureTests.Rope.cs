@@ -86,6 +86,7 @@ public sealed partial class ManualBelayFeatureTests
         source.Keys.Pressed = true;
         Advance(world, .11f);
         Assert.Equal(0, target.Rope.Motion);
+        if (context == 1) { Assert.False(target.Active); return; }
         Assert.False(target.LastBrake);
         Assert.True(target.Active);
     }

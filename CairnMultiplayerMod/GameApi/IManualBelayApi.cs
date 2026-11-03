@@ -9,6 +9,7 @@ internal interface IManualBelayApi
     bool CanBeginStation(out string reason) { reason = "Station unavailable."; return false; }
     bool CanClimb(out string reason) { reason = "Protection unavailable."; return false; }
     bool TryGetStation(out BelaySharedStation station) { station = default; return false; }
+    bool IsStationKnown(BelaySharedStation station) => false;
     bool CanClimb(BelaySharedStation station, out string reason) { reason = "Shared station unavailable."; return false; }
     bool BeginStation(out string reason);
     bool HasStation => false;
@@ -59,9 +60,9 @@ internal readonly record struct LocalStationConnectionStatus(StationConnectionSt
         or StationConnectionStage.Connecting or StationConnectionStage.Confirming;
 }
 
-internal readonly record struct BelaySharedStation(Guid Id, WorldPosition Position)
+internal readonly record struct BelaySharedStation(Guid Id, WorldPosition Position, int PitonOwner = -1, uint PitonId = 0)
 {
-    internal bool IsValid => Id != Guid.Empty && float.IsFinite(Position.X)
+    internal bool IsValid => Id != Guid.Empty && PitonOwner >= 0 && PitonId != 0 && float.IsFinite(Position.X)
         && float.IsFinite(Position.Y) && float.IsFinite(Position.Z);
 }
 

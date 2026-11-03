@@ -1,0 +1,114 @@
+BELAY TEAM - COOPERATIVE ACCEPTANCE PLAN
+
+Status: experimental source, protocol 22. Native two-client acceptance is pending.
+Both participants must install the exact same build. Automated participants and
+the accepted offline local-station reconnection do not establish multiplayer success.
+
+Roles and order
+  H1: host is belayer; guest is climber.
+  H2: host is climber; guest is belayer. Create a new room to exchange the host.
+  Run connection and stationary cases first. Proceed to falls only after those pass.
+  Use normal Steam accounts with the game available on both computers.
+  Record build, game/loader versions, H1/H2, local time and both log files per batch.
+  Status per case: PASS, FAIL, NOT RUN, BLOCKED or NOT APPLICABLE. Never infer PASS.
+
+Setup shared by connection cases
+  1. Back up the profiles used for testing. Install with the game closed.
+  2. Create Multiplayer -> Private -> Belay Team; invite the other participant.
+  3. Belayer places fresh station piton S, personally anchors with E, opens L and
+     chooses Define station (K while L is open). Remain anchored and stationary.
+  4. Climber places a separate healthy backup P within about 2 m of S and personally
+     anchors with E. Both players must be within 6 m in the same scene.
+  5. Use L to offer/request and explicitly accept. Close L to operate rope controls.
+  6. During initial attachment, keep P attached and remain still. Wait for connection
+     confirmation and the native length readback. Do not use the solo Ctrl+F10/F11/F12.
+  7. If setup is refused, record the message/time and stop; do not make a fall.
+
+Connection / consent
+  C01 Installation and mode: verify same build/protocol, L opens/closes, cursor and
+      gameplay control restore. Other lobby modes retain their original behavior.
+  C02 Station lifecycle: define/remove S without releasing personal anchoring;
+      release/re-anchor S and verify a fresh station/invitation is required.
+  C03 Initial missing attachment: belayer offers, climber accepts while held at P.
+      Expected: one BelayAttachment Requested, original P/route retained, native
+      confirmation for five observed seconds, then control. If the station was
+      already attached and no request occurred, record the existing-route branch;
+      this does not pass initial missing attachment. Check both logs.
+  C04 Reverse invitation: climber requests, anchored belayer accepts; same station
+      reference and protection checks apply. Decline/cancel must not start control.
+  C05 Removed/replaced station: withdraw/change S during invitation and during
+      preparation while both players are anchored. Expected: end, no further
+      requests, no automatic retry or rollback of already queued game operations.
+  C06 Near-coincident pitons: use distinct freshly placed pitons where practical.
+      Expected: owner/source identity chooses the agreed piton, not the nearest
+      neighbor. Ambiguous/unavailable references refuse control.
+
+Stationary controls - remain anchored at P
+  R01 FREE + Up for 2 seconds: approximately 2 m paid out; release stops explicit
+      feed. Check reported slack/reserve, visual change and native length match.
+  R02 Down: only slack is taken in, at up to 1 m/s. No upward hauling or shrinking
+      below loaded/geometric distance. Releasing the key stops motion.
+  R03 Space or F7: latched BRAKED/FREE. Up cannot feed while braked; Down can remove
+      slack. Both arrow keys cancel motion. Only the belayer controls this rope.
+  R04 L or chat during held motion: motion becomes zero; closing/releasing input
+      permits a fresh command. Closing the panel is not acceptance of an invitation.
+  R05 Climb above P after releasing personal anchoring: BRAKED blocks outward
+      advancement when slack is exhausted, allows retreat, then allows progress
+      after FREE/feed. Keep enough clearance to avoid an unintended fall.
+  R06 Add one protection while unloaded, first FREE then BRAKED. Expected: native
+      split settles, count increases once, budget remains coherent; old held motion
+      does not continue across the rebind. Do not remove/reorder a loaded route.
+
+Falls - only after C/R cases pass
+  F01 Short fall with BRAKED already set: native catch with coherent slack and no
+      excessive upward launch. Record height, slack, damage and piton condition.
+  F02 Short fall from FREE, belayer brakes in flight: one catch at current geometry;
+      no repeated brake input is needed to keep it latched.
+  F03 Suspended release/re-brake and take-in: coherent payout/catch; take-in removes
+      slack without winching the loaded character. Stop if the earlier gates fail.
+  F04 Rope-end knot: later controlled case with suitable clearance and a prepared
+      test profile. FREE reaches the native limit; record stop, damage and failure
+      outcomes. No assumption of zero injury or guaranteed piton survival.
+
+Interruption and persistence - start anchored, without a fall
+  L01 Pause menu, Alt+Tab/focus loss and an available natural cutscene, each for
+      belayer and climber and during preparation. Expected: session ends, motion
+      stops, an already queued native operation may finish. Returning does not
+      automatically restart; revalidate anchors and send a fresh invitation.
+      If no natural cutscene is available, mark that part NOT RUN.
+  L02 Disconnect each participant through the normal UI while the climber remains
+      anchored at P. Expected: no new commands, no stale control after rejoining.
+      Check personal protection before continuing. Do not use firewall changes.
+  L03 Remove the station/end belay through L. Personal anchoring stays attached.
+      A new invitation is required; stale prior-session messages cannot restart it.
+  L04 Save/reload and duplicate-piton investigation, after the core cases and a
+      profile backup: record counts/positions before save, after reload, after
+      rejoining and after leaving. Look for repeated copies/inventory changes.
+      This build does not repair old saves or delete duplicates by position.
+      Position-only rebound identities refuse station binding; use fresh pitons.
+  L05 Stable run longer than 5 minutes with fresh partner input: no two-minute
+      diagnostic cutoff. Record stutters, crashes and any growth of log volume.
+  L06 Repeat C03/R01-R06/F01-F03 in H2. Record natural latency and host/client roles;
+      passing only one host arrangement is partial acceptance.
+
+Later scenarios / not implemented acceptance
+  N01 Start a NEW upper-station belay session without falling first. Validate native
+      station order and take-in before follower falls. This is not protected role
+      transfer within the existing pair; record a refused route as a failed case.
+  N02 Protected same-pair role transfer: BLOCKED until implemented. Do not count
+      ending and reinviting as seamless transfer.
+  N03 Preserve pair and resume after cutscene/pause: BLOCKED; first pilot ends the
+      interaction by design. A future resume must revalidate route/anchors and input.
+  N04 Shared damage and belayer ragdoll: FUTURE balance investigation after the
+      multiplayer core passes. This build retains the game's native damage/failure.
+  N05 Third-player injection and multi-pair behavior: optional later manual cases;
+      one pair is supported. Automated authorization checks do not replace native tests.
+
+Stop and evidence
+  If connection/readback fails, remain personally anchored and report the message,
+  case id, H1/H2 and time. Do not advance into fall cases to compensate for failure.
+  Finish the current round before switching windows: losing focus ends the session.
+  Collect both MelonLoader/Latest.log files before relaunch (the log is replaced).
+  Review/redact shared diagnostic bundles; do not send saves or game DLLs.
+  A local PASS means only its exact scenario/build. Multiplayer, damage/failure,
+  lifecycle and performance acceptance must be recorded separately.
