@@ -7,12 +7,17 @@ namespace CairnMultiplayerMod.Bootstrap;
 public partial class Mod
 {
     private GUIStyle _stationConnectionStyle;
+    private bool _stationConnectionUiShown;
 
     private void DrawStationConnectionTrial()
     {
         if (Network?.IsConnected == true || _multiplayerModeActive) return;
         var status = _game.Belay.StationConnectionStatus;
-        if (!_game.State.IsLocalPlayerInGame && !status.HasValue) return;
+        if (!_game.Belay.StationConnectionContext.ShowPanel(_game.Belay.LocalStationStatus.HasValue, status.HasValue))
+        { _stationConnectionUiShown = false; return; }
+        if (!_stationConnectionUiShown)
+            LoggerInstance.Msg("[StationConnection] Panel draw started; nativeInGame=" + _game.Belay.StationConnectionContext.NativeInGame
+                + ", station=" + _game.Belay.LocalStationStatus.HasValue + ", result=" + status.HasValue);
         _stationConnectionStyle ??= new GUIStyle(GUI.skin.box)
         {
             fontSize = 18, wordWrap = true, alignment = TextAnchor.UpperLeft,
@@ -56,6 +61,8 @@ public partial class Mod
             GUI.Box(new Rect(20, 20, Math.Min(840f, Screen.width - 40f), 300),
                 title + "\n" + TrialText("Piton A: station | Piton B: your personal anchor", "Piton A: estação | Piton B: sua ancoragem pessoal")
                     + "\n\n" + instruction + "\n\n" + footer, _stationConnectionStyle);
+            if (!_stationConnectionUiShown)
+            { _stationConnectionUiShown = true; LoggerInstance.Msg("[StationConnection] Panel draw completed."); }
         }
         finally { GUI.contentColor = previous; }
     }

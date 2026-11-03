@@ -164,7 +164,7 @@ public partial class Mod : MelonMod
             new WeatherAdapter(),
             new WorldAdapter(), _voice, new LifeAdapter(), new SpectatorAdapter(),
             new ManualBelayAdapter(() => _runtimeState.ModeRules.UsesPartnerBelay,
-                () => Network?.IsConnected != true && !_multiplayerModeActive && LocalState == PlayerState.InGame), new BelayPanelAdapter());
+                () => Network?.IsConnected != true && !_multiplayerModeActive), new BelayPanelAdapter());
 
         Rope = new RopeCoupleController(Network, _runtimeState);
         Player = new PlayerStateBroadcaster(

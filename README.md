@@ -314,6 +314,10 @@ protection order, loaded rope parts, native pin-collider references for A/B,
 usable station route and five observed seconds of stable connection. The panel
 gives the current instruction and retains PASS/NOT APPROVED.
 The earlier append guide is suppressed while this trial is selected.
+Readiness and the preparation panel use Cairn's native lifecycle rather than
+the multiplayer player-state cache, which can remain Menu during offline Story.
+Ctrl+F11 cannot start the separate rope-budget controller while this trial is
+selected; use Ctrl+F12 and follow the panel.
 
 This diagnostic does not spawn/delete pitons, write inventory/HP/positions or
 control rope length/brake. It requires the same healthy personal B anchor, native

@@ -22,6 +22,10 @@ internal sealed partial class ManualBelayAdapter
     private string _connectionDetail;
     private bool ConnectionActive => _connectionTrial?.Active == true;
     private bool _connectionPinsAgree;
+    private LocalStationConnectionContext _connectionContext;
+    private double _nextConnectionContext;
+    private string _connectionLifecycleDetail;
+    public LocalStationConnectionContext StationConnectionContext => _connectionContext;
     public LocalStationConnectionStatus? StationConnectionStatus => _connectionTrial == null ? _connectionNotice
         : new(_connectionTrial.Stage, _connectionTrial.Failure, _connectionTrial.ConfirmedSeconds, _connectionDetail ?? "");
 
@@ -53,10 +57,10 @@ internal sealed partial class ManualBelayAdapter
         }
         catch (Exception ex) { ClearStationConnection(); reason = ex.Message; return RejectConnection(reason); }
         ClearStationConnection();
-        reason = "Enable the offline station connection trial first.";
+        reason = "Station connection context unavailable.";
         try
         {
-            if (ModConfig.BelayStationConnectionExperiment?.Value != true || !_localConnectionAllowed()) return RejectConnection(reason);
+            if (!CanRunStationConnection(out reason)) return RejectConnection(reason);
             if (!TryGetActiveContext(out reason)) return RejectConnection(reason);
             reason = "End rope control first. Record A with Ctrl+F10, then anchor yourself at a distinct B.";
             if (_control != null || _stationLifeline != null || Roping.RopeInterop.IsNativeBelayEngaged) return RejectConnection(reason);
@@ -106,8 +110,7 @@ internal sealed partial class ManualBelayAdapter
         snapshot = null; order = Array.Empty<long>(); attached = measured = false;
         _connectionPinsAgree = false;
         failure = StationConnectionFailure.Context; reason = "The offline trial context changed.";
-        if (ModConfig.BelayStationConnectionExperiment?.Value != true || !_localConnectionAllowed()
-            || _control != null || _stationLifeline != null || Roping.RopeInterop.IsNativeBelayEngaged) return false;
+        if (!CanRunStationConnection(out reason) || _control != null || _stationLifeline != null || Roping.RopeInterop.IsNativeBelayEngaged) return false;
         if (!TryGetActiveContext(out reason)) return false;
         var lifeline = _connectionLifeline;
         failure = StationConnectionFailure.BackupLost; reason = "B is no longer the same healthy personal anchor. No further rope requests were issued.";
@@ -210,6 +213,38 @@ internal sealed partial class ManualBelayAdapter
     {
         _connectionTrial = null; _connectionNotice = null;
         ReleaseConnectionReferences();
+    }
+
+    private void RefreshStationConnectionContext(bool force = false)
+    {
+        var enabled = ModConfig.BelayStationConnectionExperiment?.Value == true;
+        var offline = _localConnectionAllowed();
+        if (!force && enabled == _connectionContext.Enabled && offline == _connectionContext.Offline
+            && Now < _nextConnectionContext) return;
+        _nextConnectionContext = Now + .25;
+        var state = CairnGameLifecycleState.Unknown;
+        var detail = "not queried";
+        var nativeInGame = enabled && offline && GameLifecycleService.TryGetGameLifecycle(out state, out detail)
+            && state == CairnGameLifecycleState.InGame;
+        var current = new LocalStationConnectionContext(enabled, offline, nativeInGame);
+        if (enabled && (current != _connectionContext || detail != _connectionLifecycleDetail))
+            ModLog.Info("[StationConnection] Context; enabled=" + enabled + ", offline=" + offline
+                + ", nativeInGame=" + nativeInGame + ", lifecycle=" + state + "; " + detail);
+        _connectionLifecycleDetail = detail;
+        _connectionContext = current;
+    }
+
+    private bool CanRunStationConnection(out string reason)
+    {
+        RefreshStationConnectionContext(true);
+        reason = "Enable the offline station connection trial first.";
+        if (!_connectionContext.Enabled) return false;
+        reason = "Leave Multiplayer and enter Story directly before this solo trial.";
+        if (!_connectionContext.Offline) return false;
+        reason = "Wait for the native Story gameplay to finish loading. The solo trial does not use multiplayer player state.";
+        if (!_connectionContext.CanRun) return false;
+        reason = "";
+        return true;
     }
 
     private void ReleaseConnectionReferences()

@@ -168,6 +168,8 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     private bool BeginClimber(Guid session, bool localExercise, out string reason)
     {
+        reason = "The station connection trial is selected. Use Ctrl+F12 and follow its panel; Ctrl+F11 belongs to the separate rope-budget exercise.";
+        if (localExercise && ModConfig.BelayStationConnectionExperiment?.Value == true) return false;
         reason = "Enable the selected belay experiment first.";
         if (!(localExercise ? LocalExerciseEnabled : Enabled)) return false;
         reason = "The belay session identifier is invalid.";
@@ -402,6 +404,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     public void Tick()
     {
+        RefreshStationConnectionContext();
         TickStationConnection();
         if (HasStation && !StationValid) EndStation();
         if (_unpatchPending && _control == null)

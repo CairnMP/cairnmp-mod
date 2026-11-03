@@ -36,6 +36,14 @@ internal interface IManualBelayApi
     bool TryPreviewRoute(WorldPosition station, out SharedBelayRoutePreview preview) { preview = default; return false; }
     bool AdvanceLocalStationConnection(out string reason) { reason = "Station connection trial unavailable."; return false; }
     LocalStationConnectionStatus? StationConnectionStatus => null;
+    LocalStationConnectionContext StationConnectionContext => default;
+}
+
+/// <summary>Solo trial readiness uses the native lifecycle, independent of multiplayer player state.</summary>
+internal readonly record struct LocalStationConnectionContext(bool Enabled, bool Offline, bool NativeInGame)
+{
+    internal bool CanRun => Enabled && Offline && NativeInGame;
+    internal bool ShowPanel(bool hasStation, bool hasResult) => Enabled && Offline && (NativeInGame || hasStation || hasResult);
 }
 
 internal enum StationConnectionStage { Unclipping, Detached, Connecting, Confirming, Passed, Failed }
