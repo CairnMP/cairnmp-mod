@@ -86,13 +86,10 @@ internal sealed partial class ManualBelayAdapter
         }
         if (!_ropeControl.TryStep(distance, minimum, elapsed))
         { EndLocalRope("The rope-budget measurement is invalid."); return false; }
-        if (!suspended && !_lifeline.pawn.IsFalling && distance > _ropeControl.Released + .15f)
-        {
-            // Wall climbing is kinematic. Do not fake a brake by snapping the
-            // character back after they climb beyond an already locked budget.
-            EndLocalRope("Climbing exceeded the locked rope length. Feed rope before moving farther from the piton.");
-            return false;
-        }
+        // Native fall/anchor transitions can move the body before IsFalling or
+        // the swing pivot catches up. Keep the locked budget and the outward
+        // movement restriction; retreat and feeding remain available. A brief
+        // overrun must not silently release the belayer's control.
         return true;
     }
 
@@ -153,6 +150,8 @@ internal sealed partial class ManualBelayAdapter
         if (controller.obiRope == null || Id(controller.obiRope) != _localObiRope) return false;
         if (!MappingMatches(out var reason))
         {
+            if (_pivot != 0 && _lifeline.pawn != null && !_lifeline.pawn.IsFalling
+                && !_lifeline.SwingHasPivotAndExtremity()) return false; // Tick rearms the completed suspension first.
             if (!TryBeginLocalRouteChange(reason)) EndLocalRope("Protection route changed during a native length update. " + reason);
             return false;
         }

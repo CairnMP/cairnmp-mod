@@ -10,6 +10,75 @@ public sealed class BelayRopeRebindTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void PersonalAnchorMaintenanceRestoresOnlyTheOriginalPhysicalRouteAndBudget(bool braked)
+    {
+        var protections = new[] { Point(1), Point(2) };
+        var tracker = new BelayTopologyTracker();
+        var original = NativeSnapshot(2, 3, 5);
+        tracker.Observe(original, false, 0);
+        var temporary = NativeSnapshot(2, 4, 6);
+        Assert.Equal(BelayTopologyChange.Settling, tracker.ObserveProtectionRestore(temporary, protections, protections, false, .1));
+        var recreated = new BelayTopologySnapshot(1, 2, new long[] { 21, 50, 51 }, original.Holders, 35, 2);
+        Assert.Equal(BelayTopologyChange.Settling, tracker.ObserveProtectionRestore(recreated, protections, protections, true, .3));
+        Assert.Equal(BelayTopologyChange.Rebound, tracker.ObserveProtectionRestore(recreated, protections, protections, true, .5));
+        Assert.Equal(2u, tracker.Revision);
+        var rope = new BelayRopeControl(35, 6, 2);
+        rope.SetBrake(braked);
+        Assert.True(rope.TryRebindRoute(3, 3, 35, 2));
+        Assert.Equal(6, rope.Released); Assert.Equal(braked, rope.Braked);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void MaintenanceCannotHideChangedPinsHoldersProtectionsOrLastPiton(int corruption)
+    {
+        var protections = new[] { Point(1), Point(2) };
+        var tracker = new BelayTopologyTracker();
+        var original = NativeSnapshot(2, 3, 5);
+        tracker.Observe(original, false, 0);
+        var holders = (long[])original.Holders.Clone();
+        if (corruption == 1) holders[1] = 999;
+        var candidate = new BelayTopologySnapshot(1, corruption == 3 ? 99 : 2, new long[] { 21, 50, 51 }, holders, 35, 2);
+        var next = corruption == 2 ? new[] { Point(2), Point(1) } : protections;
+        tracker.ObserveProtectionRestore(candidate, protections, next, corruption != 0, .1);
+        Assert.Equal(BelayTopologyChange.Settling, tracker.ObserveProtectionRestore(candidate, protections, next, corruption != 0, 1));
+        Assert.Same(original, tracker.Current); Assert.Equal(1u, tracker.Revision);
+    }
+
+    [Fact]
+    public void RestoredRouteMustSettleAgainAfterItsPinsBecomeUnavailable()
+    {
+        var protections = new[] { Point(1), Point(2) };
+        var tracker = new BelayTopologyTracker();
+        var original = NativeSnapshot(2, 3, 5);
+        tracker.Observe(original, false, 0);
+        tracker.ObserveProtectionRestore(original, protections, protections, true, .1);
+        tracker.ObserveProtectionRestore(original, protections, protections, false, .2);
+        Assert.Equal(BelayTopologyChange.Settling, tracker.ObserveProtectionRestore(original, protections, protections, true, .4));
+        Assert.Equal(BelayTopologyChange.Settling, tracker.ObserveProtectionRestore(original, protections, protections, true, .5));
+        Assert.Equal(BelayTopologyChange.Rebound, tracker.ObserveProtectionRestore(original, protections, protections, true, .6));
+    }
+
+    [Fact]
+    public void ABrakedOverrunKeepsItsBudgetAndCannotWinchTheNextCatchUpwards()
+    {
+        var rope = new BelayRopeControl(40, 2, 1);
+        rope.SetBrake(true);
+        Assert.True(rope.TryStep(2.2f, 2.2f, 0));
+        Assert.Equal(2, rope.Released);
+        Assert.True(rope.TryAttachSuspension(2.4f, out var target));
+        Assert.Equal(2.4f, target, 4);
+        Assert.Equal(2, rope.Released);
+        Assert.True(rope.TryGetSuspensionTarget(out target));
+        Assert.Equal(2.4f, target, 4);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void ClippingRedistributesPaidOutRopeAndPreservesBrake(bool braked)
     {
         var rope = new BelayRopeControl(35, 6, 2);

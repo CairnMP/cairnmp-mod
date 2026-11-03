@@ -12,6 +12,7 @@ internal sealed partial class ManualBelayAdapter
     private string _localRouteWaitReason;
     private float _localRouteFixedLength;
     private BelayProtectionPoint[] _boundStationProtections;
+    private long[] _boundProtectionPins;
     private uint _localRouteRebinds;
     private string _localRouteObservation;
     private int _localRouteObservationCount;
@@ -21,6 +22,7 @@ internal sealed partial class ManualBelayAdapter
         if (_localStation == null || !LocalStationStatus.HasValue) return;
         _localRouteFixedLength = LocalStationStatus.Value.FixedLength;
         _boundStationProtections = _measuredStationProtections;
+        _boundProtectionPins = ReadProtectionPins();
     }
 
     private static void BeforeAddingProtection(ClimbingV2PawnController __instance, LogicalQuickdraw __0)
@@ -78,6 +80,8 @@ internal sealed partial class ManualBelayAdapter
             + ", brake=" + _ropeControl.Braked + ", protections=" + ProtectionOrder(_boundStationProtections)
             + ", expectedParts=" + (_topology.Current.Parts.Length + 1)
             + ", expectedHolders=" + (_topology.Current.Holders.Length + 1)
+            + ", originalHolderWalk=" + string.Join(",", _topology.Current.Holders)
+            + ", originalPins=" + (_boundProtectionPins == null ? "unavailable" : string.Join(",", _boundProtectionPins))
             + ", reason=" + reason);
         return true;
     }
@@ -95,22 +99,21 @@ internal sealed partial class ManualBelayAdapter
         if (!TrySnapshot(_lifeline, out var snapshot, out var snapshotReason))
         { _localRouteWaitReason = snapshotReason; return false; }
         var previous = _topology.Current;
-        if (previous.Matches(snapshot))
-        {
-            _topology.Observe(snapshot, false, Now);
-            _localRouteWaitReason = "Waiting for the native protection request to change the holder walk.";
-            return false;
-        }
         if (!TryMeasureLocalStation(_lifeline, snapshot.Available, out var available, out reason))
         { _localRouteWaitReason = reason; return false; }
         ObserveLocalRouteChange(snapshot);
-        var change = _topology.ObserveProtectionAppend(snapshot,
-            _boundStationProtections, _measuredStationProtections, Now);
+        var restoring = snapshot.ProtectionCount == previous.ProtectionCount;
+        var change = restoring
+            ? _topology.ObserveProtectionRestore(snapshot, _boundStationProtections, _measuredStationProtections,
+                SamePins(_boundProtectionPins, ReadProtectionPins()), Now)
+            : _topology.ObserveProtectionAppend(snapshot, _boundStationProtections, _measuredStationProtections, Now);
         if (change == BelayTopologyChange.Invalid)
         { EndLocalRope("The protection route became invalid during rebinding."); return false; }
         if (change != BelayTopologyChange.Rebound)
         {
-            _localRouteWaitReason = "Waiting for a complete single-protection split and stable identities; temporary rope holders must be released.";
+            _localRouteWaitReason = restoring
+                ? "Waiting for the original protection, holder and physical pin walks to return after personal-anchor maintenance."
+                : "Waiting for a complete single-protection split and stable identities; temporary rope holders must be released.";
             return false;
         }
         if (!TryReadRopeDistance(_lifeline, out var distance))
@@ -129,12 +132,35 @@ internal sealed partial class ManualBelayAdapter
         _nextRopeSample = Now;
         if (_localRouteRebinds < uint.MaxValue) _localRouteRebinds++;
         RememberLocalRoute();
-        ModLog.Info("[BelayRope] Route rebound; revision=" + _topology.Revision + ", rebinds=" + _localRouteRebinds
+        ModLog.Info("[BelayRope] Route rebound; revision=" + _topology.Revision + ", maintenance=" + restoring + ", rebinds=" + _localRouteRebinds
             + ", fixedBefore=" + fixedBefore + ", releasedBefore=" + releasedBefore
             + ", totalBefore=" + (fixedBefore + releasedBefore)
             + ", fixedAfter=" + fixedAfter + ", releasedAfter=" + _ropeControl.Released
             + ", totalAfter=" + (fixedAfter + _ropeControl.Released)
             + ", brake=" + _ropeControl.Braked + ", pitons=" + snapshot.ProtectionCount);
+        return true;
+    }
+
+    private long[] ReadProtectionPins()
+    {
+        var parts = _rope?.ropeParts;
+        if (parts == null || parts.Count < 2 || parts.Count > 64) return null;
+        var pins = new long[parts.Count * 2];
+        for (var i = 0; i < parts.Count; i++)
+        {
+            var part = parts[i];
+            if (part?.obiRope == null || !part.obiRope.isLoaded || part.pinConstraintHandler == null) return null;
+            pins[i * 2] = Id(part.pinConstraintHandler.GetAttachCollider(RopeSide.Begin));
+            pins[i * 2 + 1] = Id(part.pinConstraintHandler.GetAttachCollider(RopeSide.End));
+            if (pins[i * 2] == 0 || pins[i * 2 + 1] == 0) return null;
+        }
+        return pins;
+    }
+
+    private static bool SamePins(long[] before, long[] after)
+    {
+        if (before == null || after == null || before.Length != after.Length) return false;
+        for (var i = 0; i < before.Length; i++) if (before[i] != after[i]) return false;
         return true;
     }
 
@@ -151,7 +177,9 @@ internal sealed partial class ManualBelayAdapter
         if (_localRouteObservationCount >= 8) return;
         var observation = "pitons=" + snapshot.ProtectionCount + ", parts=" + snapshot.Parts.Length
             + ", holders=" + snapshot.Holders.Length + ", lastChanged=" + (snapshot.LastPiton != _topology.Current.LastPiton)
-            + ", protections=" + ProtectionOrder(_measuredStationProtections);
+            + ", protections=" + ProtectionOrder(_measuredStationProtections)
+            + ", holderWalk=" + string.Join(",", snapshot.Holders)
+            + ", originalPinsMatch=" + SamePins(_boundProtectionPins, ReadProtectionPins());
         if (observation == _localRouteObservation) return;
         _localRouteObservation = observation;
         _localRouteObservationCount++;

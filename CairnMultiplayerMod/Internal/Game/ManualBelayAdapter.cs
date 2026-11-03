@@ -17,6 +17,7 @@ namespace CairnMultiplayerMod.Internal.Game;
 internal sealed partial class ManualBelayAdapter : IManualBelayApi
 {
     private static ManualBelayAdapter _owner;
+    private static ManualBelayAdapter _stationOwner;
     private readonly Func<bool> _remoteEnabled;
     private readonly Func<bool> _localConnectionAllowed;
     private readonly Func<int> _localPlayerId;
@@ -26,8 +27,10 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     private Lifeline _lifeline, _stationLifeline;
     private LogicalRope _rope;
     private long _piton, _pivot, _stationPiton;
-    private Vector3 _stationPosition;
     private BelayStationAnchor _stationAnchor;
+    private Guid _stationSession;
+    private string _stationInvalidReason;
+    private double _nextAnchorGuardNotice;
     private BelayBrakeControl _control;
     private BelayInputLease _lease;
     private uint _appliedSequence;
@@ -72,6 +75,17 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     private static bool ContextValid => TryGetActiveContext(out _);
 
+    private static Piton PersonalAnchor(Lifeline lifeline)
+    {
+        if (lifeline == null) return null;
+        var placed = lifeline.PlacedPitons;
+        var index = lifeline.OffBelayPitonIndex;
+        // Native anchor maintenance can leave this index temporarily stale.
+        // Read a checked index without repairing or overwriting native state.
+        if (!BelayStationAnchor.CanReadPersonalAnchor(index, placed?.Count ?? 0)) return null;
+        return placed[index]?.Piton;
+    }
+
     private static bool TryGetActiveContext(out string reason)
     {
         reason = "The game window is not focused. Return to the game before starting or restarting the exercise.";
@@ -102,14 +116,13 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         }
         if (!CanBeginStation(out reason)) return false;
         var lifeline = LocalLifeline();
-        var piton = lifeline.OffBelayPiton;
+        var piton = PersonalAnchor(lifeline);
+        if (piton == null) { reason = "Wait for your personal piton anchor to settle."; return false; }
         reason = "Wait for the anchored piton's session identity to synchronize. A position-only reload match cannot define a station; use a freshly placed piton.";
         if (!RopeInterop.TryGetPitonReference(lifeline, piton, _localPlayerId(), out var owner, out var sourceId)) return false;
-        var position = lifeline.harness.GetAttachPosition();
         var anchor = new BelayStationAnchor(Id(lifeline), Id(lifeline.securingRope), Id(piton), ToNumerics(piton.transform.position));
         _stationLifeline = lifeline;
         _stationPiton = Id(piton);
-        _stationPosition = position;
         _stationAnchor = anchor;
         var anchorPosition = piton.transform.position;
         _definedStation = new BelaySharedStation(Guid.NewGuid(), new WorldPosition(anchorPosition.x, anchorPosition.y, anchorPosition.z), owner, sourceId);
@@ -123,7 +136,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         reason = "Anchor yourself on a piton and remain still.";
         if (!Enabled || !ContextValid || _control != null || _attachment != null || ConnectionActive || RopeInterop.IsNativeBelayEngaged) return false;
         var lifeline = LocalLifeline();
-        var piton = lifeline != null ? lifeline.OffBelayPiton : null;
+        var piton = PersonalAnchor(lifeline);
         return piton != null && piton.pitonHp > 0 && lifeline.securingRope != null
             && lifeline.pawn != null && lifeline.harness != null
             && !lifeline.pawn.IsFalling && Vector3.Distance(lifeline.harness.GetAttachPosition(), piton.transform.position) <= 1.5f;
@@ -150,19 +163,24 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         {
             try
             {
+                _stationInvalidReason = "The station context or local lifeline is unavailable.";
                 if (!HasStation || !Enabled || !ContextValid || _stationLifeline == null || _stationLifeline.pawn == null
                     || _stationLifeline.harness == null || RopeInterop.IsNativeBelayEngaged) return false;
-                var piton = _stationLifeline.OffBelayPiton;
-                return piton != null && Id(piton) == _stationPiton && piton.pitonHp > 0
+                var piton = PersonalAnchor(_stationLifeline);
+                _stationInvalidReason = "The personal anchor changed, its identity was lost, or its piton moved/broke.";
+                var valid = piton != null && Id(piton) == _stationPiton && piton.pitonHp > 0
                     && _stationAnchor.Matches(Id(_stationLifeline), Id(_stationLifeline.securingRope), Id(piton),
                         piton.pitonHp, ToNumerics(piton.transform.position))
                     && !_stationLifeline.pawn.IsFalling
                     && RopeInterop.TryGetPitonReference(_stationLifeline, piton, _localPlayerId(), out var owner, out var sourceId)
                     && owner == _definedStation.PitonOwner && sourceId == _definedStation.PitonId
-                    && Vector3.Distance(_stationLifeline.harness.GetAttachPosition(), _stationPosition) <= .25f;
+                    && Vector3.Distance(_stationLifeline.harness.GetAttachPosition(), piton.transform.position) <= 1.5f;
+                if (valid) _stationInvalidReason = null;
+                return valid;
             }
             catch (Exception ex)
             {
+                _stationInvalidReason = "Station validation failed: " + ex.Message;
                 ModLog.SuppressedException("belay.station-validity", ex);
                 return false;
             }
@@ -171,9 +189,38 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     public void EndStation()
     {
-        if (HasStation) ModLog.Info("[BelayStation] Removed; personal native anchoring unchanged.");
+        if (HasStation) ModLog.Info("[BelayStation] Removed; personal native anchoring unchanged; reason="
+            + (_stationInvalidReason ?? "Session or station ended explicitly.") + ", session=" + _stationSession);
+        if (_stationSession != Guid.Empty && _installed && _control == null) _unpatchPending = true;
+        _stationSession = Guid.Empty;
+        if (ReferenceEquals(_stationOwner, this)) _stationOwner = null;
         _stationLifeline = null; _stationPiton = 0; _stationAnchor = null;
         _definedStation = default;
+    }
+
+    public bool ProtectStation(Guid session)
+    {
+        if (session == Guid.Empty || !StationValid) return false;
+        Install();
+        _unpatchPending = false;
+        _stationSession = session; _stationOwner = this;
+        ModLog.Info("[BelayStation] Personal anchor input locked; use L > End belay to leave; session=" + session);
+        return true;
+    }
+
+    private static bool BeforePersonalAnchorInput(ClimbingV2PawnController __instance, ref bool __result)
+    {
+        var owner = _stationOwner;
+        if (owner == null || owner._stationSession == Guid.Empty || !owner.HasStation
+            || owner._stationLifeline?.pawn == null || Id(__instance) != Id(owner._stationLifeline.pawn)) return true;
+        if (!owner.StationValid) { owner.EndStation(); return true; }
+        __result = false;
+        if (Now >= owner._nextAnchorGuardNotice)
+        {
+            owner._nextAnchorGuardNotice = Now + 2;
+            ModLog.Info("[BelayStation] Blocked personal-anchor input during belay; use L > End belay first.");
+        }
+        return false;
     }
 
     public bool BeginClimber(Guid session, out string reason)
@@ -569,6 +616,8 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
                 prefix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(BeforeAddingProtection)));
             _harmony.Patch(AccessTools.Method(typeof(LogicalRope), nameof(LogicalRope.AddQuickdraw)),
                 prefix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(BeforeAddingRopeProtection)));
+            _harmony.Patch(AccessTools.Method(typeof(ClimbingV2PawnController), nameof(ClimbingV2PawnController.InputRequestOffBelay)),
+                prefix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(BeforePersonalAnchorInput)));
             _installed = true;
         }
         catch { _harmony.UnpatchSelf(); throw; }
@@ -659,7 +708,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
             ModLog.Info("[BelayRope] Ended; " + _localRopeNotice);
         }
         _ropeControl = null; _localObiRope = 0;
-        _localRoutePending = false; _boundStationProtections = null; _localRouteFixedLength = 0;
+        _localRoutePending = false; _boundStationProtections = null; _boundProtectionPins = null; _localRouteFixedLength = 0;
         _topology = null; _localExercise = _rebinding = false;
         LocalRoutePreview = null;
         _stopping = _holdApplied = false;

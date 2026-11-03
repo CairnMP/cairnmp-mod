@@ -7,6 +7,17 @@ namespace CairnMultiplayerMod.Tests;
 
 public sealed class BelayStationAnchorTests
 {
+    [Theory]
+    [InlineData(-1, 2, false)]
+    [InlineData(2, 2, false)]
+    [InlineData(3, 2, false)]
+    [InlineData(0, 0, false)]
+    [InlineData(0, 129, false)]
+    [InlineData(0, 2, true)]
+    [InlineData(127, 128, true)]
+    public void PersonalAnchorIndexCannotReachTheNativeUncheckedGetter(int index, int count, bool expected)
+        => Assert.Equal(expected, BelayStationAnchor.CanReadPersonalAnchor(index, count));
+
     [Fact]
     public void SameHealthyStationSurvivesCharacterMovementAndMinorNativePrecision()
     {

@@ -34,7 +34,7 @@ internal sealed partial class ManualBelayAdapter
         reason = "Disconnect the cooperative harness rope before recording a station.";
         if (Roping.RopeInterop.IsNativeBelayEngaged) return false;
         var lifeline = LocalLifeline();
-        var piton = lifeline != null ? lifeline.OffBelayPiton : null;
+        var piton = PersonalAnchor(lifeline);
         reason = "Anchor yourself on a healthy piton before recording the station.";
         if (piton == null || piton.pitonHp <= 0 || lifeline.harness == null || lifeline.pawn == null
             || lifeline.pawn.IsFalling || lifeline.SwingHasPivotAndExtremity()

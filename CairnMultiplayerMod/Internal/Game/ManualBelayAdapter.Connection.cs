@@ -69,7 +69,7 @@ internal sealed partial class ManualBelayAdapter
             if (_localStation == null) return RejectConnection("Record A with Ctrl+F10 while personally anchored at A, before preparing B.",
                 StationConnectionFailure.StationRequired);
             if (!LocalStationMatches(lifeline, out reason)) return RejectConnection(reason, StationConnectionFailure.StationLost);
-            var backup = lifeline.OffBelayPiton;
+            var backup = PersonalAnchor(lifeline);
             reason = "Remain personally anchored at healthy B, different from recorded A, with exactly A -> B on the rope.";
             if (backup == null || Id(backup) == Id(_localStationPiton) || backup.pitonHp <= 0
                 || lifeline.pawn == null || lifeline.pawn.IsFalling || lifeline.SwingHasPivotAndExtremity()
@@ -124,7 +124,7 @@ internal sealed partial class ManualBelayAdapter
         failure = StationConnectionFailure.BackupLost; reason = "B is no longer the same healthy personal anchor. No further rope requests were issued.";
         if (lifeline == null || Id(LocalLifeline()) != Id(lifeline) || _connectionBackup == null
             || lifeline.harness == null || lifeline.pawn == null || lifeline.pawn.IsFalling || lifeline.SwingHasPivotAndExtremity()
-            || Id(lifeline.OffBelayPiton) != Id(_connectionBackup)
+            || Id(PersonalAnchor(lifeline)) != Id(_connectionBackup)
             || !_connectionBackupAnchor.Matches(Id(lifeline), Id(lifeline.securingRope), Id(_connectionBackup),
                 _connectionBackup.pitonHp, ToNumerics(_connectionBackup.transform.position))
             || Vector3.Distance(lifeline.harness.GetAttachPosition(), _connectionBody) > .25f

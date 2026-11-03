@@ -32,7 +32,7 @@ internal sealed partial class ManualBelayAdapter
     private bool CanAttachStation(Lifeline lifeline, Piton station, out string reason)
     {
         reason = "To connect a new station, remain personally anchored at a separate healthy piton, near the belayer. Keep this backup attached until connection is confirmed.";
-        var backup = lifeline?.OffBelayPiton;
+        var backup = PersonalAnchor(lifeline);
         if (backup == null || backup.Quickdraw == null || station == null || Id(backup) == Id(station) || backup.pitonHp <= 0
             || lifeline.pawn == null || lifeline.harness == null || lifeline.pawn.IsFalling || lifeline.SwingHasPivotAndExtremity()
             || Vector3.Distance(lifeline.harness.GetAttachPosition(), backup.transform.position) > 1.5f
@@ -48,7 +48,7 @@ internal sealed partial class ManualBelayAdapter
         if (session == Guid.Empty || _attachment != null) return false;
         var lifeline = LocalLifeline();
         if (!CanAttachStation(lifeline, station, out reason) || !TrySnapshot(lifeline, out var before, out reason)) return false;
-        var backup = lifeline.OffBelayPiton;
+        var backup = PersonalAnchor(lifeline);
         var placed = ConnectionPlaced(lifeline);
         reason = "The station and backup must already exist in the same synchronized native piton collection.";
         if (placed == null || !placed.Contains(Id(station)) || !placed.Contains(Id(backup))) return false;
@@ -84,7 +84,9 @@ internal sealed partial class ManualBelayAdapter
             // existing quickdraw; do not spawn/register a second piton or force an end insertion.
             lifeline.pawn.AddQuickdrawToSecuringRope(state.Quickdraw, false, false);
             ModLog.Info("[BelayAttachment] Requested once; session=" + session + ", owner=" + reference.PitonOwner
-                + ", piton=" + reference.PitonId + ", previousProtections=" + before.ProtectionCount);
+                + ", piton=" + reference.PitonId + ", previousProtections=" + before.ProtectionCount
+                + ", previousParts=" + before.Parts.Length
+                + ", previousHolders=" + string.Join(",", before.Holders) + ", previousLast=" + before.LastPiton);
             reason = "Connecting the station. Keep your personal backup attached and remain still until the native route is confirmed.";
             return true;
         }
@@ -104,7 +106,7 @@ internal sealed partial class ManualBelayAdapter
             var lifeline = state.Lifeline;
             if (lifeline == null || Id(LocalLifeline()) != Id(lifeline) || Id(lifeline.securingRope) != state.Before.Rope
                 || lifeline.pawn == null || lifeline.harness == null || lifeline.pawn.IsFalling || lifeline.SwingHasPivotAndExtremity()
-                || Id(lifeline.OffBelayPiton) != Id(state.Backup)
+                || Id(PersonalAnchor(lifeline)) != Id(state.Backup)
                 || Vector3.Distance(lifeline.harness.GetAttachPosition(), state.Body) > .25f
                 || !state.BackupAnchor.Matches(Id(lifeline), state.Before.Rope, Id(state.Backup),
                     state.Backup.pitonHp, ToNumerics(state.Backup.transform.position)))
@@ -130,6 +132,8 @@ internal sealed partial class ManualBelayAdapter
                 state.NextLog = Now + .5;
                 ModLog.Info("[BelayAttachment] Sample; stage=" + state.Observer.Stage + ", pins=" + pins
                     + ", parts=" + snapshot?.Parts.Length + ", protections=" + snapshot?.ProtectionCount
+                    + ", last=" + snapshot?.LastPiton + ", holders=" + (snapshot == null ? "unavailable" : string.Join(",", snapshot.Holders))
+                    + ", order=" + string.Join(",", ConnectionOrder(lifeline))
                     + ", originalBackup=True, collectionUnchanged=True");
             }
             if (state.Observer.Stage == BelayStationAttachmentStage.Failed)

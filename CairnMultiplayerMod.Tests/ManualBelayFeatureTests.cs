@@ -117,18 +117,51 @@ public sealed partial class ManualBelayFeatureTests
     }
 
     [Fact]
-    public void RemovingAnActiveBelayersStationEndsControlAndRejectsItsOldInput()
+    public void RemovingAnActiveStationIsIgnoredUntilBelayIsExplicitlyEnded()
     {
         using var world = World.Started();
         var belayer = world.Nodes[1].Game;
         var session = world.Last(ManualBelayPhase.Started).Session;
         belayer.PanelImpl.Act(BelayPanelAction.RemoveStation);
         world.Tick();
+        Assert.True(belayer.BelayImpl.HasStation);
+        Assert.True(world.Nodes[2].Game.BelayImpl.Active);
+        Assert.Equal(session, belayer.BelayImpl.ProtectedSession);
+        belayer.PanelImpl.Act(BelayPanelAction.Cancel);
+        world.Tick();
         Assert.False(belayer.BelayImpl.HasStation);
         Assert.True(belayer.BelayImpl.Anchored);
         Assert.False(world.Nodes[2].Game.BelayImpl.Active);
         Assert.Equal(ManualBelayPhase.Ended, world.Messages.Last().Phase);
         Assert.False(world.Execute(1, new() { Operation = ManualBelayOperation.Intent, Session = session, Sequence = 999 }).Committed);
+        Assert.Equal(Guid.Empty, belayer.BelayImpl.ProtectedSession);
+    }
+
+    [Theory]
+    [InlineData(1, 2)]
+    [InlineData(2, 1)]
+    public void OnlyTheBelayersPersonalAnchorIsProtectedUntilExplicitEnd(int belayer, int climber)
+    {
+        using var world = new World();
+        world.Nodes[belayer].Game.ChatImpl.Run("offer " + climber);
+        world.Nodes[climber].Game.ChatImpl.Run("accept"); world.Tick();
+        Assert.NotEqual(Guid.Empty, world.Nodes[belayer].Game.BelayImpl.ProtectedSession);
+        Assert.Equal(Guid.Empty, world.Nodes[climber].Game.BelayImpl.ProtectedSession);
+        world.Nodes[climber].Game.PanelImpl.Act(BelayPanelAction.Cancel); world.Tick();
+        Assert.Equal(Guid.Empty, world.Nodes[belayer].Game.BelayImpl.ProtectedSession);
+        Assert.False(world.Nodes[climber].Game.BelayImpl.Active);
+    }
+
+    [Fact]
+    public void AnchoredBodyMotionWithinTheStationAreaDoesNotEndThePair()
+    {
+        using var world = World.Started();
+        world.Locations[1] = new PlayerLocation(1, 0, 0, "Wall", PlayerState.InGame);
+        Advance(world, .3f);
+        Assert.True(world.Nodes[2].Game.BelayImpl.Active);
+        world.Locations[1] = new PlayerLocation(3.1f, 0, 0, "Wall", PlayerState.InGame);
+        Advance(world, .3f);
+        Assert.False(world.Nodes[2].Game.BelayImpl.Active);
     }
 
     [Fact]
@@ -264,7 +297,7 @@ public sealed partial class ManualBelayFeatureTests
     {
         using (var world = World.Started())
         {
-            world.Locations[1] = new PlayerLocation(.6f, 0, 0, "Wall", PlayerState.InGame);
+            world.Locations[1] = new PlayerLocation(3.1f, 0, 0, "Wall", PlayerState.InGame);
             world.Tick();
             Assert.False(world.Nodes[2].Game.BelayImpl.Active);
         }
@@ -825,6 +858,7 @@ public sealed partial class ManualBelayFeatureTests
         internal bool SharedStationReady = true;
         internal int StationBeginCalls;
         internal Guid StationId;
+        internal Guid ProtectedSession;
         internal int StationOwner;
         internal bool KnownStation = true;
         internal WorldPosition StationPosition;
@@ -849,7 +883,8 @@ public sealed partial class ManualBelayFeatureTests
         public bool BeginStation(out string reason)
         { reason = "Need station"; if (Anchored && !StationRecorded) StationId = Guid.NewGuid(); return StationRecorded = Anchored; }
         public bool TryGetStation(out BelaySharedStation station) { station = StationReference; return StationValid; }
-        public void EndStation() => StationRecorded = false;
+        public bool ProtectStation(Guid session) { ProtectedSession = session; return StationValid; }
+        public void EndStation() { StationRecorded = false; ProtectedSession = Guid.Empty; }
         public bool BeginClimber(Guid id, out string reason)
         {
             BeginCalls++; reason = "No native rope"; _session = id;

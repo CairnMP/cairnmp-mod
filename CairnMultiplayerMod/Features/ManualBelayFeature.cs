@@ -157,6 +157,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
                 break;
             case BelayPanelAction.RemoveStation:
                 if (!IsBelayMode || !IsConnected || !Game.State.IsLocalPlayerInGame || !Game.Belay.HasStation) return;
+                if (_active != null) { Notice("Station locked during belay. Use End belay before removing it."); break; }
                 RequestStop();
                 Game.Belay.EndStation();
                 Notice("Station removed. Your personal piton anchor remains attached.");
@@ -253,9 +254,12 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         => (a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y) + (a.Z - b.Z) * (a.Z - b.Z);
 
     private bool ValidStation(BelaySharedStation station, PlayerLocation belayer)
+        => Game.Belay.IsStationKnown(station) && WithinStationArea(station, belayer);
+
+    private static bool WithinStationArea(BelaySharedStation station, PlayerLocation belayer)
     {
         var position = station.Position;
-        return station.IsValid && Game.Belay.IsStationKnown(station) && (position.X - belayer.X) * (position.X - belayer.X)
+        return station.IsValid && (position.X - belayer.X) * (position.X - belayer.X)
             + (position.Y - belayer.Y) * (position.Y - belayer.Y)
             + (position.Z - belayer.Z) * (position.Z - belayer.Z) <= 9;
     }
@@ -311,7 +315,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         }
         if (!TryLocations(session.Belayer, session.Climber, out var current, out var climber)
             || (session.Station.IsValid && !Game.Belay.IsStationKnown(session.Station))
-            || ((session.Started || session.Initiator == session.Belayer) && DistanceSquared(current, session.BelayerLocation) > .25f)
+            || ((session.Started || session.Initiator == session.Belayer) && !WithinStationArea(session.Station, current))
             || DistanceSquared(current, climber) > 1600)
         { request.Reject("Belay station moved, location became stale, or protection context changed."); return; }
         if (message.Operation == ManualBelayOperation.Accept)
@@ -375,10 +379,13 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         => new() { Phase = phase, Session = session.Id, Belayer = session.Belayer, Climber = session.Climber, Initiator = session.Initiator,
             Sequence = session.Sequence, Braked = session.Braked, Station = session.Station, Motion = session.Motion };
 
-    private void EndHost()
+    private void EndHost() => EndHost("A participant ended the session.");
+
+    private void EndHost(string reason)
     {
         if (_hostSession == null) return;
         var ended = _hostSession; _hostSession = null;
+        FeatureLog.Info("[BelaySession] Host ended; session=" + ended.Id + ", reason=" + reason);
         _changed.Send(Message(ended, ManualBelayPhase.Ended));
     }
 
@@ -416,7 +423,9 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
                 if (Game.Belay.Status.Rebinding)
                     Notice("Connecting the partner station. Remain personally anchored and still until the rope readback is ready.");
             }
-            if (message.Belayer == LocalPlayerId && !OwnStationMatches(message.Station)) RequestStop();
+            if (message.Belayer == LocalPlayerId
+                && (!OwnStationMatches(message.Station) || !Game.Belay.ProtectStation(message.Session)))
+                RequestStop("The belayer's native station could not be protected.");
             Game.BelayPanel.Close();
             return;
         }
@@ -455,21 +464,24 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         {
             if (_active != null || _offer != null || _offeredTarget >= 0)
             {
-                RequestStop();
+                RequestStop("Pause, cutscene or lost window focus.");
                 Notice("Belay ended for pause, cutscene or lost focus. Re-anchor and send a new invitation when ready; automatic resume is not enabled.");
             }
             Game.Belay.EndStation(); Game.BelayPanel.Close();
             return;
         }
-        if (IsHost && _hostSession != null && (!IsBelayMode || now >= _hostSession.Until
-            || (_hostSession.Station.IsValid && !Game.Belay.IsStationKnown(_hostSession.Station))
-            || !TryLocations(_hostSession.Belayer, _hostSession.Climber, out var hostStation, out _)
-            || ((_hostSession.Started || _hostSession.Initiator == _hostSession.Belayer)
-                && DistanceSquared(hostStation, _hostSession.BelayerLocation) > .25f))) EndHost();
+        if (IsHost && _hostSession != null)
+        {
+            if (now >= _hostSession.Until) EndHost("Fresh partner input timed out.");
+            else if (_hostSession.Station.IsValid && !Game.Belay.IsStationKnown(_hostSession.Station)) EndHost("The agreed station is no longer synchronized.");
+            else if (!TryLocations(_hostSession.Belayer, _hostSession.Climber, out var hostStation, out _)) EndHost("A participant left active gameplay or the shared scene.");
+            else if ((_hostSession.Started || _hostSession.Initiator == _hostSession.Belayer)
+                && !WithinStationArea(_hostSession.Station, hostStation)) EndHost("The belayer left the station area.");
+        }
         if (!IsBelayMode || !IsConnected || !Game.State.IsLocalPlayerInGame)
         { Game.BelayPanel.Close(); if (_active != null || _offer != null) RequestStop(); Game.Belay.EndStation(); return; }
         if (Game.Belay.HasStation && !Game.Belay.StationValid)
-        { RequestStop(); Game.Belay.EndStation(); }
+        { RequestStop("The belayer's personal piton anchor is no longer valid."); Game.Belay.EndStation(); }
         if (_offer?.Belayer == LocalPlayerId
             && _offer.Initiator == LocalPlayerId && !OwnStationMatches(_offer.Station))
         { RequestStop(); return; }
@@ -481,7 +493,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         { RequestStop(); return; }
         if (_active.Belayer == LocalPlayerId)
         {
-            if (!OwnStationMatches(_active.Station)) { RequestStop(); return; }
+            if (!OwnStationMatches(_active.Station)) { RequestStop("The active station identity or personal anchor changed."); return; }
             if (!KeyboardCaptured && !Game.BelayPanel.IsOpen && !Game.Input.IsPauseMenuActive && !Game.Chat.IsTyping
                 && (Game.Input.WasKeyPressed(GameKey.Space) || Game.Input.WasKeyPressed(GameKey.F7)))
                 _desiredBrake = !_desiredBrake;
@@ -507,7 +519,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         {
             var status = Game.Belay.Status;
             if (!status.Active || !status.Rope.HasValue)
-            { Notice(Game.Belay.LocalExerciseNotice ?? "The native station or rope control is no longer available."); RequestStop(); return; }
+            { var reason = Game.Belay.LocalExerciseNotice ?? "The native station or rope control is no longer available."; Notice(reason); RequestStop(reason); return; }
             if (now >= _nextReport)
             {
                 _nextReport = now + .3f;
@@ -530,7 +542,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             + RopeReadback() + (_active.Belayer == LocalPlayerId ? " Hold Up/Down: feed/take in; Space: brake/release." : " /belay stop: end"), 1.2f);
     }
 
-    private void RequestStop()
+    private void RequestStop(string reason = "Belay ended by local request.")
     {
         var session = _active ?? _offer;
         if (session == null)
@@ -539,6 +551,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             return;
         }
         if (_stopSent) return;
+        FeatureLog.Info("[BelaySession] Local stop; session=" + session.Session + ", reason=" + reason);
         _stopSent = true;
         Game.Belay.Stop(session.Session);
         Game.Belay.EndStation();

@@ -73,7 +73,7 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
         if (_onAction != null && keyEvent != null && keyEvent.keyCode == KeyCode.K
             && keyEvent.type is EventType.KeyDown or EventType.KeyUp)
         {
-            var eligible = IsOpen && Application.isFocused && !keyEvent.control && !keyEvent.alt
+            var eligible = IsOpen && _view.Phase != BelayPanelPhase.Active && Application.isFocused && !keyEvent.control && !keyEvent.alt
                 && !keyEvent.command && !keyEvent.shift
                 && (_view.StationDefined || _view.Phase == BelayPanelPhase.Partners);
             if (_stationKey.Observe(keyEvent.type == EventType.KeyDown, eligible))
@@ -142,8 +142,9 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
             GUI.Label(new Rect(x, rect.y + 140f, half, 40f),
                 view.StationDefined ? "Station: your current piton anchor" : "Use your existing piton anchor", _body);
             if (Button(new Rect(x + half + 10f, rect.y + 140f, half, 40f),
-                view.StationDefined ? "Remove station (K)" : "Define station (K)",
-                view.StationDefined ? BelayPanelAction.RemoveStation : BelayPanelAction.DefineStation)) return;
+                view.Phase == BelayPanelPhase.Active ? "Station locked during belay" : view.StationDefined ? "Remove station (K)" : "Define station (K)",
+                view.StationDefined ? BelayPanelAction.RemoveStation : BelayPanelAction.DefineStation,
+                enabled: view.Phase != BelayPanelPhase.Active)) return;
         }
         if (view.Phase == BelayPanelPhase.Partners)
         {

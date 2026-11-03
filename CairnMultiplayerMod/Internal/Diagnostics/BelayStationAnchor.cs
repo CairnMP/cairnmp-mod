@@ -7,6 +7,8 @@ namespace CairnMultiplayerMod.Internal.Diagnostics;
 internal sealed class BelayStationAnchor
 {
     internal const float MaximumMovement = .05f;
+    internal static bool CanReadPersonalAnchor(int index, int count)
+        => count is > 0 and <= 128 && index >= 0 && index < count;
     private readonly long _lifeline, _rope, _piton;
     private readonly Vector3 _position;
 

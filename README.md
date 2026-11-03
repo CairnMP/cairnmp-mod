@@ -157,7 +157,7 @@ network latency and two-client behavior still need validation.
 
 The existing personal piton anchor can also be explicitly marked with **Define
 station** in the L panel, even before a partner joins. **Remove station** clears
-that role and ends any pending/active belay; it does not detach the personal
+an idle station or cancels its pending invitation; it does not detach the personal
 anchor or retrieve the piton. Releasing the native anchor, losing/breaking/moving
 the piton, leaving Belay Team or changing scenes invalidates the station. Offering
 belay or accepting a request still records the current anchor when needed.
@@ -166,6 +166,18 @@ With the L panel open, **K** performs its visible Define/Remove station action
 without needing the mouse. One press performs one action; holding K does not
 toggle repeatedly. Outside the panel, the shortcut does not consume K. The panel
 keeps the cursor visible/unlocked while open and restores its previous state on close.
+
+After acceptance, the belayer's native personal-anchor input is locked and K
+cannot remove the active station. Use **L > End belay** before releasing that
+anchor or exchanging roles. The station is tied to its real piton rather than
+a frozen body coordinate, so ordinary anchored body motion stays inside the
+native tether area. Piton failure, lost anchoring, departure and disconnect still
+end control. This new input guard requires native validation.
+
+An unloaded personal-anchor transition may recreate rope segments without adding
+a piton. The controller restores only the original ordered holders/protections
+and physical pin walk after settling, preserving paid-out rope and the brake.
+It still refuses loaded route changes, removals, reorders and incomplete pins.
 
 Invitations carry the station's placer/source id and its lifecycle reference. The
 host checks that identity against its live piton registry; the climber resolves
@@ -183,8 +195,10 @@ An already attached station can bind directly after its existing route validates
 The route budget includes the fixed path from that station through downstream
 protections; FREE pays out as needed and BRAKED limits falls and outward climbing
 using the paid-out length. Remote feed/take-in uses this same bounded budget;
-protected role transfer remains pending. Initial partner attachment and shared
-station control have not yet been exercised in two native clients.
+protected role transfer remains pending. The R12 H1 session exercised remote
+controls, climbing limits and short catches, but also exposed premature session
+ends. Its two initial-insertion attempts failed; later sessions used an existing
+attachment. These stability changes and initial insertion need native retesting.
 
 Piton synchronization also creates native copies that may be saved by the game.
 Existing save duplication is not repaired by this pilot. References inferred only

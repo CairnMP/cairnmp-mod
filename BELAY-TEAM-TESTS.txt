@@ -36,9 +36,10 @@ Connection / consent
       this does not pass initial missing attachment. Check both logs.
   C04 Reverse invitation: climber requests, anchored belayer accepts; same station
       reference and protection checks apply. Decline/cancel must not start control.
-  C05 Removed/replaced station: withdraw/change S during invitation and during
-      preparation while both players are anchored. Expected: end, no further
-      requests, no automatic retry or rollback of already queued game operations.
+  C05 Station guard: after acceptance/preparation, K/Remove station cannot end
+      belay and the belayer's personal-anchor input is locked. L > End belay
+      explicitly ends control and unlocks it. Native station failure or identity
+      loss must still end the pair; no rollback of queued native operations.
   C06 Near-coincident pitons: use distinct freshly placed pitons where practical.
       Expected: owner/source identity chooses the agreed piton, not the nearest
       neighbor. Ambiguous/unavailable references refuse control.
@@ -79,7 +80,7 @@ Interruption and persistence - start anchored, without a fall
   L02 Disconnect each participant through the normal UI while the climber remains
       anchored at P. Expected: no new commands, no stale control after rejoining.
       Check personal protection before continuing. Do not use firewall changes.
-  L03 Remove the station/end belay through L. Personal anchoring stays attached.
+  L03 End belay through L, then remove the station. Personal anchoring stays attached.
       A new invitation is required; stale prior-session messages cannot restart it.
   L04 Save/reload and duplicate-piton investigation, after the core cases and a
       profile backup: record counts/positions before save, after reload, after

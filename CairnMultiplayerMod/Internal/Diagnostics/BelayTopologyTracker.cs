@@ -114,6 +114,37 @@ internal sealed class BelayTopologyTracker
         return Observe(snapshot, false, now);
     }
 
+    internal BelayTopologyChange ObserveProtectionRestore(BelayTopologySnapshot snapshot,
+        IReadOnlyList<BelayProtectionPoint> previous, IReadOnlyList<BelayProtectionPoint> next,
+        bool samePhysicalPins, double now)
+    {
+        if (Current == null || snapshot?.IsValid != true || snapshot.Rope != Current.Rope
+            || !double.IsFinite(now) || now < _lastObservation) return BelayTopologyChange.Invalid;
+        _lastObservation = now;
+        var same = samePhysicalPins && previous != null && next != null
+            && previous.Count == Current.ProtectionCount && next.Count == previous.Count
+            && snapshot.ProtectionCount == Current.ProtectionCount && snapshot.LastPiton == Current.LastPiton
+            && snapshot.Parts.Length == Current.Parts.Length && snapshot.Holders.Length == Current.Holders.Length;
+        if (same)
+        {
+            var ids = new HashSet<uint>();
+            for (var i = 0; i < previous.Count; i++)
+                if (previous[i].Id == 0 || previous[i].Id != next[i].Id || !ids.Add(previous[i].Id)) { same = false; break; }
+            for (var i = 0; same && i < Current.Holders.Length; i++)
+                if (snapshot.Holders[i] != Current.Holders[i]) same = false;
+        }
+        if (!same) { _pending = null; return BelayTopologyChange.Settling; }
+        // Personal anchoring can temporarily split the rope and recreate its
+        // segments. Restore only the exact holder/protection walk and pin walk,
+        // after fresh observations; this never authorizes a removal or reorder.
+        if (_pending?.Matches(snapshot) != true)
+        { _pending = snapshot; _pendingSince = now; return BelayTopologyChange.Settling; }
+        if (now - _pendingSince < SettleSeconds) return BelayTopologyChange.Settling;
+        if (Revision == uint.MaxValue) return BelayTopologyChange.Invalid;
+        Current = snapshot; _pending = null; Revision++;
+        return BelayTopologyChange.Rebound;
+    }
+
     internal BelayTopologyChange Observe(BelayTopologySnapshot snapshot, bool suspended, double now)
     {
         if (snapshot?.IsValid != true || !double.IsFinite(now) || now < _lastObservation)

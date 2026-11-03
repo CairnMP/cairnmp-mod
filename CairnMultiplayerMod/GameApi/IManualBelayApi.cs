@@ -14,6 +14,7 @@ internal interface IManualBelayApi
     bool BeginStation(out string reason);
     bool HasStation => false;
     bool StationValid { get; }
+    bool ProtectStation(Guid session) => session != Guid.Empty && StationValid;
     void EndStation();
     bool BeginClimber(Guid session, out string reason);
     bool BeginClimber(Guid session, BelaySharedStation station, out string reason)

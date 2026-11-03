@@ -112,7 +112,11 @@ internal sealed class BelayRopeControl
     {
         target = realDistance;
         if (Suspended || !ValidDistance(realDistance)) return false;
-        var offset = Distance - realDistance;
+        // A body can briefly overrun the kinematic climb limit while native
+        // states change. Keep the paid-out budget; do not winch that body back
+        // when its suspension first appears.
+        var origin = Braked ? Math.Min(Distance, Released) : Distance;
+        var offset = origin - realDistance;
         if (!TryMapTarget(offset, out target)) return false;
         _swingOffset = offset;
         Suspended = true;
