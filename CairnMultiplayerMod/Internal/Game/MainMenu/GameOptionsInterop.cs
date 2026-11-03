@@ -22,6 +22,7 @@ internal static unsafe class GameOptionsInterop
 
             var opts = menu.nextGameStartOptions;
             if (opts == null) return false;
+            opts.forceSummitNewGame = false;
 
             var ng = opts.newGameOptions;
 
@@ -82,11 +83,17 @@ internal static unsafe class GameOptionsInterop
 
             var constraints = defaults.Constraints
                               | (GamemodeConstraints)(int)rules.ExtraConstraints;
+            var customize = NeedsCustomStoryDifficulty((ClimbConstraints)(int)defaults.Constraints, rules.ExtraConstraints);
 
             var ng = opts.newGameOptions;
             ng.currentSelectedDifficulty = defaults.Difficulty;
-            ng.customizedDifficulty = new GameSetup.CustomizedDifficulty(
-                defaults.ClimbingPackage, defaults.SurvivalPackage, constraints);
+            // Native story launch clears summitMode after its preset constructor,
+            // but not after its customized constructor. Keep exact presets on the
+            // normal path instead of marking every story run as customized.
+            ng.customizedDifficulty = customize
+                ? new GameSetup.CustomizedDifficulty(defaults.ClimbingPackage, defaults.SurvivalPackage, constraints)
+                : default;
+            opts.forceSummitNewGame = false;
             // Assist stays the host's call; the mode's constraints (NoAssistMode) are what
             // actually forbid it, and the game enforces those itself.
             ng.assistEnabled = assistEnabled;
@@ -99,7 +106,8 @@ internal static unsafe class GameOptionsInterop
                 var check = opts.newGameOptions;
                 ModLog.Info($"[GameOptions] Mode '{rules.Name}' applied: difficulty=" +
                     $"{check.currentSelectedDifficulty} constraints={constraints} " +
-                    $"climbing={defaults.ClimbingPackage} survival={defaults.SurvivalPackage}");
+                    $"climbing={defaults.ClimbingPackage} survival={defaults.SurvivalPackage} " +
+                    $"customized={customize} story=True");
             }
             return true;
         }
@@ -111,6 +119,25 @@ internal static unsafe class GameOptionsInterop
     }
 
     private static GameDifficulty _missingDifficultyLogged = GameDifficulty.Invalid;
+    private static string _lastActiveSetup;
+
+    internal static bool NeedsCustomStoryDifficulty(ClimbConstraints preset, ClimbConstraints additions)
+        => (preset | additions) != preset;
+
+    internal static void LogActiveSetup()
+    {
+        try
+        {
+            var manager = MoSingleton<CairnSceneManager>.Instance;
+            if (manager == null) return;
+            var setup = manager.GameSetup;
+            var detail = $"summit={setup.summitMode}; gearUp={setup.RequiresGearUp}; energyHealth={setup.UseEnergyInsteadOfHealth}";
+            if (detail == _lastActiveSetup) return;
+            _lastActiveSetup = detail;
+            ModLog.Info("[GameOptions] Active native setup: " + detail);
+        }
+        catch (Exception exception) { ModLog.SuppressedException("modes.active-game-setup", exception); }
+    }
 
     private static void LogMissingDifficultyOnce(MultiplayerModeRules rules)
     {
