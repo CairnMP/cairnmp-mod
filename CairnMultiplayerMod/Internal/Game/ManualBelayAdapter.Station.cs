@@ -13,6 +13,7 @@ internal sealed partial class ManualBelayAdapter
     private BelayStationAnchor _localStation;
     private Piton _localStationPiton;
     private uint _localStationId;
+    private double _nextStationProtectionLog;
     private BelayProtectionPoint[] _measuredStationProtections;
     public LocalBelayStationStatus? LocalStationStatus { get; private set; }
 
@@ -63,6 +64,38 @@ internal sealed partial class ManualBelayAdapter
         return lifeline != null && lifeline.securingRope != null && _localStationPiton != null
             && _localStation.Matches(Id(lifeline), Id(lifeline.securingRope), Id(_localStationPiton),
                 _localStationPiton.pitonHp, ToNumerics(_localStationPiton.transform.position));
+    }
+
+    private bool ProtectsNativeStation(Lifeline lifeline, Piton piton)
+    {
+        if (lifeline == null || piton == null) return false;
+        if (_stationSession != Guid.Empty && Id(lifeline) == Id(_stationLifeline)
+            && Id(piton) == _stationPiton) return StationValid;
+        return _control != null && !_stopping && _partnerStation.HasValue
+            && Id(lifeline) == Id(_lifeline) && Id(piton) == Id(_localStationPiton)
+            && ContextValid && LocalStationMatches(lifeline, out _);
+    }
+
+    private static void AfterStationCriticality(Lifeline __instance, Piton piton, ref bool __result)
+    {
+        if (__result) return;
+        try
+        {
+            ManualBelayAdapter owner = null;
+            if (_owner?.ProtectsNativeStation(__instance, piton) == true) owner = _owner;
+            else if (_stationOwner?.ProtectsNativeStation(__instance, piton) == true) owner = _stationOwner;
+            if (owner == null) return;
+            // Native Climbot recovery checks this before taking an older piton.
+            // The agreed station remains essential even after the climber clips
+            // or personally anchors to a newer protection. Native breakage and
+            // explicit session teardown retain their separate handling.
+            __result = true;
+            if (Now < owner._nextStationProtectionLog) return;
+            owner._nextStationProtectionLog = Now + 2;
+            var session = owner._stationSession != Guid.Empty ? owner._stationSession : owner._lease.Session;
+            ModLog.Info("[BelayStation] Kept active station critical for native Climbot recovery; session=" + session);
+        }
+        catch (Exception exception) { ModLog.SuppressedException("belay.station-criticality", exception); }
     }
 
     private bool TryMeasureLocalStation(Lifeline lifeline, float nativeAvailable, out float available, out string reason)

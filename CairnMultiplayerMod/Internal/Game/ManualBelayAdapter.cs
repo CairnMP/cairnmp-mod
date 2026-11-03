@@ -662,6 +662,8 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
                 prefix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(BeforePersonalRopeAscend)));
             _harmony.Patch(AccessTools.Method(typeof(ClimbingV2PawnController), nameof(ClimbingV2PawnController.TryAndHoldItem)),
                 prefix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(BeforeHoldingRopeItem)));
+            _harmony.Patch(AccessTools.Method(typeof(Lifeline), nameof(Lifeline.IsPitonCriticalForLifeline)),
+                postfix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(AfterStationCriticality)));
             _installed = true;
         }
         catch { _harmony.UnpatchSelf(); throw; }

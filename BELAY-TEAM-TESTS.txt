@@ -53,6 +53,12 @@ Connection / consent
       belay and the belayer's personal-anchor input is locked. L > End belay
       explicitly ends control and unlocks it. Native station failure or identity
       loss must still end the pair; no rollback of queued native operations.
+      The agreed native station is also critical for Climbot recovery on both
+      lifelines during an active session. After clipping a new protection and
+      personally anchoring there, wait ten seconds: the original station must
+      remain and the same session must continue. End belay releases this added
+      criticality; ordinary native recovery rules apply again. This case still
+      needs native acceptance, including verifying that broken stations can fail.
   C06 Near-coincident pitons: use distinct freshly placed pitons where practical.
       Expected: owner/source identity chooses the agreed piton, not the nearest
       neighbor. Ambiguous/unavailable references refuse control.
