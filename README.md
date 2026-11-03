@@ -31,7 +31,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **23**; lobby admission may also require the exact mod version.
+> protocol is **24**; lobby admission may also require the exact mod version.
 
 ## Features
 
