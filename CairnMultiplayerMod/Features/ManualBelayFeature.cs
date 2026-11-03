@@ -15,6 +15,10 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
 {
     private const float InputInterval = .1f;
     private const string InputRateLimited = "Rope input arrived too quickly; retry the current input.";
+    private const float MaximumRopeCapacity = 200;
+    // Body points differ from native station/harness attachments. Native route
+    // geometry is the final check after this broad-phase position margin.
+    private const float BodyMargin = 3;
     private sealed class SessionState
     {
         internal Guid Id;
@@ -24,6 +28,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         internal uint TopologyRevision;
         internal float Until, InputAt, NextReport;
         internal float InputCredits = 2;
+        internal float RopeCapacity;
         internal sbyte Motion;
         internal PlayerLocation BelayerLocation;
         internal BelaySharedStation Station;
@@ -82,7 +87,8 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
                 ? TryBeginStation(out station, out var reason) : Game.Belay.CanClimb(station, out reason);
             if (!ready) { Notice(reason); return; }
             _accepted = _offer.Session;
-            Send(new ManualBelayCommand { Operation = ManualBelayOperation.Accept, Session = _accepted, Station = station });
+            Send(new ManualBelayCommand { Operation = ManualBelayOperation.Accept, Session = _accepted, Station = station,
+                RopeCapacity = _offer.Climber == LocalPlayerId ? Game.Belay.RopeCapacity : 0 });
             return;
         }
         var asking = args.StartsWith("request ", StringComparison.OrdinalIgnoreCase);
@@ -100,7 +106,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         if (!canSend) { Notice(failure); return; }
         _offeredTarget = target;
         Send(new ManualBelayCommand { Operation = asking ? ManualBelayOperation.Request : ManualBelayOperation.Offer,
-            Target = target, Station = offeredStation });
+            Target = target, Station = offeredStation, RopeCapacity = asking ? Game.Belay.RopeCapacity : 0 });
     }
 
     private bool TryBeginStation(out BelaySharedStation station, out string reason)
@@ -214,6 +220,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             return;
         }
         var partners = new List<BelayPartnerRow>();
+        var capacity = Game.Belay.RopeCapacity;
         string blocked = null;
         foreach (var player in Players)
         {
@@ -221,8 +228,11 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             if (!TryLocations(LocalPlayerId, player.Id, out var self, out var other, out var reason))
             { blocked ??= player.Name + ": " + reason; continue; }
             var squared = DistanceSquared(self, other);
-            if (squared <= 36) partners.Add(new BelayPartnerRow(player.Id, player.Name, MathF.Sqrt(squared)));
-            else blocked ??= $"{player.Name}: synchronized body distance {MathF.Sqrt(squared):F1} m; move within 6 m.";
+            var distance = MathF.Sqrt(squared);
+            if (distance <= MaximumRopeCapacity + BodyMargin)
+                partners.Add(new BelayPartnerRow(player.Id, player.Name, distance,
+                    ValidCapacity(capacity) && distance <= capacity + BodyMargin));
+            else blocked ??= $"{player.Name}: synchronized body distance {distance:F1} m exceeds the supported rope range.";
         }
         partners.Sort((a, b) => a.Distance.CompareTo(b.Distance));
         if (partners.Count == 0)
@@ -240,7 +250,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         _lastPartnerBlock = null;
         var canRequest = Game.Belay.CanClimb(out var protectionReason);
         var canOffer = Game.Belay.CanBeginStation(out var stationReason);
-        var instructions = "Choose a nearby partner.";
+        var instructions = $"Choose a partner. Your rope: {capacity:F1} m; climber route checked before control.";
         if (!canRequest) instructions += " To ask: " + protectionReason;
         if (!canOffer) instructions += " To offer: " + stationReason;
         Game.BelayPanel.SetView(new BelayPanelView { Phase = BelayPanelPhase.Partners, Partners = partners,
@@ -274,6 +284,12 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
 
     private static float DistanceSquared(PlayerLocation a, PlayerLocation b)
         => (a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y) + (a.Z - b.Z) * (a.Z - b.Z);
+
+    private static bool ValidCapacity(float capacity)
+        => float.IsFinite(capacity) && capacity > 0 && capacity <= MaximumRopeCapacity;
+
+    private static bool WithinRopeRange(PlayerLocation belayer, PlayerLocation climber, float capacity)
+        => ValidCapacity(capacity) && DistanceSquared(belayer, climber) <= (capacity + BodyMargin) * (capacity + BodyMargin);
 
     private bool ValidStation(BelaySharedStation station, PlayerLocation belayer)
         => Game.Belay.IsStationKnown(station) && WithinStationArea(station, belayer);
@@ -315,13 +331,16 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             var belayer = message.Operation == ManualBelayOperation.Offer ? request.FromPlayerId : message.Target;
             var climberId = message.Operation == ManualBelayOperation.Offer ? message.Target : request.FromPlayerId;
             if (_hostSession != null || !TryLocations(belayer, climberId, out var station, out var target)
-                || DistanceSquared(station, target) > 36)
-            { request.Reject("Belay needs two nearby players in the same scene and no other session."); return; }
+                || !WithinRopeRange(station, target, message.Operation == ManualBelayOperation.Request
+                    ? message.RopeCapacity : MaximumRopeCapacity))
+            { request.Reject("Belay needs two players in the same world, within the climber's rope reach, and no other session."); return; }
+            if (message.Operation == ManualBelayOperation.Offer && message.RopeCapacity != 0)
+            { request.Reject("Only the climber may declare the protection rope capacity."); return; }
             if (message.Operation == ManualBelayOperation.Offer ? !ValidStation(message.Station, station) : message.Station != default)
             { request.Reject("The invitation needs the belayer's current native station."); return; }
             var offered = new SessionState { Id = Guid.NewGuid(), Belayer = belayer,
                 Climber = climberId, Initiator = request.FromPlayerId, BelayerLocation = station,
-                Station = message.Station, Until = now + 20 };
+                Station = message.Station, RopeCapacity = message.RopeCapacity, Until = now + 20 };
             request.AfterCommit(() => { _hostSession = offered; _changed.Send(Message(offered, ManualBelayPhase.Offered)); });
             return;
         }
@@ -338,13 +357,16 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         if (!TryLocations(session.Belayer, session.Climber, out var current, out var climber)
             || (session.Station.IsValid && !Game.Belay.IsStationKnown(session.Station))
             || ((session.Started || session.Initiator == session.Belayer) && !WithinStationArea(session.Station, current))
-            || DistanceSquared(current, climber) > 1600)
+            || !WithinRopeRange(current, climber, session.RopeCapacity > 0 ? session.RopeCapacity : MaximumRopeCapacity))
         { request.Reject("Belay station moved, location became stale, or protection context changed."); return; }
         if (message.Operation == ManualBelayOperation.Accept)
         {
             var recipient = session.Initiator == session.Belayer ? session.Climber : session.Belayer;
-            if (session.Started || actor != recipient || DistanceSquared(current, climber) > 36)
-            { request.Reject("Only the invited nearby partner may accept."); return; }
+            if (session.Started || actor != recipient)
+            { request.Reject("Only the invited partner may accept."); return; }
+            var capacity = actor == session.Climber ? message.RopeCapacity : session.RopeCapacity;
+            if ((actor != session.Climber && message.RopeCapacity != 0) || !WithinRopeRange(current, climber, capacity))
+            { request.Reject("The declared climber rope cannot cover the participant distance."); return; }
             if (!ValidStation(message.Station, current)
                 || (session.Initiator == session.Belayer && message.Station != session.Station))
             { request.Reject("The agreed station is missing, replaced or outside the belayer's anchor area."); return; }
@@ -352,6 +374,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             {
                 session.Started = true; session.Until = now + 3; session.BelayerLocation = current; session.InputAt = now;
                 session.Station = message.Station;
+                session.RopeCapacity = capacity;
                 _changed.Send(Message(session, ManualBelayPhase.Started));
             });
             return;
@@ -399,7 +422,8 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
 
     private static ManualBelayMessage Message(SessionState session, ManualBelayPhase phase)
         => new() { Phase = phase, Session = session.Id, Belayer = session.Belayer, Climber = session.Climber, Initiator = session.Initiator,
-            Sequence = session.Sequence, Braked = session.Braked, Station = session.Station, Motion = session.Motion };
+            Sequence = session.Sequence, Braked = session.Braked, Station = session.Station,
+            Motion = session.Motion, RopeCapacity = session.RopeCapacity };
 
     private void EndHost() => EndHost("A participant ended the session.");
 
@@ -436,7 +460,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             _sentBrake = false; _sentMotion = 0; _sendNotBefore = 0;
             _nextIntent = _nextReport = _nextHint = 0; _stopSent = false; _telemetry = null;
             _localUntil = Game.Time.UnscaledTime + 3;
-            if (!message.Station.IsValid || !stationMatchesOffer)
+            if (!message.Station.IsValid || !stationMatchesOffer || !ValidCapacity(message.RopeCapacity))
             { Notice("The accepted station changed. Send a new invitation."); RequestStop(); return; }
             if (message.Climber == LocalPlayerId)
             {
@@ -458,7 +482,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             return;
         }
         if (message.Phase == ManualBelayPhase.Ended) { ClearLocal(); Notice("Belay ended."); return; }
-        if (message.Station != _active.Station) { RequestStop(); return; }
+        if (message.Station != _active.Station || message.RopeCapacity != _active.RopeCapacity) { RequestStop(); return; }
         if (message.Phase == ManualBelayPhase.Intent)
         {
             if (message.Sequence <= _active.Sequence) return;
@@ -614,6 +638,7 @@ internal sealed class ManualBelayCommand : IPacket
     public BelaySharedStation Station;
     public sbyte Motion;
     public float Released, Slack, Reserve;
+    public float RopeCapacity;
     public bool LengthApplied;
 
     public void Serialize(BinaryWriter writer)
@@ -625,16 +650,18 @@ internal sealed class ManualBelayCommand : IPacket
         writer.Write(Station.Id.ToByteArray()); writer.Write(Station.Position.X); writer.Write(Station.Position.Y); writer.Write(Station.Position.Z);
         writer.Write(Station.PitonOwner); writer.Write(Station.PitonId);
         writer.Write(Motion); writer.Write(Released); writer.Write(Slack); writer.Write(Reserve); writer.Write(LengthApplied);
+        writer.Write(RopeCapacity);
     }
     public void Deserialize(BinaryReader reader)
     {
-        if (reader.BaseStream.Length - reader.BaseStream.Position != 98) throw new InvalidDataException("Invalid belay request size.");
+        if (reader.BaseStream.Length - reader.BaseStream.Position != 102) throw new InvalidDataException("Invalid belay request size.");
         Operation = (ManualBelayOperation)reader.ReadByte(); Session = new Guid(reader.ReadBytes(16)); Target = reader.ReadInt32();
         Sequence = reader.ReadUInt32(); AppliedSequence = reader.ReadUInt32(); Braked = reader.ReadBoolean(); Suspended = reader.ReadBoolean();
         Limit = reader.ReadSingle(); RealDistance = reader.ReadSingle();
         ProtectionCount = reader.ReadInt32(); TopologyRevision = reader.ReadUInt32(); Rebinding = reader.ReadBoolean();
         Station = new BelaySharedStation(new Guid(reader.ReadBytes(16)), new WorldPosition(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle()), reader.ReadInt32(), reader.ReadUInt32());
         Motion = reader.ReadSByte(); Released = reader.ReadSingle(); Slack = reader.ReadSingle(); Reserve = reader.ReadSingle(); LengthApplied = reader.ReadBoolean();
+        RopeCapacity = reader.ReadSingle();
     }
 }
 
@@ -653,6 +680,7 @@ internal sealed class ManualBelayMessage : IPacket
     public BelaySharedStation Station;
     public sbyte Motion;
     public float Released, Slack, Reserve;
+    public float RopeCapacity;
     public bool LengthApplied;
 
     public void Serialize(BinaryWriter writer)
@@ -664,15 +692,17 @@ internal sealed class ManualBelayMessage : IPacket
         writer.Write(Station.Id.ToByteArray()); writer.Write(Station.Position.X); writer.Write(Station.Position.Y); writer.Write(Station.Position.Z);
         writer.Write(Station.PitonOwner); writer.Write(Station.PitonId);
         writer.Write(Motion); writer.Write(Released); writer.Write(Slack); writer.Write(Reserve); writer.Write(LengthApplied);
+        writer.Write(RopeCapacity);
     }
     public void Deserialize(BinaryReader reader)
     {
-        if (reader.BaseStream.Length - reader.BaseStream.Position != 106) throw new InvalidDataException("Invalid belay message size.");
+        if (reader.BaseStream.Length - reader.BaseStream.Position != 110) throw new InvalidDataException("Invalid belay message size.");
         Phase = (ManualBelayPhase)reader.ReadByte(); Session = new Guid(reader.ReadBytes(16));
         Belayer = reader.ReadInt32(); Climber = reader.ReadInt32(); Sequence = reader.ReadUInt32(); AppliedSequence = reader.ReadUInt32();
         Braked = reader.ReadBoolean(); Suspended = reader.ReadBoolean(); Limit = reader.ReadSingle(); RealDistance = reader.ReadSingle();
         Initiator = reader.ReadInt32(); ProtectionCount = reader.ReadInt32(); TopologyRevision = reader.ReadUInt32(); Rebinding = reader.ReadBoolean();
         Station = new BelaySharedStation(new Guid(reader.ReadBytes(16)), new WorldPosition(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle()), reader.ReadInt32(), reader.ReadUInt32());
         Motion = reader.ReadSByte(); Released = reader.ReadSingle(); Slack = reader.ReadSingle(); Reserve = reader.ReadSingle(); LengthApplied = reader.ReadBoolean();
+        RopeCapacity = reader.ReadSingle();
     }
 }

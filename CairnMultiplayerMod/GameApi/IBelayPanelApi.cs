@@ -5,7 +5,8 @@ namespace CairnMultiplayerMod.GameApi;
 
 internal enum BelayPanelAction { Request, Offer, Accept, Decline, Cancel, ToggleBrake, Close, Toggle, DefineStation, RemoveStation }
 internal enum BelayPanelPhase { Partners, Waiting, Invitation, Active }
-internal readonly record struct BelayPartnerRow(int Id, string Name, float Distance);
+internal readonly record struct BelayPartnerRow(int Id, string Name, float Distance,
+    bool CanRequest = true, bool CanOffer = true);
 
 internal sealed class BelayPanelView
 {

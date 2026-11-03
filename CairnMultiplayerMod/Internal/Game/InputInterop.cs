@@ -22,7 +22,7 @@ internal static class InputInterop
     /// </summary>
     public static void ReconcileGameplayInput(bool wantBlocked)
     {
-        if (wantBlocked == _blockApplied) return;
+        if (wantBlocked == _blockApplied && !(wantBlocked && InputCaptureState.IsBelayPanelCaptured)) return;
 
         try
         {
@@ -31,16 +31,25 @@ internal static class InputInterop
 
             if (wantBlocked)
             {
-                _savedDisableInputs = mgr.disabledInputs;
+                if (!_blockApplied)
+                {
+                    _savedDisableInputs = mgr.disabledInputs;
+                    // Native ignore-input state is a counter: acquire once,
+                    // rather than incrementing it on every panel repaint.
+                    mgr.SetIgnoreInputEvents(true);
+                    _blockApplied = true;
+                }
                 mgr.disabledInputs = true;
-                mgr.SetIgnoreInputEvents(true);
-                _blockApplied = true;
+                // Mouse climbing actions use native action maps. The two input
+                // flags alone do not disable those maps; contexts may refresh
+                // while the panel is open, so reassert its modal ownership.
+                if (InputCaptureState.IsBelayPanelCaptured) mgr.DisableAllMaps();
             }
             else
             {
                 mgr.SetIgnoreInputEvents(false);
-                mgr.disabledInputs = _savedDisableInputs;
                 mgr.EnableInputs();
+                mgr.disabledInputs = _savedDisableInputs;
                 mgr.UpdateInputContext();
                 _blockApplied = false;
                 LogMapStatusOnce(mgr);

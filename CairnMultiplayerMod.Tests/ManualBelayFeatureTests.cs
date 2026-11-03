@@ -467,7 +467,7 @@ public sealed partial class ManualBelayFeatureTests
         var request = new ManualBelayCommand { Operation = ManualBelayOperation.Report, Session = Guid.NewGuid(),
             Target = 2, Sequence = 8, AppliedSequence = 7, Braked = true, Suspended = true, Limit = 1.5f, RealDistance = 1.4f,
             Station = new BelaySharedStation(Guid.NewGuid(), new WorldPosition(1, 2, 3), 1, 7),
-            Motion = -1, Released = 8, Slack = 3, Reserve = 32, LengthApplied = true };
+            Motion = -1, Released = 8, Slack = 3, Reserve = 32, LengthApplied = true, RopeCapacity = 40 };
         var decoded = new ManualBelayCommand();
         using (var reader = new BinaryReader(new MemoryStream(Bytes(request)))) decoded.Deserialize(reader);
         Assert.Equal(request.Session, decoded.Session);
@@ -475,7 +475,8 @@ public sealed partial class ManualBelayFeatureTests
         Assert.Equal(7u, decoded.AppliedSequence);
         Assert.Equal(1.5f, decoded.Limit);
         Assert.Equal(1.4f, decoded.RealDistance);
-        Assert.Equal(98, Bytes(request).Length);
+        Assert.Equal(102, Bytes(request).Length);
+        Assert.Equal(40, decoded.RopeCapacity);
         Assert.Equal(request.Station, decoded.Station);
         Assert.Equal(-1, decoded.Motion);
         Assert.Equal(8, decoded.Released);
@@ -484,7 +485,7 @@ public sealed partial class ManualBelayFeatureTests
         Assert.True(decoded.LengthApplied);
         var message = new ManualBelayMessage { Phase = ManualBelayPhase.Telemetry, Session = request.Session,
             Belayer = 1, Climber = 2, Sequence = 8, AppliedSequence = 7, Braked = true, Suspended = true, Limit = 1.5f, RealDistance = 1.4f,
-            Station = request.Station, Motion = -1, Released = 8, Slack = 3, Reserve = 32, LengthApplied = true };
+            Station = request.Station, Motion = -1, Released = 8, Slack = 3, Reserve = 32, LengthApplied = true, RopeCapacity = 40 };
         var eventCopy = new ManualBelayMessage();
         using (var reader = new BinaryReader(new MemoryStream(Bytes(message)))) eventCopy.Deserialize(reader);
         Assert.Equal(message.Session, eventCopy.Session);
@@ -492,7 +493,8 @@ public sealed partial class ManualBelayFeatureTests
         Assert.Equal(2, eventCopy.Climber);
         Assert.Equal(7u, eventCopy.AppliedSequence);
         Assert.True(eventCopy.Braked);
-        Assert.Equal(106, Bytes(message).Length);
+        Assert.Equal(110, Bytes(message).Length);
+        Assert.Equal(40, eventCopy.RopeCapacity);
         Assert.Equal(message.Station, eventCopy.Station);
         Assert.Equal(-1, eventCopy.Motion);
         Assert.Equal(8, eventCopy.Released);
@@ -628,6 +630,7 @@ public sealed partial class ManualBelayFeatureTests
 
     [Theory]
     [InlineData(-28)]
+    [InlineData(-4)]
     [InlineData(-14)]
     [InlineData(-1)]
     [InlineData(1)]
@@ -894,6 +897,7 @@ public sealed partial class ManualBelayFeatureTests
     private sealed class Belay : IManualBelayApi
     {
         internal bool OptIn = true, Anchored = true, CanBegin = true, ProtectionReady = true, Active, LastBrake, StationRecorded;
+        public float RopeCapacity { get; set; } = 40;
         internal int BeginCalls, SetCalls, StopCalls, ReadinessChecks;
         internal uint Sequence;
         internal bool SharedStationReady = true;
@@ -930,7 +934,7 @@ public sealed partial class ManualBelayFeatureTests
         {
             BeginCalls++; reason = "No native rope"; _session = id;
             _inputLease = new BelayInputLease(id, Clock());
-            Rope = new BelayRopeControl(40, 8, 5); _lastStep = Clock();
+            Rope = new BelayRopeControl(RopeCapacity, 8, 5); _lastStep = Clock();
             return Active = CanBegin;
         }
         public bool BeginClimber(Guid id, BelaySharedStation station, out string reason)

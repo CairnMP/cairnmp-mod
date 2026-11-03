@@ -31,13 +31,18 @@ internal sealed partial class ManualBelayAdapter
 
     private bool CanAttachStation(Lifeline lifeline, Piton station, out string reason)
     {
-        reason = "To connect a new station, remain personally anchored at a separate healthy piton, near the belayer. Keep this backup attached until connection is confirmed.";
+        reason = "To connect a new station, remain personally anchored at a separate healthy piton within your rope's reach. Keep this backup attached until connection is confirmed.";
         var backup = PersonalAnchor(lifeline);
-        if (backup == null || backup.Quickdraw == null || station == null || Id(backup) == Id(station) || backup.pitonHp <= 0
+        if (backup == null || backup.Quickdraw == null || station == null || station.Quickdraw == null
+            || Id(backup) == Id(station) || backup.pitonHp <= 0
             || lifeline.pawn == null || lifeline.harness == null || lifeline.pawn.IsFalling || lifeline.SwingHasPivotAndExtremity()
-            || Vector3.Distance(lifeline.harness.GetAttachPosition(), backup.transform.position) > 1.5f
-            || Vector3.Distance(station.transform.position, backup.transform.position) > 6) return false;
+            || Vector3.Distance(lifeline.harness.GetAttachPosition(), backup.transform.position) > 1.5f) return false;
         if (!TrySnapshot(lifeline, out var before, out reason)) return false;
+        reason = "The climber's rope cannot reach the station while retaining the personal backup.";
+        if (!BelayRoutePlanner.TryPlan(ToNumerics(station.Quickdraw.Cast<IRopeHolder>().Position),
+            new[] { new BelayProtectionPoint(unchecked((uint)backup.GetInstanceID()), ToNumerics(backup.Quickdraw.Cast<IRopeHolder>().Position)) },
+            ToNumerics(lifeline.harness.GetAttachPosition()), lifeline.securingRope.MaxLengthMeters, out var reach)
+            || !reach.ReachesClimber) return false;
         reason = "Keep the personal backup as the last connected protection, with room for one more station.";
         return before.LastPiton == Id(backup) && before.ProtectionCount < 63 && before.Parts.Length < 64 && before.Holders.Length < 66;
     }

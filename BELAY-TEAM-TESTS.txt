@@ -1,6 +1,6 @@
 BELAY TEAM - COOPERATIVE ACCEPTANCE PLAN
 
-Status: experimental source, protocol 24. Native two-client acceptance is pending.
+Status: experimental source, protocol 25. Full native two-client acceptance is pending.
 Both participants must install the exact same build. Automated participants and
 the accepted offline local-station reconnection do not establish multiplayer success.
 
@@ -18,7 +18,8 @@ Setup shared by connection cases
   3. Belayer places fresh station piton S, personally anchors with E, opens L and
      chooses Define station (K while L is open). Remain anchored and stationary.
   4. Climber places a separate healthy backup P within about 2 m of S and personally
-     anchors with E. Both players must be within 6 m in the same scene.
+     anchors with E. For the first trial, remain about 2 m apart in the same world.
+     Later distance cases use the climber's real rope capacity and protection path.
   5. Use L to offer/request and explicitly accept. Close L to operate rope controls.
   6. During initial attachment, keep P attached and remain still. Wait for connection
      confirmation and the native length readback. Do not use the solo Ctrl+F10/F11/F12.
@@ -27,9 +28,9 @@ Setup shared by connection cases
      or measured distance. Live ghost movement alone does not prove eligibility.
      Proximity uses fresh replicated body positions on both sides, not actor bases.
      Belay Team compares the game's native world identity, not the last streamed
-     zone callback. Both builds must use protocol 24; different worlds still refuse.
-     R18 intentionally rejects older experimental peers: the previous protocol
-     allowed an R15 belayer and R17 climber to connect despite different controls.
+     zone callback. Both builds must use protocol 25; different worlds still refuse.
+     R21 carries the climber's capacity in the invitation/acceptance contract;
+     earlier experimental protocols cannot join this version.
      If E is missing, close L and check your own fresh piton with firm foot holds.
      The panel/BelayAnchor log reports native readiness; it never forces anchoring.
 
@@ -40,6 +41,11 @@ Connection / consent
       change does not convert saves already created with Summit settings.
   C01 Installation and mode: verify same build/protocol, L opens/closes, cursor and
       gameplay control restore. Other lobby modes retain their original behavior.
+      With L open, Up/Down selects a partner by identity, I requests, O offers,
+      Enter accepts and Backspace declines/cancels an invitation. Held keys do not
+      repeat, changing distance order does not redirect the selected partner,
+      Enter must not open chat and mouse clicks must not start climbing. Backspace
+      in an active pair must not end it. Close L to resume rope controls.
   C02 Station lifecycle: define/remove S without releasing personal anchoring;
       release/re-anchor S and verify a fresh station/invitation is required.
   C03 Initial missing attachment: belayer offers, climber accepts while held at P.
@@ -62,6 +68,12 @@ Connection / consent
   C06 Near-coincident pitons: use distinct freshly placed pitons where practical.
       Expected: owner/source identity chooses the agreed piton, not the nearest
       neighbor. Ambiguous/unavailable references refuse control.
+      Separately test 10-15 m invitations in both directions and with the belayer
+      above the climber, anchored backups and no falls. Acceptance must use the
+      climber's actual capacity; the belayer's longer rope cannot substitute for
+      it. An excessive ordered path or invalid capacity must refuse control.
+      This range change does not establish a protected role exchange or native
+      upper-station insertion: keep those cases separate from invitation reach.
   C07 Personal rope input while receiving belay: ordinary hand grabs and native
       rope ascent cannot take over the owned protection rope; the climber sees a
       short notice. Wall grips still work. Unloaded clipping/personal anchoring

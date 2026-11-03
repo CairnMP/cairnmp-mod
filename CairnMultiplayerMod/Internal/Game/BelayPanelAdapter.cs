@@ -11,6 +11,7 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
     private BelayPanelView _view = new();
     private readonly BelayPanelKeyGate _toggleKey = new();
     private readonly BelayPanelKeyGate _stationKey = new();
+    private readonly BelayPanelNavigation _navigation = new();
     private int _page;
     private bool _firstDrawCompleted;
     private int _cursorRepairsLogged;
@@ -53,6 +54,7 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
         view ??= new BelayPanelView();
         if (_view.Phase != view.Phase) _page = 0;
         _view = view;
+        _navigation.Update(view);
     }
 
     public void Draw()
@@ -73,7 +75,7 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
         if (_onAction != null && keyEvent != null && keyEvent.keyCode == KeyCode.K
             && keyEvent.type is EventType.KeyDown or EventType.KeyUp)
         {
-            var eligible = IsOpen && _view.Phase != BelayPanelPhase.Active && Application.isFocused && !keyEvent.control && !keyEvent.alt
+            var eligible = IsOpen && _view.Phase == BelayPanelPhase.Partners && Application.isFocused && !keyEvent.control && !keyEvent.alt
                 && !keyEvent.command && !keyEvent.shift
                 && (_view.StationDefined || _view.Phase == BelayPanelPhase.Partners);
             if (_stationKey.Observe(keyEvent.type == EventType.KeyDown, eligible))
@@ -85,7 +87,9 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
             }
             else if (IsOpen) keyEvent.Use();
         }
+        ObserveShortcut(keyEvent);
         if (!IsOpen) return;
+        InputInterop.ReconcileGameplayInput(InputCaptureState.WantsGameplayBlocked);
         MaintainCursor();
         var trace = !_firstDrawCompleted;
         if (trace) ModLog.Info("[BelayPanel] First draw started.");
@@ -104,7 +108,36 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
             _firstDrawCompleted = true;
             if (trace) ModLog.Info("[BelayPanel] First draw completed.");
         }
-        finally { GUI.enabled = previousEnabled; }
+        finally
+        {
+            GUI.enabled = previousEnabled;
+            if (keyEvent != null && keyEvent.type is EventType.MouseDown or EventType.MouseUp
+                or EventType.MouseDrag or EventType.ScrollWheel) keyEvent.Use();
+        }
+    }
+
+    private void ObserveShortcut(Event keyEvent)
+    {
+        if (_onAction == null || keyEvent == null || keyEvent.type is not (EventType.KeyDown or EventType.KeyUp)) return;
+        BelayPanelShortcut? key = keyEvent.keyCode switch
+        {
+            KeyCode.UpArrow => BelayPanelShortcut.Previous,
+            KeyCode.DownArrow => BelayPanelShortcut.Next,
+            KeyCode.O => BelayPanelShortcut.Offer,
+            KeyCode.I => BelayPanelShortcut.Request,
+            KeyCode.Return or KeyCode.KeypadEnter => BelayPanelShortcut.Accept,
+            KeyCode.Backspace => BelayPanelShortcut.Decline,
+            _ => null
+        };
+        if (!key.HasValue) return;
+        var eligible = IsOpen && Application.isFocused && !keyEvent.control && !keyEvent.alt
+            && !keyEvent.command && !keyEvent.shift;
+        if (_navigation.Observe(key.Value, keyEvent.type == EventType.KeyDown, eligible, _view, out var action, out var target))
+        {
+            ModLog.Info("[BelayPanel] Keyboard action=" + action + ", target=" + target);
+            Act(action, target);
+        }
+        if (IsOpen || eligible) keyEvent.Use();
     }
 
     private void MaintainCursor()
@@ -142,9 +175,9 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
             GUI.Label(new Rect(x, rect.y + 140f, half, 40f),
                 view.StationDefined ? "Station: your current piton anchor" : "Use your existing piton anchor", _body);
             if (Button(new Rect(x + half + 10f, rect.y + 140f, half, 40f),
-                view.Phase == BelayPanelPhase.Active ? "Station locked during belay" : view.StationDefined ? "Remove station (K)" : "Define station (K)",
+                view.Phase != BelayPanelPhase.Partners ? "Station locked during invitation/belay" : view.StationDefined ? "Remove station (K)" : "Define station (K)",
                 view.StationDefined ? BelayPanelAction.RemoveStation : BelayPanelAction.DefineStation,
-                enabled: view.Phase != BelayPanelPhase.Active)) return;
+                enabled: view.Phase == BelayPanelPhase.Partners)) return;
         }
         if (view.Phase == BelayPanelPhase.Partners)
         {
@@ -155,6 +188,8 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
                 var pageSize = Math.Max(1, (int)(available / 92f));
                 var pageCount = (view.Partners.Count + pageSize - 1) / pageSize;
                 _page = Math.Clamp(_page, 0, pageCount - 1);
+                for (var i = 0; i < view.Partners.Count; i++)
+                    if (view.Partners[i].Id == _navigation.SelectedPartner) _page = i / pageSize;
                 var rowHeight = Math.Min(92f, available / pageSize);
                 for (var row = 0; row < pageSize; row++)
                 {
@@ -162,16 +197,19 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
                     if (index >= view.Partners.Count) break;
                     var partner = view.Partners[index];
                     var y = contentY + row * rowHeight;
-                    GUI.Label(new Rect(x, y, width, 24f), $"{partner.Name} — {partner.Distance:F1} m", _name);
+                    var selected = partner.Id == _navigation.SelectedPartner ? "> " : "";
+                    GUI.Label(new Rect(x, y, width, 24f), $"{selected}{partner.Name} — {partner.Distance:F1} m", _name);
                     var buttonHeight = Math.Min(40f, rowHeight - 30f);
-                    if (Button(new Rect(x, y + 26f, half, buttonHeight), "Ask for belay", BelayPanelAction.Request, partner.Id, view.CanRequest)) return;
-                    if (Button(new Rect(x + half + 10f, y + 26f, half, buttonHeight), "Offer belay", BelayPanelAction.Offer, partner.Id, view.CanOffer)) return;
+                    if (Button(new Rect(x, y + 26f, half, buttonHeight), "Ask for belay (I)", BelayPanelAction.Request, partner.Id, view.CanRequest && partner.CanRequest)) return;
+                    if (Button(new Rect(x + half + 10f, y + 26f, half, buttonHeight), "Offer belay (O)", BelayPanelAction.Offer, partner.Id, view.CanOffer && partner.CanOffer)) return;
                 }
                 if (pageCount > 1)
                 {
-                    if (GUI.Button(new Rect(x, footerY - 38f, 100f, 30f), "Previous", _button)) _page = Math.Max(0, _page - 1);
+                    if (GUI.Button(new Rect(x, footerY - 38f, 100f, 30f), "Previous", _button))
+                        _navigation.Select(view.Partners[Math.Max(0, _page - 1) * pageSize].Id);
                     GUI.Label(new Rect(x + 110f, footerY - 38f, width - 220f, 30f), $"Page {_page + 1} / {pageCount}", _body);
-                    if (GUI.Button(new Rect(x + width - 100f, footerY - 38f, 100f, 30f), "Next", _button)) _page = Math.Min(pageCount - 1, _page + 1);
+                    if (GUI.Button(new Rect(x + width - 100f, footerY - 38f, 100f, 30f), "Next", _button))
+                        _navigation.Select(view.Partners[Math.Min(pageCount - 1, _page + 1) * pageSize].Id);
                 }
             }
         }
@@ -179,8 +217,8 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
         {
             GUI.Label(new Rect(x, contentY, width, 24f), view.PartnerName, _name);
             var buttonHeight = Math.Min(44f, available - 28f);
-            if (Button(new Rect(x, contentY + 28f, half, buttonHeight), "Accept", BelayPanelAction.Accept, enabled: view.CanAccept)) return;
-            if (Button(new Rect(x + half + 10f, contentY + 28f, half, buttonHeight), "Decline", BelayPanelAction.Decline)) return;
+            if (Button(new Rect(x, contentY + 28f, half, buttonHeight), "Accept (Enter)", BelayPanelAction.Accept, enabled: view.CanAccept)) return;
+            if (Button(new Rect(x + half + 10f, contentY + 28f, half, buttonHeight), "Decline (Backspace)", BelayPanelAction.Decline)) return;
         }
         else if (view.Phase == BelayPanelPhase.Active)
         {
@@ -193,8 +231,11 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
             }
             else if (Button(new Rect(x, contentY + 28f, width, buttonHeight), "End belay", BelayPanelAction.Cancel)) return;
         }
-        else if (Button(new Rect(x, contentY, width, Math.Min(40f, available)), "Cancel invitation", BelayPanelAction.Cancel)) return;
-        GUI.Label(new Rect(x, footerY, width, 30f), "L: open/close  •  Space: brake/release while belaying", _body);
+        else if (Button(new Rect(x, contentY, width, Math.Min(40f, available)), "Cancel invitation (Backspace)", BelayPanelAction.Cancel)) return;
+        GUI.Label(new Rect(x, footerY, width, 34f), view.Phase == BelayPanelPhase.Partners
+            ? "Up/Down: partner | I: ask | O: offer | K: station | L: close"
+            : view.Phase == BelayPanelPhase.Invitation ? "Enter: accept | Backspace: decline | L: close"
+            : "L: open/close | Space: brake/release with panel closed", _body);
         Button(new Rect(x, rect.yMax - 44f, width, 32f), "Close", BelayPanelAction.Close);
     }
 

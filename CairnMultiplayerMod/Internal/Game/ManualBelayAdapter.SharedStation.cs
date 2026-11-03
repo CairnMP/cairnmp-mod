@@ -11,6 +11,22 @@ internal sealed partial class ManualBelayAdapter
     private BelaySharedStation _definedStation;
     private BelaySharedStation? _partnerStation;
 
+    public float RopeCapacity
+    {
+        get
+        {
+            try
+            {
+                if (!ContextValid) return 0;
+                var rope = LocalLifeline()?.securingRope;
+                var length = rope?.IsInitialized == true ? rope.MaxLengthMeters : 0;
+                return float.IsFinite(length) && length > 0 && length <= 200 ? length : 0;
+            }
+            catch (Exception exception)
+            { ModLog.SuppressedException("belay.rope-capacity", exception); return 0; }
+        }
+    }
+
     public bool IsStationKnown(BelaySharedStation station) => station.IsValid && _stationKnown(station);
 
     public bool TryGetStation(out BelaySharedStation station)
@@ -24,7 +40,28 @@ internal sealed partial class ManualBelayAdapter
     public bool CanClimb(BelaySharedStation station, out string reason)
     {
         if (!CanClimb(out reason) || !TryResolveSharedStation(station, out var piton, out var attached, out reason)) return false;
-        return attached || CanAttachStation(LocalLifeline(), piton, out reason);
+        return attached ? CanUseAttachedStation(LocalLifeline(), piton, out reason)
+            : CanAttachStation(LocalLifeline(), piton, out reason);
+    }
+
+    private static bool CanUseAttachedStation(Lifeline lifeline, Piton station, out string reason)
+    {
+        reason = "The climber's rope cannot cover the station's ordered protection route.";
+        var rope = lifeline.securingRope;
+        var points = new System.Collections.Generic.List<BelayProtectionPoint>();
+        foreach (var holder in rope.ropeHolders)
+        {
+            var quickdraw = holder?.TryCast<LogicalQuickdraw>();
+            if (quickdraw == null) continue;
+            if (quickdraw.Piton == null || quickdraw.Piton.pitonHp <= 0) return false;
+            points.Add(new BelayProtectionPoint(unchecked((uint)quickdraw.Piton.GetInstanceID()), ToNumerics(holder.Position)));
+        }
+        if (!BelayRoutePlanner.TryPlanFromStation(unchecked((uint)station.GetInstanceID()), points,
+            ToNumerics(lifeline.harness.GetAttachPosition()), rope.MaxLengthMeters, out var plan)
+            || !BelayRoutePlanner.TryLimitFinalCapacity(plan, rope.GetRemainingSlackMeters(false), out var available)
+            || plan.ClimberDistance > available) return false;
+        reason = "";
+        return true;
     }
 
     public bool BeginClimber(Guid session, BelaySharedStation station, out string reason)

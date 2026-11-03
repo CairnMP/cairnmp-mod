@@ -6,6 +6,7 @@ namespace CairnMultiplayerMod.GameApi;
 internal interface IManualBelayApi
 {
     bool Enabled { get; }
+    float RopeCapacity => 0;
     bool CanBeginStation(out string reason) { reason = "Station unavailable."; return false; }
     bool CanClimb(out string reason) { reason = "Protection unavailable."; return false; }
     bool TryGetStation(out BelaySharedStation station) { station = default; return false; }

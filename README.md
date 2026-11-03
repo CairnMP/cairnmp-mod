@@ -31,7 +31,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **24**; lobby admission may also require the exact mod version.
+> protocol is **25**; lobby admission may also require the exact mod version.
 
 ## Features
 
@@ -121,16 +121,25 @@ instead of being destroyed or duplicated.
 Choose **Belay Team** when creating a lobby to enable partner belay. Rope team
 keeps its original direct harness tether; Belay Team rejects that tether in input,
 host validation, received packets and late-join snapshots. Every peer
-must use the same experimental build (protocol **22**, incompatible with the
+must use the same experimental build (protocol **25**, incompatible with the
 published 2.4.1/protocol 16 and earlier pilots). A missing station attachment can
 now be requested on the climber's synchronized native copy of that exact piton.
 This implementation has automated coverage; its initial attachment still needs
 native two-client validation. Belay Team does not create the direct harness tether.
 
-Press **L** to choose a nearby player, ask for belay or offer belay. The recipient
-accepts or declines in the panel; closing it does not accept the invitation. The
-belayer must be secured at a native piton station and remain still. Both players
-must initially be within 6 m in the same scene. Chat fallbacks remain available:
+Press **L** to choose a player. With the panel open, **Up/Down** selects a partner,
+**I** requests belay, **O** offers it, **Enter** accepts and **Backspace** declines
+or cancels a pending invitation. **K** defines/removes an idle station. Shortcuts
+act once per press; Backspace does not end an active pair. Closing L does not
+accept an invitation. Gameplay action maps stay blocked while the panel is open,
+including mouse climbing; Enter belongs to the panel instead of opening chat.
+The belayer must remain secured at their native piton station. Both players must
+be in the same world. The fixed 6 m invitation limit is replaced by the climber's
+native rope capacity and protection-route checks. The climber declares capacity
+when requesting or accepting; an offer waits for that declaration. The host uses
+a bounded distance check with a 3 m allowance for replicated body/attachment
+offsets, while native station-to-backup geometry, ordered route and remaining
+rope remain decisive before control. Chat fallbacks remain available:
 `/belay request <player>`, `/belay offer <player>`, `/belay accept`, `/belay stop`.
 **Space** (or F7) toggles the latched brake, starting with free rope. Only one pair
 can use this pilot at a time. L opens this panel only in Belay Team; Rope team
@@ -183,7 +192,7 @@ Invitations carry the station's placer/source id and its lifecycle reference. Th
 host checks that identity against its live piton registry; the climber resolves
 the corresponding native copy, with position used only as a secondary check.
 For a missing attachment, the climber must first be personally anchored at a
-separate healthy backup, within 6 m of the station. Acceptance requests one native
+separate healthy backup reachable within their native rope capacity. Acceptance requests one native
 quickdraw insertion ahead of the existing protection route. The panel reports
 preparation while the original backup, ordered holders, native piton collection
 and loaded pin connections are checked for five observed seconds. Feed/take-in
