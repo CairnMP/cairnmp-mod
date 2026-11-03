@@ -145,6 +145,7 @@ public partial class Mod
             TickPerformance();
             TickBelayRouteInput();
             _game?.Belay.Tick(); // Complete a pending hold even after leaving multiplayer.
+            TickBelayAppendGuide();
             NativePerformanceProbe.Tick();
             GameTuning.Tick();
             using var performance = Measure(PerformanceArea.ModUpdate);

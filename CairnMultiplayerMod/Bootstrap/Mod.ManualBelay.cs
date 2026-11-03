@@ -36,6 +36,11 @@ public partial class Mod
                 var recorded = _game.Belay.ToggleLocalStation(out var stationReason);
                 _localBelayNotice = stationReason;
                 _localBelayNoticeUntil = Time.realtimeSinceStartupAsDouble + 20;
+                if (LocalAppendGuideEnabled)
+                {
+                    if (recorded) _localBelayAppendTrial.StationChanged(_game.Belay.LocalStationStatus.HasValue);
+                    else _localBelayAppendTrial.RejectAction();
+                }
                 if (!recorded) LoggerInstance.Warning("[BelayStation] " + stationReason);
             }
             if (keyboard.f11Key.wasPressedThisFrame && (keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed))
@@ -44,6 +49,7 @@ public partial class Mod
                 _localBelayExerciseInput.Reset();
                 _localBelayNotice = reason;
                 _localBelayNoticeUntil = Time.realtimeSinceStartupAsDouble + 15;
+                if (!started && LocalAppendGuideEnabled) _localBelayAppendTrial.RejectAction();
                 if (!started) LoggerInstance.Warning("[ManualBelay] " + reason);
             }
             if (keyboard.spaceKey.wasPressedThisFrame || keyboard.f7Key.wasPressedThisFrame) _game.Belay.ToggleLocalBrake();
@@ -68,6 +74,7 @@ public partial class Mod
     private void DrawLocalBelayExercise()
     {
         if ((ModConfig.BelayRouteExperiment?.Value != true && ModConfig.BelayRopeExperiment?.Value != true) || _game == null) return;
+        if (LocalAppendGuideEnabled) { DrawBelayAppendGuide(); return; }
         _localBelayStyle ??= new GUIStyle(GUI.skin.box)
         {
             fontSize = 14, wordWrap = true, alignment = TextAnchor.UpperLeft,

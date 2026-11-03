@@ -237,6 +237,18 @@ exercise without a recorded station still uses a fixed route. This new integrati
 needs native validation independently of the already-passed fixed two-piton
 rehearsal on `1234e4e`; no partner endpoint or role transfer is implemented.
 
+`Debug.BelayAppendGuide` optionally replaces the diagnostic overlay with an
+observation-only guide for one offline BRAKED protection addition. It checks the
+recorded station and initial route, asks for 3.5 m of confirmed slack before
+closing the brake, follows the addition and requires five observed seconds of
+BRAKED control with two intermediate protections and matching length readback.
+The current instruction, controller ACTIVE/STOPPED state and final PASS/RETRY
+remain visible; stopping control, changing scenes or returning to the menu does
+not erase a result. A new exercise or station action starts a fresh attempt.
+The guide never changes rope commands or native physics. It defaults off;
+`Debug.BelayAppendGuideLanguage` defaults to `en`, with `pt` available for the
+local tester. A guide pass covers this local workflow only, not partner operation.
+
 This experiment controls the final segment of the existing native protection
 route. The HUD separates released length, estimated straight-line slack, geometric
 reserve, native rest/particle measurements and the suspension readback. Rope and
