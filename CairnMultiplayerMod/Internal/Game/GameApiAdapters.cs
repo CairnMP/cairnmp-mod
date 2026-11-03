@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.GameApi;
+using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Game.World;
 using CairnMultiplayerMod.Internal.Networking;
@@ -221,6 +222,7 @@ internal sealed class PlayersAdapter : IPlayersApi
     private readonly List<int> _sleepParticipants = new();
     private readonly List<int> _inGameOrBivouacPlayers = new();
     private readonly List<int> _inGamePlayers = new();
+    private int _interactionBasisLogs;
 
     public IReadOnlyList<int> RemoteSleepParticipants => CollectInGameOrBivouac(_sleepParticipants);
 
@@ -281,6 +283,41 @@ internal sealed class PlayersAdapter : IPlayersApi
             || DateTime.UtcNow.Ticks / (double)TimeSpan.TicksPerSecond - player.LastUpdateTime
                 > MaxLocationAgeSeconds) return false;
         location = new PlayerLocation(player.X, player.Y, player.Z, player.SceneName, player.State);
+        return true;
+    }
+
+    public bool TryGetInteractionLocation(int playerId, out PlayerLocation location, out string reason)
+    {
+        location = default;
+        var network = _network();
+        reason = "The multiplayer connection is not ready.";
+        if (network == null) return false;
+        if (playerId == network.LocalPlayerId)
+        {
+            reason = "Your player state is " + _state.LocalPlayerState + "; wait for active gameplay.";
+            if (_state.LocalPlayerState != PlayerState.InGame) return false;
+            reason = "Your synchronized body position is not ready; wait for player pose updates.";
+            if (!PawnCaptureInterop.TryGetInteractionPosition(out var local)) return false;
+            if (_interactionBasisLogs < 3 && LocalPlayerInterop.TryGetPose(out var actor, out _)
+                && (actor - new Vector3(local.X, local.Y, local.Z)).sqrMagnitude > 1)
+            {
+                _interactionBasisLogs++;
+                ModLog.Info($"[BelayPartner] Interaction body/actor offset: body=({local.X:F2},{local.Y:F2},{local.Z:F2}) actor=({actor.x:F2},{actor.y:F2},{actor.z:F2}). Using the replicated body point.");
+            }
+            location = new PlayerLocation(local.X, local.Y, local.Z,
+                SceneRoles.ResolveNetworkScene(_state.CurrentScene, _state.LastGameplayScene), _state.LocalPlayerState);
+            reason = "";
+            return true;
+        }
+        reason = "The partner is not registered in this connection.";
+        if (!network.RemotePlayers.TryGetValue(playerId, out var player) || player == null) return false;
+        reason = "Partner state is " + player.State + "; wait for active gameplay.";
+        if (player.State != PlayerState.InGame) return false;
+        reason = "The partner body pose is missing or older than 2 seconds.";
+        var now = DateTime.UtcNow.Ticks / (double)TimeSpan.TicksPerSecond;
+        if (!PlayerInteractionPose.TryRead(player.PlayerFrame, player.LastPlayerFrameTime, now, out var remote)) return false;
+        location = new PlayerLocation(remote.X, remote.Y, remote.Z, player.SceneName, player.State);
+        reason = "";
         return true;
     }
 

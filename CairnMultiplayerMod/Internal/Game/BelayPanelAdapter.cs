@@ -149,7 +149,7 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
         if (view.Phase == BelayPanelPhase.Partners)
         {
             if (view.Partners.Count == 0)
-                GUI.Label(new Rect(x, contentY, width, available), "No partner within 6 m in this area.", _body);
+                GUI.Label(new Rect(x, contentY, width, available), "No eligible partner yet. See the status above.", _body);
             else
             {
                 var pageSize = Math.Max(1, (int)(available / 92f));

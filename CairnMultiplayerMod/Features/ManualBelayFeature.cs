@@ -33,6 +33,8 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
     private HostEvent<ManualBelayMessage> _changed;
     private SessionState _hostSession;
     private ManualBelayMessage _offer, _active, _telemetry;
+    private string _lastPartnerBlock;
+    private float _nextPartnerBlockLog;
     private Guid _accepted;
     private int _offeredTarget = -1;
     private bool _desiredBrake;
@@ -212,20 +214,30 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             return;
         }
         var partners = new List<BelayPartnerRow>();
+        string blocked = null;
         foreach (var player in Players)
         {
-            if (player.IsLocal || !TryLocations(LocalPlayerId, player.Id, out var self, out var other)) continue;
+            if (player.IsLocal) continue;
+            if (!TryLocations(LocalPlayerId, player.Id, out var self, out var other, out var reason))
+            { blocked ??= player.Name + ": " + reason; continue; }
             var squared = DistanceSquared(self, other);
             if (squared <= 36) partners.Add(new BelayPartnerRow(player.Id, player.Name, MathF.Sqrt(squared)));
+            else blocked ??= $"{player.Name}: synchronized body distance {MathF.Sqrt(squared):F1} m; move within 6 m.";
         }
         partners.Sort((a, b) => a.Distance.CompareTo(b.Distance));
         if (partners.Count == 0)
         {
+            if (blocked != null && blocked != _lastPartnerBlock && Game.Time.UnscaledTime >= _nextPartnerBlockLog)
+            {
+                _lastPartnerBlock = blocked; _nextPartnerBlockLog = Game.Time.UnscaledTime + 2;
+                FeatureLog.Info("[BelayPartner] No eligible partner; " + blocked);
+            }
             Game.BelayPanel.SetView(new BelayPanelView { Phase = BelayPanelPhase.Partners,
                 StationDefined = Game.Belay.HasStation,
-                Partners = partners, Description = "You can define your current piton anchor as a station before a partner joins." });
+                Partners = partners, Description = blocked ?? "You can define your current piton anchor as a station before a partner joins." });
             return;
         }
+        _lastPartnerBlock = null;
         var canRequest = Game.Belay.CanClimb(out var protectionReason);
         var canOffer = Game.Belay.CanBeginStation(out var stationReason);
         var instructions = "Choose a nearby partner.";
@@ -237,13 +249,23 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
     }
 
     private bool TryLocations(int belayer, int climber, out PlayerLocation station, out PlayerLocation target)
+        => TryLocations(belayer, climber, out station, out target, out _);
+
+    private bool TryLocations(int belayer, int climber, out PlayerLocation station, out PlayerLocation target, out string reason)
     {
         station = target = default;
-        return belayer != climber && Game.Players.TryGetLocation(belayer, out station)
-            && Game.Players.TryGetLocation(climber, out target)
-            && ValidLocation(station) && ValidLocation(target)
-            && station.State == PlayerState.InGame && target.State == PlayerState.InGame
-            && station.Scene == target.Scene;
+        reason = "Two different players are required.";
+        if (belayer == climber) return false;
+        if (!Game.Players.TryGetInteractionLocation(belayer, out station, out reason)
+            || !Game.Players.TryGetInteractionLocation(climber, out target, out reason)) return false;
+        reason = "A synchronized position or gameplay scene is not ready.";
+        if (!ValidLocation(station) || !ValidLocation(target)) return false;
+        if (station.State != PlayerState.InGame || target.State != PlayerState.InGame)
+        { reason = $"Player states: {station.State}/{target.State}; both must be in active gameplay."; return false; }
+        if (station.Scene != target.Scene)
+        { reason = $"Different gameplay scenes: {station.Scene} / {target.Scene}."; return false; }
+        reason = "";
+        return true;
     }
 
     private static bool ValidLocation(PlayerLocation value)
@@ -474,7 +496,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         {
             if (now >= _hostSession.Until) EndHost("Fresh partner input timed out.");
             else if (_hostSession.Station.IsValid && !Game.Belay.IsStationKnown(_hostSession.Station)) EndHost("The agreed station is no longer synchronized.");
-            else if (!TryLocations(_hostSession.Belayer, _hostSession.Climber, out var hostStation, out _)) EndHost("A participant left active gameplay or the shared scene.");
+            else if (!TryLocations(_hostSession.Belayer, _hostSession.Climber, out var hostStation, out _, out var locationReason)) EndHost("Participant location unavailable: " + locationReason);
             else if ((_hostSession.Started || _hostSession.Initiator == _hostSession.Belayer)
                 && !WithinStationArea(_hostSession.Station, hostStation)) EndHost("The belayer left the station area.");
         }

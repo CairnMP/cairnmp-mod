@@ -15,6 +15,40 @@ namespace CairnMultiplayerMod.Tests;
 
 public sealed partial class ManualBelayFeatureTests
 {
+    [Fact]
+    public void NearbyInteractionBodiesCanConnectEvenWhenTheActorBasesAreFarApart()
+    {
+        using var world = new World(participants: 2);
+        world.Locations[1] = new PlayerLocation(50, 0, 0, "Wall", PlayerState.InGame);
+        world.Locations[2] = new PlayerLocation(100, 0, 0, "Wall", PlayerState.InGame);
+        var bodies = new Dictionary<int, PlayerLocation>
+        {
+            [1] = new(0, 0, 0, "Wall", PlayerState.InGame),
+            [2] = new(2, 0, 0, "Wall", PlayerState.InGame),
+        };
+        world.Nodes[1].Game.InteractionLocations = bodies;
+        world.Nodes[2].Game.InteractionLocations = bodies;
+        world.Nodes[1].Game.PanelImpl.Act(BelayPanelAction.Toggle); world.Tick();
+        Assert.Equal(2, Assert.Single(world.Nodes[1].Game.PanelImpl.View.Partners).Distance);
+        world.Nodes[1].Game.ChatImpl.Run("offer 2"); world.Nodes[2].Game.ChatImpl.Run("accept"); world.Tick();
+        Assert.True(world.Nodes[2].Game.BelayImpl.Active);
+        Assert.Empty(world.Failures);
+    }
+
+    [Fact]
+    public void ASceneMismatchExplainsTheMissingPartnerWithoutBypassingSceneValidation()
+    {
+        using var world = new World(participants: 2);
+        world.Locations[2] = new PlayerLocation(1, 0, 0, "OtherWall", PlayerState.InGame);
+        var game = world.Nodes[1].Game;
+        game.PanelImpl.Act(BelayPanelAction.Toggle); world.Tick();
+        Assert.Empty(game.PanelImpl.View.Partners);
+        Assert.Contains("Different gameplay scenes", game.PanelImpl.View.Description);
+        Assert.False(game.PanelImpl.View.CanOffer);
+        game.ChatImpl.Run("offer 2");
+        Assert.False(world.Nodes[2].Game.BelayImpl.Active);
+    }
+
     [Theory]
     [InlineData(MultiplayerMode.RopeTeam)]
     [InlineData(MultiplayerMode.FreeSolo)]
@@ -815,6 +849,7 @@ public sealed partial class ManualBelayFeatureTests
         internal readonly Belay BelayImpl = new(); internal readonly Chat ChatImpl = new(); internal readonly Keys Keys = new();
         internal readonly Panel PanelImpl = new();
         internal bool Cutscene;
+        internal IReadOnlyDictionary<int, PlayerLocation> InteractionLocations;
         internal Game(World world, int id)
         { _world = world; BelayImpl.StationPosition = new WorldPosition(id - 1, 0, 0); BelayImpl.StationOwner = id; BelayImpl.Clock = () => world.Time; }
         public IMainMenuApi MainMenu => UnavailableGameApi.Instance.MainMenu;
@@ -838,6 +873,12 @@ public sealed partial class ManualBelayFeatureTests
         public IReadOnlyList<int> RemotePlayersInGameOrBivouac => RemotePlayersInGame;
         public bool IsRemotePlayerInBivouac(int id) => false;
         public bool TryGetLocation(int id, out PlayerLocation location) => _world.Locations.TryGetValue(id, out location);
+        public bool TryGetInteractionLocation(int id, out PlayerLocation location, out string reason)
+        {
+            var found = (InteractionLocations ?? _world.Locations).TryGetValue(id, out location);
+            reason = found ? "" : "The synchronized player position is not ready.";
+            return found;
+        }
         public bool TryCaptureHandPose(out byte[] packed) { packed = null; return false; }
         public bool TryCaptureAppearance(out int packed) { packed = 0; return false; }
         public bool TryCaptureCosmetics(out byte packed) { packed = 0; return false; }

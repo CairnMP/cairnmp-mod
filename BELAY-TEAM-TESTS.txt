@@ -23,6 +23,9 @@ Setup shared by connection cases
   6. During initial attachment, keep P attached and remain still. Wait for connection
      confirmation and the native length readback. Do not use the solo Ctrl+F10/F11/F12.
   7. If setup is refused, record the message/time and stop; do not make a fall.
+     An empty partner list now reports the rejected state, scene, stale body pose
+     or measured distance. Live ghost movement alone does not prove eligibility.
+     Proximity uses fresh replicated body positions on both sides, not actor bases.
 
 Connection / consent
   C01 Installation and mode: verify same build/protocol, L opens/closes, cursor and

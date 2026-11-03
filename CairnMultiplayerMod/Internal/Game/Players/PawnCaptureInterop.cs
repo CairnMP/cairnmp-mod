@@ -1,5 +1,6 @@
 using System;
 using CairnMultiplayer.Shared;
+using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
@@ -34,6 +35,21 @@ internal static class PawnCaptureInterop
     // native SetFrame asserts to be Player on a player frame; the capture already reports 0
     // there, and masking keeps a stale target byte from ever reaching that assertion.
     private const byte PlayerFlagsMask = 0x1F;
+    private static WorldPosition _interactionPosition;
+    private static double _interactionCapturedAt;
+
+    internal static bool TryGetInteractionPosition(out WorldPosition position)
+    {
+        position = _interactionPosition;
+        return PlayerInteractionPose.IsFresh(_interactionCapturedAt, Time.realtimeSinceStartupAsDouble);
+    }
+
+    private static void RememberInteractionPosition(NetFrameData frame)
+    {
+        var now = Time.realtimeSinceStartupAsDouble;
+        if (!PlayerInteractionPose.TryRead(frame, now, now, out var position)) return;
+        _interactionPosition = position; _interactionCapturedAt = now;
+    }
 
     /// <summary>Stale native pointers can crash the first capture after a death or reload.</summary>
     internal static void ResetCaches()
@@ -51,6 +67,7 @@ internal static class PawnCaptureInterop
         // Invalid (0) until the native capture tells us otherwise: announcing a stale
         // Walking would let a partner teleport onto a pawn whose state we do not know.
         _lastNativePlayerFlags = 0;
+        _interactionPosition = default; _interactionCapturedAt = 0;
     }
 
     public static bool TryCaptureLocalPlayerFrame(out NetFrameData frameData)
@@ -87,6 +104,7 @@ internal static class PawnCaptureInterop
                     {
                         SampleBoneStability(frameData.Positions);
                         _lastNativePlayerFlags = (byte)(frameData.Flags & PlayerFlagsMask);
+                        RememberInteractionPosition(frameData);
                         return true;
                     }
                 }
@@ -99,7 +117,9 @@ internal static class PawnCaptureInterop
             }
         }
 
-        return TryCaptureLocalPlayerFallbackFrame(capture, out frameData);
+        if (!TryCaptureLocalPlayerFallbackFrame(capture, out frameData)) return false;
+        RememberInteractionPosition(frameData);
+        return true;
     }
 
     private static float _lastPawnStateCheckTime;
