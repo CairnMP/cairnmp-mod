@@ -45,6 +45,7 @@ public partial class Mod
             }
             if (keyboard.f11Key.wasPressedThisFrame && (keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed))
             {
+                if (LocalAppendGuideEnabled && !_game.Belay.IsLocalExercise) _localBelayAppendTrial.ExerciseRequested();
                 var started = _game.Belay.ToggleLocalExercise(out var reason);
                 _localBelayExerciseInput.Reset();
                 _localBelayNotice = reason;

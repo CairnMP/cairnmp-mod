@@ -35,6 +35,8 @@ internal sealed class BelayAppendTrialTracker
     private uint _revision;
     private double _lastObservation = -1, _stableSince = double.NaN;
 
+    internal void ExerciseRequested() => Reset();
+
     internal void StationChanged(bool recorded)
     {
         Reset();

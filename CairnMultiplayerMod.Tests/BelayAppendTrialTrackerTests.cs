@@ -139,6 +139,18 @@ public sealed class BelayAppendTrialTrackerTests
     }
 
     [Fact]
+    public void ARejectedNewStartCannotLeaveThePreviousPassOnScreen()
+    {
+        var guide = Armed();
+        for (var i = 0; i <= 10; i++) guide.Observe(Added(), 2 + i * .5);
+        guide.Observe(default, 8);
+        guide.ExerciseRequested();
+        guide.RejectAction();
+        Assert.Equal(BelayAppendTrialStage.Retry, guide.Stage);
+        Assert.Equal(BelayAppendTrialFailure.RejectedAction, guide.Failure);
+    }
+
+    [Fact]
     public void StoppingEarlyKeepsAnExplicitRetryResult()
     {
         var guide = Armed();
