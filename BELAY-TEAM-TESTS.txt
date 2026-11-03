@@ -32,6 +32,10 @@ Setup shared by connection cases
      The panel/BelayAnchor log reports native readiness; it never forces anchoring.
 
 Connection / consent
+  C00 Fresh Story slot in Belay Team on Mount Kami: no Summit gear selection and
+      health rather than the Summit energy bar. Verify active native setup logs
+      summit=False, gearUp=False, energyHealth=False. Use an empty slot; this
+      change does not convert saves already created with Summit settings.
   C01 Installation and mode: verify same build/protocol, L opens/closes, cursor and
       gameplay control restore. Other lobby modes retain their original behavior.
   C02 Station lifecycle: define/remove S without releasing personal anchoring;
@@ -72,6 +76,10 @@ Falls - only after C/R cases pass
       excessive upward launch. Record height, slack, damage and piton condition.
   F02 Short fall from FREE, belayer brakes in flight: one catch at current geometry;
       no repeated brake input is needed to keep it latched.
+      R15 remains unstable when native holder topology changes after the catch;
+      a second recorded stop followed a fall during a pending route update.
+      These are unresolved. R16 logs holder types and physical endpoints to
+      distinguish native transitions before changing loaded-route ownership.
   F03 Suspended release/re-brake and take-in: coherent payout/catch; take-in removes
       slack without winching the loaded character. Stop if the earlier gates fail.
   F04 Rope-end knot: later controlled case with suitable clearance and a prepared

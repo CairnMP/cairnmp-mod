@@ -83,6 +83,7 @@ internal sealed partial class ManualBelayAdapter
             + ", originalHolderWalk=" + string.Join(",", _topology.Current.Holders)
             + ", originalPins=" + (_boundProtectionPins == null ? "unavailable" : string.Join(",", _boundProtectionPins))
             + ", reason=" + reason);
+        LogRouteContext("Waiting: " + reason);
         return true;
     }
 
@@ -179,6 +180,7 @@ internal sealed partial class ManualBelayAdapter
             + ", holders=" + snapshot.Holders.Length + ", lastChanged=" + (snapshot.LastPiton != _topology.Current.LastPiton)
             + ", protections=" + ProtectionOrder(_measuredStationProtections)
             + ", holderWalk=" + string.Join(",", snapshot.Holders)
+            + ", holderTypes=" + DescribeLiveHolders()
             + ", originalPinsMatch=" + SamePins(_boundProtectionPins, ReadProtectionPins());
         if (observation == _localRouteObservation) return;
         _localRouteObservation = observation;
@@ -188,4 +190,54 @@ internal sealed partial class ManualBelayAdapter
 
     private static string ProtectionOrder(BelayProtectionPoint[] protections)
         => protections == null ? "none" : string.Join(",", Array.ConvertAll(protections, point => point.Id));
+
+    private string DescribeLiveHolders()
+    {
+        try { return ReadLiveHolderDescription(); }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("belay.describe-route-holders", exception);
+            return "not ready";
+        }
+    }
+
+    private string ReadLiveHolderDescription()
+    {
+        var holders = _rope?.ropeHolders;
+        var count = holders?.Count ?? 0;
+        if (count > 66) return "over limit";
+        var result = new System.Text.StringBuilder();
+        for (var i = 0; i < count; i++)
+        {
+            if (i > 0) result.Append(',');
+            var holder = holders[i];
+            result.Append(i).Append(':');
+            if (holder == null) { result.Append("null"); continue; }
+            result.Append(holder.TryCast<Il2CppSystem.Object>()?.GetIl2CppType().Name ?? "unknown")
+                .Append(':').Append(holder.Pointer.ToInt64());
+            var piton = holder.TryCast<LogicalQuickdraw>()?.Piton;
+            if (piton != null) result.Append("/piton=").Append(unchecked((uint)piton.GetInstanceID()));
+        }
+        return result.ToString();
+    }
+
+    private void LogRouteContext(string reason)
+    {
+        try
+        {
+            if (_lifeline == null || _rope == null || !GameLifecycleService.TryGetRawGameState(out var lifecycle)
+                || lifecycle != CairnGameLifecycleState.InGame) return;
+            ModLog.Info("[BelayRope] Route context; reason=" + reason
+                + ", falling=" + (_lifeline.pawn?.IsFalling == true)
+                + ", swing=" + _lifeline.SwingHasPivotAndExtremity()
+                + ", boundPivot=" + _pivot + ", livePivot=" + Id(_lifeline.SwingPivotInstance)
+                + ", attached=" + (_control?.Attached == true) + ", pending=" + _localRoutePending
+                + ", expectedParts=" + (_topology?.Current?.Parts.Length ?? 0)
+                + ", parts=" + (_rope.ropeParts?.Count ?? 0)
+                + ", expectedHolders=" + (_topology?.Current?.Holders.Length ?? 0)
+                + ", holders=" + DescribeLiveHolders()
+                + ", pins=" + (ReadProtectionPins() is { } pins ? string.Join(",", pins) : "not ready"));
+        }
+        catch (Exception exception) { ModLog.SuppressedException("belay.route-context", exception); }
+    }
 }

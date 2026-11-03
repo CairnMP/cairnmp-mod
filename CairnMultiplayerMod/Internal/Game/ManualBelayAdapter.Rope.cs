@@ -242,6 +242,7 @@ internal sealed partial class ManualBelayAdapter
     private void EndLocalRope(string reason)
     {
         if (_control == null || _lease == null) return;
+        LogRouteContext(reason);
         _localRopeNotice = reason;
         ModLog.Info("[BelayRope] Ended; " + reason);
         Stop(_lease.Session, reason);
