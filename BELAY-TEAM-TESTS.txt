@@ -61,6 +61,12 @@ Connection / consent
       short notice. Wall grips still work. Unloaded clipping/personal anchoring
       retain their native handling. After End belay, native rope input works again.
       The guard is scoped to the local climber and this rope, not other actors.
+      After a controlled catch, returning to the piton may automatically play an
+      OffBelay rope-item animation. While the owned route is loaded, retain that
+      animation without inserting a physical hand into the protection rope.
+      Verify personal anchoring completes, the same session stays active and the
+      belayer can still brake/feed after the climber releases the personal anchor.
+      This native return-to-anchor case is pending; do not infer it from unit tests.
 
 Stationary controls - remain anchored at P
   R01 FREE + Up for 2 seconds: approximately 2 m paid out; release stops explicit

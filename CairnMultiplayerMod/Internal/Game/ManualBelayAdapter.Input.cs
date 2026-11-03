@@ -17,6 +17,10 @@ internal sealed partial class ManualBelayAdapter
             && Id(overrideRope ?? _lifeline.securingRope) == Id(_rope)
             && Id(_lifeline.securingRope) == Id(_rope);
 
+    private bool RopeInputLoaded(ClimbingV2PawnController pawn)
+        => pawn.IsFalling || _lifeline.SwingHasPivotAndExtremity()
+            || _control.Attached || _ropeControl.Suspended;
+
     private bool BlockPersonalRopeAction(ClimbingV2PawnController pawn, LogicalRope overrideRope,
         BelayPersonalRopeAction action)
     {
@@ -27,8 +31,7 @@ internal sealed partial class ManualBelayAdapter
             || next?.TryCast<ClimbingV2PawnControllerModulePitonExecution>() != null;
         var anchoring = current?.TryCast<ClimbingV2PawnControllerModuleOffBelay>() != null
             || next?.TryCast<ClimbingV2PawnControllerModuleOffBelay>() != null;
-        var loaded = pawn.IsFalling || _lifeline.SwingHasPivotAndExtremity()
-            || _control.Attached || _ropeControl.Suspended;
+        var loaded = RopeInputLoaded(pawn);
         if (!BelayRopeInteractionGuard.ShouldBlock(action, true, _stopping, loaded, placing, anchoring)) return false;
         _ropeInputNoticeUntil = Now + 3;
         if (Now >= _nextRopeInputLog)
@@ -38,6 +41,27 @@ internal sealed partial class ManualBelayAdapter
                 + ", loaded=" + loaded + ", placing=" + placing + ", anchoring=" + anchoring);
         }
         return true;
+    }
+
+    private static void BeforeHoldingRopeItem(ClimbingV2PawnController __instance,
+        ClimbingV2PawnController.HeldItem item, ref ClimbingV2PawnController.HoldItemContext context)
+    {
+        if (item != ClimbingV2PawnController.HeldItem.Rope
+            || context != ClimbingV2PawnController.HoldItemContext.OffBelay) return;
+        var owner = _owner;
+        if (owner == null) return;
+        try
+        {
+            if (!owner.OwnsClimberRopeInput(__instance) || !ContextValid) return;
+            if (owner._stopping || !owner.RopeInputLoaded(__instance)) return;
+            // Native OffBelay item handling adds a physical hand to the securing
+            // rope, bypassing GrabSecuringRope. Its Abseil item context retains
+            // the same held-item animation without RequestAttach. Only change
+            // this call's context: the anchor module and its transition still run.
+            context = ClimbingV2PawnController.HoldItemContext.Abseil;
+            ModLog.Info("[BelayInput] Anchor rope animation kept without a loaded hand attachment; session=" + owner._lease.Session);
+        }
+        catch (Exception exception) { owner.Fail(exception); }
     }
 
     private static bool BeforePersonalRopeGrab(ClimbingV2PawnController __instance, LogicalRope overrideRope)
