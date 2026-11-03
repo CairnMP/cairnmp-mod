@@ -302,6 +302,31 @@ to two records per second, including read-only stretch/compression observations.
 No remote take-in, shared station attachment or protected role transfer is added
 by this local exercise. Native damage/piton coherence is still unverified.
 
+An independent opt-in **station reconnection trial** is enabled by
+`Debug.BelayStationConnectionExperiment` together with `Debug.BelayRopeExperiment`.
+Enter Story directly without Multiplayer. Place/anchor at A and record it with
+Ctrl+F10, then release personal anchoring, place B about 2 m higher and personally
+anchor at B. Keep exactly the native A -> B protection route. Ctrl+F12 requests
+unclipping only A's quickdraw from that rope; the second press is enabled after
+the game confirms A is absent and B is still attached. It requests native
+geometric reinsertion of the same existing quickdraw, then checks the original
+protection order, loaded rope parts, native pin-collider references for A/B,
+usable station route and five observed seconds of stable connection. The panel
+gives the current instruction and retains PASS/NOT APPROVED.
+The earlier append guide is suppressed while this trial is selected.
+
+This diagnostic does not spawn/delete pitons, write inventory/HP/positions or
+control rope length/brake. It requires the same healthy personal B anchor, native
+rope identity and piton collection throughout. Only one native request is issued
+per phase. Native topology changes have a three-second deadline and require a
+complete stable snapshot; missing frames do not count toward confirmation. Pause,
+focus/mode/scene changes, movement or anchor/route loss stop further requests.
+Cancellation does not rewind rope state or clear the game's native request queue;
+an already queued operation can still finish. Keep B attached. Ctrl+F12 can retry
+a detached A only if the original B anchor and exact remaining route are verified
+again. This is a no-fall, solo reconnection experiment; no initial partner
+attachment, two-client routing or role transfer acceptance is established.
+
 ### Proximity voice
 
 Experimental proximity voice is available under **Settings → CairnMP**. It

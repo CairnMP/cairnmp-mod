@@ -18,6 +18,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 {
     private static ManualBelayAdapter _owner;
     private readonly Func<bool> _remoteEnabled;
+    private readonly Func<bool> _localConnectionAllowed;
     private readonly HarmonyLib.Harmony _harmony = new("CairnMultiplayerMod.ManualBelay");
     private bool _installed, _stopping, _holdApplied;
     private Lifeline _lifeline, _stationLifeline;
@@ -40,8 +41,11 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     public SharedBelayRoutePreview? LocalRoutePreview { get; private set; }
     internal static bool IsControlling => _owner?._control != null;
 
-    internal ManualBelayAdapter(Func<bool> remoteEnabled)
-        => _remoteEnabled = remoteEnabled ?? throw new ArgumentNullException(nameof(remoteEnabled));
+    internal ManualBelayAdapter(Func<bool> remoteEnabled, Func<bool> localConnectionAllowed = null)
+    {
+        _remoteEnabled = remoteEnabled ?? throw new ArgumentNullException(nameof(remoteEnabled));
+        _localConnectionAllowed = localConnectionAllowed ?? (() => false);
+    }
 
     public bool Enabled => _remoteEnabled();
     public ManualBelayStatus Status => new(_control != null && !_stopping, _control?.Attached == true,
@@ -106,7 +110,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     public bool CanBeginStation(out string reason)
     {
         reason = "Anchor yourself on a piton and remain still.";
-        if (!Enabled || !ContextValid || _control != null || RopeInterop.IsNativeBelayEngaged) return false;
+        if (!Enabled || !ContextValid || _control != null || ConnectionActive || RopeInterop.IsNativeBelayEngaged) return false;
         var lifeline = LocalLifeline();
         var piton = lifeline != null ? lifeline.OffBelayPiton : null;
         return piton != null && piton.pitonHp > 0 && lifeline.securingRope != null
@@ -120,7 +124,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         if (!(Enabled || LocalExerciseEnabled)) return false;
         if (!TryGetActiveContext(out reason)) return false;
         reason = "End the current rope control before starting another.";
-        if (_control != null) return false;
+        if (_control != null || ConnectionActive) return false;
         reason = "Remove your belay station before becoming the climber.";
         if (HasStation) return false;
         reason = "Disconnect the existing cooperative rope first.";
@@ -170,7 +174,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         if (session == Guid.Empty) return false;
         if (!TryGetActiveContext(out reason)) return false;
         reason = "End the current rope control before starting another.";
-        if (_control != null || (_owner != null && !ReferenceEquals(_owner, this))) return false;
+        if (_control != null || ConnectionActive || (_owner != null && !ReferenceEquals(_owner, this))) return false;
         reason = "End your anchored belayer role before controlling the climbing rope.";
         if (_stationLifeline != null) return false;
         reason = "Disconnect the existing cooperative rope before starting this exercise.";
@@ -398,6 +402,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     public void Tick()
     {
+        TickStationConnection();
         if (HasStation && !StationValid) EndStation();
         if (_unpatchPending && _control == null)
         {
@@ -640,6 +645,8 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     private bool _unpatchPending;
     public void ResetScene()
     {
+        if (ConnectionActive) FailStationConnection(StationConnectionFailure.Context, "Scene changed; no further rope requests will be issued.");
+        ReleaseConnectionReferences();
         if (_localStation != null) ModLog.Info("[BelayStation] Captured station cleared by a scene reset.");
         EndStation(); ClearControl("A scene reset invalidated the native rope and station."); ClearLocalStation();
     }

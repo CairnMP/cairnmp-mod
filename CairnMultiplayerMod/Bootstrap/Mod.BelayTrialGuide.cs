@@ -13,7 +13,7 @@ public partial class Mod
     private BelayAppendTrialFailure _lastBelayTrialFailure;
     private double _nextBelayTrialLog;
     private static bool LocalAppendGuideEnabled => ModConfig.BelayRopeExperiment?.Value == true
-        && ModConfig.BelayAppendGuide?.Value == true;
+        && ModConfig.BelayAppendGuide?.Value == true && ModConfig.BelayStationConnectionExperiment?.Value != true;
     private static string TrialText(string english, string portuguese)
         => string.Equals(ModConfig.BelayAppendGuideLanguage?.Value, "pt", StringComparison.OrdinalIgnoreCase)
             ? portuguese : english;

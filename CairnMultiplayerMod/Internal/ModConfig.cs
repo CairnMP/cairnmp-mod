@@ -21,6 +21,7 @@ internal static class ModConfig
     public static MelonPreferences_Entry<bool> PerformanceDiagnostics;
     public static MelonPreferences_Entry<bool> BelayRouteExperiment;
     public static MelonPreferences_Entry<bool> BelayRopeExperiment;
+    public static MelonPreferences_Entry<bool> BelayStationConnectionExperiment;
     public static MelonPreferences_Entry<bool> BelayAppendGuide;
     public static MelonPreferences_Entry<string> BelayAppendGuideLanguage;
     public static MelonPreferences_Entry<bool> NativeProfiling;
@@ -46,6 +47,7 @@ internal static class ModConfig
         // Independent solo route exercise; partner belay is selected through the lobby mode.
         BelayRouteExperiment = debug.CreateEntry("BelayRouteExperiment", false);
         BelayRopeExperiment = debug.CreateEntry("BelayRopeExperiment", false);
+        BelayStationConnectionExperiment = debug.CreateEntry("BelayStationConnectionExperiment", false);
         BelayAppendGuide = debug.CreateEntry("BelayAppendGuide", false);
         BelayAppendGuideLanguage = debug.CreateEntry("BelayAppendGuideLanguage", "en");
         // Times the native methods flagged by the reverse-engineering audit. Adds Harmony

@@ -34,6 +34,16 @@ internal interface IManualBelayApi
     LocalBelayStationStatus? LocalStationStatus => null;
     SharedBelayRoutePreview? LocalRoutePreview => null;
     bool TryPreviewRoute(WorldPosition station, out SharedBelayRoutePreview preview) { preview = default; return false; }
+    bool AdvanceLocalStationConnection(out string reason) { reason = "Station connection trial unavailable."; return false; }
+    LocalStationConnectionStatus? StationConnectionStatus => null;
+}
+
+internal enum StationConnectionStage { Unclipping, Detached, Connecting, Confirming, Passed, Failed }
+internal enum StationConnectionFailure { None, Setup, Context, BackupLost, StationLost, RouteChanged, Timeout, NativeRejected }
+internal readonly record struct LocalStationConnectionStatus(StationConnectionStage Stage, StationConnectionFailure Failure,
+    float ConfirmedSeconds, string Detail)
+{
+    internal bool Active => Stage is not (StationConnectionStage.Passed or StationConnectionStage.Failed);
 }
 
 internal readonly record struct BelaySharedStation(Guid Id, WorldPosition Position)

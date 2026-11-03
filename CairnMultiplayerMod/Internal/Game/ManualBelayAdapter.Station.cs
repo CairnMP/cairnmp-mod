@@ -21,7 +21,8 @@ internal sealed partial class ManualBelayAdapter
         reason = "Enable the local rope-budget exercise first.";
         if (ModConfig.BelayRopeExperiment?.Value != true) return false;
         reason = "End the current rope exercise before changing its station.";
-        if (_control != null || _stationLifeline != null) return false;
+        if (_control != null || _stationLifeline != null || ConnectionActive) return false;
+        ClearStationConnection();
         if (_localStation != null)
         {
             ClearLocalStation();

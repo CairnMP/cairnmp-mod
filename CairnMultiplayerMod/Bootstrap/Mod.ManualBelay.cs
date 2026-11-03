@@ -53,6 +53,12 @@ public partial class Mod
                 if (!started && LocalAppendGuideEnabled) _localBelayAppendTrial.RejectAction();
                 if (!started) LoggerInstance.Warning("[ManualBelay] " + reason);
             }
+            if (ModConfig.BelayStationConnectionExperiment?.Value == true && keyboard.f12Key.wasPressedThisFrame
+                && (keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed))
+            {
+                if (!_game.Belay.AdvanceLocalStationConnection(out var connectionReason))
+                    LoggerInstance.Warning("[StationConnection] " + connectionReason);
+            }
             if (keyboard.spaceKey.wasPressedThisFrame || keyboard.f7Key.wasPressedThisFrame) _game.Belay.ToggleLocalBrake();
             var takingIn = _localBelayExerciseInput.TakingIn;
             var toggleTakeIn = keyboard.downArrowKey.wasPressedThisFrame
@@ -75,6 +81,8 @@ public partial class Mod
     private void DrawLocalBelayExercise()
     {
         if ((ModConfig.BelayRouteExperiment?.Value != true && ModConfig.BelayRopeExperiment?.Value != true) || _game == null) return;
+        if (ModConfig.BelayStationConnectionExperiment?.Value == true && !_game.Belay.IsLocalExercise)
+        { DrawStationConnectionTrial(); return; }
         if (LocalAppendGuideEnabled) { DrawBelayAppendGuide(); return; }
         _localBelayStyle ??= new GUIStyle(GUI.skin.box)
         {
