@@ -222,6 +222,7 @@ public sealed class ArchitectureBoundaryTests
         Assert.DoesNotContain("typeof(Lifeline)", patch, StringComparison.Ordinal);
         Assert.Contains("TryGetInitialLength", interop, StringComparison.Ordinal);
         Assert.Contains("renderer.parts = _rope.ropeParts", interop, StringComparison.Ordinal);
+        AssertPartnerRopeLengthIsAppliedFromFixedUpdate(interop);
         Assert.Contains("SetHarnessVisual", interop, StringComparison.Ordinal);
         Assert.Contains("RestoreHarnessVisual", interop, StringComparison.Ordinal);
         Assert.Contains("MC_Outift_NoHarness", interop, StringComparison.Ordinal);
@@ -275,6 +276,48 @@ public sealed class ArchitectureBoundaryTests
     private static string ReadGameSource(params string[] relativePath)
         => File.ReadAllText(relativePath.Aggregate(
             Path.Combine(ProjectDirectory, "Internal", "Game"), Path.Combine));
+
+    /// <summary>
+    /// The cloned rope part keeps the prefab's full length. Setting that length from
+    /// Attach runs during Update, which Cairn rejects, so the line stays at the horizon.
+    /// </summary>
+    private static void AssertPartnerRopeLengthIsAppliedFromFixedUpdate(string interop)
+    {
+        var attach = MethodBody(interop, "public bool Attach()");
+        var snap = MethodBody(interop, "internal void ApplyPendingSnap()");
+        var beforePhysics = MethodBody(interop, "internal static bool BeforeRopePhysics(");
+
+        Assert.DoesNotContain("_rope.RequestSetLength", attach, StringComparison.Ordinal);
+        Assert.DoesNotContain("_rope.SetLengthInstant", attach, StringComparison.Ordinal);
+        Assert.DoesNotContain("_rope.TeleportOnAttachPoints", attach, StringComparison.Ordinal);
+        Assert.Contains("_pendingSnapLength = initialLength", attach, StringComparison.Ordinal);
+
+        Assert.Contains("SetLengthInstant(length)", snap, StringComparison.Ordinal);
+        Assert.Contains("RequestSetLength(length, false, true)", snap, StringComparison.Ordinal);
+        Assert.Contains(
+            "TeleportOnAttachPoints(RopeTeleportMode.PreTeleportOnLineAndFabrik, false, false)",
+            snap, StringComparison.Ordinal);
+        Assert.Contains("ApplyPendingSnap()", beforePhysics, StringComparison.Ordinal);
+    }
+
+    private static string MethodBody(string source, string signature)
+    {
+        var start = source.IndexOf(signature, StringComparison.Ordinal);
+        Assert.True(start >= 0, signature);
+        var open = source.IndexOf('{', start);
+        var depth = 0;
+        for (var i = open; i < source.Length; i++)
+        {
+            if (source[i] == '{') depth++;
+            else if (source[i] == '}')
+            {
+                depth--;
+                if (depth == 0) return source.Substring(start, i - start + 1);
+            }
+        }
+
+        throw new InvalidOperationException(signature);
+    }
 
     private static bool ContainsEngineUsing(string source)
     {
