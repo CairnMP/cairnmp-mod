@@ -92,6 +92,23 @@ internal sealed class BelayTopologyTracker
         return true;
     }
 
+    internal BelayTopologyChange ObserveProtectionAppend(BelayTopologySnapshot snapshot,
+        IReadOnlyList<BelayProtectionPoint> previous, IReadOnlyList<BelayProtectionPoint> next, double now)
+    {
+        if (Current == null || snapshot?.IsValid != true || snapshot.Rope != Current.Rope
+            || !double.IsFinite(now) || now < _lastObservation) return BelayTopologyChange.Invalid;
+        if (!BelayRoutePlanner.IsSingleProtectionAppend(previous, next))
+        {
+            // An interaction may have stable temporary holders before its piton
+            // is clipped. Never promote that mapping or reuse its settling time.
+            // The caller bounds this wait and ends control on timeout or load.
+            _lastObservation = now;
+            _pending = null;
+            return BelayTopologyChange.Settling;
+        }
+        return Observe(snapshot, false, now);
+    }
+
     internal BelayTopologyChange Observe(BelayTopologySnapshot snapshot, bool suspended, double now)
     {
         if (snapshot?.IsValid != true || !double.IsFinite(now) || now < _lastObservation)

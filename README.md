@@ -175,8 +175,9 @@ native evidence; populated panels and real partner operation remain unverified.
 `Debug.BelayRopeExperiment` enables a separate **local rope-budget exercise**,
 off by default. It takes precedence over the previous solo exercise. Start/end
 with Ctrl+F11 while stable on the wall; Space/F7 toggles the brake. Hold Up to feed
-rope or Down to take in slack at 1 m/s. An open brake permits passive payout in a
-fall up to the rope-end cap. Closing the brake preserves the released length,
+rope or Down to take in slack at 1 m/s. Pausing or switching windows ends the
+exercise; the inactive banner and local log report the stop reason. An open brake
+permits passive payout in a fall up to the rope-end cap. Closing the brake preserves the released length,
 including existing slack. Take-in is one-way and cannot shorten a loaded segment;
 the brake blocks additional manual feed. Releasing either arrow stops that command.
 Open payout follows both geometric and native loaded distance. When braking an
@@ -218,7 +219,10 @@ Unlike a real player's station, this solo test marker remains after releasing
 your personal anchor. End Ctrl+F11 before Ctrl+F10 clears it; scene changes and
 native identity loss invalidate it. With a recorded station, adding one new piton
 while stable on the wall now pauses manual length writes, waits for the ordered
-native route to settle and rebinds its new final segment. The station-to-protection
+native route to settle and rebinds its new final segment. Temporary holder walks
+are not accepted as completed clips: the existing protection order plus exactly
+one new piton must be present before the new mapping can settle. Bounded local
+diagnostics record the observed protection sequences. The station-to-protection
 geometry plus paid-out final length is conserved; FREE can pay out only the extra
 length needed by the new geometry. BRAKED cannot silently gain rope. The brake
 state is retained and held take-in is cancelled during the transition. Existing

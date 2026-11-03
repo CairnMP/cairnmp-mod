@@ -106,7 +106,8 @@ public partial class Mod
                 + (station.HasValue
                     ? $"\nSTATION REHEARSAL: fixed path {station.Value.FixedLength:F2} m | intermediate protections {station.Value.IntermediateProtections}"
                         + "\nReal piton on native route; local controls simulate the absent belayer"
-                    : ""), _localBelayStyle);
+                    : "")
+                + "\nPausing or switching windows ends this exercise.", _localBelayStyle);
             return;
         }
         var preview = _game.Belay.LocalRoutePreview;

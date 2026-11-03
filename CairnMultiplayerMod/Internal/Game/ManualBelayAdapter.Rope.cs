@@ -147,7 +147,8 @@ internal sealed partial class ManualBelayAdapter
             if (!TryBeginLocalRouteChange(reason)) EndLocalRope("Protection route changed during a native length update. " + reason);
             return false;
         }
-        if (!ContextValid || _lease.IsExpired(Now)) { Stop(_lease.Session); return false; }
+        if (!TryGetActiveContext(out reason)) { Stop(_lease.Session, reason); return false; }
+        if (_lease.IsExpired(Now)) { Stop(_lease.Session, "The brake-command lease expired during a native length update."); return false; }
         if (controller.ropeLengthOverride > 0)
         { EndLocalRope("The native rope has a fixed-length override. End that interaction before starting."); return false; }
         return true;
@@ -234,6 +235,6 @@ internal sealed partial class ManualBelayAdapter
         if (_control == null || _lease == null) return;
         _localRopeNotice = reason;
         ModLog.Info("[BelayRope] Ended; " + reason);
-        Stop(_lease.Session);
+        Stop(_lease.Session, reason);
     }
 }

@@ -118,5 +118,78 @@ public sealed class BelayRopeRebindTests
         Assert.False(BelayRoutePlanner.IsSingleProtectionAppend(null, new[] { a }));
     }
 
+    [Fact]
+    public void StableTemporaryHoldersCannotReplaceTheAcceptedProtectionRoute()
+    {
+        var before = new[] { Point(1), Point(2) };
+        var tracker = new BelayTopologyTracker();
+        var accepted = Snapshot(2, new long[] { 11, 12, 13 }, 2);
+        var temporary = Snapshot(2, new long[] { 11, 12, 13, 14 }, 2);
+        var appended = Snapshot(3, new long[] { 11, 12, 15, 14 }, 3);
+        tracker.Observe(accepted, false, 0);
+        Assert.Equal(BelayTopologyChange.Settling, tracker.ObserveProtectionAppend(temporary, before, before, .1));
+        Assert.Equal(BelayTopologyChange.Settling, tracker.ObserveProtectionAppend(temporary, before, before, .4));
+        Assert.Same(accepted, tracker.Current);
+        Assert.Equal(1u, tracker.Revision);
+        var after = new[] { Point(1), Point(2), Point(3) };
+        Assert.Equal(BelayTopologyChange.Settling, tracker.ObserveProtectionAppend(appended, before, after, .5));
+        Assert.Equal(BelayTopologyChange.Rebound, tracker.ObserveProtectionAppend(appended, before, after, .7));
+        Assert.Same(appended, tracker.Current);
+        Assert.Equal(2u, tracker.Revision);
+    }
+
+    [Theory]
+    [InlineData(1, 2)]
+    [InlineData(2, 1)]
+    [InlineData(1)]
+    [InlineData(1, 2, 2)]
+    [InlineData(1, 2, 3, 4)]
+    public void IncompleteOrUnsupportedClipsNeverPromoteANewMapping(params uint[] ids)
+    {
+        var before = new[] { Point(1), Point(2) };
+        var after = Array.ConvertAll(ids, Point);
+        var tracker = new BelayTopologyTracker();
+        var accepted = Snapshot(2, new long[] { 11, 12, 13 }, 2);
+        var candidate = Snapshot(3, new long[] { 11, 12, 15, 14 }, 3);
+        tracker.Observe(accepted, false, 0);
+        tracker.ObserveProtectionAppend(candidate, before, after, .1);
+        Assert.Equal(BelayTopologyChange.Settling, tracker.ObserveProtectionAppend(candidate, before, after, 1));
+        Assert.Same(accepted, tracker.Current);
+        Assert.Equal(1u, tracker.Revision);
+    }
+
+    [Fact]
+    public void AnInterruptedClipMustSettleAgainBeforeTheNewMappingIsAccepted()
+    {
+        var before = new[] { Point(1), Point(2) };
+        var after = new[] { Point(1), Point(2), Point(3) };
+        var tracker = new BelayTopologyTracker();
+        var accepted = Snapshot(2, new long[] { 11, 12, 13 }, 2);
+        var appended = Snapshot(3, new long[] { 11, 12, 15, 14 }, 3);
+        tracker.Observe(accepted, false, 0);
+        tracker.ObserveProtectionAppend(appended, before, after, .1);
+        tracker.ObserveProtectionAppend(accepted, before, before, .3);
+        Assert.Equal(BelayTopologyChange.Settling, tracker.ObserveProtectionAppend(appended, before, after, .4));
+        Assert.Equal(BelayTopologyChange.Rebound, tracker.ObserveProtectionAppend(appended, before, after, .6));
+    }
+
+    [Fact]
+    public void InvalidOwnershipOrTimeCannotBeTreatedAsAClipInProgress()
+    {
+        var before = new[] { Point(1), Point(2) };
+        var tracker = new BelayTopologyTracker();
+        var accepted = Snapshot(2, new long[] { 11, 12, 13 }, 2);
+        tracker.Observe(accepted, false, 1);
+        var replaced = new BelayTopologySnapshot(99, 2, new long[] { 21, 22 }, new long[] { 11, 12 }, 35, 2);
+        Assert.Equal(BelayTopologyChange.Invalid, tracker.ObserveProtectionAppend(replaced, before, before, 2));
+        Assert.Equal(BelayTopologyChange.Invalid, tracker.ObserveProtectionAppend(accepted, before, before, .5));
+        Assert.Equal(BelayTopologyChange.Invalid, tracker.ObserveProtectionAppend(accepted, before, before, double.NaN));
+        Assert.Same(accepted, tracker.Current);
+        Assert.Equal(1u, tracker.Revision);
+    }
+
     private static BelayProtectionPoint Point(uint id) => new(id, new Vector3(0, id, 0));
+
+    private static BelayTopologySnapshot Snapshot(long lastPiton, long[] holders, int protections)
+        => new(1, lastPiton, new long[] { 21, 22, 23 }, holders, 35, protections);
 }

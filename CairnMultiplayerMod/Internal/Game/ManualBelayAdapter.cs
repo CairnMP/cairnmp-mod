@@ -62,14 +62,14 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     private static bool TryGetActiveContext(out string reason)
     {
-        reason = "Return focus to the game before starting the exercise.";
+        reason = "The game window is not focused. Return to the game before starting or restarting the exercise.";
         if (!Application.isFocused) return false;
-        reason = "Unpause the game before starting the exercise.";
+        reason = "The game is paused. Unpause before starting or restarting the exercise.";
         if (!(Time.timeScale > 0)) return false;
         reason = "Wait for the local character to finish loading.";
         var survival = SurvivalManager.Instance;
         if (survival == null) return false;
-        reason = "The character must be alive before starting the exercise.";
+        reason = "The local character is not alive.";
         if (!(survival.CurrentHp > 0)) return false;
         reason = "";
         return true;
@@ -215,7 +215,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     public bool ToggleLocalExercise(out string reason)
     {
-        if (IsLocalExercise) { Stop(_lease.Session); reason = "Local exercise ended."; return true; }
+        if (IsLocalExercise) { Stop(_lease.Session, "The local exercise was toggled off."); reason = "Local exercise ended."; return true; }
         return BeginClimber(Guid.NewGuid(), true, out reason);
     }
 
@@ -335,23 +335,41 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     }
 
     public void Stop(Guid session)
+        => Stop(session, "A stop was requested by the belay session.");
+
+    private void Stop(Guid session, string reason)
     {
         if (_control == null || _lease.Session != session || _stopping) return;
         _stopping = true;
+        ModLog.Info("[ManualBelay] Holding and ending session=" + session + ", local=" + _localExercise
+            + ", pendingRoute=" + _localRoutePending + ", elapsed=" + (Now - _started).ToString("F3")
+            + ", focused=" + Application.isFocused + ", timeScale=" + Time.timeScale + "; " + reason);
         if (_ropeControl != null)
         {
             ReleaseLocalRopeGoal();
-            _localRopeNotice ??= "Local rope exercise ended. Native rope control resumed; restart only when stable.";
+            _localRopeNotice ??= "Local rope exercise ended. " + reason;
             // Ending the experiment hands off at current geometry, never at a
             // previously paid-out length that could pull the suspended body.
             _control = new BelayBrakeControl(_control.Available);
             _ropeControl = null;
         }
-        ModLog.Info("[ManualBelay] Holding and ending session=" + session);
         // While suspended, catch at current geometry on the next physics step,
         // then drop ownership. Never restore the older, shorter joint radius.
         if (_control.Braked == false) _control.ToggleBrake();
         if (_pivot == 0) ClearControl();
+    }
+
+    private bool TryGetControlStopReason(bool requireRopeExperiment, out string reason)
+    {
+        reason = "The selected belay experiment was disabled.";
+        if (!(_localExercise ? LocalExerciseEnabled : Enabled)) return true;
+        reason = "The local rope-budget experiment was disabled.";
+        if (requireRopeExperiment && ModConfig.BelayRopeExperiment?.Value != true) return true;
+        if (!TryGetActiveContext(out reason)) return true;
+        reason = "The brake-command lease expired.";
+        if (_lease.IsExpired(Now)) return true;
+        reason = "The 120-second exercise limit was reached.";
+        return Now - _started >= 120;
     }
 
     public void Tick()
@@ -365,12 +383,12 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         if (_control == null) return;
         try
         {
-            if (_holdApplied || !RopeIdentityValid()) { ClearControl("The owned native rope was replaced or released."); return; }
+            if (_holdApplied) { ClearControl("The final hold was applied; native rope control resumed."); return; }
+            if (!RopeIdentityValid()) { ClearControl("The owned native rope was replaced or released."); return; }
             if (_localRoutePending)
             {
-                if (!LocalExerciseEnabled || ModConfig.BelayRopeExperiment?.Value != true
-                    || !ContextValid || _lease.IsExpired(Now) || Now - _started >= 120)
-                { Stop(_lease.Session); return; }
+                if (TryGetControlStopReason(requireRopeExperiment: true, out var pendingStopReason))
+                { Stop(_lease.Session, pendingStopReason); return; }
                 if (!TickLocalRouteChange()) { RenewLocalIntent(); return; }
             }
             var hasSwing = _lifeline.SwingHasPivotAndExtremity();
@@ -423,12 +441,12 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
                     LocalRoutePreview = TryPreviewRoute(new WorldPosition(_localPreviewStation.x, _localPreviewStation.y, _localPreviewStation.z), out var plan)
                         ? plan : null;
             }
-            if (!(_localExercise ? LocalExerciseEnabled : Enabled)
-                || !ContextValid || _lease.IsExpired(Now) || Now - _started >= 120)
-            { Stop(_lease.Session); return; }
+            if (TryGetControlStopReason(requireRopeExperiment: false, out var stopReason))
+            { Stop(_lease.Session, stopReason); return; }
             if (_ropeControl != null)
             {
-                if (ModConfig.BelayRopeExperiment?.Value != true) { Stop(_lease.Session); return; }
+                if (ModConfig.BelayRopeExperiment?.Value != true)
+                { Stop(_lease.Session, "The local rope-budget experiment was disabled."); return; }
                 if (!hasSwing && !StepLocalRope(Time.deltaTime, false)) return;
                 SampleLocalRope();
             }
@@ -495,6 +513,8 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
                 postfix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(AfterClimbingPermission)));
             _harmony.Patch(AccessTools.Method(typeof(ClimbingV2PawnController), nameof(ClimbingV2PawnController.AddQuickdrawToSecuringRope)),
                 prefix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(BeforeAddingProtection)));
+            _harmony.Patch(AccessTools.Method(typeof(LogicalRope), nameof(LogicalRope.AddQuickdraw)),
+                prefix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(BeforeAddingRopeProtection)));
             _installed = true;
         }
         catch { _harmony.UnpatchSelf(); throw; }
@@ -540,7 +560,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         {
             if (!owner.MappingMatches() || !owner._lifeline.SwingHasPivotAndExtremity()
                 || Id(owner._lifeline.SwingPivotInstance) != owner._pivot) { owner.ClearControl(); return; }
-            if (owner._lease.IsExpired(Now)) owner.Stop(owner._lease.Session);
+            if (owner._lease.IsExpired(Now)) owner.Stop(owner._lease.Session, "The brake-command lease expired during suspension.");
             var real = __instance.SwingRealDistance;
             float target;
             var valid = owner._ropeControl != null
@@ -593,7 +613,11 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     }
 
     private bool _unpatchPending;
-    public void ResetScene() { EndStation(); ClearControl("A scene reset invalidated the native rope and station."); ClearLocalStation(); }
+    public void ResetScene()
+    {
+        if (_localStation != null) ModLog.Info("[BelayStation] Captured station cleared by a scene reset.");
+        EndStation(); ClearControl("A scene reset invalidated the native rope and station."); ClearLocalStation();
+    }
     public void Shutdown()
     {
         ResetScene();

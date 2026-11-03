@@ -13,6 +13,8 @@ internal sealed partial class ManualBelayAdapter
     private float _localRouteFixedLength;
     private BelayProtectionPoint[] _boundStationProtections;
     private uint _localRouteRebinds;
+    private string _localRouteObservation;
+    private int _localRouteObservationCount;
 
     private void RememberLocalRoute()
     {
@@ -24,19 +26,31 @@ internal sealed partial class ManualBelayAdapter
     private static void BeforeAddingProtection(ClimbingV2PawnController __instance, LogicalQuickdraw __0)
     {
         var owner = _owner;
-        if (owner?._ropeControl == null || owner._localStation == null || !owner._localExercise
-            || owner._stopping || owner._lifeline?.pawn == null || Id(__instance) != Id(owner._lifeline.pawn)) return;
+        if (owner?._lifeline?.pawn == null || Id(__instance) != Id(owner._lifeline.pawn)) return;
+        owner.PrepareLocalProtection(__0, "Native pawn protection attachment");
+    }
+
+    private static void BeforeAddingRopeProtection(LogicalRope __instance, LogicalQuickdraw __0)
+    {
+        var owner = _owner;
+        if (owner?._rope == null || Id(__instance) != Id(owner._rope)) return;
+        owner.PrepareLocalProtection(__0, "Native rope protection attachment");
+    }
+
+    private void PrepareLocalProtection(LogicalQuickdraw quickdraw, string reason)
+    {
+        if (_ropeControl == null || _localStation == null || !_localExercise || _stopping) return;
         try
         {
-            if (__0?.Piton == null) return;
-            var id = unchecked((uint)__0.Piton.GetInstanceID());
-            if (owner._boundStationProtections != null)
-                foreach (var point in owner._boundStationProtections)
+            if (quickdraw?.Piton == null) return;
+            var id = unchecked((uint)quickdraw.Piton.GetInstanceID());
+            if (_boundStationProtections != null)
+                foreach (var point in _boundStationProtections)
                     if (point.Id == id) return; // Existing-anchor maintenance is not a new protection.
-            if (!owner.TryBeginLocalRouteChange("Native protection attachment", true) && owner._control != null)
-                owner.EndLocalRope("A new protection cannot be rebound while falling or suspended, or after station ownership changed.");
+            if (!TryBeginLocalRouteChange(reason, true) && _control != null)
+                EndLocalRope("A new protection cannot be rebound while falling or suspended, or after station ownership changed.");
         }
-        catch (Exception ex) { owner.Fail(ex); }
+        catch (Exception ex) { Fail(ex); }
     }
 
     private bool TryBeginLocalRouteChange(string reason, bool refreshOldDistance = false)
@@ -54,11 +68,14 @@ internal sealed partial class ManualBelayAdapter
         _localRoutePending = _rebinding = true;
         _localRouteStarted = Now;
         _localRouteWaitReason = reason;
+        _localRouteObservation = null;
+        _localRouteObservationCount = 0;
         _nextTopologyPoll = Now;
         _ropeControl.TrySetMotion(0);
         ModLog.Info("[BelayRope] Route waiting; revision=" + _topology.Revision
             + ", total=" + (_localRouteFixedLength + _ropeControl.Released)
-            + ", brake=" + _ropeControl.Braked + ", reason=" + reason);
+            + ", brake=" + _ropeControl.Braked + ", protections=" + ProtectionOrder(_boundStationProtections)
+            + ", reason=" + reason);
         return true;
     }
 
@@ -83,13 +100,18 @@ internal sealed partial class ManualBelayAdapter
         }
         if (!TryMeasureLocalStation(_lifeline, snapshot.Available, out var available, out reason))
         { _localRouteWaitReason = reason; return false; }
-        var change = _topology.Observe(snapshot, false, Now);
+        ObserveLocalRouteChange(snapshot);
+        var change = _topology.ObserveProtectionAppend(snapshot,
+            _boundStationProtections, _measuredStationProtections, Now);
         if (change == BelayTopologyChange.Invalid)
         { EndLocalRope("The protection route became invalid during rebinding."); return false; }
         if (change != BelayTopologyChange.Rebound)
-        { _localRouteWaitReason = "Waiting for stable ordered protection identities."; return false; }
-        if (!BelayRoutePlanner.IsSingleProtectionAppend(_boundStationProtections, _measuredStationProtections))
-        { EndLocalRope("Only one new protection appended to the existing station route can be rebound. Removal or reordering ends this exercise."); return false; }
+        {
+            _localRouteWaitReason = BelayRoutePlanner.IsSingleProtectionAppend(_boundStationProtections, _measuredStationProtections)
+                ? "Waiting for stable ordered protection identities."
+                : "Waiting for exactly one new protection at the end of the recorded route; temporary holders cannot be rebound.";
+            return false;
+        }
         if (!TryReadRopeDistance(_lifeline, out var distance))
         { EndLocalRope("The new protection distance is invalid."); return false; }
         var fixedBefore = _localRouteFixedLength;
@@ -119,7 +141,22 @@ internal sealed partial class ManualBelayAdapter
     {
         if (!_localExercise || _control == null || _stopping || Now < _nextLocalIntent) return;
         _nextLocalIntent = Now + .5;
-        if (_localSequence == uint.MaxValue) { Stop(_lease.Session); return; }
+        if (_localSequence == uint.MaxValue) { Stop(_lease.Session, "The local brake-command sequence was exhausted."); return; }
         SetBrake(_lease.Session, ++_localSequence, _control.Braked);
     }
+
+    private void ObserveLocalRouteChange(BelayTopologySnapshot snapshot)
+    {
+        if (_localRouteObservationCount >= 8) return;
+        var observation = "pitons=" + snapshot.ProtectionCount + ", parts=" + snapshot.Parts.Length
+            + ", holders=" + snapshot.Holders.Length + ", lastChanged=" + (snapshot.LastPiton != _topology.Current.LastPiton)
+            + ", protections=" + ProtectionOrder(_measuredStationProtections);
+        if (observation == _localRouteObservation) return;
+        _localRouteObservation = observation;
+        _localRouteObservationCount++;
+        ModLog.Info("[BelayRope] Route observed; " + observation);
+    }
+
+    private static string ProtectionOrder(BelayProtectionPoint[] protections)
+        => protections == null ? "none" : string.Join(",", Array.ConvertAll(protections, point => point.Id));
 }
