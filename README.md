@@ -221,8 +221,10 @@ native identity loss invalidate it. With a recorded station, adding one new pito
 while stable on the wall now pauses manual length writes, waits for the ordered
 native route to settle and rebinds its new final segment. Temporary holder walks
 are not accepted as completed clips: the existing protection order plus exactly
-one new piton must be present before the new mapping can settle. Bounded local
-diagnostics record the observed protection sequences. The station-to-protection
+one new piton, one additional physical part and one additional holder must be
+present before the new mapping can settle. This also waits for the held rope to
+be released after attaching the piton. Bounded local diagnostics record the
+observed protection sequences. The station-to-protection
 geometry plus paid-out final length is conserved; FREE can pay out only the extra
 length needed by the new geometry. BRAKED cannot silently gain rope. The brake
 state is retained and held take-in is cancelled during the transition. Existing

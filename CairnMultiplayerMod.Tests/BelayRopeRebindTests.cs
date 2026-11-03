@@ -188,8 +188,67 @@ public sealed class BelayRopeRebindTests
         Assert.Equal(1u, tracker.Revision);
     }
 
+    [Fact]
+    public void AClippedPitonCannotRebindUntilItsTemporaryRopeHolderIsReleased()
+    {
+        var before = new[] { Point(1), Point(2) };
+        var after = new[] { Point(1), Point(2), Point(3) };
+        var tracker = new BelayTopologyTracker();
+        // Native r8 sequence: 2 pitons/3 parts/5 holders -> 2/4/6 ->
+        // 3/5/7 while clipping -> 3/4/6 after the held rope is released.
+        var accepted = NativeSnapshot(2, 3, 5);
+        var holding = NativeSnapshot(2, 4, 6);
+        var clipped = NativeSnapshot(3, 5, 7);
+        var released = NativeSnapshot(3, 4, 6);
+        tracker.Observe(accepted, false, 0);
+        tracker.ObserveProtectionAppend(holding, before, before, .005);
+        Assert.Equal(BelayTopologyChange.Settling, tracker.ObserveProtectionAppend(clipped, before, after, .531));
+        Assert.Equal(BelayTopologyChange.Settling, tracker.ObserveProtectionAppend(clipped, before, after, .745));
+        Assert.Same(accepted, tracker.Current);
+        Assert.Equal(1u, tracker.Revision);
+        Assert.Equal(BelayTopologyChange.Settling, tracker.ObserveProtectionAppend(released, before, after, 1.201));
+        Assert.Equal(BelayTopologyChange.Rebound, tracker.ObserveProtectionAppend(released, before, after, 1.401));
+        Assert.Same(released, tracker.Current);
+        Assert.Equal(2u, tracker.Revision);
+        Assert.Equal(BelayTopologyChange.Unchanged, tracker.Observe(released, false, 6.401));
+    }
+
+    [Theory]
+    [InlineData(3, 5, 7)]
+    [InlineData(3, 4, 7)]
+    [InlineData(3, 5, 6)]
+    [InlineData(3, 3, 6)]
+    [InlineData(3, 4, 5)]
+    [InlineData(2, 4, 6)]
+    public void CorrectPitonOrderCannotBypassAnIncompleteNativeSplit(int protections, int parts, int holders)
+    {
+        var before = new[] { Point(1), Point(2) };
+        var after = new[] { Point(1), Point(2), Point(3) };
+        var tracker = new BelayTopologyTracker();
+        var accepted = NativeSnapshot(2, 3, 5);
+        var incomplete = NativeSnapshot(protections, parts, holders);
+        tracker.Observe(accepted, false, 0);
+        tracker.ObserveProtectionAppend(incomplete, before, after, .1);
+        Assert.Equal(BelayTopologyChange.Settling, tracker.ObserveProtectionAppend(incomplete, before, after, .4));
+        Assert.Same(accepted, tracker.Current);
+        Assert.Equal(1u, tracker.Revision);
+    }
+
+    private static BelayTopologySnapshot NativeSnapshot(int protections, int parts, int holders)
+    {
+        var partIds = new long[parts];
+        var holderIds = new long[holders];
+        for (var i = 0; i < parts; i++) partIds[i] = 21 + i;
+        for (var i = 0; i < holders; i++) holderIds[i] = 11 + i;
+        return new BelayTopologySnapshot(1, protections, partIds, holderIds, 35, protections);
+    }
+
     private static BelayProtectionPoint Point(uint id) => new(id, new Vector3(0, id, 0));
 
     private static BelayTopologySnapshot Snapshot(long lastPiton, long[] holders, int protections)
-        => new(1, lastPiton, new long[] { 21, 22, 23 }, holders, 35, protections);
+    {
+        var parts = new long[protections + 1];
+        for (var i = 0; i < parts.Length; i++) parts[i] = 21 + i;
+        return new BelayTopologySnapshot(1, lastPiton, parts, holders, 35, protections);
+    }
 }

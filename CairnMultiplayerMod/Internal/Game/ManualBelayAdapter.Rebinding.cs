@@ -75,6 +75,8 @@ internal sealed partial class ManualBelayAdapter
         ModLog.Info("[BelayRope] Route waiting; revision=" + _topology.Revision
             + ", total=" + (_localRouteFixedLength + _ropeControl.Released)
             + ", brake=" + _ropeControl.Braked + ", protections=" + ProtectionOrder(_boundStationProtections)
+            + ", expectedParts=" + (_topology.Current.Parts.Length + 1)
+            + ", expectedHolders=" + (_topology.Current.Holders.Length + 1)
             + ", reason=" + reason);
         return true;
     }
@@ -107,9 +109,7 @@ internal sealed partial class ManualBelayAdapter
         { EndLocalRope("The protection route became invalid during rebinding."); return false; }
         if (change != BelayTopologyChange.Rebound)
         {
-            _localRouteWaitReason = BelayRoutePlanner.IsSingleProtectionAppend(_boundStationProtections, _measuredStationProtections)
-                ? "Waiting for stable ordered protection identities."
-                : "Waiting for exactly one new protection at the end of the recorded route; temporary holders cannot be rebound.";
+            _localRouteWaitReason = "Waiting for a complete single-protection split and stable identities; temporary rope holders must be released.";
             return false;
         }
         if (!TryReadRopeDistance(_lifeline, out var distance))

@@ -97,10 +97,15 @@ internal sealed class BelayTopologyTracker
     {
         if (Current == null || snapshot?.IsValid != true || snapshot.Rope != Current.Rope
             || !double.IsFinite(now) || now < _lastObservation) return BelayTopologyChange.Invalid;
-        if (!BelayRoutePlanner.IsSingleProtectionAppend(previous, next))
+        if (!BelayRoutePlanner.IsSingleProtectionAppend(previous, next)
+            || snapshot.ProtectionCount != Current.ProtectionCount + 1
+            || snapshot.Parts.Length != Current.Parts.Length + 1
+            || snapshot.Holders.Length != Current.Holders.Length + 1)
         {
-            // An interaction may have stable temporary holders before its piton
-            // is clipped. Never promote that mapping or reuse its settling time.
+            // Clipping splits one part and adds one holder. The native interaction
+            // can still hold the rope after adding the piton, leaving another
+            // temporary part/holder until release. Do not promote that mapping
+            // or reuse its settling time when the completed split arrives.
             // The caller bounds this wait and ends control on timeout or load.
             _lastObservation = now;
             _pending = null;
