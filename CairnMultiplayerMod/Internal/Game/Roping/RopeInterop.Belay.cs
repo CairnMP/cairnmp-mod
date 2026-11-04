@@ -14,6 +14,7 @@ internal static partial class RopeInterop
     private static RopeBindingSession _ropeSession;
     private static NativeRopeBinding _ropeBinding;
     private static int _ropePartner = -1;
+    private static bool _dropRopeAfterPhysics;
     public static bool HasRopeTeamAnchors => _ropeSession != null;
     public static bool IsNativeBelayEngaged => _ropeSession?.State == RopeBindingState.Attached;
 
@@ -21,6 +22,11 @@ internal static partial class RopeInterop
     {
         try
         {
+            if (_dropRopeAfterPhysics)
+            {
+                ReleaseAllAnchors();
+                return false;
+            }
             if (!RopeTeamFallPatch.IsInstalled) return false;
             var local = ResolveLocalHarness();
             if (local == null || partner == null) { ReleaseAllAnchors(); return true; }
@@ -60,8 +66,11 @@ internal static partial class RopeInterop
 
     internal static bool BeforeRopePhysics(LogicalRope rope)
     {
+        // A retie calls ForceInitialize while the session is still waiting. Skipping
+        // that FixedUpdate aborts the new rope's setup, and the prefab length stays.
+        if (_dropRopeAfterPhysics) return false;
         if (_ropeBinding?.Owns(rope) != true) return true;
-        if (!IsNativeBelayEngaged) return false;
+        if (!IsNativeBelayEngaged) return true;
         try
         {
             // SetLengthInstant rejects calls from Update. This prefix is inside the
@@ -70,14 +79,16 @@ internal static partial class RopeInterop
             if (_ropeBinding.Maintain()) return true;
         }
         catch (Exception ex) { ModLog.Warning("[RopeTeam] Physics attachment lost: " + ex.Message); }
-        ReleaseAllAnchors();
-        return false; // Never enter native physics after disposing its attachments.
+        // Destroying the rope from this prefix closes the process. Update drops it.
+        _dropRopeAfterPhysics = true;
+        return false;
     }
 
     public static void ReleaseAllAnchors()
     {
         var session = _ropeSession;
         _ropeSession = null; _ropeBinding = null; _ropePartner = -1;
+        _dropRopeAfterPhysics = false;
         session?.Dispose();
     }
 
@@ -107,8 +118,10 @@ internal static partial class RopeInterop
         private bool _outfitWithHarnessWasActive, _outfitWithoutHarnessWasActive;
         private int _createdFrame;
         private Vector3 _lastLocal, _lastPartner;
+        private const int MaxSnapAttempts = 8;
         private bool _attached, _disposed;
         private float _pendingSnapLength = -1f;
+        private int _snapAttempts;
 
         internal NativeRopeBinding(Harness local, Harness partner, Lifeline lifeline, LogicalRope source, float length)
         {
@@ -209,6 +222,7 @@ internal static partial class RopeInterop
             // cloned part's full-length particles in place. The physics prefix
             // shortens the rope and lays it between the harnesses.
             _pendingSnapLength = initialLength;
+            _snapAttempts = 0;
             _rope.SetCollisionsFilter(_source.category, _source.masks);
             _rope.SetVisible(true);
             _attached = true;
@@ -283,14 +297,25 @@ internal static partial class RopeInterop
 
         internal void ApplyPendingSnap()
         {
-            if (_pendingSnapLength < 0f || _rope == null) return;
+            if (_pendingSnapLength < 0f || _rope == null || !_rope.IsInitialized) return;
             var length = _pendingSnapLength;
-            _pendingSnapLength = -1f;
             _rope.SetLengthInstant(length);
             _rope.RequestSetLength(length, false, true);
             _rope.TeleportOnAttachPoints(RopeTeleportMode.PreTeleportOnLineAndFabrik, false, false);
             _renderer?.SyncFromRope(_rope);
             _rope.SyncRenderer();
+            _snapAttempts++;
+            float reported;
+            try { reported = _rope.GetLength(false, true); }
+            catch (Exception ex)
+            {
+                ModLog.Warning("[RopeTeam] Could not read the paid-out length: " + ex.Message);
+                reported = float.NaN;
+            }
+            // The first attempt can run before the new part accepts a length. Clearing
+            // the request there is what leaves a retie at the prefab's full length.
+            if (RopeAttachmentPolicy.SnapLanded(length, reported) || _snapAttempts >= MaxSnapAttempts)
+                _pendingSnapLength = -1f;
         }
 
         public bool Maintain()

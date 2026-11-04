@@ -25,4 +25,16 @@ internal static class RopeAttachmentPolicy
         length = distance + slack;
         return float.IsFinite(length) && length > distance && length < maxLength;
     }
+
+    /// <summary>
+    /// The paid-out length has reached the request. A cloned part still reports the
+    /// prefab's full length until the physics step accepts the snap, and that full
+    /// length is what draws the line to the horizon.
+    /// </summary>
+    internal static bool SnapLanded(float requested, float reported)
+    {
+        if (!float.IsFinite(requested) || !float.IsFinite(reported) || requested <= 0f) return false;
+        var tolerance = Math.Max(0.5f, requested * 0.15f);
+        return Math.Abs(reported - requested) <= tolerance;
+    }
 }

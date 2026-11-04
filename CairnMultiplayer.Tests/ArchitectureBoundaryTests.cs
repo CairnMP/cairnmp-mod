@@ -297,7 +297,12 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains(
             "TeleportOnAttachPoints(RopeTeleportMode.PreTeleportOnLineAndFabrik, false, false)",
             snap, StringComparison.Ordinal);
+        Assert.Contains("RopeAttachmentPolicy.SnapLanded(length, reported)", snap, StringComparison.Ordinal);
         Assert.Contains("ApplyPendingSnap()", beforePhysics, StringComparison.Ordinal);
+        // Skipping FixedUpdate while the session is still waiting aborts ForceInitialize
+        // on a retie, and the cloned part keeps the prefab length.
+        Assert.Contains("if (!IsNativeBelayEngaged) return true;", beforePhysics, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReleaseAllAnchors()", beforePhysics, StringComparison.Ordinal);
     }
 
     private static string MethodBody(string source, string signature)
