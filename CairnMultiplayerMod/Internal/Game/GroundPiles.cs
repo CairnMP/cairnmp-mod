@@ -147,21 +147,34 @@ internal sealed class GroundPiles
             }
 
             var rotation = Quaternion.Euler(0f, template.transform.eulerAngles.y, 0f);
-            var clone = UnityEngine.Object.Instantiate(template.gameObject, pile.Center, rotation);
-            clone.name = "CairnMP Ground Bag";
-            var provider = clone.GetComponent<LootProvider>();
-            if (provider != null && provider.IsPersistent)
+            // The game's own runtime copies keep Unity's "(Clone)" name and are not saved, so keep
+            // that name. Try without a parent first, then under the original's parent.
+            GameObject clone = null;
+            LootProvider provider = null;
+            foreach (var withParent in new[] { false, true })
             {
-                // A copy inherits the original's save identity. Clear it so the bag is a
-                // runtime-only object, as the game's own spawned loot is, and check again.
-                var before = provider.UniquePersistentID;
-                provider.UniquePersistentID = 0UL;
-                ModLog.Info($"[Pile] Copy was persistent (id {before}); cleared -> persistent={provider.IsPersistent}");
-            }
-            if (provider == null || provider.IsPersistent)
-            {
+                var candidate = withParent
+                    ? UnityEngine.Object.Instantiate(template.gameObject, pile.Center, rotation, template.transform.parent)
+                    : UnityEngine.Object.Instantiate(template.gameObject, pile.Center, rotation);
+                var candidateProvider = candidate.GetComponent<LootProvider>();
+                if (candidateProvider != null)
+                {
+                    candidateProvider.lootTable = BuildTable(pile.Items);
+                    var persistentBefore = candidateProvider.IsPersistent;
+                    // The game's unsaved loot is the kind that never runs out and can be used
+                    // without limit, so make the copy that kind and judge it again.
+                    candidateProvider.maxInteraction = Il2CppTheGameBakers.Cairn.InteractionProvider.NO_MAX_INTERACTIONS;
+                    candidateProvider.destroyWhenEmptied = false;
+                    ModLog.Info($"[Pile] max interactions={candidateProvider.maxInteraction} (was persistent={persistentBefore}) source={candidateProvider.source}");
+                }
+                var saved = candidateProvider == null || candidateProvider.IsPersistent;
+                ModLog.Info($"[Pile] Copy '{candidate.name}' parent={withParent} persistent={saved}");
+                if (!saved) { clone = candidate; provider = candidateProvider; break; }
                 // A saved copy would write itself into the player's save game. Never keep one.
-                UnityEngine.Object.Destroy(clone);
+                UnityEngine.Object.Destroy(candidate);
+            }
+            if (clone == null)
+            {
                 if (!_unsafeReported)
                     ModLog.Warning("[Pile] The loot bag copy would be saved with the game; using floating icons instead.");
                 _unsafeReported = true;
@@ -189,7 +202,7 @@ internal sealed class GroundPiles
         foreach (var provider in UnityEngine.Object.FindObjectsOfType<LootProvider>(false))
         {
             if (provider == null || !provider.gameObject.activeInHierarchy
-                || provider.gameObject.name == "CairnMP Ground Bag" || !provider.alwaysUseMultiLoot) continue;
+                || provider.gameObject.name.Contains("(Clone)") || !provider.alwaysUseMultiLoot) continue;
             if (provider.source == LootProviderSource.Bag) return provider;
             if (provider.source == LootProviderSource.BearBox) fallback ??= provider;
         }
@@ -199,7 +212,9 @@ internal sealed class GroundPiles
     private static LootTable BuildTable(List<GroundItem> items)
     {
         var table = ScriptableObject.CreateInstance<LootTable>();
-        table.infiniteStocks = false;
+        // Never run out: the host decides what is left and rebuilds the bag, and a table that
+        // is not infinite is what makes the game save a provider.
+        table.infiniteStocks = true;
         var loots = new Il2CppReferenceArray<Loot>(items.Count);
         for (var index = 0; index < items.Count; index++)
         {
