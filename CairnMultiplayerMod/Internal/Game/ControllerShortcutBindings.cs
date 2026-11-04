@@ -87,7 +87,8 @@ internal static class ControllerShortcutBindings
 
     /// <summary>
     /// The shortcuts chosen from the radial menu, clockwise from the top. The others stay as
-    /// View/Share + button combos: they are held or repeated, which a menu does badly.
+    /// View/Share + button combos: they are held or repeated, or only make sense in the
+    /// backpack (give and drop), which a menu does badly.
     /// </summary>
     internal static readonly ControllerShortcut[] RadialItems =
     {
@@ -96,8 +97,6 @@ internal static class ControllerShortcutBindings
         ControllerShortcut.PlacePing,
         ControllerShortcut.ToggleNames,
         ControllerShortcut.PickupSharedItem,
-        ControllerShortcut.GiveSelectedItem,
-        ControllerShortcut.DropSelectedItem,
     };
 
     internal static bool IsRadialItem(ControllerShortcut shortcut) => Array.IndexOf(RadialItems, shortcut) >= 0;

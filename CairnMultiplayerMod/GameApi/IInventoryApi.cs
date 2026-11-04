@@ -49,6 +49,12 @@ internal interface IInventoryApi
     IGameRegistration AddShareActions(Func<bool> canGive, Action<ShareableItem> give,
         Func<bool> canDrop, Action<ShareableItem> drop);
     void SetGroundItems(IReadOnlyList<GroundItem> items);
+
+    /// <summary>
+    /// Called with a ground item's id when the player takes it out of a bag in the world. The
+    /// handler asks the host for the item; nothing is added to the backpack here.
+    /// </summary>
+    void SetGroundTakeHandler(Action<uint> take) { }
     void DrawGroundItems();
     uint SelectGroundItem(IReadOnlyList<GroundItem> nearbyItems);
     bool IsShareableDefinition(int definitionId);

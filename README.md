@@ -65,20 +65,20 @@ choose nothing.
 | Ping | Place a multiplayer ping |
 | Show or hide names | Show or hide player names |
 | Pick up shared item | Pick up a shared ground item |
-| Give item | Give the selected backpack item |
-| Drop item | Drop the selected backpack item |
 
 Prefer button combinations? In the game's settings, open the **CairnMP** page and set
 **Shortcut style** to *Button combos*. Hold `View/Share` and press `Y/Triangle` (rope),
-`D-pad ↑` (names), `A/Cross` (pick up), `X/Square` (give), `B/Circle` (drop),
-`RB/R1` (ping) or `Menu` (multiplayer panel). The same page lists the shortcuts for the
+`D-pad ↑` (names), `A/Cross` (pick up), `RB/R1` (ping) or `Menu` (multiplayer panel). The same page lists the shortcuts for the
 style you have chosen.
 
-A few actions stay as button combinations in either style because they are held or repeated.
+A few actions stay as button combinations in either style because they are held or
+repeated, or because they only apply in the backpack.
 Hold `View/Share` first, then press the button; the menu steps aside.
 
 | Controller shortcut | Action |
 | --- | --- |
+| `View/Share` + `X/Square` | Give the selected backpack item |
+| `View/Share` + `B/Circle` | Drop the selected backpack item |
 | `View/Share` + D-pad `←` / `→` | Select a shared ground item |
 | Hold `View/Share` + `LB/L1` | Push to talk |
 | `View/Share` + right-stick click | Emergency input release |
@@ -109,8 +109,8 @@ an argument as `<player>`.
 
 Select an ordinary consumable in Cairn’s backpack. The native action bar adds:
 
-- **`G` or the radial menu's *Give item* — Give nearest:** transfer one unit to the nearest eligible player;
-- **`X` or the radial menu's *Drop item* — Drop:** place one unit into the shared world.
+- **`G` or `View/Share` + `X/Square` — Give nearest:** transfer one unit to the nearest eligible player;
+- **`X` or `View/Share` + `B/Circle` — Drop:** place one unit into the shared world.
 
 | Rule | Limit |
 | --- | ---: |

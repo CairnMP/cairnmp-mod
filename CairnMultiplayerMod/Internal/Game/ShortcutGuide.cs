@@ -23,6 +23,7 @@ internal static class ShortcutGuide
         var modifier = ControllerShortcutBindings.ModifierDisplayName;
         var alwaysOn = new[]
         {
+            ControllerShortcut.GiveSelectedItem, ControllerShortcut.DropSelectedItem,
             ControllerShortcut.PreviousSharedItem, ControllerShortcut.NextSharedItem,
             ControllerShortcut.PushToTalk, ControllerShortcut.Panic,
         };

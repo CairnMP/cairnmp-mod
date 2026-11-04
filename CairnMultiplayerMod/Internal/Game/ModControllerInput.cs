@@ -19,6 +19,12 @@ internal static class ModControllerInput
 
     internal static bool IsModifierHeld { get; private set; }
 
+    /// <summary>True when the gamepad was the last device used, so on-screen hints show its buttons.</summary>
+    internal static bool UsingController { get; private set; }
+
+    /// <summary>True while the radial menu owns the hold, so the game must not also act on the right stick.</summary>
+    internal static bool IsRadialHeld { get; private set; }
+
     internal static RadialMenuState RadialMenu { get; } = new(ControllerShortcutBindings.RadialItems.Length);
 
     /// <summary>The shortcut that fired this frame, for on-screen feedback; null if none.</summary>
@@ -37,6 +43,7 @@ internal static class ModControllerInput
     internal static void Update(bool radialMenuAvailable, float deltaSeconds)
     {
         var gamepad = Gamepad.current;
+        TrackActiveDevice(gamepad);
         var held = gamepad?.selectButton.isPressed == true;
         _shortcutsEnabled = held && _modifierSeenHeld;
         _modifierSeenHeld = held;
@@ -46,10 +53,13 @@ internal static class ModControllerInput
         var comboUsed = IsHeld(ControllerShortcut.PushToTalk)
                         || WasPressed(ControllerShortcut.PreviousSharedItem)
                         || WasPressed(ControllerShortcut.NextSharedItem)
+                        || WasPressed(ControllerShortcut.GiveSelectedItem)
+                        || WasPressed(ControllerShortcut.DropSelectedItem)
                         || WasPressed(ControllerShortcut.Panic);
         var stick = gamepad != null ? gamepad.rightStick.ReadValue() : default;
         var menuHeld = held && radialMenuAvailable && ControllerPreferences.UseRadialMenu
                        && !InputCaptureState.IsKeyboardCaptured;
+        IsRadialHeld = menuHeld;
         var choice = RadialMenu.Update(menuHeld, stick.x, stick.y, deltaSeconds, comboUsed);
         _radialChoice = choice >= 0 ? ControllerShortcutBindings.RadialItems[choice] : null;
 
@@ -61,6 +71,26 @@ internal static class ModControllerInput
             break;
         }
     }
+
+    private static void TrackActiveDevice(Gamepad gamepad)
+    {
+        if (gamepad != null && (gamepad.leftStick.ReadValue().sqrMagnitude > .09f
+                                || gamepad.rightStick.ReadValue().sqrMagnitude > .09f
+                                || gamepad.allControls.Count > 0 && AnyGamepadButton(gamepad)))
+            UsingController = true;
+        else if (Keyboard.current?.anyKey.isPressed == true
+                 || Mouse.current != null && (Mouse.current.leftButton.isPressed
+                                               || Mouse.current.delta.ReadValue().sqrMagnitude > 4f
+                                               || Mouse.current.scroll.ReadValue().sqrMagnitude > 0f))
+            UsingController = false;
+    }
+
+    private static bool AnyGamepadButton(Gamepad g)
+        => g.buttonSouth.isPressed || g.buttonEast.isPressed || g.buttonWest.isPressed || g.buttonNorth.isPressed
+           || g.leftShoulder.isPressed || g.rightShoulder.isPressed || g.selectButton.isPressed
+           || g.startButton.isPressed || g.dpad.up.isPressed || g.dpad.down.isPressed
+           || g.dpad.left.isPressed || g.dpad.right.isPressed
+           || g.leftTrigger.isPressed || g.rightTrigger.isPressed;
 
     internal static bool WasPressed(ControllerShortcut shortcut)
     {

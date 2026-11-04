@@ -166,10 +166,17 @@ public partial class Mod
         // controller snapshot and secondary buttons cannot trigger both action sets.
         var controllerShortcutsAvailable = (_multiplayerModeActive || SceneRoles.IsMainMenu(CurrentScene))
                                            && !MultiplayerPausePatch.IsPauseMenuActive;
-        ModControllerInput.Update(controllerShortcutsAvailable, Time.unscaledDeltaTime);
+        // The backpack only takes the give/drop combos; its View/Share press must neither open
+        // the radial menu nor close the screen.
+        var backpackOpen = _multiplayerModeActive && _inventory?.IsBackpackVisible == true;
+        ModControllerInput.Update(controllerShortcutsAvailable && !backpackOpen, Time.unscaledDeltaTime);
         InputCaptureState.IsControllerShortcutCaptured = ModControllerInput.IsModifierHeld
                                                          && controllerShortcutsAvailable;
         InputInterop.ReconcileGameplayInput(InputCaptureState.WantsGameplayBlocked);
+        InputInterop.SuppressNativeInput(
+            blockViewShare: backpackOpen && controllerShortcutsAvailable,
+            blockCameraLook: ModControllerInput.IsRadialHeld,
+            blockFaceButtons: backpackOpen && controllerShortcutsAvailable && ModControllerInput.IsModifierPressedNow);
 
         if (ModControllerInput.RadialMenu.IsVisible) _radialContext = BuildRadialContext();
 
@@ -333,20 +340,8 @@ public partial class Mod
     /// <summary>Gathered once a frame while the radial menu is open, not on every IMGUI pass.</summary>
     private RadialContext BuildRadialContext()
     {
-        ShareableItem item = default;
-        var hasItem = false;
-        try
-        {
-            hasItem = _game != null && _game.Inventory.TryGetSelectedShareableItem(out item);
-        }
-        catch (Exception ex)
-        {
-            ModLog.SuppressedException("radial.selected-item", ex);
-        }
-
         var ropeAttached = Network != null && RopeLinkState.PartnerOf(Network.LocalPlayerId) >= 0;
-        return new RadialContext(ropeAttached, RemotePlayerManager.ShowNames,
-            hasItem ? item.Name : null, hasItem ? item.Count : 0);
+        return new RadialContext(ropeAttached, RemotePlayerManager.ShowNames);
     }
 
     private void TickNameToggleInput()

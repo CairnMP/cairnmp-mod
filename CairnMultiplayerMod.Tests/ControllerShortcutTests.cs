@@ -67,6 +67,9 @@ public sealed class ControllerShortcutTests
             Assert.Contains(combos, line => line.EndsWith(description));
         }
 
+        Assert.Contains(combos, line => line == "X/Square: Give item");
+        Assert.Contains(combos, line => line == "B/Circle: Drop item");
+        Assert.DoesNotContain("Give item", radial);
         Assert.Contains("F5: Multiplayer panel", columns[2].Lines);
         Assert.Contains("V: Push to talk", columns[2].Lines);
     }
