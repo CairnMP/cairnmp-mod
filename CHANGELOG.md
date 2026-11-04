@@ -43,6 +43,15 @@ All notable CairnMP changes are documented here. Releases follow
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- A new partner rope stays between the two harnesses. The cloned rope was keeping the prefab's full length, so the line stretched to the horizon. Its length is now applied from the rope's own physics step.
+- Tying that rope again lays it between the harnesses on the first physics steps. A retie was skipping the new rope's setup and discarding the length request, so the line went back to the horizon. The cloned rope was still drawing a straight line off the harnesses; the visible rope is now redrawn between the two harnesses after that line updates. The climber's own coiled rope is left as it is.
+
+---
+
 ## [2.4.1] — 2026-10-30 (stable)
 
 > The first stable build for Cairn **1.1.593**. It brings the stable channel everything

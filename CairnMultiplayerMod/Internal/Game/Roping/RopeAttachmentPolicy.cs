@@ -25,4 +25,15 @@ internal static class RopeAttachmentPolicy
         length = distance + slack;
         return float.IsFinite(length) && length > distance && length < maxLength;
     }
+
+    /// <summary>
+    /// The paid-out length has reached the request. In game this reading has stayed
+    /// at 0, so the visible line is drawn from the harnesses and does not wait on it.
+    /// </summary>
+    internal static bool SnapLanded(float requested, float reported)
+    {
+        if (!float.IsFinite(requested) || !float.IsFinite(reported) || requested <= 0f) return false;
+        var tolerance = Math.Max(0.5f, requested * 0.15f);
+        return Math.Abs(reported - requested) <= tolerance;
+    }
 }
