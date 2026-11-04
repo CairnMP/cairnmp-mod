@@ -1,6 +1,6 @@
 BELAY TEAM - COOPERATIVE ACCEPTANCE PLAN
 
-Status: experimental source, protocol 25. Full native two-client acceptance is pending.
+Status: experimental source, protocol 26. Full native two-client acceptance is pending.
 Both participants must install the exact same build. Automated participants and
 the accepted offline local-station reconnection do not establish multiplayer success.
 
@@ -28,8 +28,9 @@ Setup shared by connection cases
      or measured distance. Live ghost movement alone does not prove eligibility.
      Proximity uses fresh replicated body positions on both sides, not actor bases.
      Belay Team compares the game's native world identity, not the last streamed
-     zone callback. Both builds must use protocol 25; different worlds still refuse.
+     zone callback. Both builds must use protocol 26; different worlds still refuse.
      R21 carries the climber's capacity in the invitation/acceptance contract;
+     R22 adds a role-transaction identity to the fixed-size request/event contracts;
      earlier experimental protocols cannot join this version.
      If E is missing, close L and check your own fresh piton with firm foot holds.
      The panel/BelayAnchor log reports native readiness; it never forces anchoring.
@@ -107,7 +108,42 @@ Stationary controls - remain anchored at P
       or a downstream protection, or changing any loaded mapping, is not allowed.
       Native acceptance of this upstream-only recovery is still pending.
 
-Falls - only after C/R cases pass
+Belayer rope drawing - candidate, native acceptance pending
+  V01 While both remain personally anchored, confirm the belayer sees the route
+      from S through the climber's protections to the climber. The climber keeps
+      the original native rope. Repeat with the host and guest as belayer.
+  V02 Feed and take in slack while anchored: the belayer's drawing should follow
+      the climber's rope shape rather than remain a straight station/body line.
+      Confirm R01-R03 readbacks and brake control still behave as before.
+  V03 Add one unloaded protection, then wait for the route to settle. Confirm
+      every protection junction remains visible. The drawing may hide briefly
+      during native rebinding; visibility failure alone must not end the pair.
+  V04 End belay while personally anchored: the drawing disappears. Reconnect and
+      verify no old route remains. Focus/pause cases retain L01's stop behavior.
+      Drawing samples never renew the three-second brake/session lease.
+
+Anchored role exchange - candidate, native acceptance pending
+  T01 With the current pair active, the climber places a separate healthy upper
+      protection T, waits for rebinding and personally anchors at T. The original
+      belayer remains held at S. Open L on the climber: K proposes T as the next
+      station. The original belayer accepts with Enter. Both remain still and
+      personally anchored throughout preparation. Do not close L or make a fall.
+      Expected: both native routes confirm, roles reverse, brake starts closed,
+      new rope readback appears, and both personal anchors remain attached.
+      Existing-route binding and missing-station insertion must be recorded
+      separately; a refused insertion is not a passed role exchange.
+  T02 Cancel/decline the proposal with Backspace, before acceptance and during
+      preparation. Expected: original roles and control remain; native queued
+      insertions are not rolled back. No automatic release or second role offer.
+  T03 After T01 passes, the new climber releases S, climbs toward T while the new
+      upper belayer takes in slack with Down, and personally anchors again.
+      Expected: slack is collected without hauling; brake and climbing limit work.
+      Repeat the role exchange back, then repeat in the other host arrangement.
+  T04 Pause/focus/disconnect during a proposal or preparation: L01/L02 still end
+      the interaction rather than resume automatically. Check both personal
+      anchors, input restoration and fresh-consent requirements afterward.
+
+Falls - only after C/R/T cases pass
   F01 Short fall with BRAKED already set: native catch with coherent slack and no
       excessive upward launch. Record height, slack, damage and piton condition.
   F02 Short fall from FREE, belayer brakes in flight: one catch at current geometry;
@@ -149,8 +185,8 @@ Later scenarios / not implemented acceptance
   N01 Start a NEW upper-station belay session without falling first. Validate native
       station order and take-in before follower falls. This is not protected role
       transfer within the existing pair; record a refused route as a failed case.
-  N02 Protected same-pair role transfer: BLOCKED until implemented. Do not count
-      ending and reinviting as seamless transfer.
+  N02 Loaded or seamless role transfer is not implemented. T01-T04 test an
+      explicitly consented, stationary exchange with both personal anchors held.
   N03 Preserve pair and resume after cutscene/pause: BLOCKED; first pilot ends the
       interaction by design. A future resume must revalidate route/anchors and input.
   N04 Shared damage and belayer ragdoll: FUTURE balance investigation after the

@@ -105,7 +105,9 @@ internal sealed partial class ManualBelayAdapter
         state.NextPoll = Now + .1;
         try
         {
-            if (!Enabled || _lease.IsExpired(Now) || RopeInterop.IsNativeBelayEngaged || _stationLifeline != null
+            if (!Enabled || _lease.IsExpired(Now) || RopeInterop.IsNativeBelayEngaged
+                || (_stationLifeline != null && !_rolePreparing)
+                || (_rolePreparing && (_stationSession != _roleOldSession || !StationValid))
                 || !TryGetActiveContext(out _))
             { CancelStationAttachment("The station context or fresh partner-input lease ended."); return; }
             var lifeline = state.Lifeline;
@@ -144,14 +146,8 @@ internal sealed partial class ManualBelayAdapter
             if (state.Observer.Stage == BelayStationAttachmentStage.Failed)
             { CancelStationAttachment("The station route did not confirm: " + state.Observer.Failure); return; }
             if (state.Observer.Stage != BelayStationAttachmentStage.Ready) return;
-            var lease = _lease;
-            _attachment = null;
-            if (!BindPartnerStation(lease.Session, state.Station, state.Piton, out var reason))
-            { _lease = null; _localRopeNotice = reason; ModLog.Warning("[BelayAttachment] Control refused after connection: " + reason); return; }
-            _lease = lease;
-            _lease.CancelMotion();
-            ApplyBrake(_lease.Braked);
-            ModLog.Info("[BelayAttachment] Confirmed; five observed seconds, original protection retained; fresh input required for rope motion.");
+            if (_rolePreparing) { _roleConnectionReady = true; return; }
+            CompleteStationAttachment(state, _lease);
         }
         catch (Exception ex)
         {
@@ -161,6 +157,16 @@ internal sealed partial class ManualBelayAdapter
             if (_control != null) ClearControl("Station attachment control failed: " + ex.Message);
             else { _lease = null; ClearPartnerStation(); }
         }
+    }
+
+    private bool CompleteStationAttachment(StationAttachment state, BelayInputLease lease)
+    {
+        _attachment = null;
+        if (!BindPartnerStation(lease.Session, state.Station, state.Piton, out var reason))
+        { _lease = null; _localRopeNotice = reason; ModLog.Warning("[BelayAttachment] Control refused after connection: " + reason); return false; }
+        _lease = lease; _lease.CancelMotion(); ApplyBrake(_lease.Braked);
+        ModLog.Info("[BelayAttachment] Confirmed; five observed seconds, original protection retained; fresh input required for rope motion.");
+        return true;
     }
 
     private static bool AttachmentPinsReady(StationAttachment state, bool stationAttached)
@@ -189,6 +195,7 @@ internal sealed partial class ManualBelayAdapter
     private void CancelStationAttachment(string reason)
     {
         if (_attachment == null) return;
+        if (_rolePreparing) _roleFailure = reason;
         ModLog.Info("[BelayAttachment] Stopped; no additional native requests or automatic rollback: " + reason);
         _attachment = null;
         _lease?.CancelMotion(); _lease = null;

@@ -475,7 +475,7 @@ public sealed partial class ManualBelayFeatureTests
         Assert.Equal(7u, decoded.AppliedSequence);
         Assert.Equal(1.5f, decoded.Limit);
         Assert.Equal(1.4f, decoded.RealDistance);
-        Assert.Equal(102, Bytes(request).Length);
+        Assert.Equal(118, Bytes(request).Length);
         Assert.Equal(40, decoded.RopeCapacity);
         Assert.Equal(request.Station, decoded.Station);
         Assert.Equal(-1, decoded.Motion);
@@ -493,7 +493,7 @@ public sealed partial class ManualBelayFeatureTests
         Assert.Equal(2, eventCopy.Climber);
         Assert.Equal(7u, eventCopy.AppliedSequence);
         Assert.True(eventCopy.Braked);
-        Assert.Equal(110, Bytes(message).Length);
+        Assert.Equal(126, Bytes(message).Length);
         Assert.Equal(40, eventCopy.RopeCapacity);
         Assert.Equal(message.Station, eventCopy.Station);
         Assert.Equal(-1, eventCopy.Motion);
@@ -896,6 +896,11 @@ public sealed partial class ManualBelayFeatureTests
     }
     private sealed class Belay : IManualBelayApi
     {
+        internal WorldPosition[] Visual;
+        internal int VisualCalls;
+        public void ShowRopeVisual(Guid session, int climber, uint revision, WorldPosition[] points)
+        { Visual = points; VisualCalls++; }
+        public void ClearRopeVisual() => Visual = null;
         internal bool OptIn = true, Anchored = true, CanBegin = true, ProtectionReady = true, Active, LastBrake, StationRecorded;
         public float RopeCapacity { get; set; } = 40;
         internal int BeginCalls, SetCalls, StopCalls, ReadinessChecks;
@@ -908,6 +913,48 @@ public sealed partial class ManualBelayFeatureTests
         internal bool KnownStation = true;
         internal WorldPosition StationPosition;
         internal BelaySharedStation BoundStation;
+        internal bool RolePreparationReady = true, RolePreparationFailed, RoleCommitFailed;
+        internal int RolePrepareCalls, RoleCommitCalls;
+        private BelaySharedStation _roleCandidate;
+        private Guid _roleSession;
+        public bool CanPrepareRoleStation(Guid session, out string reason)
+        { reason = "Remain anchored"; return Active && Anchored && _session == session; }
+        public bool PrepareRoleStation(Guid session, out BelaySharedStation station, out string reason)
+        {
+            station = default;
+            if (!CanPrepareRoleStation(session, out reason)) return false;
+            _roleSession = session;
+            station = _roleCandidate = new(Guid.NewGuid(), StationPosition, StationOwner, 7);
+            return true;
+        }
+        public bool RoleStationValid(Guid session, BelaySharedStation station)
+            => Active && Anchored && _roleSession == session && station == _roleCandidate;
+        public bool CanReceiveRoleSwap(Guid session, BelaySharedStation station, out string reason)
+        { reason = "Keep original station"; return StationValid && ProtectedSession == session && station.IsValid && SharedStationReady; }
+        public BelayRolePreparation PrepareRoleClimber(Guid session, Guid next, BelaySharedStation station, out string reason)
+        {
+            RolePrepareCalls++;
+            if (!CanReceiveRoleSwap(session, station, out reason) || RolePreparationFailed) return BelayRolePreparation.Failed;
+            return RolePreparationReady ? BelayRolePreparation.Ready : BelayRolePreparation.Preparing;
+        }
+        public bool CommitRoleSwap(Guid session, Guid next, BelaySharedStation station, bool becomeBelayer, out string reason)
+        {
+            RoleCommitCalls++; reason = "Native role commit refused";
+            if (RoleCommitFailed || !Anchored) return false;
+            if (becomeBelayer)
+            {
+                if (!RoleStationValid(session, station)) return false;
+                Stop(session); StationRecorded = true; StationId = station.Id; StationPosition = station.Position;
+                ProtectedSession = next; return true;
+            }
+            if (!CanReceiveRoleSwap(session, station, out reason) || !RolePreparationReady) return false;
+            EndStation(); BoundStation = station;
+            if (!BeginClimber(next, out reason)) return false;
+            Sequence = 0; LastBrake = true; Rope.SetBrake(true);
+            _inputLease = new BelayInputLease(next, Clock(), true);
+            return true;
+        }
+        public void CancelRoleSwap() { _roleCandidate = default; _roleSession = Guid.Empty; }
         internal Func<double> Clock = () => 0;
         internal BelayRopeControl Rope;
         internal bool CanApplyInput = true, SuppressRopeReadback;

@@ -14,10 +14,11 @@ internal sealed class BelayInputLease
     private double _motionExpiresAt;
     private int _motion;
 
-    internal BelayInputLease(Guid session, double now)
+    internal BelayInputLease(Guid session, double now, bool braked = false)
     {
         if (session == Guid.Empty || !double.IsFinite(now)) throw new ArgumentOutOfRangeException();
         Session = session;
+        Braked = braked;
         _lastReceived = now;
         _expiresAt = now + DurationSeconds;
     }

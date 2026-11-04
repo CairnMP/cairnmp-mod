@@ -38,8 +38,12 @@ internal sealed class BelayPanelNavigation
         }
         if (key == BelayPanelShortcut.Accept && view.Phase == BelayPanelPhase.Invitation && view.CanAccept)
         { action = BelayPanelAction.Accept; return true; }
+        if (key == BelayPanelShortcut.Accept && view.Phase == BelayPanelPhase.SwapInvitation && view.CanAccept)
+        { action = BelayPanelAction.AcceptSwap; return true; }
         if (key == BelayPanelShortcut.Decline)
         {
+            if (view.Phase is BelayPanelPhase.SwapInvitation or BelayPanelPhase.SwapPreparing)
+            { action = BelayPanelAction.CancelSwap; return true; }
             if (view.Phase == BelayPanelPhase.Invitation) { action = BelayPanelAction.Decline; return true; }
             if (view.Phase == BelayPanelPhase.Waiting) { action = BelayPanelAction.Cancel; return true; }
             return false; // Declining an invitation must never end an active belay.

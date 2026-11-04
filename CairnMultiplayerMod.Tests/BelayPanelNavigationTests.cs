@@ -6,6 +6,20 @@ namespace CairnMultiplayerMod.Tests;
 
 public sealed class BelayPanelNavigationTests
 {
+    [Fact]
+    public void SwapShortcutsAcceptOrCancelOnlyTheRoleProposal()
+    {
+        var navigation = new BelayPanelNavigation();
+        var invitation = new BelayPanelView { Phase = BelayPanelPhase.SwapInvitation, CanAccept = true };
+        Assert.True(navigation.Observe(BelayPanelShortcut.Accept, true, true, invitation, out var action, out _));
+        Assert.Equal(BelayPanelAction.AcceptSwap, action);
+        Assert.True(navigation.Observe(BelayPanelShortcut.Decline, true, true,
+            new() { Phase = BelayPanelPhase.SwapPreparing }, out action, out _));
+        Assert.Equal(BelayPanelAction.CancelSwap, action);
+        navigation.Observe(BelayPanelShortcut.Accept, false, true, invitation, out _, out _);
+        Assert.False(navigation.Observe(BelayPanelShortcut.Accept, true, true,
+            new() { Phase = BelayPanelPhase.SwapPreparing }, out _, out _));
+    }
     private static BelayPanelView Partners(params BelayPartnerRow[] rows)
         => new() { Phase = BelayPanelPhase.Partners, Partners = rows, CanOffer = true, CanRequest = true };
 

@@ -11,7 +11,7 @@ namespace CairnMultiplayerMod.Features;
 /// Consensual remote brake pilot on the climber's existing protection route.
 /// The host arbitrates roles/intent; only the climber touches their native suspension.
 /// </summary>
-internal sealed class ManualBelayFeature : MultiplayerFeature
+internal sealed partial class ManualBelayFeature : MultiplayerFeature
 {
     private const float InputInterval = .1f;
     private const string InputRateLimited = "Rope input arrived too quickly; retry the current input.";
@@ -32,6 +32,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         internal sbyte Motion;
         internal PlayerLocation BelayerLocation;
         internal BelaySharedStation Station;
+        internal RoleSwapState Swap;
     }
 
     private HostCommand<ManualBelayCommand> _command;
@@ -58,6 +59,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
     {
         _command = feature.HostCommand<ManualBelayCommand>("request", Judge);
         _changed = feature.HostEvent<ManualBelayMessage>("changed", (_, message) => Receive(message));
+        _ropeVisual = feature.Stream<BelayRopeVisualFrame>("rope-visual-v1", ReceiveRopeVisual);
         feature.Game.Chat.AddCommand("belay", "/belay offer <player> | request <player> | accept | stop",
             "Experimental manual brake: anchored belayer offers; climber accepts; Space brakes/releases.", HandleChat);
         feature.Game.BelayPanel.Register(HandlePanelAction);
@@ -129,6 +131,8 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             if (command.Operation == ManualBelayOperation.Intent)
             {
                 if (_active?.Session != command.Session || _active.Sequence >= command.Sequence) return;
+                if (_swap?.Phase == ManualBelayPhase.SwapPreparing && reason == "Belay session expired or replaced.")
+                    return; // The role commit can arrive after an old command's response.
                 if (reason == InputRateLimited)
                 {
                     // A delivery burst must not end a valid pair or replay an
@@ -152,10 +156,14 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             case BelayPanelAction.Toggle:
                 if (!IsBelayMode || !IsConnected || !Game.State.IsLocalPlayerInGame
                     || Game.Chat.IsTyping || Game.Input.IsPauseMenuActive) return;
+                if (_swap?.Phase == ManualBelayPhase.SwapPreparing) return;
                 if (Game.BelayPanel.IsOpen) Game.BelayPanel.Close();
                 else if (!KeyboardCaptured) { RefreshPanel(); Game.BelayPanel.Show(); }
                 return;
             case BelayPanelAction.Request: HandleChat("request " + target); break;
+            case BelayPanelAction.ProposeSwap: ProposeRoleSwap(); break;
+            case BelayPanelAction.AcceptSwap: AcceptRoleSwap(); break;
+            case BelayPanelAction.CancelSwap: CancelRoleSwapRequest(); break;
             case BelayPanelAction.DefineStation:
                 if (!IsBelayMode || !IsConnected || !Game.State.IsLocalPlayerInGame) return;
                 if (_active != null || _offer != null || _offeredTarget >= 0)
@@ -177,13 +185,16 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             case BelayPanelAction.ToggleBrake:
                 if (_active?.Belayer == LocalPlayerId) _desiredBrake = !_desiredBrake;
                 break;
-            case BelayPanelAction.Close: Game.BelayPanel.Close(); return;
+            case BelayPanelAction.Close:
+                if (_swap?.Phase != ManualBelayPhase.SwapPreparing) Game.BelayPanel.Close();
+                return;
         }
         RefreshPanel();
     }
 
     private void RefreshPanel()
     {
+        if (RefreshRoleSwapPanel()) return;
         if (_active != null)
         {
             var partner = _active.Belayer == LocalPlayerId ? _active.Climber : _active.Belayer;
@@ -193,8 +204,10 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             Game.BelayPanel.SetView(new BelayPanelView { Phase = BelayPanelPhase.Active,
                 PartnerName = GetPlayerName(partner), LocalBelayer = _active.Belayer == LocalPlayerId,
                 StationDefined = Game.Belay.HasStation,
+                CanSwap = !_roleOfferPending && _active.Climber == LocalPlayerId && Game.Belay.CanPrepareRoleStation(_active.Session, out _),
                 Braked = _desiredBrake, Description = $"{state}; {MotionLabel(_active.Motion)} requested. Pitons: {_telemetry?.ProtectionCount ?? 0}.\n"
-                    + RopeReadback() + (_active.Belayer == LocalPlayerId ? "\nClose L; hold Up/Down: feed/take in." : "") });
+                    + RopeReadback() + (_active.Belayer == LocalPlayerId ? "\nClose L; hold Up/Down: feed/take in."
+                        : "\nPersonally anchor at the next station, then K proposes a role exchange.") });
             return;
         }
         if (_offer != null)
@@ -326,6 +339,8 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         var now = Game.Time.UnscaledTime;
         if (!IsBelayMode || !float.IsFinite(now) || !Enum.IsDefined(typeof(ManualBelayOperation), message.Operation))
         { request.Reject("Manual belay experiment unavailable."); return; }
+        if (!IsRoleSwapOperation(message.Operation) && message.Swap != Guid.Empty)
+        { request.Reject("A role transaction cannot be attached to an ordinary rope command."); return; }
         if (message.Operation is ManualBelayOperation.Offer or ManualBelayOperation.Request)
         {
             var belayer = message.Operation == ManualBelayOperation.Offer ? request.FromPlayerId : message.Target;
@@ -380,6 +395,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             return;
         }
         if (!session.Started) { request.Reject("Climber has not accepted."); return; }
+        if (IsRoleSwapOperation(message.Operation)) { JudgeRoleSwap(request, session, now, current, climber); return; }
         if (message.Operation == ManualBelayOperation.Intent)
         {
             // Two credits absorb a small delivery burst; sustained input is
@@ -389,6 +405,8 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
                 || message.Motion is < -1 or > 1 || now < session.InputAt)
             { request.Reject("Unauthorized, repeated or excessive brake command."); return; }
             if (credits + .0001f < 1) { request.Reject(InputRateLimited); return; }
+            if (session.Swap?.Preparing == true && (!message.Braked || message.Motion != 0))
+            { request.Reject("Keep the brake closed and rope motion stopped during role preparation."); return; }
             request.AfterCommit(() =>
             {
                 session.Sequence = message.Sequence; session.Braked = message.Braked;
@@ -398,7 +416,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
             });
             return;
         }
-        if (actor != session.Climber || !ValidRopeReport(message) || message.Sequence > session.Sequence || message.AppliedSequence > message.Sequence
+        if (message.Operation != ManualBelayOperation.Report || actor != session.Climber || !ValidRopeReport(message) || message.Sequence > session.Sequence || message.AppliedSequence > message.Sequence
             || message.TopologyRevision < session.TopologyRevision || message.TopologyRevision > 4096
             || (message.TopologyRevision == session.TopologyRevision && message.AppliedSequence < session.AppliedSequence)
             || message.ProtectionCount < 0 || message.ProtectionCount > 63 || now < session.NextReport
@@ -439,6 +457,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
     {
         if (!IsBelayMode) { ClearLocal(); return; }
         if (message.Session == Guid.Empty || (message.Belayer != LocalPlayerId && message.Climber != LocalPlayerId)) return;
+        if (ReceiveRoleSwap(message)) return;
         if (message.Phase == ManualBelayPhase.Offered)
         {
             var partner = message.Belayer == LocalPlayerId ? message.Climber : message.Belayer;
@@ -457,6 +476,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
                 || (message.Initiator != LocalPlayerId && _accepted != message.Session)) return;
             var stationMatchesOffer = !_offer.Station.IsValid || _offer.Station == message.Station;
             _active = message; _offer = null; _sequence = 0; _desiredBrake = false;
+            ResetRopeVisual();
             _sentBrake = false; _sentMotion = 0; _sendNotBefore = 0;
             _nextIntent = _nextReport = _nextHint = 0; _stopSent = false; _telemetry = null;
             _localUntil = Game.Time.UnscaledTime + 3;
@@ -518,6 +538,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         }
         if (IsHost && _hostSession != null)
         {
+            if (_hostSession.Swap != null && now >= _hostSession.Swap.Until) CancelHostRoleSwap(_hostSession);
             if (now >= _hostSession.Until) EndHost("Fresh partner input timed out.");
             else if (_hostSession.Station.IsValid && !Game.Belay.IsStationKnown(_hostSession.Station)) EndHost("The agreed station is no longer synchronized.");
             else if (!TryLocations(_hostSession.Belayer, _hostSession.Climber, out var hostStation, out _, out var locationReason)) EndHost("Participant location unavailable: " + locationReason);
@@ -537,14 +558,17 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         if (_active == null) return;
         if (!IsBelayMode || !IsConnected || !Game.State.IsLocalPlayerInGame || now >= _localUntil)
         { RequestStop(); return; }
+        TickRoleSwap(now);
+        if (_active == null) return;
         if (_active.Belayer == LocalPlayerId)
         {
             if (!OwnStationMatches(_active.Station)) { RequestStop("The active station identity or personal anchor changed."); return; }
-            if (!KeyboardCaptured && !Game.BelayPanel.IsOpen && !Game.Input.IsPauseMenuActive && !Game.Chat.IsTyping
+            if (_swap?.Phase == ManualBelayPhase.SwapPreparing) _desiredBrake = true;
+            if (_swap?.Phase != ManualBelayPhase.SwapPreparing && !KeyboardCaptured && !Game.BelayPanel.IsOpen && !Game.Input.IsPauseMenuActive && !Game.Chat.IsTyping
                 && (Game.Input.WasKeyPressed(GameKey.Space) || Game.Input.WasKeyPressed(GameKey.F7)))
                 _desiredBrake = !_desiredBrake;
             var motion = (sbyte)0;
-            if (!KeyboardCaptured && !Game.BelayPanel.IsOpen && !Game.Input.IsPauseMenuActive && !Game.Chat.IsTyping && !Game.Time.IsPaused)
+            if (_swap?.Phase != ManualBelayPhase.SwapPreparing && !KeyboardCaptured && !Game.BelayPanel.IsOpen && !Game.Input.IsPauseMenuActive && !Game.Chat.IsTyping && !Game.Time.IsPaused)
             {
                 var up = Game.Input.IsKeyHeld(GameKey.UpArrow);
                 var down = Game.Input.IsKeyHeld(GameKey.DownArrow);
@@ -578,6 +602,7 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
                     Reserve = rope.Reserve, LengthApplied = rope.LengthApplied });
             }
         }
+        TickRopeVisual(now);
         if (_active == null || now < _nextHint) return;
         _nextHint = now + .5f;
         var desired = _active.Braked ? "BRAKED" : "FREE";
@@ -608,10 +633,57 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
 
     private void ClearLocal()
     {
+        ClearRoleSwap();
+        ResetRopeVisual();
         if (_active != null) Game.Belay.Stop(_active.Session);
         Game.Belay.EndStation(); Game.Hud.HideMessage("belay");
         Game.BelayPanel.Close();
         _active = _offer = _telemetry = null; _accepted = Guid.Empty; _offeredTarget = -1; _stopSent = _cancelPending = false;
+    }
+
+    private Stream<BelayRopeVisualFrame> _ropeVisual;
+    private uint _visualSequence, _receivedVisualSequence;
+    private float _nextVisual, _visualUntil, _visualAcceptAt;
+
+    private void TickRopeVisual(float now)
+    {
+        if (_active?.Climber == LocalPlayerId && now >= _nextVisual && _visualSequence < uint.MaxValue)
+        {
+            _nextVisual = now + .1f;
+            var ready = Game.Belay.TryCaptureRopeVisual(_active.Session, out var points);
+            _ropeVisual.Send(new BelayRopeVisualFrame { Session = _active.Session, Sequence = ++_visualSequence,
+                Revision = Game.Belay.Status.TopologyRevision, Points = ready ? points : Array.Empty<WorldPosition>() });
+        }
+        if (_visualUntil > 0 && now >= _visualUntil)
+        {
+            Game.Belay.ClearRopeVisual();
+            _visualUntil = 0;
+        }
+    }
+
+    private void ReceiveRopeVisual(int sender, BelayRopeVisualFrame frame)
+    {
+        var now = Game.Time.UnscaledTime;
+        // This stream never grants consent, renews a brake lease or changes physics.
+        if (!IsBelayMode || !IsConnected || _active?.Belayer != LocalPlayerId || sender != _active.Climber
+            || frame.Session != _active.Session || frame.Sequence <= _receivedVisualSequence
+            || !Game.State.IsLocalPlayerInGame || Game.State.IsLocalPlayerInCutscene
+            || !Game.Input.IsWindowFocused || Game.Input.IsPauseMenuActive || Game.Time.IsPaused
+            || !float.IsFinite(now) || now < _visualAcceptAt
+            || !TryLocations(_active.Belayer, _active.Climber, out _, out var climber, out _)
+            || !frame.MatchesRoute(_active.Station.Position, new(climber.X, climber.Y, climber.Z), _active.RopeCapacity)) return;
+        _receivedVisualSequence = frame.Sequence;
+        _visualAcceptAt = now + .04f;
+        if (frame.Points.Length == 0) { Game.Belay.ClearRopeVisual(); _visualUntil = 0; return; }
+        Game.Belay.ShowRopeVisual(frame.Session, sender, frame.Revision, frame.Points);
+        _visualUntil = now + .75f;
+    }
+
+    private void ResetRopeVisual()
+    {
+        Game.Belay.ClearRopeVisual();
+        _visualSequence = _receivedVisualSequence = 0;
+        _nextVisual = _visualUntil = _visualAcceptAt = 0;
     }
 
     private void Notice(string message)
@@ -620,14 +692,15 @@ internal sealed class ManualBelayFeature : MultiplayerFeature
         Game.Hud.ShowMessage("notice", message, 5);
     }
 }
-internal enum ManualBelayOperation : byte { Offer, Accept, Intent, Report, Stop, Request }
-internal enum ManualBelayPhase : byte { Offered, Started, Intent, Telemetry, Ended }
+internal enum ManualBelayOperation : byte { Offer, Accept, Intent, Report, Stop, Request, ProposeSwap, AcceptSwap, CancelSwap, ReadySwap }
+internal enum ManualBelayPhase : byte { Offered, Started, Intent, Telemetry, Ended, SwapOffered, SwapPreparing, SwapCancelled, SwapCommitted }
 
 /// <summary>Fixed-size requests. Actor identity always comes from the transport.</summary>
 internal sealed class ManualBelayCommand : IPacket
 {
     public ManualBelayOperation Operation;
     public Guid Session;
+    public Guid Swap;
     public int Target;
     public uint Sequence, AppliedSequence;
     public bool Braked, Suspended;
@@ -651,10 +724,11 @@ internal sealed class ManualBelayCommand : IPacket
         writer.Write(Station.PitonOwner); writer.Write(Station.PitonId);
         writer.Write(Motion); writer.Write(Released); writer.Write(Slack); writer.Write(Reserve); writer.Write(LengthApplied);
         writer.Write(RopeCapacity);
+        writer.Write(Swap.ToByteArray());
     }
     public void Deserialize(BinaryReader reader)
     {
-        if (reader.BaseStream.Length - reader.BaseStream.Position != 102) throw new InvalidDataException("Invalid belay request size.");
+        if (reader.BaseStream.Length - reader.BaseStream.Position != 118) throw new InvalidDataException("Invalid belay request size.");
         Operation = (ManualBelayOperation)reader.ReadByte(); Session = new Guid(reader.ReadBytes(16)); Target = reader.ReadInt32();
         Sequence = reader.ReadUInt32(); AppliedSequence = reader.ReadUInt32(); Braked = reader.ReadBoolean(); Suspended = reader.ReadBoolean();
         Limit = reader.ReadSingle(); RealDistance = reader.ReadSingle();
@@ -662,6 +736,7 @@ internal sealed class ManualBelayCommand : IPacket
         Station = new BelaySharedStation(new Guid(reader.ReadBytes(16)), new WorldPosition(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle()), reader.ReadInt32(), reader.ReadUInt32());
         Motion = reader.ReadSByte(); Released = reader.ReadSingle(); Slack = reader.ReadSingle(); Reserve = reader.ReadSingle(); LengthApplied = reader.ReadBoolean();
         RopeCapacity = reader.ReadSingle();
+        Swap = new Guid(reader.ReadBytes(16));
     }
 }
 
@@ -670,6 +745,7 @@ internal sealed class ManualBelayMessage : IPacket
 {
     public ManualBelayPhase Phase;
     public Guid Session;
+    public Guid Swap;
     public int Belayer, Climber, Initiator;
     public uint Sequence, AppliedSequence;
     public bool Braked, Suspended;
@@ -693,10 +769,11 @@ internal sealed class ManualBelayMessage : IPacket
         writer.Write(Station.PitonOwner); writer.Write(Station.PitonId);
         writer.Write(Motion); writer.Write(Released); writer.Write(Slack); writer.Write(Reserve); writer.Write(LengthApplied);
         writer.Write(RopeCapacity);
+        writer.Write(Swap.ToByteArray());
     }
     public void Deserialize(BinaryReader reader)
     {
-        if (reader.BaseStream.Length - reader.BaseStream.Position != 110) throw new InvalidDataException("Invalid belay message size.");
+        if (reader.BaseStream.Length - reader.BaseStream.Position != 126) throw new InvalidDataException("Invalid belay message size.");
         Phase = (ManualBelayPhase)reader.ReadByte(); Session = new Guid(reader.ReadBytes(16));
         Belayer = reader.ReadInt32(); Climber = reader.ReadInt32(); Sequence = reader.ReadUInt32(); AppliedSequence = reader.ReadUInt32();
         Braked = reader.ReadBoolean(); Suspended = reader.ReadBoolean(); Limit = reader.ReadSingle(); RealDistance = reader.ReadSingle();
@@ -704,5 +781,57 @@ internal sealed class ManualBelayMessage : IPacket
         Station = new BelaySharedStation(new Guid(reader.ReadBytes(16)), new WorldPosition(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle()), reader.ReadInt32(), reader.ReadUInt32());
         Motion = reader.ReadSByte(); Released = reader.ReadSingle(); Slack = reader.ReadSingle(); Reserve = reader.ReadSingle(); LengthApplied = reader.ReadBoolean();
         RopeCapacity = reader.ReadSingle();
+        Swap = new Guid(reader.ReadBytes(16));
     }
+}
+
+/// <summary>Optional, bounded drawing samples; unknown stream channels are ignored by older peers.</summary>
+internal sealed class BelayRopeVisualFrame : IPacket
+{
+    internal const int MaximumPoints = 192;
+    public Guid Session;
+    public uint Sequence, Revision;
+    public WorldPosition[] Points = Array.Empty<WorldPosition>();
+
+    public void Serialize(BinaryWriter writer)
+    {
+        if (Points == null || Points.Length == 1 || Points.Length > MaximumPoints)
+            throw new InvalidDataException("Invalid belay rope drawing size.");
+        writer.Write(Session.ToByteArray()); writer.Write(Sequence); writer.Write(Revision);
+        writer.Write((ushort)Points.Length);
+        foreach (var point in Points) { writer.Write(point.X); writer.Write(point.Y); writer.Write(point.Z); }
+    }
+
+    public void Deserialize(BinaryReader reader)
+    {
+        if (reader.BaseStream.Length - reader.BaseStream.Position < 26) throw new InvalidDataException("Incomplete rope drawing.");
+        Session = new Guid(reader.ReadBytes(16)); Sequence = reader.ReadUInt32(); Revision = reader.ReadUInt32();
+        var count = reader.ReadUInt16();
+        if (count == 1 || count > MaximumPoints || reader.BaseStream.Length - reader.BaseStream.Position != count * 12)
+            throw new InvalidDataException("Invalid rope drawing payload length.");
+        Points = new WorldPosition[count];
+        for (var i = 0; i < count; i++) Points[i] = new(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
+    }
+
+    internal bool MatchesRoute(WorldPosition station, WorldPosition climber, float capacity)
+    {
+        if (Session == Guid.Empty || Sequence == 0 || !float.IsFinite(capacity) || capacity <= 0 || capacity > 200
+            || Points == null || Points.Length == 1 || Points.Length > MaximumPoints) return false;
+        if (Points.Length == 0) return true;
+        if (!Finite(station) || !Finite(climber) || !Finite(Points[0]) || !Finite(Points[^1])
+            || Distance(station, Points[0]) > 1 || Distance(climber, Points[^1]) > 5) return false;
+        var maximum = capacity * 2 + 3; // Native rope can stretch during a catch.
+        var length = 0f;
+        for (var i = 0; i < Points.Length; i++)
+        {
+            if (!Finite(Points[i]) || Distance(station, Points[i]) > maximum) return false;
+            if (i > 0) length += Distance(Points[i - 1], Points[i]);
+            if (!float.IsFinite(length) || length > maximum) return false;
+        }
+        return true;
+    }
+
+    private static bool Finite(WorldPosition p) => float.IsFinite(p.X) && float.IsFinite(p.Y) && float.IsFinite(p.Z);
+    private static float Distance(WorldPosition a, WorldPosition b)
+        => MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y) + (a.Z - b.Z) * (a.Z - b.Z));
 }

@@ -69,6 +69,8 @@ internal sealed partial class ManualBelayAdapter
     private bool ProtectsNativeStation(Lifeline lifeline, Piton piton)
     {
         if (lifeline == null || piton == null) return false;
+        if (_roleAnchor != null && Id(lifeline) == Id(_roleLifeline) && Id(piton) == Id(_rolePiton)
+            && RoleStationValid(_roleOldSession, _roleStation)) return true;
         if (_stationSession != Guid.Empty && Id(lifeline) == Id(_stationLifeline)
             && Id(piton) == _stationPiton) return StationValid;
         return _control != null && !_stopping && _partnerStation.HasValue

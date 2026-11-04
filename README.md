@@ -31,7 +31,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **25**; lobby admission may also require the exact mod version.
+> protocol is **26**; lobby admission may also require the exact mod version.
 
 ## Features
 
@@ -121,7 +121,7 @@ instead of being destroyed or duplicated.
 Choose **Belay Team** when creating a lobby to enable partner belay. Rope team
 keeps its original direct harness tether; Belay Team rejects that tether in input,
 host validation, received packets and late-join snapshots. Every peer
-must use the same experimental build (protocol **25**, incompatible with the
+must use the same experimental build (protocol **26**, incompatible with the
 published 2.4.1/protocol 16 and earlier pilots). A missing station attachment can
 now be requested on the climber's synchronized native copy of that exact piton.
 This implementation has automated coverage; its initial attachment still needs
@@ -154,6 +154,14 @@ the climber's reported slack, reserve, motion input and native length readback,
 separately from the host-accepted request. Those reports are not independent
 proof of physics.
 
+The belayer also receives a bounded, visual-only copy of the climber's native
+rope shape from the agreed station, through each protection, to the harness.
+Samples refresh at up to 10 Hz, with at most 192 points and interpolation between
+updates of the same topology. They do not create another physical rope or alter
+damage, brake input or the session lease. Stale drawings disappear after 0.75 s;
+ending the pair or resetting the scene clears the drawing. This visual candidate
+still needs two-client validation for visibility, slack and protection updates.
+
 Held motion is renewed at up to 10 Hz and expires after 0.4 s without a fresh
 accepted command on the climber. This stops explicit feed/take-in, while retaining
 the latched brake; FREE can still pay out naturally as the climber moves or falls.
@@ -178,15 +186,31 @@ keeps the cursor visible/unlocked while open and restores its previous state on 
 
 After acceptance, the belayer's native personal-anchor input is locked and K
 cannot remove the active station. Use **L > End belay** before releasing that
-anchor or exchanging roles. The station is tied to its real piton rather than
+anchor manually. The station is tied to its real piton rather than
 a frozen body coordinate, so ordinary anchored body motion stays inside the
 native tether area. Piton failure, lost anchoring, departure and disconnect still
 end control. This new input guard requires native validation.
 
+The current climber can personally anchor at a separate healthy upper piton,
+then choose **Define station / swap roles (K)** in L. The current belayer accepts
+with **Enter**, or either participant cancels the proposal with **Backspace**.
+The original pair stays active during preparation. Both personal anchors must
+remain attached and both endpoints must confirm readiness before the host commits
+a new control session with reversed roles and a closed brake. The future climber's
+own rope capacity and native station route are checked before transfer. If the
+station needs insertion, the existing native preparation/confirmation is reused
+while the old belayer remains anchored. Cancellation retains the original roles;
+it does not undo a native operation already queued. L stays open during preparation.
+After commit, wait for new rope readback before releasing the follower's personal
+anchor. This is an experimental anchored exchange, with automated participant
+coverage; native two-client role exchange still needs validation.
+
 An unloaded personal-anchor transition may recreate rope segments without adding
 a piton. The controller restores only the original ordered holders/protections
 and physical pin walk after settling, preserving paid-out rope and the brake.
-It still refuses loaded route changes, removals, reorders and incomplete pins.
+An unloaded recovery may also remove older pitons before the station only if the
+entire station-to-harness holder, segment and physical pin suffix stays unchanged.
+Loaded route changes, downstream removals, reorders and incomplete pins are refused.
 
 Invitations carry the station's placer/source id and its lifecycle reference. The
 host checks that identity against its live piton registry; the climber resolves
@@ -204,7 +228,7 @@ An already attached station can bind directly after its existing route validates
 The route budget includes the fixed path from that station through downstream
 protections; FREE pays out as needed and BRAKED limits falls and outward climbing
 using the paid-out length. Remote feed/take-in uses this same bounded budget;
-protected role transfer remains pending. The R12 H1 session exercised remote
+native acceptance of the anchored role exchange remains pending. The R12 H1 session exercised remote
 controls, climbing limits and short catches, but also exposed premature session
 ends. Its two initial-insertion attempts failed; later sessions used an existing
 attachment. These stability changes and initial insertion need native retesting.

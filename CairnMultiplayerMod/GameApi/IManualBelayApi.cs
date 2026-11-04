@@ -7,6 +7,20 @@ internal interface IManualBelayApi
 {
     bool Enabled { get; }
     float RopeCapacity => 0;
+    bool TryCaptureRopeVisual(Guid session, out WorldPosition[] points) { points = null; return false; }
+    void ShowRopeVisual(Guid session, int climber, uint revision, WorldPosition[] points) { }
+    void ClearRopeVisual() { }
+    bool CanPrepareRoleStation(Guid session, out string reason) { reason = "Role exchange unavailable."; return false; }
+    bool PrepareRoleStation(Guid session, out BelaySharedStation station, out string reason)
+    { station = default; reason = "Role exchange unavailable."; return false; }
+    bool RoleStationValid(Guid session, BelaySharedStation station) => false;
+    bool CanReceiveRoleSwap(Guid session, BelaySharedStation station, out string reason)
+    { reason = "Role exchange unavailable."; return false; }
+    BelayRolePreparation PrepareRoleClimber(Guid session, Guid next, BelaySharedStation station, out string reason)
+    { reason = "Role exchange unavailable."; return BelayRolePreparation.Failed; }
+    bool CommitRoleSwap(Guid session, Guid next, BelaySharedStation station, bool becomeBelayer, out string reason)
+    { reason = "Role exchange unavailable."; return false; }
+    void CancelRoleSwap() { }
     bool CanBeginStation(out string reason) { reason = "Station unavailable."; return false; }
     bool CanClimb(out string reason) { reason = "Protection unavailable."; return false; }
     bool TryGetStation(out BelaySharedStation station) { station = default; return false; }
@@ -51,6 +65,7 @@ internal readonly record struct LocalStationConnectionContext(bool Enabled, bool
 }
 
 internal enum StationConnectionStage { Unclipping, Detached, Connecting, Confirming, Passed, Failed, NotReady }
+internal enum BelayRolePreparation { Preparing, Ready, Failed }
 internal enum StationConnectionFailure
 {
     None, Setup, Context, BackupLost, StationLost, RouteChanged, Timeout, NativeRejected,

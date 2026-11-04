@@ -12,6 +12,14 @@ All notable CairnMP changes are documented here. Releases follow
 ## Unreleased
 
 ### Added
+- Experimental anchored role exchange in the active Belay Team panel: the current
+  climber proposes a new personal-anchor station, the belayer accepts, and both
+  endpoints prepare before the host replaces the control session with reversed
+  roles and a closed brake. Cancellation keeps the original roles; native
+  two-client exchange is still pending validation.
+- Visual-only replication of the climber's native rope shape to the active
+  belayer, preserving protection junctions within a bounded sampling budget.
+  Stale/session-ended drawings are cleared independently of physical control.
 - Initial partner-station attachment: invitations identify the exact synchronized
   piton by its placer and source id. A climber with a separate personal backup
   requests one native quickdraw insertion, retains the original route and waits
@@ -36,10 +44,17 @@ All notable CairnMP changes are documented here. Releases follow
 - Pause, cutscene and focus loss explicitly end partner belay. Automatic pair
   suspension/resume remains future work. The two-minute diagnostic limit now
   applies only to solo exercises; partner control still requires a fresh lease.
-- Development protocol is now **22**. Piton snapshots retain the placer's source
-  id and belay messages carry that piton's owner/source identity. Every peer needs
+- Development protocol is now **26**. Belay commands/events add an explicit role
+  transaction id; requests are 118 bytes and events 126 bytes. Piton snapshots
+  retain the placer's source id and belay messages carry that piton's owner/source
+  identity and the climber's rope capacity. Every peer needs
   the same experimental build; published 2.4.1/protocol 16 and earlier development
   pilots cannot join.
+
+### Fixed
+- An unloaded native recovery of pitons before the active belay station can retain
+  control when the full protected holder/segment/pin suffix remains unchanged.
+  Downstream or loaded topology changes still refuse rebinding.
 
 ## Releases
 

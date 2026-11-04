@@ -246,6 +246,11 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     private static bool BeforePersonalAnchorInput(ClimbingV2PawnController __instance, ref bool __result)
     {
+        var preparing = _owner;
+        if (preparing?._roleAnchor != null && preparing._roleLifeline?.pawn != null
+            && Id(__instance) == Id(preparing._roleLifeline.pawn)
+            && preparing.RoleStationValid(preparing._roleOldSession, preparing._roleStation))
+        { __result = false; return false; }
         var owner = _stationOwner;
         if (owner == null || owner._stationSession == Guid.Empty || !owner.HasStation
             || owner._stationLifeline?.pawn == null || Id(__instance) != Id(owner._stationLifeline.pawn)) return true;
@@ -507,6 +512,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     public void Tick()
     {
+        TickRopeVisual();
         RefreshStationConnectionContext();
         TickStationConnection();
         TickStationAttachment();
@@ -766,6 +772,8 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     private bool _unpatchPending;
     public void ResetScene()
     {
+        ClearRopeVisual();
+        CancelRoleSwap();
         if (ConnectionActive) FailStationConnection(StationConnectionFailure.Context, "Scene changed; no further rope requests will be issued.");
         ReleaseConnectionReferences();
         if (_localStation != null) ModLog.Info("[BelayStation] Captured station cleared by a scene reset.");
