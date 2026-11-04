@@ -92,6 +92,13 @@ internal static partial class RopeInterop
         catch (Exception ex) { ModLog.Warning("[RopeTeam] Could not lay the rope after physics: " + ex.Message); }
     }
 
+    internal static void AfterRopeRendered(LogicalRopeRenderer renderer)
+    {
+        if (_ropeBinding?.OwnsRenderer(renderer) != true) return;
+        try { _ropeBinding.DrawHarnessLine(); }
+        catch (Exception ex) { ModLog.Warning("[RopeTeam] Could not draw the harness line: " + ex.Message); }
+    }
+
     public static void ReleaseAllAnchors()
     {
         var session = _ropeSession;
@@ -130,6 +137,7 @@ internal static partial class RopeInterop
         private bool _attached, _disposed;
         private float _pendingSnapLength = -1f;
         private int _snapAttempts;
+        private bool _harnessLineLogged;
 
         internal NativeRopeBinding(Harness local, Harness partner, Lifeline lifeline, LogicalRope source, float length)
         {
@@ -139,6 +147,8 @@ internal static partial class RopeInterop
         internal bool Matches(Harness local, Harness partner)
             => _local != null && _partner != null && _local.Pointer == local.Pointer && _partner.Pointer == partner.Pointer;
         internal bool Owns(LogicalRope rope) => _rope != null && rope != null && _rope.Pointer == rope.Pointer;
+        internal bool OwnsRenderer(LogicalRopeRenderer renderer)
+            => _renderer != null && renderer != null && _renderer.Pointer == renderer.Pointer;
         internal bool HasBothAttachments => !_disposed && _attached && _rope != null && _local != null && _partner != null
             && _rope.IsAttached(_local.Cast<IRopeHolder>()) && _rope.IsAttached(_partner.Cast<IRopeHolder>());
 
@@ -185,28 +195,43 @@ internal static partial class RopeInterop
             _rope.ropeParts = new Il2CppSystem.Collections.Generic.List<LogicalRopePart>();
             _rope.ropeParts.Add(_part);
             var sourceLine = _source.GetComponent<LineRenderer>() ?? _source.ropePartPrefab.GetComponent<LineRenderer>();
+            var line = _root.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.positionCount = 0;
+            line.enabled = false;
             if (sourceLine != null)
             {
-                var line = _root.AddComponent<LineRenderer>();
                 line.sharedMaterial = sourceLine.sharedMaterial;
                 line.widthMultiplier = sourceLine.widthMultiplier;
                 line.widthCurve = sourceLine.widthCurve;
                 line.colorGradient = sourceLine.colorGradient;
-                line.useWorldSpace = true;
-                line.positionCount = 0;
-                var renderer = _root.AddComponent<LogicalRopeRenderer>();
-                renderer.lineRenderer = line;
-                // AddComponent does not deserialize the prefab links. Without these
-                // references the renderer can use an empty/stale part list, leaving
-                // one end of the visible rope at an invalid world position.
-                renderer.parts = _rope.ropeParts;
-                _rope.logicalRopeRenderer = renderer;
-                _renderer = renderer;
+                line.numCapVertices = sourceLine.numCapVertices;
+                line.numCornerVertices = sourceLine.numCornerVertices;
+                line.alignment = sourceLine.alignment;
+                line.textureMode = sourceLine.textureMode;
+                line.shadowCastingMode = sourceLine.shadowCastingMode;
+                line.receiveShadows = sourceLine.receiveShadows;
             }
+            else
+            {
+                line.widthMultiplier = 0.02f;
+                var shader = Shader.Find("Sprites/Default");
+                if (shader != null) line.material = new Material(shader);
+            }
+            var renderer = _root.AddComponent<LogicalRopeRenderer>();
+            renderer.lineRenderer = line;
+            // AddComponent does not deserialize the prefab links. Without these
+            // references the renderer can use an empty/stale part list, leaving
+            // one end of the visible rope at an invalid world position.
+            renderer.parts = _rope.ropeParts;
+            renderer.shouldUseRopeLineRendererLateUpdate = false;
+            _rope.logicalRopeRenderer = renderer;
+            _rope.shouldUseRopeLineRendererLateUpdate = false;
+            _renderer = renderer;
             segment.SetActive(true);
             _root.SetActive(true);
-            // The prefab is the full coil. Showing it before the particles are moved
-            // draws that coil across the world for the first frames.
+            // The cloned part's mesh follows its prefab particles in a straight line.
+            // That mesh stays off. The harness line is written onto our renderer.
             SetRopeRendered(false);
             _createdFrame = Time.frameCount;
         }
@@ -235,9 +260,10 @@ internal static partial class RopeInterop
             _pendingSnapLength = initialLength;
             _snapAttempts = 0;
             _rope.SetCollisionsFilter(_source.category, _source.masks);
-            // Stay hidden until the physics step has actually shortened the coil.
-            // SetVisible keeps the simulation running; the renderers stay off.
+            // SetVisible keeps the simulation running. The cloned mesh stays off,
+            // and the visible line is the short one between the harnesses.
             _rope.SetVisible(true);
+            _rope.shouldUseRopeLineRendererLateUpdate = false;
             SetRopeRendered(false);
             _attached = true;
             if (!HasBothAttachments) return false;
@@ -246,6 +272,7 @@ internal static partial class RopeInterop
             // piton in a secured fall. The climber's own rope and pitons keep protecting them.
             _rope.enabled = true;
             SetHarnessVisual();
+            DrawHarnessLine();
             ModLog.Info("[RopeTeam] Direct harness rope attached (no piton), max=" + _length
                 + ", initial=" + initialLength);
             return true;
@@ -321,12 +348,11 @@ internal static partial class RopeInterop
 
         internal void FinishSnapAfterPhysics()
         {
+            DrawHarnessLine();
             if (_pendingSnapLength < 0f || _rope == null || !_rope.IsInitialized) return;
             var length = _pendingSnapLength;
             LayParticlesOnSegment();
             _rope.TeleportOnAttachPoints(RopeTeleportMode.PreTeleportOnLineAndFabrik, false, false);
-            _renderer?.SyncFromRope(_rope);
-            _rope.SyncRenderer();
             float reported;
             try { reported = _rope.GetLength(false, true); }
             catch (Exception ex)
@@ -334,15 +360,51 @@ internal static partial class RopeInterop
                 ModLog.Warning("[RopeTeam] Could not read the paid-out length: " + ex.Message);
                 reported = float.NaN;
             }
-            // The body's own FixedUpdate can rebuild the prefab coil after the prefix.
-            // Show the line only once that coil is gone, or once the attempts run out.
+            // GetLength stays 0 in game, so this only stops the physics retries.
+            // The visible line is drawn from the harnesses either way.
             if (!RopeAttachmentPolicy.SnapLanded(length, reported) && _snapAttempts < MaxSnapAttempts)
                 return;
-            SetRopeRendered(true);
             _pendingSnapLength = -1f;
-            ModLog.Info("[RopeTeam] Rope shown between the harnesses, length=" + reported
-                + ", requested=" + length);
+            ModLog.Info("[RopeTeam] Rope length request finished, requested=" + length
+                + ", reported=" + reported);
         }
+
+        internal void DrawHarnessLine()
+        {
+            SetRopeRendered(false);
+            var line = _renderer != null ? _renderer.lineRenderer : null;
+            if (_disposed || line == null) return;
+            if (_rope != null) _rope.shouldUseRopeLineRendererLateUpdate = false;
+            if (_renderer != null) _renderer.shouldUseRopeLineRendererLateUpdate = false;
+            if (!TryGetHarnessAttachPosition(_local, out var local)
+                || !TryGetHarnessAttachPosition(_partner, out var partner)
+                || !IsFinitePosition(local) || !IsFinitePosition(partner))
+            {
+                line.enabled = false;
+                return;
+            }
+
+            const int pointCount = 12;
+            var span = Vector3.Distance(local, partner);
+            var sag = Mathf.Min(0.35f, span * 0.08f);
+            line.useWorldSpace = true;
+            line.positionCount = pointCount;
+            for (var i = 0; i < pointCount; i++)
+            {
+                var t = i / (float)(pointCount - 1);
+                var point = Vector3.Lerp(local, partner, t);
+                point.y -= 4f * t * (1f - t) * sag;
+                line.SetPosition(i, point);
+            }
+
+            line.enabled = true;
+            if (_harnessLineLogged) return;
+            _harnessLineLogged = true;
+            ModLog.Info("[RopeTeam] Rope drawn between the harnesses, span=" + span.ToString("F2"));
+        }
+
+        private static bool IsFinitePosition(Vector3 point)
+            => float.IsFinite(point.x) && float.IsFinite(point.y) && float.IsFinite(point.z);
 
         private void LayParticlesOnSegment()
         {
@@ -368,8 +430,6 @@ internal static partial class RopeInterop
                         if (renderers[i] != null) renderers[i].enabled = rendered;
                 }
             }
-            if (_renderer != null && _renderer.lineRenderer != null)
-                _renderer.lineRenderer.enabled = rendered;
         }
 
         public bool Maintain()
@@ -380,6 +440,7 @@ internal static partial class RopeInterop
             // Teleports must not drag solver particles across the world.
             if (Vector3.Distance(local, _lastLocal) > 5 || Vector3.Distance(partner, _lastPartner) > 5) return false;
             _lastLocal = local; _lastPartner = partner;
+            DrawHarnessLine();
             return true;
         }
 

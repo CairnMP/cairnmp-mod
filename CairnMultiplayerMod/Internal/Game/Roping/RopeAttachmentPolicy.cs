@@ -27,9 +27,8 @@ internal static class RopeAttachmentPolicy
     }
 
     /// <summary>
-    /// The paid-out length has reached the request. A cloned part still reports the
-    /// prefab's full length until the physics step accepts the snap, and that full
-    /// length is what draws the line to the horizon.
+    /// The paid-out length has reached the request. In game this reading has stayed
+    /// at 0, so the visible line is drawn from the harnesses and does not wait on it.
     /// </summary>
     internal static bool SnapLanded(float requested, float reported)
     {

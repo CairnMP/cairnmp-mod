@@ -222,6 +222,7 @@ public sealed class ArchitectureBoundaryTests
         Assert.DoesNotContain("typeof(Lifeline)", patch, StringComparison.Ordinal);
         Assert.Contains("TryGetInitialLength", interop, StringComparison.Ordinal);
         Assert.Contains("renderer.parts = _rope.ropeParts", interop, StringComparison.Ordinal);
+        Assert.Contains("nameof(LogicalRopeRenderer.LateUpdate)", patch, StringComparison.Ordinal);
         AssertPartnerRopeLengthIsAppliedFromFixedUpdate(interop);
         Assert.Contains("SetHarnessVisual", interop, StringComparison.Ordinal);
         Assert.Contains("RestoreHarnessVisual", interop, StringComparison.Ordinal);
@@ -301,7 +302,9 @@ public sealed class ArchitectureBoundaryTests
             snap, StringComparison.Ordinal);
         Assert.Contains("RopeAttachmentPolicy.SnapLanded(length, reported)", finish, StringComparison.Ordinal);
         Assert.Contains("LayParticlesOnSegment()", finish, StringComparison.Ordinal);
-        Assert.Contains("SetRopeRendered(true)", finish, StringComparison.Ordinal);
+        Assert.Contains("DrawHarnessLine()", finish, StringComparison.Ordinal);
+        Assert.Contains("DrawHarnessLine()", MethodBody(interop, "public bool Maintain()"), StringComparison.Ordinal);
+        Assert.DoesNotContain("SetRopeRendered(true)", interop, StringComparison.Ordinal);
         Assert.Contains("ApplyPendingSnap()", beforePhysics, StringComparison.Ordinal);
         // Skipping FixedUpdate while the session is still waiting aborts ForceInitialize
         // on a retie, and the cloned part keeps the prefab length.
