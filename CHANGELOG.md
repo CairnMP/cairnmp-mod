@@ -48,7 +48,7 @@ All notable CairnMP changes are documented here. Releases follow
 ### Fixed
 
 - A new partner rope stays between the two harnesses. The cloned rope was keeping the prefab's full length, so the line stretched to the horizon. Its length is now applied from the rope's own physics step.
-- Tying that rope again lays it between the harnesses on the first physics steps. A retie was skipping the new rope's setup and discarding the length request, so the line went back to the horizon.
+- Tying that rope again lays it between the harnesses on the first physics steps. A retie was skipping the new rope's setup and discarding the length request, so the line went back to the horizon. The coil stays hidden until those particles have actually been moved onto the harnesses, so spawning it no longer draws the prefab across the world.
 
 ---
 

@@ -84,6 +84,14 @@ internal static partial class RopeInterop
         return false;
     }
 
+    internal static void AfterRopePhysics(LogicalRope rope)
+    {
+        if (_dropRopeAfterPhysics) return;
+        if (_ropeBinding?.Owns(rope) != true || !IsNativeBelayEngaged) return;
+        try { _ropeBinding.FinishSnapAfterPhysics(); }
+        catch (Exception ex) { ModLog.Warning("[RopeTeam] Could not lay the rope after physics: " + ex.Message); }
+    }
+
     public static void ReleaseAllAnchors()
     {
         var session = _ropeSession;
@@ -197,6 +205,9 @@ internal static partial class RopeInterop
             }
             segment.SetActive(true);
             _root.SetActive(true);
+            // The prefab is the full coil. Showing it before the particles are moved
+            // draws that coil across the world for the first frames.
+            SetRopeRendered(false);
             _createdFrame = Time.frameCount;
         }
 
@@ -224,7 +235,10 @@ internal static partial class RopeInterop
             _pendingSnapLength = initialLength;
             _snapAttempts = 0;
             _rope.SetCollisionsFilter(_source.category, _source.masks);
+            // Stay hidden until the physics step has actually shortened the coil.
+            // SetVisible keeps the simulation running; the renderers stay off.
             _rope.SetVisible(true);
+            SetRopeRendered(false);
             _attached = true;
             if (!HasBothAttachments) return false;
             // Never the Lifeline's securing rope. Cairn would hang new quickdraws on it, measure
@@ -302,9 +316,17 @@ internal static partial class RopeInterop
             _rope.SetLengthInstant(length);
             _rope.RequestSetLength(length, false, true);
             _rope.TeleportOnAttachPoints(RopeTeleportMode.PreTeleportOnLineAndFabrik, false, false);
+            _snapAttempts++;
+        }
+
+        internal void FinishSnapAfterPhysics()
+        {
+            if (_pendingSnapLength < 0f || _rope == null || !_rope.IsInitialized) return;
+            var length = _pendingSnapLength;
+            LayParticlesOnSegment();
+            _rope.TeleportOnAttachPoints(RopeTeleportMode.PreTeleportOnLineAndFabrik, false, false);
             _renderer?.SyncFromRope(_rope);
             _rope.SyncRenderer();
-            _snapAttempts++;
             float reported;
             try { reported = _rope.GetLength(false, true); }
             catch (Exception ex)
@@ -312,10 +334,42 @@ internal static partial class RopeInterop
                 ModLog.Warning("[RopeTeam] Could not read the paid-out length: " + ex.Message);
                 reported = float.NaN;
             }
-            // The first attempt can run before the new part accepts a length. Clearing
-            // the request there is what leaves a retie at the prefab's full length.
-            if (RopeAttachmentPolicy.SnapLanded(length, reported) || _snapAttempts >= MaxSnapAttempts)
-                _pendingSnapLength = -1f;
+            // The body's own FixedUpdate can rebuild the prefab coil after the prefix.
+            // Show the line only once that coil is gone, or once the attempts run out.
+            if (!RopeAttachmentPolicy.SnapLanded(length, reported) && _snapAttempts < MaxSnapAttempts)
+                return;
+            SetRopeRendered(true);
+            _pendingSnapLength = -1f;
+            ModLog.Info("[RopeTeam] Rope shown between the harnesses, length=" + reported
+                + ", requested=" + length);
+        }
+
+        private void LayParticlesOnSegment()
+        {
+            var actor = _part?.obiRope;
+            if (actor == null || !actor.isLoaded) return;
+            int count = actor.activeParticleCount;
+            if (count < 2) return;
+            for (int i = 0; i < count; i++)
+            {
+                float t = i / (float)(count - 1);
+                actor.TeleportParticle(i, Vector3.Lerp(_lastLocal, _lastPartner, t));
+            }
+        }
+
+        private void SetRopeRendered(bool rendered)
+        {
+            if (_part != null)
+            {
+                var renderers = _part.GetComponentsInChildren<Renderer>(true);
+                if (renderers != null)
+                {
+                    for (int i = 0; i < renderers.Length; i++)
+                        if (renderers[i] != null) renderers[i].enabled = rendered;
+                }
+            }
+            if (_renderer != null && _renderer.lineRenderer != null)
+                _renderer.lineRenderer.enabled = rendered;
         }
 
         public bool Maintain()

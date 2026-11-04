@@ -21,8 +21,10 @@ internal static class RopeTeamFallPatch
         if (_installed) return;
         try
         {
-            Harmony.Patch(AccessTools.Method(typeof(LogicalRope), nameof(LogicalRope.FixedUpdate)),
-                prefix: new HarmonyMethod(typeof(RopeTeamFallPatch), nameof(BeforePhysics)));
+            var fixedUpdate = AccessTools.Method(typeof(LogicalRope), nameof(LogicalRope.FixedUpdate));
+            Harmony.Patch(fixedUpdate,
+                prefix: new HarmonyMethod(typeof(RopeTeamFallPatch), nameof(BeforePhysics)),
+                postfix: new HarmonyMethod(typeof(RopeTeamFallPatch), nameof(AfterPhysics)));
             _installed = true;
         }
         catch (Exception ex)
@@ -40,4 +42,6 @@ internal static class RopeTeamFallPatch
     }
 
     private static bool BeforePhysics(LogicalRope __instance) => RopeInterop.BeforeRopePhysics(__instance);
+
+    private static void AfterPhysics(LogicalRope __instance) => RopeInterop.AfterRopePhysics(__instance);
 }

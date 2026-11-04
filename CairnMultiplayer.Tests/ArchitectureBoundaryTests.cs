@@ -285,19 +285,23 @@ public sealed class ArchitectureBoundaryTests
     {
         var attach = MethodBody(interop, "public bool Attach()");
         var snap = MethodBody(interop, "internal void ApplyPendingSnap()");
+        var finish = MethodBody(interop, "internal void FinishSnapAfterPhysics()");
         var beforePhysics = MethodBody(interop, "internal static bool BeforeRopePhysics(");
 
         Assert.DoesNotContain("_rope.RequestSetLength", attach, StringComparison.Ordinal);
         Assert.DoesNotContain("_rope.SetLengthInstant", attach, StringComparison.Ordinal);
         Assert.DoesNotContain("_rope.TeleportOnAttachPoints", attach, StringComparison.Ordinal);
         Assert.Contains("_pendingSnapLength = initialLength", attach, StringComparison.Ordinal);
+        Assert.Contains("SetRopeRendered(false)", attach, StringComparison.Ordinal);
 
         Assert.Contains("SetLengthInstant(length)", snap, StringComparison.Ordinal);
         Assert.Contains("RequestSetLength(length, false, true)", snap, StringComparison.Ordinal);
         Assert.Contains(
             "TeleportOnAttachPoints(RopeTeleportMode.PreTeleportOnLineAndFabrik, false, false)",
             snap, StringComparison.Ordinal);
-        Assert.Contains("RopeAttachmentPolicy.SnapLanded(length, reported)", snap, StringComparison.Ordinal);
+        Assert.Contains("RopeAttachmentPolicy.SnapLanded(length, reported)", finish, StringComparison.Ordinal);
+        Assert.Contains("LayParticlesOnSegment()", finish, StringComparison.Ordinal);
+        Assert.Contains("SetRopeRendered(true)", finish, StringComparison.Ordinal);
         Assert.Contains("ApplyPendingSnap()", beforePhysics, StringComparison.Ordinal);
         // Skipping FixedUpdate while the session is still waiting aborts ForceInitialize
         // on a retie, and the cloned part keeps the prefab length.
