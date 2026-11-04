@@ -145,6 +145,67 @@ internal sealed class BelayTopologyTracker
         return BelayTopologyChange.Rebound;
     }
 
+    internal BelayTopologyChange ObserveUpstreamRemoval(BelayTopologySnapshot snapshot,
+        IReadOnlyList<BelayProtectionPoint> previous, IReadOnlyList<BelayProtectionPoint> next, uint station,
+        IReadOnlyList<long> previousPins, IReadOnlyList<long> nextPins, bool suspended, double now)
+    {
+        if (Current == null || snapshot?.IsValid != true || snapshot.Rope != Current.Rope || suspended
+            || !double.IsFinite(now) || now < _lastObservation) return BelayTopologyChange.Invalid;
+        if (!SameProtectedSuffix(snapshot, previous, next, station, previousPins, nextPins))
+        { _lastObservation = now; _pending = null; return BelayTopologyChange.Settling; }
+        return Observe(snapshot, false, now);
+    }
+
+    private bool SameProtectedSuffix(BelayTopologySnapshot snapshot, IReadOnlyList<BelayProtectionPoint> previous,
+        IReadOnlyList<BelayProtectionPoint> next, uint station, IReadOnlyList<long> previousPins, IReadOnlyList<long> nextPins)
+    {
+        if (station == 0 || previous == null || next == null || next.Count >= previous.Count
+            || previous.Count != Current.ProtectionCount || next.Count != snapshot.ProtectionCount
+            || snapshot.LastPiton != Current.LastPiton || Current.Parts.Length != previous.Count + 1
+            || snapshot.Parts.Length != next.Count + 1 || Current.Holders.Length != previous.Count + 2
+            || snapshot.Holders.Length != next.Count + 2 || previousPins?.Count != Current.Parts.Length * 2
+            || nextPins?.Count != snapshot.Parts.Length * 2 || Current.Holders[0] != snapshot.Holders[0]) return false;
+        var beforeStation = -1;
+        var afterStation = -1;
+        var seen = new HashSet<uint>();
+        for (var i = 0; i < previous.Count; i++)
+        {
+            if (previous[i].Id == 0 || !seen.Add(previous[i].Id)) return false;
+            if (previous[i].Id == station) beforeStation = i;
+        }
+        seen.Clear();
+        for (var i = 0; i < next.Count; i++)
+        {
+            if (next[i].Id == 0 || !seen.Add(next[i].Id)) return false;
+            if (next[i].Id == station) afterStation = i;
+        }
+        if (beforeStation <= afterStation || afterStation < 0
+            || previous.Count - beforeStation != next.Count - afterStation) return false;
+        var oldIndex = 0;
+        for (var i = 0; i < afterStation; i++)
+        {
+            while (oldIndex < beforeStation && previous[oldIndex].Id != next[i].Id) oldIndex++;
+            if (oldIndex >= beforeStation || Current.Holders[oldIndex + 1] != snapshot.Holders[i + 1]) return false;
+            oldIndex++;
+        }
+        for (var i = 0; i < next.Count - afterStation; i++)
+            if (previous[beforeStation + i].Id != next[afterStation + i].Id) return false;
+        // Native removal may rebuild the upstream segment. From the station
+        // through the harness, retain every holder, physical segment and pin.
+        for (var i = 0; i < snapshot.Holders.Length - afterStation - 1; i++)
+            if (Current.Holders[beforeStation + 1 + i] != snapshot.Holders[afterStation + 1 + i]) return false;
+        for (var i = 0; i < snapshot.Parts.Length - afterStation - 1; i++)
+        {
+            var oldPart = beforeStation + 1 + i;
+            var newPart = afterStation + 1 + i;
+            if (Current.Parts[oldPart] != snapshot.Parts[newPart]) return false;
+            for (var side = 0; side < 2; side++)
+                if (previousPins[oldPart * 2 + side] == 0
+                    || previousPins[oldPart * 2 + side] != nextPins[newPart * 2 + side]) return false;
+        }
+        return true;
+    }
+
     internal BelayTopologyChange Observe(BelayTopologySnapshot snapshot, bool suspended, double now)
     {
         if (snapshot?.IsValid != true || !double.IsFinite(now) || now < _lastObservation)

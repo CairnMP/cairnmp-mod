@@ -101,6 +101,11 @@ Stationary controls - remain anchored at P
   R06 Add one protection while unloaded, first FREE then BRAKED. Expected: native
       split settles, count increases once, budget remains coherent; old held motion
       does not continue across the rebind. Do not remove/reorder a loaded route.
+      If native recovery removes an older protection before the active station,
+      an unloaded rebind may retain control only when the entire station-to-harness
+      holder, segment and physical pin suffix is unchanged. Removing the station
+      or a downstream protection, or changing any loaded mapping, is not allowed.
+      Native acceptance of this upstream-only recovery is still pending.
 
 Falls - only after C/R cases pass
   F01 Short fall with BRAKED already set: native catch with coherent slack and no

@@ -104,7 +104,11 @@ internal sealed partial class ManualBelayAdapter
         { _localRouteWaitReason = reason; return false; }
         ObserveLocalRouteChange(snapshot);
         var restoring = snapshot.ProtectionCount == previous.ProtectionCount;
-        var change = restoring
+        var upstreamRemoval = snapshot.ProtectionCount < previous.ProtectionCount;
+        var change = upstreamRemoval
+            ? _topology.ObserveUpstreamRemoval(snapshot, _boundStationProtections, _measuredStationProtections,
+                _localStationId, _boundProtectionPins, ReadProtectionPins(), false, Now)
+            : restoring
             ? _topology.ObserveProtectionRestore(snapshot, _boundStationProtections, _measuredStationProtections,
                 SamePins(_boundProtectionPins, ReadProtectionPins()), Now)
             : _topology.ObserveProtectionAppend(snapshot, _boundStationProtections, _measuredStationProtections, Now);
@@ -112,7 +116,9 @@ internal sealed partial class ManualBelayAdapter
         { EndLocalRope("The protection route became invalid during rebinding."); return false; }
         if (change != BelayTopologyChange.Rebound)
         {
-            _localRouteWaitReason = restoring
+            _localRouteWaitReason = upstreamRemoval
+                ? "Waiting for removal before the station with the entire station-to-harness holder, segment and pin walk unchanged."
+                : restoring
                 ? "Waiting for the original protection, holder and physical pin walks to return after personal-anchor maintenance."
                 : "Waiting for a complete single-protection split and stable identities; temporary rope holders must be released.";
             return false;
@@ -133,7 +139,8 @@ internal sealed partial class ManualBelayAdapter
         _nextRopeSample = Now;
         if (_localRouteRebinds < uint.MaxValue) _localRouteRebinds++;
         RememberLocalRoute();
-        ModLog.Info("[BelayRope] Route rebound; revision=" + _topology.Revision + ", maintenance=" + restoring + ", rebinds=" + _localRouteRebinds
+        ModLog.Info("[BelayRope] Route rebound; revision=" + _topology.Revision + ", maintenance=" + restoring
+            + ", upstreamRemoval=" + upstreamRemoval + ", rebinds=" + _localRouteRebinds
             + ", fixedBefore=" + fixedBefore + ", releasedBefore=" + releasedBefore
             + ", totalBefore=" + (fixedBefore + releasedBefore)
             + ", fixedAfter=" + fixedAfter + ", releasedAfter=" + _ropeControl.Released
