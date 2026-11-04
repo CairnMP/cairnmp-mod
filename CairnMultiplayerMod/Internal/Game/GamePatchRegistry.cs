@@ -36,6 +36,7 @@ internal static class GamePatchRegistry
         new("native performance probe", NativePerformanceProbe.Install, NativePerformanceProbe.Uninstall),
         new("downed climbers", DeathScreenPatch.Install, DeathScreenPatch.Uninstall),
         new("revive prompt", RevivePromptPatch.Install, RevivePromptPatch.Uninstall),
+        new("story launch setup", StoryLaunchSetupPatch.Install, StoryLaunchSetupPatch.Uninstall),
     };
 
     private static readonly List<PatchModule> Installed = new();

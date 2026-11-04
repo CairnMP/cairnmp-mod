@@ -82,24 +82,35 @@ internal static unsafe class GameOptionsInterop
 
             var constraints = defaults.Constraints
                               | (GamemodeConstraints)(int)rules.ExtraConstraints;
+            // A valid CustomizedDifficulty sends LaunchStoryMode through the constructor
+            // that leaves summit mode on, so a new Story save opens Summit gear and the
+            // energy bar. The preset constructor clears that flag. Use it whenever the
+            // lobby did not add a constraint the difficulty does not already carry.
+            var nativePreset = UsesNativePreset((int)defaults.Constraints, rules.ExtraConstraints);
 
             var ng = opts.newGameOptions;
             ng.currentSelectedDifficulty = defaults.Difficulty;
-            ng.customizedDifficulty = new GameSetup.CustomizedDifficulty(
-                defaults.ClimbingPackage, defaults.SurvivalPackage, constraints);
+            ng.customizedDifficulty = nativePreset
+                ? default
+                : new GameSetup.CustomizedDifficulty(
+                    defaults.ClimbingPackage, defaults.SurvivalPackage, constraints);
             // Assist stays the host's call; the mode's constraints (NoAssistMode) are what
             // actually forbid it, and the game enforces those itself.
             ng.assistEnabled = assistEnabled;
             ng.skipTutorials = skipTutorials;
             ng.skipPractice = skipPractice;
             opts.newGameOptions = ng;
+            // A leftover Summit new-game flag would still start the wrong mode. Clearing
+            // it does not fix the custom constructor; the preset path above does that.
+            opts.forceSummitNewGame = false;
 
             if (verbose)
             {
                 var check = opts.newGameOptions;
                 ModLog.Info($"[GameOptions] Mode '{rules.Name}' applied: difficulty=" +
                     $"{check.currentSelectedDifficulty} constraints={constraints} " +
-                    $"climbing={defaults.ClimbingPackage} survival={defaults.SurvivalPackage}");
+                    $"climbing={defaults.ClimbingPackage} survival={defaults.SurvivalPackage} " +
+                    $"customized={check.customizedDifficulty.isValid}");
             }
             return true;
         }
@@ -107,6 +118,39 @@ internal static unsafe class GameOptionsInterop
         {
             ModLog.Error($"[GameOptions] SetNextGameMode failed: {ex}");
             return false;
+        }
+    }
+
+    /// <summary>
+    /// True when <paramref name="extra"/> adds no flag the preset does not already have.
+    /// The story launch then leaves customized difficulty invalid.
+    /// </summary>
+    internal static bool UsesNativePreset(int presetConstraints, ClimbConstraints extra)
+    {
+        var applied = presetConstraints | (int)extra;
+        return applied == presetConstraints;
+    }
+
+    /// <summary>One line after a story launch leaves the menu, so a log can show whether
+    /// the run came up as Story or as Summit.</summary>
+    internal static void LogActiveSetup()
+    {
+        try
+        {
+            var setup = GameSetup.GetCurrentGameSetup();
+            if (setup == null)
+            {
+                ModLog.Info("[GameOptions] Active native setup: unavailable");
+                return;
+            }
+
+            ModLog.Info("[GameOptions] Active native setup: " +
+                $"summit={setup.summitMode}; gearUp={setup.RequiresGearUp}; energyHealth={setup.UseEnergyInsteadOfHealth}");
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("game-options.read-setup", exception);
+            ModLog.Info("[GameOptions] Active native setup: unavailable");
         }
     }
 

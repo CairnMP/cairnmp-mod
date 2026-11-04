@@ -9,6 +9,12 @@ All notable CairnMP changes are documented here. Releases follow
 > even when the wire-protocol number is unchanged. Read the compatibility note
 > for the release you install.
 
+## [Unreleased]
+
+### Fixed
+
+- A new multiplayer Story game keeps the difficulty the lobby picked. It starts with that preset's health and does not open the Summit equipment selection. A lobby that adds a constraint the preset does not already have still starts as Story.
+
 ## Releases
 
 | Version | Date | Channel | Highlights |
