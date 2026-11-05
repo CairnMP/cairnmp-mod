@@ -49,45 +49,106 @@ internal sealed partial class ManualBelayAdapter
             if (first < 0 || first >= parts.Count) return NoRopeVisual("The agreed station has no outgoing segment.");
             var segments = new WorldPosition[parts.Count - first][];
             var total = 0;
+            var rendered = 0;
             for (var i = first; i < parts.Count; i++)
             {
-                var rope = parts[i]?.obiRope;
+                var part = parts[i];
+                var rope = part?.obiRope;
                 if (rope == null || !rope.isLoaded) return NoRopeVisual("Native particles are not loaded.");
-                // Cairn's GetParticleCount returns the structural element count;
-                // GetParticlePositions appends each first particle AND the final second particle.
-                var elements = ObiRopeExtensions.GetParticleCount(rope);
-                if (elements < 1 || elements >= 4096) return NoRopeVisual("Native element count is outside the drawing budget.");
-                var count = elements + 1;
-                if ((total += count) > 4096) return NoRopeVisual("Native route exceeds the particle sampling budget.");
-                var particles = ObiRopeExtensions.GetParticlePositions(rope);
-                if (particles == null || particles.Count != count) return NoRopeVisual("Native particle/element counts disagree.");
-                // The native extension reads solver.positions directly (solver space).
-                var solver = rope.solver;
-                if (solver == null) return NoRopeVisual("The segment solver is not available.");
-                var transform = solver.transform;
                 var start = holders[i].Position; var end = holders[i + 1].Position;
-                var a = transform.TransformPoint(particles[0]); var b = transform.TransformPoint(particles[count - 1]);
-                var reverse = (a - end).sqrMagnitude + (b - start).sqrMagnitude < (a - start).sqrMagnitude + (b - end).sqrMagnitude;
-                if (Vector3.Distance(reverse ? b : a, start) > 1 || Vector3.Distance(reverse ? a : b, end) > 1)
-                    return NoRopeVisual("Native particles have not settled at the segment attachments.");
-                var segment = segments[i - first] = new WorldPosition[count];
-                for (var j = 0; j < count; j++)
+                // Native drawing may correct the rendered endpoints independently
+                // of the raw solver particles. Read this exact route part first.
+                if (TryReadRenderedRopeSegment(part, start, end, 4096 - total, out var segment, out var rendererReason))
+                    rendered++;
+                else if (!TryReadParticleRopeSegment(part, start, end, 4096 - total, out segment, out var particleReason))
                 {
-                    var p = transform.TransformPoint(particles[reverse ? count - 1 - j : j]);
-                    if (!float.IsFinite(p.x) || !float.IsFinite(p.y) || !float.IsFinite(p.z))
-                        return NoRopeVisual("A native particle position is not finite.");
-                    segment[j] = new(p.x, p.y, p.z);
+                    return NoRopeVisual("Segment=" + i + "; renderer: " + rendererReason + "; particles: " + particleReason);
                 }
+                segments[i - first] = segment;
+                total += segment.Length;
             }
             points = BelayRopeVisualSampling.Sample(segments, 192);
             if (points != null && !_visualCaptureReady)
             {
-                ModLog.Info("[BelayVisual] Native drawing ready; session=" + session + ", segments=" + segments.Length + ", points=" + points.Length);
+                ModLog.Info("[BelayVisual] Native drawing ready; session=" + session + ", segments=" + segments.Length
+                    + ", points=" + points.Length + ", renderedSegments=" + rendered);
                 _visualCaptureReady = true;
             }
             return points != null;
         }
         catch (Exception exception) { ModLog.SuppressedException("belay.capture-rope-drawing", exception); return false; }
+    }
+
+    private static bool TryReadRenderedRopeSegment(LogicalRopePart part, Vector3 start, Vector3 end, int maximum,
+        out WorldPosition[] segment, out string reason)
+    {
+        segment = null;
+        reason = "No native segment renderer is available.";
+        try
+        {
+            var line = part.RopeRenderer;
+            if (line == null) return false;
+            var count = line.positionCount;
+            reason = "Native renderer point count is outside the remaining drawing budget: " + count;
+            if (count < 2 || count > maximum) return false;
+            var worldSpace = line.useWorldSpace;
+            var transform = worldSpace ? null : line.transform;
+            segment = new WorldPosition[count];
+            for (var j = 0; j < count; j++)
+            {
+                var p = line.GetPosition(j);
+                if (!worldSpace) p = transform.TransformPoint(p);
+                segment[j] = new(p.x, p.y, p.z);
+            }
+            var valid = OrientRopeVisualSegment(segment, start, end, out reason);
+            if (!valid) reason = "worldSpace=" + worldSpace + ", " + reason;
+            return valid;
+        }
+        catch (Exception exception) { reason = "Native renderer read failed: " + exception.GetType().Name; return false; }
+    }
+
+    private static bool TryReadParticleRopeSegment(LogicalRopePart part, Vector3 start, Vector3 end, int maximum,
+        out WorldPosition[] segment, out string reason)
+    {
+        segment = null;
+        reason = "Native solver particles are unavailable.";
+        try
+        {
+            var rope = part.obiRope;
+            // GetParticleCount returns structural elements; positions also include
+            // the final element's second particle, so the list has one extra point.
+            var elements = ObiRopeExtensions.GetParticleCount(rope);
+            if (elements < 1 || elements >= maximum)
+            { reason = "Native element count is outside the remaining drawing budget: " + elements; return false; }
+            var count = elements + 1;
+            var particles = ObiRopeExtensions.GetParticlePositions(rope);
+            if (particles == null || particles.Count != count)
+            { reason = "Native particle/element counts disagree."; return false; }
+            var solver = rope.solver;
+            if (solver == null) { reason = "The segment solver is not available."; return false; }
+            var transform = solver.transform;
+            segment = new WorldPosition[count];
+            for (var j = 0; j < count; j++)
+            {
+                var p = transform.TransformPoint(particles[j]);
+                segment[j] = new(p.x, p.y, p.z);
+            }
+            return OrientRopeVisualSegment(segment, start, end, out reason);
+        }
+        catch (Exception exception) { reason = "Native particle read failed: " + exception.GetType().Name; return false; }
+    }
+
+    private static bool OrientRopeVisualSegment(WorldPosition[] segment, Vector3 start, Vector3 end, out string reason)
+    {
+        if (!BelayRopeVisualSampling.TryOrient(segment, new(start.x, start.y, start.z), new(end.x, end.y, end.z),
+            out var reverse, out var startError, out var endError))
+        {
+            reason = FormattableString.Invariant($"Native endpoints are not ready; startError={startError:F3} m, endError={endError:F3} m.");
+            return false;
+        }
+        if (reverse) Array.Reverse(segment);
+        reason = "";
+        return true;
     }
 
     public void ShowRopeVisual(Guid session, int climber, uint revision, WorldPosition[] points)
@@ -97,7 +158,8 @@ internal sealed partial class ManualBelayAdapter
             if (_stationSession != session || !StationValid || points == null || points.Length < 2 || points.Length > 192) return;
             if (_visualLine == null)
             {
-                var shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color");
+                var spriteShader = Shader.Find("Sprites/Default");
+                var shader = spriteShader ?? Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color");
                 if (shader == null) return;
                 _visualMaterial = new Material(shader);
                 _visualRoot = new GameObject("CairnMP.BelayRopeVisual");
@@ -105,8 +167,14 @@ internal sealed partial class ManualBelayAdapter
                 _visualLine.sharedMaterial = _visualMaterial;
                 _visualLine.useWorldSpace = true; _visualLine.widthMultiplier = .018f;
                 _visualLine.numCapVertices = _visualLine.numCornerVertices = 2;
-                _visualLine.startColor = _visualLine.endColor = RemotePlayerManager.ColorForPlayer(climber);
-                ModLog.Info("[BelayVisual] Receiving the climber's native rope drawing; session=" + session);
+                var color = RemotePlayerManager.ColorForPlayer(climber);
+                // Sprites/Default multiplies the vertex color. The fallback unlit
+                // shaders use a material tint instead; keep vertices white there.
+                _visualLine.startColor = _visualLine.endColor = spriteShader != null ? color : Color.white;
+                var tint = spriteShader != null ? Color.white : color;
+                if (_visualMaterial.HasProperty("_BaseColor")) _visualMaterial.SetColor("_BaseColor", tint);
+                if (_visualMaterial.HasProperty("_Color")) _visualMaterial.SetColor("_Color", tint);
+                ModLog.Info("[BelayVisual] Receiving the climber's native rope drawing; session=" + session + ", shader=" + shader.name);
             }
             var blend = _visualSession == session && _visualRevision == revision && _visualTarget?.Length == points.Length;
             _visualFrom = new Vector3[points.Length]; _visualTarget = new Vector3[points.Length];

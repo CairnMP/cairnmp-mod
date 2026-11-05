@@ -7,6 +7,65 @@ namespace CairnMultiplayerMod.Tests;
 
 public sealed class BelayRopeVisualSamplingTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SegmentOrientationKeepsNativeSlackAndDoesNotRewriteItsInput(bool backwards)
+    {
+        var start = new WorldPosition(8, 20, -3); var end = new WorldPosition(12, 20, -3);
+        var points = new WorldPosition[] { start, new(10, 17, -3), end };
+        if (backwards) System.Array.Reverse(points);
+        var original = (WorldPosition[])points.Clone();
+        Assert.True(BelayRopeVisualSampling.TryOrient(points, start, end, out var reverse, out var startError, out var endError));
+        Assert.Equal(backwards, reverse);
+        Assert.Equal(0, startError); Assert.Equal(0, endError);
+        Assert.Equal(original, points);
+    }
+
+    [Theory]
+    [InlineData(1, true)]
+    [InlineData(1.001f, false)]
+    public void EachNativeEndpointRetainsTheOneMeterLimit(float error, bool accepted)
+    {
+        var start = new WorldPosition(0, 0, 0); var end = new WorldPosition(10, 0, 0);
+        var points = new WorldPosition[] { new(0, error, 0), end };
+        Assert.Equal(accepted, BelayRopeVisualSampling.TryOrient(points, start, end, out _, out var startError, out _));
+        Assert.Equal(error, startError);
+        points = new WorldPosition[] { start, new(10, error, 0) };
+        Assert.Equal(accepted, BelayRopeVisualSampling.TryOrient(points, start, end, out _, out _, out var endError));
+        Assert.Equal(error, endError);
+    }
+
+    [Fact]
+    public void ATranslatedOrStaleDrawingCannotBeMovedOntoTheExpectedRoute()
+    {
+        var points = new WorldPosition[] { new(50, 100, 0), new(51, 98, 0), new(52, 100, 0) };
+        Assert.False(BelayRopeVisualSampling.TryOrient(points, default, new(2, 0, 0), out _, out var startError, out var endError));
+        Assert.True(startError > 1); Assert.True(endError > 1);
+    }
+
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(float.NegativeInfinity)]
+    public void FiniteEndpointsCannotHideAnInvalidInteriorVertex(float value)
+    {
+        var points = new WorldPosition[] { default, new(value, 0, 0), new(2, 0, 0) };
+        Assert.False(BelayRopeVisualSampling.TryOrient(points, default, new(2, 0, 0), out _, out _, out _));
+    }
+
+    [Fact]
+    public void SegmentValidationBoundsVertexCountAndRejectsInvalidHolderPositions()
+    {
+        var points = new WorldPosition[4096];
+        Assert.True(BelayRopeVisualSampling.TryOrient(points, default, default, out _, out _, out _));
+        Assert.False(BelayRopeVisualSampling.TryOrient(new WorldPosition[4097], default, default, out _, out _, out _));
+        Assert.False(BelayRopeVisualSampling.TryOrient(new WorldPosition[1], default, default, out _, out _, out _));
+        Assert.False(BelayRopeVisualSampling.TryOrient(null, default, default, out _, out _, out _));
+        Assert.False(BelayRopeVisualSampling.TryOrient(points, new(float.NaN, 0, 0), default, out _, out _, out _));
+        Assert.False(BelayRopeVisualSampling.TryOrient(points, default, new(float.PositiveInfinity, 0, 0), out _, out _, out _));
+    }
+
     [Fact]
     public void EveryProtectionJunctionSurvivesTheNetworkPointBudget()
     {
