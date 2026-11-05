@@ -41,6 +41,9 @@ All notable CairnMP changes are documented here. Releases follow
   native crash investigation and validation continue.
 
 ### Changed
+- The experimental build now includes upstream 2.4.2-r2's menu-label and
+  harness-rope initialization/rendering fixes. Belay Team retains its independent
+  station-rope controller and protocol 26; public protocol-16 builds cannot join.
 - Pause, cutscene and focus loss explicitly end partner belay. Automatic pair
   suspension/resume remains future work. The two-minute diagnostic limit now
   applies only to solo exercises; partner control still requires a fresh lease.
@@ -48,7 +51,7 @@ All notable CairnMP changes are documented here. Releases follow
   transaction id; requests are 118 bytes and events 126 bytes. Piton snapshots
   retain the placer's source id and belay messages carry that piton's owner/source
   identity and the climber's rope capacity. Every peer needs
-  the same experimental build; published 2.4.1/protocol 16 and earlier development
+  the same experimental build; public 2.4.1/2.4.2 protocol-16 builds and earlier development
   pilots cannot join.
 
 ### Fixed
@@ -60,6 +63,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.4.2](#242--2026-11-04-beta) | 2026-11-04 | Beta | Main menu label and partner rope line fixes |
 | [2.4.1](#241--2026-10-30-stable) | 2026-10-30 | Stable | First stable build for Cairn 1.1.593 |
 | [2.4.0](#240--2026-10-30-beta) | 2026-10-30 | Beta | Lobbies that climb the Deep Water DLC worlds |
 | [2.3.2](#232--2026-10-29-beta) | 2026-10-29 | Beta | Cairn 1.1.593 support and a rope that no longer reads 0 m |
@@ -87,6 +91,24 @@ All notable CairnMP changes are documented here. Releases follow
 | [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
 | [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.4.2] — 2026-11-04 (beta)
+
+> Two fixes, both from new contributors. The protocol stays **16**: a lobby can mix this
+> build with 2.4.1, though an older install still draws the long line for a rope it creates.
+
+### Fixed
+
+- The main menu no longer shows two Story buttons. The multiplayer button is a copy of the Story button and kept its translation, so the game wrote "Story" back over its label each time it refreshed the menu. The button now keeps its own label, and a leftover copy can no longer stack up. (#33)
+- A new partner rope stays between the two harnesses. The cloned rope was keeping the prefab's full length, so the line stretched to the horizon. Its length is now applied from the rope's own physics step. (#42)
+- Tying that rope again lays it between the harnesses on the first physics steps. A retie was skipping the new rope's setup and discarding the length request, so the line went back to the horizon. The cloned rope was still drawing a straight line off the harnesses; the visible rope is now redrawn between the two harnesses after that line updates. The climber's own coiled rope is left as it is. (#42)
+
+### New contributors
+
+- @Tippy-Tipster made their first contribution in #33
+- @fakedude2 made their first contribution in #42
 
 ---
 

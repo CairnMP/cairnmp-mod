@@ -21,8 +21,14 @@ internal static class RopeTeamFallPatch
         if (_installed) return;
         try
         {
-            Harmony.Patch(AccessTools.Method(typeof(LogicalRope), nameof(LogicalRope.FixedUpdate)),
-                prefix: new HarmonyMethod(typeof(RopeTeamFallPatch), nameof(BeforePhysics)));
+            var fixedUpdate = AccessTools.Method(typeof(LogicalRope), nameof(LogicalRope.FixedUpdate));
+            Harmony.Patch(fixedUpdate,
+                prefix: new HarmonyMethod(typeof(RopeTeamFallPatch), nameof(BeforePhysics)),
+                postfix: new HarmonyMethod(typeof(RopeTeamFallPatch), nameof(AfterPhysics)));
+            // The rope writes its particle line from LateUpdate. That line is the
+            // straight one leaving the harnesses, so the replacement is drawn after it.
+            var lateUpdate = AccessTools.Method(typeof(LogicalRopeRenderer), nameof(LogicalRopeRenderer.LateUpdate));
+            Harmony.Patch(lateUpdate, postfix: new HarmonyMethod(typeof(RopeTeamFallPatch), nameof(AfterRender)));
             _installed = true;
         }
         catch (Exception ex)
@@ -40,4 +46,8 @@ internal static class RopeTeamFallPatch
     }
 
     private static bool BeforePhysics(LogicalRope __instance) => RopeInterop.BeforeRopePhysics(__instance);
+
+    private static void AfterPhysics(LogicalRope __instance) => RopeInterop.AfterRopePhysics(__instance);
+
+    private static void AfterRender(LogicalRopeRenderer __instance) => RopeInterop.AfterRopeRendered(__instance);
 }

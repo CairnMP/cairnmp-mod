@@ -122,7 +122,10 @@ Choose **Belay Team** when creating a lobby to enable partner belay. Rope team
 keeps its original direct harness tether; Belay Team rejects that tether in input,
 host validation, received packets and late-join snapshots. Every peer
 must use the same experimental build (protocol **26**, incompatible with the
-published 2.4.1/protocol 16 and earlier pilots). A missing station attachment can
+public 2.4.1/2.4.2 protocol-16 builds and earlier pilots). The R23 candidate
+includes upstream 2.4.2-r2's main-menu label and harness-rope fixes. Their new
+physics/render callbacks remain scoped to the dedicated harness rope, while
+Belay Team uses its own protection-rope controller. A missing station attachment can
 now be requested on the climber's synchronized native copy of that exact piton.
 This implementation has automated coverage; its initial attachment still needs
 native two-client validation. Belay Team does not create the direct harness tether.
@@ -701,6 +704,10 @@ notes are that changelog section. A tag that disagrees with `versions.json`, or 
 version without a changelog section, fails before anything is built. A suffixed
 tag (`vx.y.z-r2`) republishes the same version.
 
+Credit first-time contributors under `### New contributors` in that section. Once
+published, the notes are posted to Discord if the webhook secret below is set; if
+that post fails, **Re-run failed jobs** sends it again without touching the release.
+
 ### One-time setup
 
 The build needs the game's generated assemblies, which must never be published:
@@ -723,6 +730,10 @@ Until LavaGang releases the fix for non-ASCII game paths
 [patched fork](https://github.com/yutho-o/MelonLoader/tree/cairnmp)'s
 `v0.7.2-cairnmp.N` build; afterwards, the official `MelonLoader.x64.zip`. Its URL
 and SHA-256 are pinned in the workflow and in the launcher: change both together.
+
+To announce releases on Discord, create a webhook in the channel's settings and add
+its full URL as the `DISCORD_WEBHOOK_URL` Actions secret of this repository. Without
+the secret, releases publish as usual and nothing is posted.
 
 ## Versioning
 
