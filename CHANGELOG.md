@@ -41,8 +41,8 @@ All notable CairnMP changes are documented here. Releases follow
   native crash investigation and validation continue.
 
 ### Changed
-- The experimental build now includes upstream 2.4.2-r2's menu-label and
-  harness-rope initialization/rendering fixes. Belay Team retains its independent
+- The experimental build now includes upstream 2.4.3's Story-launch preset fix,
+  menu-label and harness-rope initialization/rendering fixes. Belay Team retains its independent
   station-rope controller and protocol 26; public protocol-16 builds cannot join.
 - Pause, cutscene and focus loss explicitly end partner belay. Automatic pair
   suspension/resume remains future work. The two-minute diagnostic limit now
@@ -51,7 +51,7 @@ All notable CairnMP changes are documented here. Releases follow
   transaction id; requests are 118 bytes and events 126 bytes. Piton snapshots
   retain the placer's source id and belay messages carry that piton's owner/source
   identity and the climber's rope capacity. Every peer needs
-  the same experimental build; public 2.4.1/2.4.2 protocol-16 builds and earlier development
+  the same experimental build; public 2.4.1/2.4.2/2.4.3 protocol-16 builds and earlier development
   pilots cannot join.
 
 ### Fixed
@@ -63,6 +63,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.4.3](#243--2026-11-05-beta) | 2026-11-05 | Beta | New Story saves keep their difficulty instead of turning into Summit |
 | [2.4.2](#242--2026-11-04-beta) | 2026-11-04 | Beta | Main menu label and partner rope line fixes |
 | [2.4.1](#241--2026-10-30-stable) | 2026-10-30 | Stable | First stable build for Cairn 1.1.593 |
 | [2.4.0](#240--2026-10-30-beta) | 2026-10-30 | Beta | Lobbies that climb the Deep Water DLC worlds |
@@ -91,6 +92,17 @@ All notable CairnMP changes are documented here. Releases follow
 | [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
 | [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.4.3] — 2026-11-05 (beta)
+
+> An important fix for anyone starting a new Story save in a lobby. The protocol stays
+> **16**, and saves that were already started are not changed.
+
+### Fixed
+
+- A new multiplayer Story game keeps the difficulty the lobby picked. It starts with that preset's health and does not open the Summit equipment selection. A lobby that adds a constraint the preset does not already have still starts as Story. (#43)
 
 ---
 

@@ -339,8 +339,6 @@ public partial class Mod
 
         LoggerInstance.Msg($"[State] local: {LocalState} -> {state} ({Player.LastComputedStateReason})");
         _runtimeState.LocalPlayerState = state;
-        if (state == PlayerState.InGame && _runtimeState.ModeRules.UsesPartnerBelay)
-            GameOptionsInterop.LogActiveSetup();
 
         // Leaving gameplay means Cairn is about to tear the scene down. Ghosts survive the
         // transition (DontDestroyOnLoad), so their colliders must leave the physics scene

@@ -122,8 +122,9 @@ Choose **Belay Team** when creating a lobby to enable partner belay. Rope team
 keeps its original direct harness tether; Belay Team rejects that tether in input,
 host validation, received packets and late-join snapshots. Every peer
 must use the same experimental build (protocol **26**, incompatible with the
-public 2.4.1/2.4.2 protocol-16 builds and earlier pilots). The R23 candidate
-includes upstream 2.4.2-r2's main-menu label and harness-rope fixes. Their new
+public 2.4.1/2.4.2/2.4.3 protocol-16 builds and earlier pilots). This branch
+includes upstream 2.4.3, including its Story-launch preset correction, main-menu
+label and harness-rope fixes. The upstream
 physics/render callbacks remain scoped to the dedicated harness rope, while
 Belay Team uses its own protection-rope controller. A missing station attachment can
 now be requested on the climber's synchronized native copy of that exact piton.
@@ -206,7 +207,9 @@ while the old belayer remains anchored. Cancellation retains the original roles;
 it does not undo a native operation already queued. L stays open during preparation.
 After commit, wait for new rope readback before releasing the follower's personal
 anchor. This is an experimental anchored exchange, with automated participant
-coverage; native two-client role exchange still needs validation.
+coverage. One matched R23 exchange remained active for about 159 seconds, but
+reverse preparations failed. The current terminal-insertion correction and
+repeated exchanges in both host arrangements still need native validation.
 
 An unloaded personal-anchor transition may recreate rope segments without adding
 a piton. The controller restores only the original ordered holders/protections

@@ -53,6 +53,7 @@ internal sealed class StartGameFlow
     {
         _pendingStart = null;
         _forceNewGameOpts = null;
+        StoryLaunchSetupPatch.MultiplayerStoryPending = false;
         _pendingStartRetries = 0;
         _pendingStartRetryTimer = 0f;
     }
@@ -90,6 +91,8 @@ internal sealed class StartGameFlow
             }
             else
             {
+                GameOptionsInterop.LogActiveSetup();
+                StoryLaunchSetupPatch.MultiplayerStoryPending = false;
                 _forceNewGameOpts = null;
             }
         }
@@ -120,6 +123,10 @@ internal sealed class StartGameFlow
 
     private void LaunchStory(ServerStartGame start)
     {
+        // Set before the player confirms a slot. The native constructor that builds a
+        // customized story setup leaves summit mode on; the patch clears it only while
+        // this handoff is still in progress.
+        StoryLaunchSetupPatch.MultiplayerStoryPending = true;
         var rules = RulesOf(start);
         if (!GameOptionsInterop.SetNextGameMode(rules, start.SkipTutorials,
                 start.SkipPractice, start.AssistEnabled))
