@@ -50,16 +50,18 @@ internal sealed partial class ManualBelayFeature
             if (accepted || _active?.Session != command.Session) return;
             if (command.Swap != Guid.Empty && _swap?.Swap != command.Swap) return;
             Notice(reason);
-            if (_swap != null && command.Operation != ManualBelayOperation.CancelSwap) CancelRoleSwapRequest();
+            if (_swap != null && command.Operation != ManualBelayOperation.CancelSwap)
+                CancelRoleSwapRequest("The host rejected " + command.Operation + ": " + reason);
             else ClearRoleSwap();
             RefreshPanel();
         });
     }
 
-    private void CancelRoleSwapRequest()
+    private void CancelRoleSwapRequest(string reason)
     {
         if (_active == null || _swap == null || _swapCancelSent) return;
         _swapCancelSent = true;
+        FeatureLog.Info("[BelaySwap] Local cancellation requested; session=" + _active.Session + ", swap=" + _swap.Swap + ", reason=" + reason);
         SendRoleSwap(new() { Operation = ManualBelayOperation.CancelSwap, Session = _active.Session,
             Swap = _swap.Swap, Station = _swap.Station });
     }
@@ -79,14 +81,19 @@ internal sealed partial class ManualBelayFeature
                 || !ValidStation(command.Station, climber))
             { request.Reject("The current climber must propose a new healthy station at their personal anchor."); return; }
             var proposed = new RoleSwapState { Id = Guid.NewGuid(), Station = command.Station, Until = now + 20 };
-            request.AfterCommit(() => { session.Swap = proposed; _changed.Send(RoleSwapMessage(session, ManualBelayPhase.SwapOffered)); });
+            request.AfterCommit(() =>
+            {
+                session.Swap = proposed;
+                FeatureLog.Info("[BelaySwap] Host proposed; session=" + session.Id + ", swap=" + proposed.Id);
+                _changed.Send(RoleSwapMessage(session, ManualBelayPhase.SwapOffered));
+            });
             return;
         }
         var swap = session.Swap;
         if (swap == null || now >= swap.Until || command.Swap != swap.Id || command.Station != swap.Station)
         { request.Reject("Role proposal expired, changed or was already completed."); return; }
         if (command.Operation == ManualBelayOperation.CancelSwap)
-        { request.AfterCommit(() => CancelHostRoleSwap(session)); return; }
+        { request.AfterCommit(() => CancelHostRoleSwap(session, "A participant cancelled the role exchange.")); return; }
         if (!ValidStation(swap.Station, climber))
         { request.Reject("The new station is no longer synchronized at the current climber."); return; }
         if (command.Operation == ManualBelayOperation.AcceptSwap)
@@ -96,6 +103,7 @@ internal sealed partial class ManualBelayFeature
             request.AfterCommit(() =>
             {
                 swap.Preparing = true; swap.Capacity = command.RopeCapacity; swap.Until = now + 20;
+                FeatureLog.Info("[BelaySwap] Host preparing; session=" + session.Id + ", swap=" + swap.Id);
                 _changed.Send(RoleSwapMessage(session, ManualBelayPhase.SwapPreparing));
             });
             return;
@@ -106,6 +114,8 @@ internal sealed partial class ManualBelayFeature
         request.AfterCommit(() =>
         {
             if (actor == session.Climber) swap.ClimberReady = true; else swap.BelayerReady = true;
+            FeatureLog.Info("[BelaySwap] Host received readiness; session=" + session.Id + ", swap=" + swap.Id
+                + ", from=" + (actor == session.Climber ? "current climber" : "current belayer"));
             if (!swap.BelayerReady || !swap.ClimberReady) return;
             var committed = RoleSwapMessage(session, ManualBelayPhase.SwapCommitted);
             committed.Belayer = session.Climber; committed.Climber = session.Belayer;
@@ -123,10 +133,11 @@ internal sealed partial class ManualBelayFeature
         => new() { Phase = phase, Session = session.Id, Swap = session.Swap.Id, Station = session.Swap.Station,
             Belayer = session.Belayer, Climber = session.Climber, Initiator = session.Climber, RopeCapacity = session.Swap.Capacity };
 
-    private void CancelHostRoleSwap(SessionState session)
+    private void CancelHostRoleSwap(SessionState session, string reason)
     {
         if (session.Swap == null) return;
         var cancelled = RoleSwapMessage(session, ManualBelayPhase.SwapCancelled);
+        FeatureLog.Info("[BelaySwap] Host cancelled; session=" + session.Id + ", swap=" + session.Swap.Id + ", reason=" + reason);
         session.Swap = null;
         _changed.Send(cancelled);
     }
@@ -197,18 +208,20 @@ internal sealed partial class ManualBelayFeature
             RequestStop(failure); return;
         }
         if (_swap == null || _active == null) return;
-        if (now >= _swapUntil) { CancelRoleSwapRequest(); return; }
+        if (now >= _swapUntil) { CancelRoleSwapRequest("The role proposal or preparation timed out locally."); return; }
         if (_active.Climber == LocalPlayerId && !Game.Belay.RoleStationValid(_active.Session, _swap.Station))
-        { Notice("Keep your personal anchor at the proposed station. Original roles retained."); CancelRoleSwapRequest(); return; }
+        { Notice("Keep your personal anchor at the proposed station. Original roles retained."); CancelRoleSwapRequest("The proposed personal station changed."); return; }
         if (_swap.Phase != ManualBelayPhase.SwapPreparing || _swapCancelSent) return;
         Game.BelayPanel.Show();
         var reason = "";
         var preparation = _active.Climber == LocalPlayerId ? BelayRolePreparation.Ready
             : Game.Belay.PrepareRoleClimber(_active.Session, _swap.Swap, _swap.Station, out reason);
         if (preparation == BelayRolePreparation.Failed)
-        { Notice("The new native route could not be prepared: " + reason + " Keep both personal anchors; original roles retained."); CancelRoleSwapRequest(); return; }
+        { Notice("The new native route could not be prepared: " + reason + " Keep both personal anchors; original roles retained."); CancelRoleSwapRequest("The new native route could not be prepared: " + reason); return; }
         if (preparation != BelayRolePreparation.Ready || _swapReadySent) return;
         _swapReadySent = true;
+        FeatureLog.Info("[BelaySwap] Local route ready; session=" + _active.Session + ", swap=" + _swap.Swap
+            + ", role=" + (_active.Climber == LocalPlayerId ? "current climber" : "current belayer"));
         SendRoleSwap(new() { Operation = ManualBelayOperation.ReadySwap, Session = _active.Session,
             Swap = _swap.Swap, Station = _swap.Station });
     }

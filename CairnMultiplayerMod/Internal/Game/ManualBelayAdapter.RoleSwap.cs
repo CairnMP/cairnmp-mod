@@ -118,6 +118,16 @@ internal sealed partial class ManualBelayAdapter
         if (!_rolePreparing || !_roleConnectionReady || _roleOldSession != session || _roleNextSession != next
             || _roleStation != station || _stationSession != session || !StationValid) return false;
         var prepared = _attachment;
+        if (prepared != null)
+        {
+            // Readiness is not a substitute for a current physical route. Both
+            // original personal protection and the new pins must survive consent.
+            prepared.NextPoll = 0;
+            TickStationAttachment();
+            if (_attachment != prepared || _roleFailure != null || !_roleConnectionReady)
+            { reason = _roleFailure ?? "The prepared station route changed before role commit."; return false; }
+        }
+        else if (!CanReceiveRoleSwap(session, station, out reason)) return false;
         EndStation();
         _rolePreparing = false;
         var success = prepared != null ? CompleteStationAttachment(prepared, new BelayInputLease(next, Now, true))

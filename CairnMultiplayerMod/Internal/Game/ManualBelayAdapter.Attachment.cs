@@ -79,7 +79,8 @@ internal sealed partial class ManualBelayAdapter
         }
         reason = "Wait for all original protection pins to load before connecting the station.";
         if (colliders.Contains(0) || !AttachmentPinsReady(state, false)) return false;
-        state.Observer = new BelayStationAttachment(before, ConnectionOrder(lifeline), Id(station), state.Quickdraw.Pointer.ToInt64(), Now);
+        state.Observer = new BelayStationAttachment(before, ConnectionOrder(lifeline), Id(station), state.Quickdraw.Pointer.ToInt64(), Now,
+            allowTerminalStation: _rolePreparing);
         _lease = new BelayInputLease(session, Now);
         _localRopeNotice = null;
         _attachment = state;

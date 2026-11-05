@@ -4,6 +4,12 @@ Status: experimental source, protocol 26. Full native two-client acceptance is p
 Both participants must install the exact same build. Automated participants and
 the accepted offline local-station reconnection do not establish multiplayer success.
 
+R23 native pilot: one anchored role exchange completed and the new pair remained
+active for about 159 seconds. The reverse preparation failed when native insertion
+placed the station after the original protections. Rope drawing was visible to one
+belayer only. These are partial results; neither T01 in both directions nor V01
+in both roles is accepted yet. The next revision needs both cases repeated.
+
 Roles and order
   H1: host is belayer; guest is climber.
   H2: host is climber; guest is belayer. Create a new room to exchange the host.
@@ -132,6 +138,10 @@ Anchored role exchange - candidate, native acceptance pending
       new rope readback appears, and both personal anchors remain attached.
       Existing-route binding and missing-station insertion must be recorded
       separately; a refused insertion is not a passed role exchange.
+      During role preparation, the new station may precede the old protections
+      or become the final protection before the harness. Every original protection,
+      the same personal backup, both endpoints and physical pins must be retained;
+      insertion still needs five observed seconds. Repeat in BOTH directions.
   T02 Cancel/decline the proposal with Backspace, before acceptance and during
       preparation. Expected: original roles and control remain; native queued
       insertions are not rolled back. No automatic release or second role offer.
