@@ -242,6 +242,9 @@ internal sealed class ShareItemsFeature : MultiplayerFeature
     private const int MaxHostPending = 32;
     private const int MaxTransfersPerSession = 4096;
     private const float PickupDistance = 1.6f;
+    // Items sit in a bag the game lets you open from further away than a floating item can be
+    // selected, and a bag may hold items up to a pile radius from its centre.
+    private const float HostPickupDistance = 4.5f;
 
     private HostCommand<ShareItemOffer> _offers;
     private HostCommand<ShareItemReceipt> _receipts;
@@ -598,7 +601,7 @@ internal sealed class ShareItemsFeature : MultiplayerFeature
         if (!Game.Players.TryGetLocation(request.FromPlayerId, out var player)
             || player.State != PlayerState.InGame
             || !string.Equals(player.Scene, item.Scene, StringComparison.Ordinal)
-            || SquaredDistance(player, item) > PickupDistance * PickupDistance)
+            || SquaredDistance(player, item) > HostPickupDistance * HostPickupDistance)
         { request.Reject("Move closer to the item to pick it up."); return; }
 
         var pending = new PendingPickup(item.Copy(), request.FromPlayerId,
