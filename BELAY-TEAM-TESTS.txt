@@ -53,6 +53,8 @@ Connection / consent
       repeat, changing distance order does not redirect the selected partner,
       Enter must not open chat and mouse clicks must not start climbing. Backspace
       in an active pair must not end it. Close L to resume rope controls.
+      With a controller, also check radial/backpack -> L and chat <-> radial:
+      captured menus must not leak gameplay actions or leave input locked afterward.
   C02 Station lifecycle: define/remove S without releasing personal anchoring;
       release/re-anchor S and verify a fresh station/invitation is required.
   C03 Initial missing attachment: belayer offers, climber accepts while held at P.

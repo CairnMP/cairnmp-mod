@@ -220,6 +220,7 @@ internal sealed class FeatureBuilder
             Func<bool> canDrop, Action<ShareableItem> drop)
             => _own(_inner.AddShareActions(canGive, give, canDrop, drop));
         public void SetGroundItems(IReadOnlyList<GroundItem> items) => _inner.SetGroundItems(items);
+        public void SetGroundTakeHandler(Action<uint> take) => _inner.SetGroundTakeHandler(take);
         public void DrawGroundItems() => _inner.DrawGroundItems();
         public uint SelectGroundItem(IReadOnlyList<GroundItem> nearbyItems)
             => _inner.SelectGroundItem(nearbyItems);

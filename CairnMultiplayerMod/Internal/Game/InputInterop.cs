@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using UnityEngine;
@@ -14,6 +15,7 @@ internal static class InputInterop
     private static bool _savedDisableInputs;
     // Track the applied state, rather than the request, so a missing singleton is retried.
     private static bool _blockApplied;
+    private static bool _ignoreInputApplied;
     private static bool _mapDiagLogged;
 
     /// <summary>
@@ -22,7 +24,9 @@ internal static class InputInterop
     /// </summary>
     public static void ReconcileGameplayInput(bool wantBlocked)
     {
-        if (wantBlocked == _blockApplied && !(wantBlocked && InputCaptureState.IsBelayPanelCaptured)) return;
+        var wantIgnoreInput = wantBlocked && InputCaptureState.IsKeyboardCaptured;
+        if (wantBlocked == _blockApplied && wantIgnoreInput == _ignoreInputApplied
+            && !(wantBlocked && InputCaptureState.IsBelayPanelCaptured)) return;
 
         try
         {
@@ -34,12 +38,17 @@ internal static class InputInterop
                 if (!_blockApplied)
                 {
                     _savedDisableInputs = mgr.disabledInputs;
-                    // Native ignore-input state is a counter: acquire once,
-                    // rather than incrementing it on every panel repaint.
-                    mgr.SetIgnoreInputEvents(true);
-                    _blockApplied = true;
                 }
                 mgr.disabledInputs = true;
+                _blockApplied = true;
+                // Native ignore-input state is a counter, owned separately from
+                // the gameplay block. Chat/Belay acquire it once; the radial menu
+                // must keep the gamepad state updating while gameplay is blocked.
+                if (wantIgnoreInput != _ignoreInputApplied)
+                {
+                    mgr.SetIgnoreInputEvents(wantIgnoreInput);
+                    _ignoreInputApplied = wantIgnoreInput;
+                }
                 // Mouse climbing actions use native action maps. The two input
                 // flags alone do not disable those maps; contexts may refresh
                 // while the panel is open, so reassert its modal ownership.
@@ -47,7 +56,11 @@ internal static class InputInterop
             }
             else
             {
-                mgr.SetIgnoreInputEvents(false);
+                if (_ignoreInputApplied)
+                {
+                    mgr.SetIgnoreInputEvents(false);
+                    _ignoreInputApplied = false;
+                }
                 mgr.EnableInputs();
                 mgr.disabledInputs = _savedDisableInputs;
                 mgr.UpdateInputContext();
@@ -59,6 +72,144 @@ internal static class InputInterop
         {
             ModLog.Warning($"[Input] ReconcileGameplayInput failed: {ex.Message}");
         }
+    }
+
+    private static readonly List<UnityEngine.InputSystem.InputAction> ViewShareActions = new();
+    private static readonly List<UnityEngine.InputSystem.InputAction> CameraLookActions = new();
+    // Back (B) and the other face buttons: with View/Share held in the backpack they belong to give/drop.
+    private static readonly List<UnityEngine.InputSystem.InputAction> FaceButtonActions = new();
+    private static bool _faceButtonsBlocked;
+    private static int _nextActionScan;
+    private static bool _nativeSuppressed;
+    private static string _lastSuppressionLog = "";
+
+    /// <summary>
+    /// Keeps native actions from reacting to input the mod has claimed. The game handles a
+    /// press before the mod's update sees it, so these actions are disabled ahead of time and
+    /// every frame while wanted: View/Share on the backpack screen (it would close it), and the
+    /// right stick's camera look while the radial menu is aimed with that stick.
+    /// </summary>
+    internal static void SuppressNativeInput(bool blockViewShare, bool blockCameraLook, bool blockFaceButtons = false)
+    {
+        try
+        {
+            if (_faceButtonsBlocked && !blockFaceButtons)
+            {
+                // Combo released with the backpack still open: restore the buttons' native actions.
+                _faceButtonsBlocked = false;
+                if (!_blockApplied) FindInputManager()?.UpdateInputContext();
+                RestoreDisabled(FaceButtonActions);
+            }
+
+            if (!blockViewShare && !blockCameraLook && !blockFaceButtons)
+            {
+                if (!_nativeSuppressed) return;
+                _nativeSuppressed = false;
+                if (!_blockApplied) FindInputManager()?.UpdateInputContext();
+                RestoreDisabled(ViewShareActions);
+                RestoreDisabled(CameraLookActions);
+                RestoreDisabled(FaceButtonActions);
+                ViewShareActions.Clear();
+                CameraLookActions.Clear();
+                FaceButtonActions.Clear();
+                _nextActionScan = 0;
+                // Rebuild the maps so everything disabled here is restored exactly as the game wants it.
+                if (!_blockApplied) FindInputManager()?.UpdateInputContext();
+                return;
+            }
+
+            _nativeSuppressed = true;
+            if (Time.frameCount >= _nextActionScan)
+            {
+                _nextActionScan = Time.frameCount + 30;
+                ScanNativeActions();
+            }
+
+            if (blockViewShare) DisableAll(ViewShareActions);
+            if (blockCameraLook) DisableAll(CameraLookActions);
+            if (blockFaceButtons) { _faceButtonsBlocked = true; DisableAll(FaceButtonActions); }
+        }
+        catch (Exception ex)
+        {
+            ModLog.SuppressedException("input.native-suppression", ex);
+        }
+    }
+
+    private static void DisableAll(List<UnityEngine.InputSystem.InputAction> actions)
+    {
+        foreach (var action in actions)
+        {
+            if (action == null || !action.enabled) continue;
+            action.Disable();
+            DisabledByUs.Add(action);
+        }
+    }
+
+    // Rebuilding the game's input context leaves an action that was disabled one at a time
+    // disabled, so every action this class turned off is switched back on explicitly.
+    private static readonly HashSet<UnityEngine.InputSystem.InputAction> DisabledByUs = new();
+
+    private static void RestoreDisabled(List<UnityEngine.InputSystem.InputAction> actions)
+    {
+        var restored = false;
+        try
+        {
+            foreach (var action in actions)
+                if (action != null && DisabledByUs.Remove(action) && !action.enabled)
+                {
+                    restored = true;
+                    action.Enable();
+                }
+        }
+        finally
+        {
+            // Radial/backpack suppression can end after Belay captured this
+            // frame. Restoring its individual actions must not reopen climbing
+            // maps behind L; normal panel close rebuilds the native context.
+            if (restored && InputCaptureState.IsBelayPanelCaptured) FindInputManager()?.DisableAllMaps();
+        }
+    }
+
+    private static void ScanNativeActions()
+    {
+        var enabled = new Il2CppSystem.Collections.Generic.List<UnityEngine.InputSystem.InputAction>();
+        UnityEngine.InputSystem.InputSystem.ListEnabledActions(enabled);
+        for (var i = 0; i < enabled.Count; i++)
+        {
+            var action = enabled[i];
+            if (action == null) continue;
+            var map = action.actionMap?.name ?? "";
+            if (map.Contains("Camera") && action.name.StartsWith("rs", StringComparison.OrdinalIgnoreCase)
+                && !CameraLookActions.Contains(action))
+                CameraLookActions.Add(action);
+            if (BindsGamepad(action, "/select") && !ViewShareActions.Contains(action))
+                ViewShareActions.Add(action);
+            if ((BindsGamepad(action, "/buttonEast") || BindsGamepad(action, "/buttonWest") || BindsGamepad(action, "/circle") || BindsGamepad(action, "/square"))
+                && !FaceButtonActions.Contains(action))
+                FaceButtonActions.Add(action);
+        }
+
+        var summary = $"{ViewShareActions.Count}/{CameraLookActions.Count}/{FaceButtonActions.Count}";
+        if (summary == _lastSuppressionLog) return;
+        _lastSuppressionLog = summary;
+        ModLog.Info("[Input] suppressing View/Share actions: "
+                    + string.Join(", ", ViewShareActions.ConvertAll(a => $"{a.actionMap?.name}/{a.name}"))
+                    + " | camera look: "
+                    + string.Join(", ", CameraLookActions.ConvertAll(a => $"{a.actionMap?.name}/{a.name}"))
+                    + " | face buttons: "
+                    + string.Join(", ", FaceButtonActions.ConvertAll(a => $"{a.actionMap?.name}/{a.name}")));
+    }
+
+    private static bool BindsGamepad(UnityEngine.InputSystem.InputAction action, string suffix)
+    {
+        var bindings = action.bindings;
+        for (var i = 0; i < bindings.Count; i++)
+        {
+            var path = bindings[i].effectivePath;
+            if (path != null && path.Contains("Gamepad") && path.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 
     private static bool _menuMapsBlocked;
@@ -141,7 +292,11 @@ internal static class InputInterop
             var mgr = FindInputManager();
             if (mgr != null)
             {
-                mgr.SetIgnoreInputEvents(false);
+                if (_ignoreInputApplied)
+                {
+                    mgr.SetIgnoreInputEvents(false);
+                    _ignoreInputApplied = false;
+                }
                 mgr.disabledInputs = false;
                 mgr.EnableInputs();
                 mgr.UpdateInputContext();

@@ -2,10 +2,12 @@ using System;
 using System.Linq;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Framework;
+using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game;
 using CairnMultiplayerMod.Internal.Game.MainMenu;
 using CairnMultiplayerMod.Internal.Game.Players;
+using CairnMultiplayerMod.Internal.Game.Roping;
 using CairnMultiplayerMod.Internal.Game.World;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -166,10 +168,24 @@ public partial class Mod
         // Arm controller shortcuts only after their modifier has already blocked Cairn for
         // one frame. This runs before inventory/features so every consumer sees one coherent
         // controller snapshot and secondary buttons cannot trigger both action sets.
-        ModControllerInput.Update();
+        var controllerShortcutsAvailable = (_multiplayerModeActive || SceneRoles.IsMainMenu(CurrentScene))
+                                           && !MultiplayerPausePatch.IsPauseMenuActive;
+        // The backpack only takes the give/drop combos; its View/Share press must neither open
+        // the radial menu nor close the screen.
+        var backpackOpen = _multiplayerModeActive && _inventory?.IsBackpackVisible == true;
+        ModControllerInput.Update(controllerShortcutsAvailable && !backpackOpen, Time.unscaledDeltaTime);
         InputCaptureState.IsControllerShortcutCaptured = ModControllerInput.IsModifierHeld
-            && (_multiplayerModeActive || SceneRoles.IsMainMenu(CurrentScene));
+                                                         && controllerShortcutsAvailable;
         InputInterop.ReconcileGameplayInput(InputCaptureState.WantsGameplayBlocked);
+        InputInterop.SuppressNativeInput(
+            blockViewShare: backpackOpen && controllerShortcutsAvailable,
+            blockCameraLook: ModControllerInput.IsRadialHeld,
+            blockFaceButtons: backpackOpen && controllerShortcutsAvailable && ModControllerInput.IsModifierPressedNow);
+
+        if (ModControllerInput.RadialMenu.IsVisible) _radialContext = BuildRadialContext();
+
+        if (_multiplayerModeActive && ModControllerInput.PressedThisFrame is { } pressedShortcut)
+            _game?.Hud.ShowMessage("controller-shortcut", ControllerShortcutBindings.FeedbackFor(pressedShortcut, ControllerPreferences.UseRadialMenu), 1.5f);
 
         if (_multiplayerModeActive)
         {
@@ -323,6 +339,15 @@ public partial class Mod
         return Enum.TryParse<Key>(name, true, out var result) ? result : fallback;
     }
 
+    private RadialContext _radialContext;
+
+    /// <summary>Gathered once a frame while the radial menu is open, not on every IMGUI pass.</summary>
+    private RadialContext BuildRadialContext()
+    {
+        var ropeAttached = Network != null && RopeLinkState.PartnerOf(Network.LocalPlayerId) >= 0;
+        return new RadialContext(ropeAttached, RemotePlayerManager.ShowNames);
+    }
+
     private void TickNameToggleInput()
     {
         var keyboardPressed = Keyboard.current?[Key.N].wasPressedThisFrame == true;
@@ -387,6 +412,10 @@ public partial class Mod
         Features?.DrawHud();
         if (_multiplayerModeActive)
             _hud?.Draw();
+        RadialMenuView.Draw(ModControllerInput.RadialMenu, _radialContext);
+        if (_voice != null && _voice.TryGetShortcutGuideRect(out var guideRect))
+            ShortcutGuideView.Draw(guideRect, ShortcutGuide.Columns(ControllerPreferences.UseRadialMenu,
+                _connectKey.ToString(), _disconnectKey.ToString(), CairnMultiplayerMod.Internal.Game.Voice.VoicePreferences.PushToTalkKey.Value));
     }
 
     private void TickConnectingStatus()
