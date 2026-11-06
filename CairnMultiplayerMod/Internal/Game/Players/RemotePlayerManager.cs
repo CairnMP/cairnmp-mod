@@ -340,20 +340,19 @@ internal static class RemotePlayerManager
 
                     // Enable the climbot's native interpolation once it exists (created on
                     // the first frame) — otherwise it snaps while the player is smoothed.
-                    if (!entry.ClimbotLerpApplied)
+                    try
                     {
-                        try
+                        var climbot = entry.NrpComponent.Climbot;
+                        if (climbot != null && !PracticePartner.Is(rp.Id))
+                            ClimbotRopePatch.HideRemote(climbot);
+                        if (!entry.ClimbotLerpApplied && climbot != null)
                         {
-                            var climbot = entry.NrpComponent.Climbot;
-                            if (climbot != null)
-                            {
-                                climbot.lerp = true;
-                                if (climbot.lerpSpeed <= 0f) climbot.lerpSpeed = 12f;
-                                entry.ClimbotLerpApplied = true;
-                            }
+                            climbot.lerp = true;
+                            if (climbot.lerpSpeed <= 0f) climbot.lerpSpeed = 12f;
+                            entry.ClimbotLerpApplied = true;
                         }
-                        catch (Exception exception) { ModLog.SuppressedException("remote-player.apply-runtime-lerp", exception); }
                     }
+                    catch (Exception exception) { ModLog.SuppressedException("remote-player.apply-runtime-lerp", exception); }
                 }
 
                 if (poseApplied) continue;
@@ -666,7 +665,9 @@ internal static class RemotePlayerManager
                 if (go != null)
                 {
                     go.SetActive(true);
-                    ActivateNativeRemoteVisuals(go);
+                    // His climbot has no frame. Activating it runs an update that calls into
+                    // il2cpp and kills the runtime. The body itself is the Visual child.
+                    ActivateNativeRemoteVisuals(go, includeClimbot: id != PracticePartner.PlayerId);
 
                     // Network-rate frame writes need native interpolation to avoid visible snapping.
                     if (nrpComp != null)
@@ -757,11 +758,12 @@ internal static class RemotePlayerManager
         }
     }
 
-    private static void ActivateNativeRemoteVisuals(GameObject root)
+    private static void ActivateNativeRemoteVisuals(GameObject root, bool includeClimbot)
     {
         if (root == null) return;
         SetChildActive(root, "Visual");
-        SetChildActive(root, "NetplayClimbot");
+        if (includeClimbot)
+            SetChildActive(root, "NetplayClimbot");
     }
 
     private static void SetChildActive(GameObject root, string childName)

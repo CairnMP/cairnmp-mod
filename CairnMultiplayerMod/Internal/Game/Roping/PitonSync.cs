@@ -387,6 +387,19 @@ internal sealed class PitonSync
         return false;
     }
 
+    internal bool TryGetOwnPointer(uint localId, out IntPtr pointer)
+    {
+        foreach (var pair in _ownByPointer)
+        {
+            if (pair.Value != localId) continue;
+            pointer = pair.Key;
+            return pointer != IntPtr.Zero;
+        }
+
+        pointer = IntPtr.Zero;
+        return false;
+    }
+
     internal bool TryGetRemotePointer(uint pitonId, out IntPtr pointer)
     {
         if (_remote.TryGetValue(pitonId, out var remote) && remote.Pointer != IntPtr.Zero)

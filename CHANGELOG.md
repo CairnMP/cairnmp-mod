@@ -11,6 +11,15 @@ All notable CairnMP changes are documented here. Releases follow
 
 ## [Unreleased]
 
+### Added
+- Temporary: F9 spawns a practice climber beside the host. H takes over his
+  body and flies it with the mouse and keyboard, so the piton chain can be
+  tried alone. Tie him with the rope control. He takes a chain piton when he
+  is next to it. He is not sent to other players.
+- Temporary: while the rope is tied, a gold marker shows the piton protecting
+  the leader and a red marker shows the follower's. The HUD says "Leader
+  unprotected" when the leader has none.
+
 ### Fixed
 - Rope Team: taking a nearby piton is P on the keyboard. E remains off-belay.
 - Rope Team: on a controller, a tap of D-pad up takes a nearby piton. Holding
@@ -23,16 +32,23 @@ All notable CairnMP changes are documented here. Releases follow
 - Rope Team: tying the rope pools the carried pitons into the leader's bag, up
   to that bag's limit. Pitons the leader gains are new. The follower's piton
   bag is emptied.
+- The rope drawn between a climber and Climbot stays off. Climbot does not
+  belay a climber who is not the tied leader. While that leader is tied, the
+  securing rope is clipped to the harness so a piton can attach. The rope
+  between two climbers is unchanged.
 - Rope Team: Climbot no longer collects pitons off the wall. A climber standing
   next to a placed piton takes it with P, or a tap of D-pad up. The prompt shows
   that tap. The piton they are hanging on stays put. Repairing pitons with
   Climbot in the bivouac is unchanged.
-- Rope Team holds two climbers. The climber who ties the rope places the pitons,
-  and the partner takes them. The first piton protects both. Each later piton
-  protects the leader, and the partner stays on the earlier one. Taking a piton
-  splices it out of that chain. With no piton left, a fall drops both climbers
-  through Cairn's own unsecured fall. The rope line runs from harness to harness
-  through those pitons.
+- Rope Team holds two climbers. Only the leader places pitons, and a climber
+  who is not tied cannot place one. The leader's own placement is not refused
+  by Cairn's rope-head check. The partner takes them. The first piton
+  protects both. Each later piton protects the leader, and the partner stays on
+  the earlier one. Taking a piton splices it out of that chain. Untying takes
+  every piton off that rope. They stay in the rock and can be picked up, and
+  they no longer catch a fall. With no piton left on the rope, a fall drops
+  both climbers through Cairn's own unsecured fall. The rope line runs from
+  harness to harness through the carabiner on each quickdraw.
 
 ## Releases
 

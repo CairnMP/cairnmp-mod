@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 
@@ -16,6 +17,22 @@ internal static class TeamAnchorSession
     private static readonly List<uint> Order = new();
     private static readonly HashSet<uint> Live = new();
     private static readonly List<uint> Dropped = new();
+    private static readonly List<ChainRelease> Released = new();
+    private static Func<bool> _inRopeTeam;
+
+    internal readonly struct ChainRelease
+    {
+        internal ChainRelease(uint id, bool localId)
+        {
+            Id = id;
+            LocalId = localId;
+        }
+
+        /// <summary>Leader announce id when <see cref="LocalId"/> is set, otherwise the host id.</summary>
+        internal uint Id { get; }
+
+        internal bool LocalId { get; }
+    }
 
     internal static bool IsLinked { get; private set; }
     internal static int LeaderId { get; private set; } = -1;
@@ -25,7 +42,12 @@ internal static class TeamAnchorSession
     internal static bool HasProtection => Chain.Count > 0;
     internal static bool IsLocalLeader => IsLinked && LocalPlayerId == LeaderId;
     internal static bool IsLocalFollower => IsLinked && LocalPlayerId == FollowerId;
-    internal static bool AllowsPlacement => TeamAnchorChain.MayPlace(IsLinked, IsLocalLeader);
+    internal static bool InRopeTeam => _inRopeTeam?.Invoke() == true;
+    internal static bool AllowsPlacement => TeamAnchorChain.MayPlace(InRopeTeam, IsLinked, IsLocalLeader);
+    internal static bool LeaderIsUnprotected => IsLinked && Chain.LeaderAnchor == 0;
+
+    internal static void Bind(Func<bool> inRopeTeam)
+        => _inRopeTeam = inRopeTeam ?? throw new ArgumentNullException(nameof(inRopeTeam));
 
     internal static void SetLocalPlayer(int playerId)
     {
@@ -57,6 +79,29 @@ internal static class TeamAnchorSession
 
     internal static bool AllowsTake(uint pitonId)
         => TeamAnchorChain.MayTake(IsLinked, IsLocalLeader, Chain.Contains(pitonId));
+
+    /// <summary>The piton the leader is on, and where it was placed.</summary>
+    internal static bool TryGetLeaderAnchor(out uint id, out Vector3 position)
+        => TryGetAnchor(Chain.LeaderAnchor, out id, out position);
+
+    /// <summary>The piton the follower is on, and where it was placed.</summary>
+    internal static bool TryGetFollowerAnchor(out uint id, out Vector3 position)
+        => TryGetAnchor(Chain.FollowerAnchor, out id, out position);
+
+    private static bool TryGetAnchor(uint anchor, out uint id, out Vector3 position)
+    {
+        id = 0;
+        position = default;
+        if (!IsLinked || anchor == 0 || !Positions.TryGetValue(anchor, out position)) return false;
+        if (!float.IsFinite(position.X) || !float.IsFinite(position.Y) || !float.IsFinite(position.Z))
+        {
+            position = default;
+            return false;
+        }
+
+        id = anchor;
+        return true;
+    }
 
     /// <summary>The leader records a piton they just placed, under their own local id.</summary>
     internal static void NoteLocalLeaderPlacement(uint id, Vector3 position)
@@ -101,6 +146,17 @@ internal static class TeamAnchorSession
         return into.Count > 0;
     }
 
+    /// <summary>Same order as <see cref="CopyPath"/>: oldest piton first, and only ids that have a position.</summary>
+    internal static void CopyIds(List<uint> into)
+    {
+        into.Clear();
+        if (!HasProtection) return;
+        Chain.CopyFromOldest(Order);
+        foreach (var id in Order)
+            if (Positions.ContainsKey(id))
+                into.Add(id);
+    }
+
     /// <summary>
     /// Pitons newer than the follower's anchor leave the follower's securing rope.
     /// One that becomes the anchor is clipped back on.
@@ -132,8 +188,28 @@ internal static class TeamAnchorSession
 
     internal static void MarkAttached(uint id) => Detached.Remove(id);
 
+    /// <summary>Pitons the last untie took off the rope. They stay queued until each one is unclipped.</summary>
+    internal static void CopyReleased(List<ChainRelease> into)
+    {
+        into.Clear();
+        into.AddRange(Released);
+    }
+
+    internal static void MarkReleased(ChainRelease piton)
+    {
+        for (var i = 0; i < Released.Count; i++)
+        {
+            if (Released[i].Id != piton.Id || Released[i].LocalId != piton.LocalId) continue;
+            Released.RemoveAt(i);
+            return;
+        }
+    }
+
+    internal static void DiscardRelease() => Released.Clear();
+
     internal static void Clear()
     {
+        QueueRelease();
         Chain.Clear();
         Positions.Clear();
         Detached.Clear();
@@ -143,6 +219,18 @@ internal static class TeamAnchorSession
         IsLinked = false;
         LeaderId = -1;
         FollowerId = -1;
+    }
+
+    private static void QueueRelease()
+    {
+        var localIds = IsLocalLeader;
+        Chain.CopyFromOldest(Order);
+        foreach (var id in Order)
+        {
+            if (id == 0) continue;
+            var release = new ChainRelease(id, localIds);
+            if (!Released.Contains(release)) Released.Add(release);
+        }
     }
 
     private static void Note(uint id, Vector3 position)

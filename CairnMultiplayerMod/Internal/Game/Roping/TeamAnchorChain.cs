@@ -22,8 +22,12 @@ internal sealed class TeamAnchorChain
     internal uint LeaderAnchor { get; private set; }
     internal uint FollowerAnchor { get; private set; }
 
-    /// <summary>The follower cannot place while the rope is clipped.</summary>
-    internal static bool MayPlace(bool linked, bool isLeader) => !linked || isLeader;
+    /// <summary>
+    /// Outside Rope Team, Cairn decides. Inside it, only the climber who is tied on as leader
+    /// places. An untied climber does not.
+    /// </summary>
+    internal static bool MayPlace(bool ropeTeam, bool linked, bool isLeader)
+        => !ropeTeam || (linked && isLeader);
 
     /// <summary>The leader cannot take a piton that is on the chain.</summary>
     internal static bool MayTake(bool linked, bool isLeader, bool onChain)

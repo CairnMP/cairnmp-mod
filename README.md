@@ -37,7 +37,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 | Area | Included functionality |
 | --- | --- |
-| Climbing | Two climbers on one rope. Pitons the leader places protect the pair; with none left, a fall drops both |
+| Climbing | Two climbers on one rope. Only the leader places pitons. Untying takes those pitons off the rope; they stay in the rock. With none left on the rope, a fall drops both |
 | Players | Position, animation, cosmetics, lamps, hand and finger poses |
 | World | Weather, time of day, pitons, shared ground items, and world pings |
 | Communication | In-game chat, completion, host commands, and experimental proximity voice |
@@ -56,6 +56,13 @@ button; Cairn's native actions are temporarily blocked while it is held.
 
 Press the right stick to attach or detach the cooperative rope. `L` does the same
 on a keyboard.
+
+Temporary test tools, taken out after the rope-team trial: `F9` spawns or removes
+a practice climber beside the host. `H` takes over his body. The mouse looks,
+`WASD` flies, `Space` rises, `Ctrl` descends, and `Shift` goes faster. `H` again
+puts you back in your own climber. While the rope is tied, a gold marker sits on
+the piton protecting the leader and a red marker sits on the follower's. The HUD
+says "Leader unprotected" when the leader's piton is gone.
 
 | Controller shortcut | Action |
 | --- | --- |

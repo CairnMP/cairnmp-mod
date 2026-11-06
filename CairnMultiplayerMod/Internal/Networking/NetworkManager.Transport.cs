@@ -522,6 +522,14 @@ internal sealed partial class NetworkManager
     {
         if (!IsHandshakeComplete || targetPlayerId == LocalPlayerId) return;
 
+        // The practice climber is not a lobby member. His tie stays on this host.
+        if (PracticePartner.Is(targetPlayerId))
+        {
+            if (!CanHostPracticePartner) return;
+            OnRopeClip?.Invoke(LocalPlayerId, targetPlayerId, clip);
+            return;
+        }
+
         if (_steamLobby != null && _steamLobby.IsHost)
         {
             var pkt = new ServerRopeClip { FromPlayerId = LocalPlayerId, TargetPlayerId = targetPlayerId, Clip = clip };

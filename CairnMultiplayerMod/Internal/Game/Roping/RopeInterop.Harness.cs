@@ -55,15 +55,25 @@ internal static partial class RopeInterop
         try
         {
             pos = harness.GetAttachPosition();
-            if (float.IsFinite(pos.x) && float.IsFinite(pos.y) && float.IsFinite(pos.z) && pos != Vector3.zero) return true;
+            if (Usable(pos)) return true;
 
             // Fallback: the skeleton attach root follows the pose even without physics.
-            var root = harness.skeletonAttachPointRoot;
-            if (root != null)
+            var skeleton = harness.skeletonAttachPointRoot;
+            if (skeleton != null && Usable(skeleton.position))
             {
-                pos = root.position;
-                return float.IsFinite(pos.x) && float.IsFinite(pos.y) && float.IsFinite(pos.z) && pos != Vector3.zero;
+                pos = skeleton.position;
+                return true;
             }
+
+            // A bind-pose practice climber can report both of those at the origin.
+            // The harness transform still follows the ghost root we move.
+            var body = harness.transform;
+            if (body != null && Usable(body.position))
+            {
+                pos = body.position;
+                return true;
+            }
+
             return false;
         }
         catch (Exception exception)
@@ -71,5 +81,8 @@ internal static partial class RopeInterop
             ModLog.SuppressedException("rope.resolve-harness", exception);
             return false;
         }
+
+        static bool Usable(Vector3 point)
+            => float.IsFinite(point.x) && float.IsFinite(point.y) && float.IsFinite(point.z) && point != Vector3.zero;
     }
 }

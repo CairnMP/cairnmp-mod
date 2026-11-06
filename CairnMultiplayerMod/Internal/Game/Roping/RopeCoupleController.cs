@@ -26,7 +26,9 @@ internal sealed class RopeCoupleController
     // Hard teardown is broadcast once per episode to avoid reliable-packet spam.
     private bool _ropeHardTornDown;
     private bool _partnerWasFalling;
+    private bool _practiceAttachRefused;
     private float _deadSince = -1f;
+    private readonly List<PracticePartner.LinkCandidate> _linkCandidates = new();
 
     internal RopeCoupleController(NetworkManager network, RuntimeState state)
     {
@@ -37,19 +39,24 @@ internal sealed class RopeCoupleController
     internal void Tick()
     {
         if (_network == null)
+        {
+            LeaderProtectionMarker.Hide();
             return;
+        }
 
         // Teardown must remain reachable outside InGame.
-        if (!TickRopeSafety()) return;
-
-        if (_state.LocalPlayerState != PlayerState.InGame)
+        if (!TickRopeSafety() || _state.LocalPlayerState != PlayerState.InGame)
+        {
+            if (!TeamAnchorSession.IsLinked) LeaderProtectionMarker.Hide();
             return;
+        }
 
         if (!InputCaptureState.IsKeyboardCaptured)
             HandleRopeClipInput();
         TeamAnchorSession.ReconcileLink();
         TickRopeTeam();
         TickUnanchoredFall();
+        if (!TeamAnchorSession.IsLinked) LeaderProtectionMarker.Hide();
     }
 
     /// <summary>
@@ -146,18 +153,22 @@ internal sealed class RopeCoupleController
         if (!LocalPlayerInterop.TryGetPose(out var localPos, out _))
             return;
 
-        int bestId = -1;
-        float bestDist = float.MaxValue;
+        _linkCandidates.Clear();
         foreach (var kv in _network.RemotePlayers)
         {
             var rp = kv.Value;
             if (rp == null || rp.State != PlayerState.InGame) continue;
             var d = Vector3.Distance(localPos, new Vector3(rp.X, rp.Y, rp.Z));
-            if (d <= RopeRequests.LinkRangeMeters && d < bestDist)
-            {
-                bestDist = d;
-                bestId = kv.Key;
-            }
+            _linkCandidates.Add(new PracticePartner.LinkCandidate(kv.Key, d, PracticePartner.Is(kv.Key)));
+        }
+
+        int bestId = PracticePartner.ChooseLinkTarget(_linkCandidates, RopeRequests.LinkRangeMeters);
+        float bestDist = float.MaxValue;
+        for (var i = 0; i < _linkCandidates.Count; i++)
+        {
+            if (_linkCandidates[i].Id != bestId) continue;
+            bestDist = _linkCandidates[i].Distance;
+            break;
         }
 
         if (bestId < 0)
@@ -223,9 +234,22 @@ internal sealed class RopeCoupleController
 
         if (!RopeInterop.UpdateRopeTeamAnchor(partner, partnerAnchor))
         {
+            // A refused native rope must not wipe the practice chain. Real partners still untie.
+            if (PracticePartner.Is(partner))
+            {
+                if (_practiceAttachRefused) return;
+                _practiceAttachRefused = true;
+                ModLog.Warning("[RopeCouple] Practice rope attachment was refused; the link stays.");
+                return;
+            }
+
+            _practiceAttachRefused = false;
             ReleaseClip(self, partner);
             ModLog.Warning("[RopeCouple] Rope attachment was refused; the link has been released.");
+            return;
         }
+
+        _practiceAttachRefused = false;
     }
 
     private void TickUnanchoredFall()

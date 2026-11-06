@@ -9,6 +9,7 @@ internal static class PitonRecoverySession
     internal const string MessageId = "rope.piton-recover";
     internal const string TakeKeyName = "P";
     internal const string TakeText = "Tap D-pad up — Take piton";
+    internal const string PartnerTakeText = "Tap D-pad up — Partner takes piton";
     internal const string BagFullText = "Backpack is full";
 
     private static Func<bool> _suppressesClimbot;

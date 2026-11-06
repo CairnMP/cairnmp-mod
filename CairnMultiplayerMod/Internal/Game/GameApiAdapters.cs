@@ -219,7 +219,8 @@ internal sealed class PlayersAdapter : IPlayersApi
     public bool IsRemotePlayerInBivouac(int playerId)
     {
         var network = _network();
-        return network != null && network.RemotePlayers.TryGetValue(playerId, out var player)
+        return network != null && PracticePartner.IsPublicRemote(playerId)
+            && network.RemotePlayers.TryGetValue(playerId, out var player)
             && player?.State == PlayerState.Bivouac;
     }
 
@@ -229,7 +230,8 @@ internal sealed class PlayersAdapter : IPlayersApi
         var network = _network();
         if (network != null)
             foreach (var pair in network.RemotePlayers)
-                if (pair.Value?.State is PlayerState.InGame or PlayerState.Bivouac)
+                if (PracticePartner.IsPublicRemote(pair.Key)
+                    && pair.Value?.State is PlayerState.InGame or PlayerState.Bivouac)
                     players.Add(pair.Key);
         return players;
     }
@@ -266,7 +268,8 @@ internal sealed class PlayersAdapter : IPlayersApi
             return true;
         }
 
-        if (!network.RemotePlayers.TryGetValue(playerId, out var player) || player == null
+        if (!PracticePartner.IsPublicRemote(playerId)
+            || !network.RemotePlayers.TryGetValue(playerId, out var player) || player == null
             || player.State != PlayerState.InGame || player.LastUpdateTime <= 0
             || DateTime.UtcNow.Ticks / (double)TimeSpan.TicksPerSecond - player.LastUpdateTime
                 > MaxLocationAgeSeconds) return false;
@@ -285,7 +288,8 @@ internal sealed class PlayersAdapter : IPlayersApi
 
             foreach (var pair in network.RemotePlayers)
             {
-                if (pair.Value?.State == PlayerState.InGame) players.Add(pair.Key);
+                if (PracticePartner.IsPublicRemote(pair.Key) && pair.Value?.State == PlayerState.InGame)
+                    players.Add(pair.Key);
             }
             return players;
         }

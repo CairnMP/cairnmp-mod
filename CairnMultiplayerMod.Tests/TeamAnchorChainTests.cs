@@ -121,9 +121,11 @@ public sealed class TeamAnchorChainTests
     [Fact]
     public void TheFollowerCannotPlaceAndTheLeaderCannotTakeAChainPiton()
     {
-        Assert.True(TeamAnchorChain.MayPlace(linked: false, isLeader: false));
-        Assert.False(TeamAnchorChain.MayPlace(linked: true, isLeader: false));
-        Assert.True(TeamAnchorChain.MayPlace(linked: true, isLeader: true));
+        Assert.False(TeamAnchorChain.MayPlace(ropeTeam: true, linked: false, isLeader: false));
+        Assert.False(TeamAnchorChain.MayPlace(ropeTeam: true, linked: false, isLeader: true));
+        Assert.False(TeamAnchorChain.MayPlace(ropeTeam: true, linked: true, isLeader: false));
+        Assert.True(TeamAnchorChain.MayPlace(ropeTeam: true, linked: true, isLeader: true));
+        Assert.True(TeamAnchorChain.MayPlace(ropeTeam: false, linked: false, isLeader: false));
 
         Assert.False(TeamAnchorChain.MayTake(linked: true, isLeader: true, onChain: true));
         Assert.True(TeamAnchorChain.MayTake(linked: true, isLeader: true, onChain: false));
@@ -153,6 +155,7 @@ public sealed class TeamAnchorChainTests
     public void TheFollowerRecordsTheLeadersPitonsAndIgnoresTheirOwn()
     {
         Reset();
+        TeamAnchorSession.Bind(() => true);
         RopeLinkState.Apply(4, 7, true);
         TeamAnchorSession.OnClip(7, 4, 7, true);
 
@@ -235,9 +238,78 @@ public sealed class TeamAnchorChainTests
         Assert.Equal(1, TeamAnchorSession.Count);
     }
 
+    [Fact]
+    public void ChainIdsFollowThePitonsFromOldest()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+        TeamAnchorSession.NoteLocalLeaderPlacement(1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(2, new Vector3(0f, 2f, 0f));
+
+        var ids = new List<uint>();
+        var path = new List<Vector3>();
+        Assert.True(TeamAnchorSession.CopyPath(path));
+        TeamAnchorSession.CopyIds(ids);
+
+        Assert.Equal(new uint[] { 1, 2 }, ids);
+        Assert.Equal(ids.Count, path.Count);
+    }
+
+    [Fact]
+    public void UntieQueuesEveryChainPitonSoNothingOnItCanCatch()
+    {
+        Reset();
+        TeamAnchorSession.Bind(() => true);
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+        TeamAnchorSession.NoteLocalLeaderPlacement(1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(2, new Vector3(0f, 2f, 0f));
+
+        RopeLinkState.Apply(4, 7, false);
+        TeamAnchorSession.OnClip(4, 4, 7, false);
+
+        var released = new List<TeamAnchorSession.ChainRelease>();
+        TeamAnchorSession.CopyReleased(released);
+        Assert.Equal(2, released.Count);
+        Assert.Equal(1u, released[0].Id);
+        Assert.True(released[0].LocalId);
+        Assert.Equal(2u, released[1].Id);
+        Assert.True(released[1].LocalId);
+        Assert.False(TeamAnchorSession.HasProtection);
+        Assert.False(TeamAnchorSession.AllowsPlacement);
+
+        TeamAnchorSession.MarkReleased(released[0]);
+        TeamAnchorSession.CopyReleased(released);
+        var left = Assert.Single(released);
+        Assert.Equal(2u, left.Id);
+    }
+
+    [Fact]
+    public void UntieOnTheFollowerQueuesTheHostIds()
+    {
+        Reset();
+        TeamAnchorSession.Bind(() => true);
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(7, 4, 7, true);
+        TeamAnchorSession.NoteRemotePlacement(4, 5, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteRemotePlacement(4, 6, new Vector3(0f, 2f, 0f));
+
+        RopeLinkState.Apply(4, 7, false);
+        TeamAnchorSession.OnClip(7, 4, 7, false);
+
+        var released = new List<TeamAnchorSession.ChainRelease>();
+        TeamAnchorSession.CopyReleased(released);
+        Assert.Equal(new uint[] { 5, 6 }, new[] { released[0].Id, released[1].Id });
+        Assert.False(released[0].LocalId);
+        Assert.False(released[1].LocalId);
+    }
+
     private static void Reset()
     {
         RopeLinkState.Clear();
         TeamAnchorSession.Clear();
+        TeamAnchorSession.DiscardRelease();
+        TeamAnchorSession.Bind(() => false);
     }
 }

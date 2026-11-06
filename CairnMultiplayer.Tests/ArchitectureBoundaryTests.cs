@@ -252,6 +252,46 @@ public sealed class ArchitectureBoundaryTests
     }
 
     [Fact]
+    public void ClimbotRopeStaysOff()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "ClimbotRopePatch.cs"));
+        var registry = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "GamePatchRegistry.cs"));
+
+        Assert.Contains("ShouldDisplayRope", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ForceHidden", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("NetplayRemoteClimbot.Update", source, StringComparison.Ordinal);
+        Assert.Contains("HideRemote", source, StringComparison.Ordinal);
+        Assert.Contains("TeamAnchorSession.IsLocalLeader", source, StringComparison.Ordinal);
+        Assert.Contains("HasSecuringRope", source, StringComparison.Ordinal);
+        Assert.Contains("SetAttachedToHarness(true)", source, StringComparison.Ordinal);
+        Assert.Contains("SetAttachedToHarness(false)", source, StringComparison.Ordinal);
+        Assert.Contains("IsAttached", source, StringComparison.Ordinal);
+        Assert.Contains("SetRopeActive(false, false)", source, StringComparison.Ordinal);
+        Assert.Contains("SetVisible(false, false)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsLinked", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Object.Destroy", source, StringComparison.Ordinal);
+        Assert.Contains("ClimbotRopePatch.Install", registry, StringComparison.Ordinal);
+        Assert.Contains("ClimbotRopePatch.Uninstall", registry, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheTiedLeaderPassesCairnsRopeHeadCheck()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "TeamPitonPlacePatch.cs"));
+
+        Assert.Contains("IsLocalClientRopeHead", source, StringComparison.Ordinal);
+        Assert.Contains("nameof(ApplyLeaderRule)", source, StringComparison.Ordinal);
+        Assert.Contains("postfix:", source, StringComparison.Ordinal);
+        Assert.Contains("AllowsPlacement", source, StringComparison.Ordinal);
+        Assert.Contains("NetplayNotRopeHead", source, StringComparison.Ordinal);
+        Assert.Contains("PitonUnusabilityReason.Usable", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("RefuseWhenFollower", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReverseEngineeredInteropUsesGeneratedApisInsteadOfManualIl2CppLayouts()
     {
         var localPlayer = ReadGameSource("Players", "LocalPlayerInterop.cs");

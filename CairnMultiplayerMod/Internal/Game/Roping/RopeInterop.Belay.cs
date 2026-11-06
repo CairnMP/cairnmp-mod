@@ -141,6 +141,7 @@ internal static partial class RopeInterop
         private bool _harnessLineLogged;
         private readonly List<Vector3> _linePoints = new();
         private readonly List<System.Numerics.Vector3> _chainPoints = new();
+        private readonly List<uint> _chainIds = new();
 
         internal NativeRopeBinding(Harness local, Harness partner, Lifeline lifeline, LogicalRope source, float length)
         {
@@ -389,13 +390,20 @@ internal static partial class RopeInterop
 
             _linePoints.Clear();
             _chainPoints.Clear();
+            _chainIds.Clear();
             if (TeamAnchorSession.CopyPath(_chainPoints))
             {
+                // The stored point is the piton in the rock. The rope runs through the
+                // quickdraw's rope carabiner, which hangs off that piton and swings.
+                TeamAnchorSession.CopyIds(_chainIds);
                 if (TeamAnchorSession.IsLocalLeader) _linePoints.Add(partner);
                 else _linePoints.Add(local);
-                foreach (var piton in _chainPoints)
+                for (var i = 0; i < _chainPoints.Count; i++)
                 {
-                    var point = new Vector3(piton.X, piton.Y, piton.Z);
+                    var stored = _chainPoints[i];
+                    var point = i < _chainIds.Count && TryGetQuickdrawCarabiner(_chainIds[i], out var carabiner)
+                        ? carabiner
+                        : new Vector3(stored.X, stored.Y, stored.Z);
                     if (IsFinitePosition(point)) _linePoints.Add(point);
                 }
                 _linePoints.Add(TeamAnchorSession.IsLocalLeader ? local : partner);

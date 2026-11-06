@@ -171,6 +171,11 @@ public partial class Mod : MelonMod
             () => Network?.IsHandshakeComplete == true
                   && _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam,
             _hud);
+        TeamAnchorSession.Bind(
+            () => Network?.IsHandshakeComplete == true
+                  && _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam);
+        LeaderProtectionMarker.Bind(_hud);
+        PracticePartnerController.Bind(_hud);
         Player = new PlayerStateBroadcaster(
             Network, _runtimeState, Rope.Reset, () => Bivouac?.BlocksGameplaySync() == true,
             isSpeaking: playerId => _voice?.IsSpeaking(playerId) == true);

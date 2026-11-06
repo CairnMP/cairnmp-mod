@@ -247,6 +247,12 @@ public partial class Mod
 
         try
         {
+            PracticePartnerController.Tick(Network, _runtimeState);
+        }
+        catch (Exception ex) { LoggerInstance.Error($"[Practice] tick failed: {ex.Message}"); }
+
+        try
+        {
             using var performance = Measure(PerformanceArea.Players);
             Player.Tick();
         }
