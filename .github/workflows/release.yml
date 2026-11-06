@@ -12,6 +12,8 @@
 # the private CairnMP/cairnmp-game-refs repository (filled by scripts/export-game-refs.ps1),
 # read with the GAME_REFS_DEPLOY_KEY secret. The loader references come from the public
 # MelonLoader archive the launcher installs (keep MELONLOADER_URL/SHA256 in step with it).
+#
+# The published notes are then posted to Discord when the DISCORD_WEBHOOK_URL secret is set.
 name: Release
 
 on:
@@ -128,3 +130,29 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --verify-tag \
             --title "$TITLE" --notes-file "$RUNNER_TEMP/release-notes.md" \
             "${flags[@]}"
+
+  # A job of its own, because a `release: published` workflow would never run: GitHub
+  # fires no event for a release made with GITHUB_TOKEN. A Discord failure leaves the
+  # published release alone, and "Re-run failed jobs" sends the announcement again.
+  announce:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Announce the release on Discord
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json name,body,url,isPrerelease > "$RUNNER_TEMP/release.json"
+          node scripts/discord-release.js "$RUNNER_TEMP/release.json"

@@ -13,6 +13,8 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.4.3](#243--2026-11-05-beta) | 2026-11-05 | Beta | New Story saves keep their difficulty instead of turning into Summit |
+| [2.4.2](#242--2026-11-04-beta) | 2026-11-04 | Beta | Main menu label and partner rope line fixes |
 | [2.4.1](#241--2026-10-30-stable) | 2026-10-30 | Stable | First stable build for Cairn 1.1.593 |
 | [2.4.0](#240--2026-10-30-beta) | 2026-10-30 | Beta | Lobbies that climb the Deep Water DLC worlds |
 | [2.3.2](#232--2026-10-29-beta) | 2026-10-29 | Beta | Cairn 1.1.593 support and a rope that no longer reads 0 m |
@@ -40,6 +42,35 @@ All notable CairnMP changes are documented here. Releases follow
 | [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
 | [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.4.3] — 2026-11-05 (beta)
+
+> An important fix for anyone starting a new Story save in a lobby. The protocol stays
+> **16**, and saves that were already started are not changed.
+
+### Fixed
+
+- A new multiplayer Story game keeps the difficulty the lobby picked. It starts with that preset's health and does not open the Summit equipment selection. A lobby that adds a constraint the preset does not already have still starts as Story. (#43)
+
+---
+
+## [2.4.2] — 2026-11-04 (beta)
+
+> Two fixes, both from new contributors. The protocol stays **16**: a lobby can mix this
+> build with 2.4.1, though an older install still draws the long line for a rope it creates.
+
+### Fixed
+
+- The main menu no longer shows two Story buttons. The multiplayer button is a copy of the Story button and kept its translation, so the game wrote "Story" back over its label each time it refreshed the menu. The button now keeps its own label, and a leftover copy can no longer stack up. (#33)
+- A new partner rope stays between the two harnesses. The cloned rope was keeping the prefab's full length, so the line stretched to the horizon. Its length is now applied from the rope's own physics step. (#42)
+- Tying that rope again lays it between the harnesses on the first physics steps. A retie was skipping the new rope's setup and discarding the length request, so the line went back to the horizon. The cloned rope was still drawing a straight line off the harnesses; the visible rope is now redrawn between the two harnesses after that line updates. The climber's own coiled rope is left as it is. (#42)
+
+### New contributors
+
+- @Tippy-Tipster made their first contribution in #33
+- @fakedude2 made their first contribution in #42
 
 ---
 
