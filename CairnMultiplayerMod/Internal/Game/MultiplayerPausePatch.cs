@@ -44,6 +44,7 @@ internal static unsafe class MultiplayerPausePatch
         {
             var onOpening = AccessTools.Method(typeof(PauseMenu), nameof(PauseMenu.OnOpening));
             var onClosing = AccessTools.Method(typeof(PauseMenu), nameof(PauseMenu.OnClosing));
+            var pauseActionPerformed = AccessTools.Method(typeof(PauseMenu), "PauseAction_performed");
             var requestPause = AccessTools.Method(typeof(Il2Cpp.TimeManager), nameof(Il2Cpp.TimeManager.RequestPause));
             var requestUnpause = AccessTools.Method(typeof(Il2Cpp.TimeManager), nameof(Il2Cpp.TimeManager.RequestUnpause));
             var requestGameTimePause = AccessTools.Method(
@@ -51,6 +52,7 @@ internal static unsafe class MultiplayerPausePatch
             var requestGameTimeUnpause = AccessTools.Method(
                 typeof(Il2Cpp.TimeManager), nameof(Il2Cpp.TimeManager.RequestGameTimeUnpause));
 
+            var pauseActionPrefix = PatchMethod(nameof(MultiplayerPausePatches.PauseActionPerformedPrefix));
             var openingPrefix = PatchMethod(nameof(MultiplayerPausePatches.PauseMenuOnOpeningPrefix));
             var openingFinalizer = PatchMethod(nameof(MultiplayerPausePatches.PauseMenuOnOpeningFinalizer));
             var closingPrefix = PatchMethod(nameof(MultiplayerPausePatches.PauseMenuOnClosingPrefix));
@@ -60,7 +62,8 @@ internal static unsafe class MultiplayerPausePatch
             var requestGameTimePausePrefix = PatchMethod(nameof(MultiplayerPausePatches.RequestGameTimePausePrefix));
             var requestGameTimeUnpausePrefix = PatchMethod(nameof(MultiplayerPausePatches.RequestGameTimeUnpausePrefix));
 
-            if (onOpening == null || onClosing == null || requestPause == null || requestUnpause == null ||
+            if (pauseActionPerformed == null || pauseActionPrefix == null ||
+                onOpening == null || onClosing == null || requestPause == null || requestUnpause == null ||
                 requestGameTimePause == null || requestGameTimeUnpause == null || openingPrefix == null ||
                 openingFinalizer == null || closingPrefix == null || closingFinalizer == null ||
                 requestPausePrefix == null || requestUnpausePrefix == null || requestGameTimePausePrefix == null ||
@@ -71,6 +74,7 @@ internal static unsafe class MultiplayerPausePatch
                 return;
             }
 
+            MpPauseHarmony.Patch(pauseActionPerformed, prefix: new HarmonyMethod(pauseActionPrefix));
             MpPauseHarmony.Patch(onOpening, prefix: new HarmonyMethod(openingPrefix),
                 finalizer: new HarmonyMethod(openingFinalizer));
             MpPauseHarmony.Patch(onClosing, prefix: new HarmonyMethod(closingPrefix),
@@ -115,6 +119,23 @@ internal static unsafe class MultiplayerPausePatch
 
     private static class MultiplayerPausePatches
     {
+        // View/Share is CairnMP's shortcut modifier, so a press that holds it is a shortcut and
+        // must not also open the pause menu. Only in a session: alone, the button keeps the
+        // game's behaviour. The device is read directly because the game handles the press
+        // earlier in the frame than the mod's own update does.
+        internal static bool PauseActionPerformedPrefix()
+        {
+            try
+            {
+                return !(_isMultiplayerConnected() && ModControllerInput.IsModifierPressedNow);
+            }
+            catch (Exception ex)
+            {
+                ModLog.SuppressedException("pause.modifier-check", ex);
+                return true;
+            }
+        }
+
         // Cairn.UI.Menu.OnOpening issues both native pause requests synchronously from
         // PauseMenu.OnOpening. Suppress only calls made inside that precise transition;
         // dialogue, loading, cutscene and solo pause requests remain untouched.
@@ -132,6 +153,19 @@ internal static unsafe class MultiplayerPausePatch
             {
                 // A UI cleanup failure must never prevent the native pause menu from opening.
                 ModLog.Warning($"[Pause] Failed to close chat before pause menu: {ex.Message}");
+            }
+
+            // The View/Share modifier holds the same lease. The native pause menu opens on that
+            // very button, so the lease is still held here; releasing it later would restore
+            // the maps over the pause menu's own context and leave its input dead.
+            try
+            {
+                InputCaptureState.IsControllerShortcutCaptured = false;
+                InputInterop.ReconcileGameplayInput(InputCaptureState.WantsGameplayBlocked);
+            }
+            catch (Exception ex)
+            {
+                ModLog.Warning($"[Pause] Failed to release the controller modifier before pause menu: {ex.Message}");
             }
 
             Suppression.BeginOpening(_isMultiplayerConnected());
