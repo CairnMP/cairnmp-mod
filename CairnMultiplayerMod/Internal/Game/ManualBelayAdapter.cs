@@ -513,6 +513,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     public void Tick()
     {
         TickRopeVisual();
+        TickSharedDamage();
         RefreshStationConnectionContext();
         TickStationConnection();
         TickStationAttachment();
@@ -750,6 +751,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     private void ClearControl(string reason = null)
     {
+        ResetPartnerFallCapture();
         CancelStationAttachment(reason ?? "Native control was cleared.");
         ReleaseLocalRopeGoal();
         if (ReferenceEquals(_owner, this)) _owner = null;
@@ -772,6 +774,8 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     private bool _unpatchPending;
     public void ResetScene()
     {
+        ResetPartnerFallCapture();
+        ResetPartnerRoute();
         ClearRopeVisual();
         CancelRoleSwap();
         if (ConnectionActive) FailStationConnection(StationConnectionFailure.Context, "Scene changed; no further rope requests will be issued.");
@@ -782,6 +786,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     public void Shutdown()
     {
         ResetScene();
+        ShutdownSharedDamage();
         if (_installed) _harmony.UnpatchSelf();
         _installed = _unpatchPending = false;
     }

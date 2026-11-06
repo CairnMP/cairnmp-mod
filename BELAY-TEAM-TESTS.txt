@@ -1,6 +1,6 @@
 BELAY TEAM - COOPERATIVE ACCEPTANCE PLAN
 
-Status: experimental source, protocol 26. Full native two-client acceptance is pending.
+Status: experimental source, protocol 27. Full native two-client acceptance is pending.
 Both participants must install the exact same build. Automated participants and
 the accepted offline local-station reconnection do not establish multiplayer success.
 
@@ -34,7 +34,7 @@ Setup shared by connection cases
      or measured distance. Live ghost movement alone does not prove eligibility.
      Proximity uses fresh replicated body positions on both sides, not actor bases.
      Belay Team compares the game's native world identity, not the last streamed
-     zone callback. Both builds must use protocol 26; different worlds still refuse.
+     zone callback. Both builds must use protocol 27; different worlds still refuse.
      R21 carries the climber's capacity in the invitation/acceptance contract;
      R22 adds a role-transaction identity to the fixed-size request/event contracts;
      earlier experimental protocols cannot join this version.
@@ -170,6 +170,33 @@ Falls - only after C/R/T cases pass
       test profile. FREE reaches the native limit; record stop, damage and failure
       outcomes. No assumption of zero injury or guaranteed piton survival.
 
+Shared fall damage - included in this candidate, native acceptance pending
+  Enable Debug.BelaySharedDamageExperiment on both clients (the cooperative test
+  installer does this). Keep the existing damage balance and one-second catch
+  observation. No solo Ctrl+F9/F10/F11/F12 exercise is needed in multiplayer.
+  D01 After F01, remain suspended for at least one second plus network delivery.
+      Expected: one measured catch and host-approved climber addition at most once;
+      native Fall HP loss is credited against the height-attenuated curve. The HUD
+      and BelayDamage logs report requested and actually observed local HP changes.
+      Effort/exhaustion drain must not count as native Fall damage.
+  D02 The belayer receives 30% of the climber's actual completed native-plus-added
+      fall HP loss fraction, scaled to the belayer's own maximum HP. With both at
+      100 maximum HP, a 20 HP observed climber fall requests 6 HP from the belayer.
+      The native damage path can reduce that result through game protections;
+      zero native HP loss is a valid result when documented in the logs. There is
+      no forced belayer ragdoll, direct HP overwrite or duplicate damage retry.
+  D03 Repeat a short catch from FREE then brake, and later vary slack and height.
+      Small falls must retain the existing height attenuation. Wait for the damage
+      result before grabbing a piton or requesting a role exchange. An invalidated
+      observation must report an incomplete result rather than apply stale damage.
+  D04 Repeat D01-D03 after a successful anchored role exchange and with the other
+      person creating the room. Damage must follow the current roles, not host
+      identity. Each catch has a distinct identity; old approvals cannot affect
+      the new pair. A pending decision briefly blocks a new exchange.
+  D05 While personally anchored, use L > End belay and reconnect. No old damage
+      decision may apply to the new session. Pause, focus loss, cutscene and
+      disconnect still end the pair as in L01/L02; returning does not resume it.
+
 Interruption and persistence - start anchored, without a fall
   L01 Pause menu, Alt+Tab/focus loss and an available natural cutscene, each for
       belayer and climber and during preparation. Expected: session ends, motion
@@ -199,8 +226,9 @@ Later scenarios / not implemented acceptance
       explicitly consented, stationary exchange with both personal anchors held.
   N03 Preserve pair and resume after cutscene/pause: BLOCKED; first pilot ends the
       interaction by design. A future resume must revalidate route/anchors and input.
-  N04 Shared damage and belayer ragdoll: FUTURE balance investigation after the
-      multiplayer core passes. This build retains the game's native damage/failure.
+  N04 A forced belayer ragdoll is not implemented. Shared damage is included and
+      tested by D01-D05 above; both native health protections and piton failure
+      handling remain in effect.
   N05 Third-player injection and multi-pair behavior: optional later manual cases;
       one pair is supported. Automated authorization checks do not replace native tests.
 

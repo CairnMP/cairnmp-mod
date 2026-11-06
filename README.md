@@ -31,7 +31,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **26**; lobby admission may also require the exact mod version.
+> protocol is **27**; lobby admission may also require the exact mod version.
 
 ## Features
 
@@ -121,7 +121,7 @@ instead of being destroyed or duplicated.
 Choose **Belay Team** when creating a lobby to enable partner belay. Rope team
 keeps its original direct harness tether; Belay Team rejects that tether in input,
 host validation, received packets and late-join snapshots. Every peer
-must use the same experimental build (protocol **26**, incompatible with the
+must use the same experimental build (protocol **27**, incompatible with the
 public 2.4.1/2.4.2/2.4.3 protocol-16 builds and earlier pilots). This branch
 includes upstream 2.4.3, including its Story-launch preset correction, main-menu
 label and harness-rope fixes. The upstream
@@ -164,7 +164,9 @@ Samples refresh at up to 10 Hz, with at most 192 points and interpolation betwee
 updates of the same topology. They do not create another physical rope or alter
 damage, brake input or the session lease. Stale drawings disappear after 0.75 s;
 ending the pair or resetting the scene clears the drawing. This visual candidate
-still needs two-client validation for visibility, slack and protection updates.
+now selects physical parts by their actual consecutive attachment pins, allowing
+repeated Climbot holders outside that path. This correction still needs two-client
+validation for visibility in both roles, slack and protection updates.
 
 Held motion is renewed at up to 10 Hz and expires after 0.4 s without a fresh
 accepted command on the climber. This stops explicit feed/take-in, while retaining
@@ -264,8 +266,25 @@ applies to solo exercises; partner sessions instead require fresh input permissi
 Native two-client braking, station
 integration, damage/failure coherence and crash stability still require testing.
 Remote control does not depend on a diagnostic capture or its recording limits.
-Shared fall damage and a belayer ragdoll reaction are future balancing work after
-multiplayer validation; this build keeps native damage/failure decisions.
+The opt-in `Debug.BelaySharedDamageExperiment` adds a cooperative fall-damage
+experiment to this build. After a measured catch remains suspended for one second,
+the climber reports the vertical drop, station-to-climber rope budget and observed
+native fall HP loss. The host validates the current pair and approves at most one
+addition per catch. The existing height-attenuated curve is retained: low falls
+receive less damage even at a high estimated fall factor. Native fall loss is
+credited against that target; exhaustion loss is not credited as fall damage.
+
+After the climber confirms the completed native call and its actual HP change,
+the host sends the belayer 30% of the climber's observed native-plus-added fall
+loss, normalized by the climber's maximum HP and applied to the belayer's maximum
+HP. Both doses use the game's native Fall damage path, preserving difficulty,
+protections and death handling. A zero addition consumes the catch without a
+damage call. Incomplete calls, expired sessions and changed roles cannot issue
+a stale or duplicate dose. Exchanges wait for a pending damage decision to finish
+or expire. The HUD and `[BelayDamage]` logs report both local requested and observed
+damage. The host validates bounded reports from the authorized climber; it does
+not independently simulate that client's physics. This combined build still
+requires native two-client validation. A forced belayer ragdoll is not implemented.
 
 `Debug.BelayRouteExperiment` also enables an independent solo exercise: Ctrl+F11
 starts/ends control and Space/F7 brakes/releases. It uses the same native adapter

@@ -61,6 +61,7 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
         _command = feature.HostCommand<ManualBelayCommand>("request", Judge);
         _changed = feature.HostEvent<ManualBelayMessage>("changed", (_, message) => Receive(message));
         _ropeVisual = feature.Stream<BelayRopeVisualFrame>("rope-visual-v1", ReceiveRopeVisual);
+        RegisterPartnerDamage(feature);
         feature.Game.Chat.AddCommand("belay", "/belay offer <player> | request <player> | accept | stop",
             "Experimental manual brake: anchored belayer offers; climber accepts; Space brakes/releases.", HandleChat);
         feature.Game.BelayPanel.Register(HandlePanelAction);
@@ -455,6 +456,7 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
     {
         if (_hostSession == null) return;
         var ended = _hostSession; _hostSession = null;
+        _pendingSharedDamage = null;
         FeatureLog.Info("[BelaySession] Host ended; session=" + ended.Id + ", reason=" + reason);
         _changed.Send(Message(ended, ManualBelayPhase.Ended));
     }
@@ -611,6 +613,7 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
                     Reserve = rope.Reserve, LengthApplied = rope.LengthApplied });
             }
         }
+        TickPartnerDamage(now);
         TickRopeVisual(now);
         if (_active == null || now < _nextHint) return;
         _nextHint = now + .5f;
@@ -642,6 +645,8 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
 
     private void ClearLocal()
     {
+        ClearPeerPartnerDamage();
+        _pendingSharedDamage = null;
         ClearRoleSwap();
         ResetRopeVisual();
         if (_active != null) Game.Belay.Stop(_active.Session);

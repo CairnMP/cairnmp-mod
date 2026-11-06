@@ -6,6 +6,10 @@ namespace CairnMultiplayerMod.GameApi;
 internal interface IManualBelayApi
 {
     bool Enabled { get; }
+    bool SharedDamageEnabled => false;
+    PartnerFallObservation? PollPartnerFall(Guid session) => null;
+    PartnerDamageResult ApplyPartnerDamage(PartnerDamageRequest request)
+        => new(false, false, 0, 0, float.NaN, float.NaN, "Shared damage is unavailable.");
     float RopeCapacity => 0;
     bool TryCaptureRopeVisual(Guid session, out WorldPosition[] points) { points = null; return false; }
     void ShowRopeVisual(Guid session, int climber, uint revision, WorldPosition[] points) { }

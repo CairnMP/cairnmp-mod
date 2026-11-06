@@ -75,6 +75,8 @@ internal sealed partial class ManualBelayFeature
         { request.Reject("Only the current pair may exchange roles."); return; }
         if (command.Operation == ManualBelayOperation.ProposeSwap)
         {
+            if (HasPendingSharedDamage(session.Id))
+            { request.Reject("Wait for the current fall-damage receipt before exchanging roles."); return; }
             if (actor != session.Climber || session.Swap != null || command.Swap != Guid.Empty || command.RopeCapacity != 0
                 || command.Station.Id == session.Station.Id
                 || (command.Station.PitonOwner == session.Station.PitonOwner && command.Station.PitonId == session.Station.PitonId)

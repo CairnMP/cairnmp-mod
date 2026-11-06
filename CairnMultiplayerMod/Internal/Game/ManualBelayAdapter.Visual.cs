@@ -38,24 +38,17 @@ internal sealed partial class ManualBelayAdapter
             if (_lease?.Session != session || _control == null || _stopping || _localExercise || !_partnerStation.HasValue
                 || _localRoutePending || _rebinding || !ContextValid || !MappingMatches())
                 return NoRopeVisual("Waiting for active control and a stable native protection route.");
-            var holders = _rope.ropeHolders;
+            if (!TryReadPartnerRoute(out _, out var routeReason)) return NoRopeVisual(routeReason);
             var parts = _rope.ropeParts;
-            if (holders == null || parts == null || parts.Count > 64 || parts.Count != holders.Count - 1)
-                return NoRopeVisual("Native holder/segment counts do not yet agree.");
-            var first = -1;
-            for (var i = 0; i < holders.Count; i++)
-                if (Id(holders[i]?.TryCast<LogicalQuickdraw>()?.Piton) == Id(_localStationPiton))
-                { if (first >= 0) return NoRopeVisual("Station repeats in the native holder walk."); first = i; }
-            if (first < 0 || first >= parts.Count) return NoRopeVisual("The agreed station has no outgoing segment.");
-            var segments = new WorldPosition[parts.Count - first][];
+            var segments = new WorldPosition[_partnerRouteLegs][];
             var total = 0;
             var rendered = 0;
-            for (var i = first; i < parts.Count; i++)
+            for (var i = 0; i < _partnerRouteLegs; i++)
             {
-                var part = parts[i];
+                var part = parts[_partnerRouteSelected[i]];
                 var rope = part?.obiRope;
                 if (rope == null || !rope.isLoaded) return NoRopeVisual("Native particles are not loaded.");
-                var start = holders[i].Position; var end = holders[i + 1].Position;
+                var start = _partnerRoutePositions[i]; var end = _partnerRoutePositions[i + 1];
                 // Native drawing may correct the rendered endpoints independently
                 // of the raw solver particles. Read this exact route part first.
                 if (TryReadRenderedRopeSegment(part, start, end, 4096 - total, out var segment, out var rendererReason))
@@ -64,7 +57,7 @@ internal sealed partial class ManualBelayAdapter
                 {
                     return NoRopeVisual("Segment=" + i + "; renderer: " + rendererReason + "; particles: " + particleReason);
                 }
-                segments[i - first] = segment;
+                segments[i] = segment;
                 total += segment.Length;
             }
             points = BelayRopeVisualSampling.Sample(segments, 192);

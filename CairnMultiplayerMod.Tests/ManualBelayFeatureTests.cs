@@ -776,7 +776,7 @@ public sealed partial class ManualBelayFeatureTests
         internal readonly Dictionary<int, Node> Nodes = new();
         internal readonly Dictionary<int, PlayerLocation> Locations = new();
         internal readonly List<ServerExtensionEvent> Events = new();
-        internal IEnumerable<ManualBelayMessage> Messages => Events.Select(Decode);
+        internal IEnumerable<ManualBelayMessage> Messages => Events.Where(e => e.EventId == "manual-belay.changed").Select(Decode);
         internal readonly List<string> Failures = new();
         internal bool DeferCommands;
         internal int DroppedEventRecipient = -1;
@@ -896,6 +896,28 @@ public sealed partial class ManualBelayFeatureTests
     }
     private sealed class Belay : IManualBelayApi
     {
+        public bool SharedDamageEnabled { get; set; }
+        internal PartnerFallObservation? PartnerFall;
+        internal readonly List<PartnerDamageRequest> DamageRequests = new();
+        internal int NativeDamageCalls;
+        internal float Hp = 100, MaxHp = 100, DamageScale = 1;
+        internal bool DamageCompletes = true, DamageThrows, InvalidDamageReadback;
+        internal Action<PartnerDamageRequest> DuringDamage;
+        public PartnerFallObservation? PollPartnerFall(Guid session)
+            => PartnerFall?.Session == session ? PartnerFall : null;
+        public PartnerDamageResult ApplyPartnerDamage(PartnerDamageRequest request)
+        {
+            DamageRequests.Add(request);
+            if (PartnerFall?.Session == request.Session && PartnerFall?.Fall == request.Fall) PartnerFall = null;
+            DuringDamage?.Invoke(request);
+            if (DamageThrows) throw new InvalidOperationException("Native test failure.");
+            var before = Hp;
+            if (DamageCompletes && request.Fraction > 0)
+            { NativeDamageCalls++; Hp = Math.Max(0, Hp - request.Fraction * MaxHp * DamageScale); }
+            return new(request.Fraction > 0, DamageCompletes, request.Fraction,
+                InvalidDamageReadback ? float.NaN : (before - Hp) / MaxHp, before,
+                InvalidDamageReadback ? float.NaN : Hp, "Native test result.");
+        }
         internal WorldPosition[] Visual;
         internal int VisualCalls;
         public void ShowRopeVisual(Guid session, int climber, uint revision, WorldPosition[] points)
