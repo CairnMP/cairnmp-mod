@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game.Players;
 using Il2Cpp;
@@ -138,6 +139,8 @@ internal static partial class RopeInterop
         private float _pendingSnapLength = -1f;
         private int _snapAttempts;
         private bool _harnessLineLogged;
+        private readonly List<Vector3> _linePoints = new();
+        private readonly List<System.Numerics.Vector3> _chainPoints = new();
 
         internal NativeRopeBinding(Harness local, Harness partner, Lifeline lifeline, LogicalRope source, float length)
         {
@@ -384,23 +387,76 @@ internal static partial class RopeInterop
                 return;
             }
 
-            const int pointCount = 12;
-            var span = Vector3.Distance(local, partner);
-            var sag = Mathf.Min(0.35f, span * 0.08f);
-            line.useWorldSpace = true;
-            line.positionCount = pointCount;
-            for (var i = 0; i < pointCount; i++)
+            _linePoints.Clear();
+            _chainPoints.Clear();
+            if (TeamAnchorSession.CopyPath(_chainPoints))
             {
-                var t = i / (float)(pointCount - 1);
-                var point = Vector3.Lerp(local, partner, t);
-                point.y -= 4f * t * (1f - t) * sag;
-                line.SetPosition(i, point);
+                if (TeamAnchorSession.IsLocalLeader) _linePoints.Add(partner);
+                else _linePoints.Add(local);
+                foreach (var piton in _chainPoints)
+                {
+                    var point = new Vector3(piton.X, piton.Y, piton.Z);
+                    if (IsFinitePosition(point)) _linePoints.Add(point);
+                }
+                _linePoints.Add(TeamAnchorSession.IsLocalLeader ? local : partner);
+            }
+            else
+            {
+                _linePoints.Add(local);
+                _linePoints.Add(partner);
             }
 
-            line.enabled = true;
+            DrawSagged(line, _linePoints);
             if (_harnessLineLogged) return;
             _harnessLineLogged = true;
-            ModLog.Info("[RopeTeam] Rope drawn between the harnesses, span=" + span.ToString("F2"));
+            ModLog.Info("[RopeTeam] Rope drawn between the harnesses, points=" + _linePoints.Count);
+        }
+
+        private static void DrawSagged(LineRenderer line, List<Vector3> points)
+        {
+            if (points.Count < 2)
+            {
+                line.enabled = false;
+                return;
+            }
+
+            line.useWorldSpace = true;
+            if (points.Count == 2)
+            {
+                const int pointCount = 12;
+                var span = Vector3.Distance(points[0], points[1]);
+                var sag = Mathf.Min(0.35f, span * 0.08f);
+                line.positionCount = pointCount;
+                for (var i = 0; i < pointCount; i++)
+                {
+                    var t = i / (float)(pointCount - 1);
+                    var point = Vector3.Lerp(points[0], points[1], t);
+                    point.y -= 4f * t * (1f - t) * sag;
+                    line.SetPosition(i, point);
+                }
+                line.enabled = true;
+                return;
+            }
+
+            const int samples = 4;
+            var segments = points.Count - 1;
+            line.positionCount = segments * samples + 1;
+            var index = 0;
+            for (var segment = 0; segment < segments; segment++)
+            {
+                var from = points[segment];
+                var to = points[segment + 1];
+                var sag = Mathf.Min(0.35f, Vector3.Distance(from, to) * 0.08f);
+                for (var i = 0; i < samples; i++)
+                {
+                    var t = i / (float)samples;
+                    var point = Vector3.Lerp(from, to, t);
+                    point.y -= 4f * t * (1f - t) * sag;
+                    line.SetPosition(index++, point);
+                }
+            }
+            line.SetPosition(index, points[points.Count - 1]);
+            line.enabled = true;
         }
 
         private static bool IsFinitePosition(Vector3 point)

@@ -378,6 +378,27 @@ internal sealed class PitonSync
     internal bool Tracks(IntPtr pointer)
         => _ownByPointer.ContainsKey(pointer) || _remoteByPointer.ContainsKey(pointer) || _foreign.Contains(pointer);
 
+    /// <summary>The local id of one of ours, or the host's id of someone else's.</summary>
+    internal bool TryGetId(IntPtr pointer, out uint id)
+    {
+        if (_ownByPointer.TryGetValue(pointer, out id)) return true;
+        if (_remoteByPointer.TryGetValue(pointer, out id)) return true;
+        id = 0;
+        return false;
+    }
+
+    internal bool TryGetRemotePointer(uint pitonId, out IntPtr pointer)
+    {
+        if (_remote.TryGetValue(pitonId, out var remote) && remote.Pointer != IntPtr.Zero)
+        {
+            pointer = remote.Pointer;
+            return true;
+        }
+
+        pointer = IntPtr.Zero;
+        return false;
+    }
+
     /// <summary>Pointers of other climbers' pitons on this Lifeline, for leaving a session.</summary>
     internal IEnumerable<IntPtr> RemotePointers => _remoteByPointer.Keys;
 

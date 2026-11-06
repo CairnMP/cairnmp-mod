@@ -215,10 +215,23 @@ public sealed class ArchitectureBoundaryTests
         var patch = File.ReadAllText(Path.Combine(
             ProjectDirectory, "Internal", "Game", "Roping", "RopeTeamFallPatch.cs"));
 
+        var pitons = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "RopeInterop.Pitons.cs"));
+        var couple = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "RopeCoupleController.cs"));
+        var chain = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "TeamAnchorChain.cs"));
+        var session = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "TeamAnchorSession.cs"));
+
         // Cairn counts quickdraws on the Lifeline's securing rope as protection. Handing it
         // the cooperative rope, or answering IsSecured for it, showed "0 m" in red and left
-        // secured falls looking for a piton that does not exist.
+        // secured falls looking for a piton that does not exist. An empty chain calls Cairn's
+        // own unsecured fall. Nothing here pushes the pawn.
         Assert.DoesNotMatch(@"\.securingRope\s*=(?!=)", interop);
+        Assert.DoesNotMatch(@"\.securingRope\s*=(?!=)", pitons);
+        Assert.DoesNotMatch(@"\.securingRope\s*=(?!=)", chain);
+        Assert.DoesNotMatch(@"\.securingRope\s*=(?!=)", session);
         Assert.DoesNotContain("typeof(Lifeline)", patch, StringComparison.Ordinal);
         Assert.Contains("TryGetInitialLength", interop, StringComparison.Ordinal);
         Assert.Contains("renderer.parts = _rope.ropeParts", interop, StringComparison.Ordinal);
@@ -227,6 +240,15 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("SetHarnessVisual", interop, StringComparison.Ordinal);
         Assert.Contains("RestoreHarnessVisual", interop, StringComparison.Ordinal);
         Assert.Contains("MC_Outift_NoHarness", interop, StringComparison.Ordinal);
+        Assert.Contains(
+            "TeamAnchorSession.CopyPath",
+            MethodBody(interop, "internal void DrawHarnessLine()"),
+            StringComparison.Ordinal);
+        Assert.Contains("ToFallingModuleUnsecure", pitons, StringComparison.Ordinal);
+
+        var rope = interop + pitons + couple + chain + session;
+        Assert.DoesNotContain(".AddForce(", rope, StringComparison.Ordinal);
+        Assert.DoesNotContain(".velocity", rope, StringComparison.Ordinal);
     }
 
     [Fact]

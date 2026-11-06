@@ -8,7 +8,7 @@ namespace CairnMultiplayer.Shared;
 /// </summary>
 public enum MultiplayerMode : byte
 {
-    /// <summary>Everyone on the same rope, teammates can pick each other up. The default.</summary>
+    /// <summary>Two climbers on one rope. The default.</summary>
     RopeTeam = 0,
 
     /// <summary>No rope, no second chance: death is final and the climber becomes a spectator.</summary>
@@ -83,7 +83,7 @@ public static class MultiplayerModes
     public static readonly MultiplayerModeRules RopeTeam = new(
         MultiplayerMode.RopeTeam,
         "Rope team",
-        "Climb roped together. A downed partner can be brought back on the spot.",
+        "Two climbers, roped together. A downed partner can be brought back on the spot.",
         GameDifficulty.Alpinist,
         ClimbConstraints.None,
         teammateRevive: true,
@@ -127,6 +127,15 @@ public static class MultiplayerModes
         => wireValue >= 0 && wireValue <= byte.MaxValue
             ? RulesFor((MultiplayerMode)(byte)wireValue)
             : RopeTeam;
+
+    /// <summary>Rope team is a pair. Other modes keep the caller's own ceiling.</summary>
+    public static int ClampLobbySize(MultiplayerMode mode, int requested, int otherModesMax = 16)
+    {
+        var max = mode == MultiplayerMode.RopeTeam ? 2 : otherModesMax;
+        if (max < 2) max = 2;
+        if (requested < 2) return 2;
+        return requested > max ? max : requested;
+    }
 }
 
 /// <summary>

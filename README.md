@@ -37,7 +37,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 | Area | Included functionality |
 | --- | --- |
-| Climbing | A cooperative rope between partners; your own pitons protect your falls |
+| Climbing | Two climbers on one rope. Pitons the leader places protect the pair; with none left, a fall drops both |
 | Players | Position, animation, cosmetics, lamps, hand and finger poses |
 | World | Weather, time of day, pitons, shared ground items, and world pings |
 | Communication | In-game chat, completion, host commands, and experimental proximity voice |
@@ -54,10 +54,12 @@ CairnMP uses **View/Share/Create** as a modifier so its commands do not replace
 Cairn's normal controller layout. Hold the modifier first, then press the action
 button; Cairn's native actions are temporarily blocked while it is held.
 
+Press the right stick to attach or detach the cooperative rope. `L` does the same
+on a keyboard.
+
 | Controller shortcut | Action |
 | --- | --- |
 | `View/Share` + `Menu/Options` | Open or close the multiplayer panel |
-| `View/Share` + `Y/△` | Attach or detach the cooperative rope |
 | `View/Share` + `A/✕` | Pick up a shared ground item |
 | `View/Share` + `X/□` | Give the selected backpack item |
 | `View/Share` + `B/○` | Drop the selected backpack item |

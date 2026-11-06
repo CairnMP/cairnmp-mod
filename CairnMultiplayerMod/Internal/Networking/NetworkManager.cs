@@ -22,6 +22,10 @@ namespace CairnMultiplayerMod.Internal.Networking
         public string CurrentRoomCode { get; private set; }
 
         private readonly Dictionary<int, RemotePlayer> _remotePlayers = new();
+        private bool _hasLocalLinkPose;
+        private float _localLinkX;
+        private float _localLinkY;
+        private float _localLinkZ;
         private readonly Func<IEnumerable<(int a, int b)>> _ropeLinks;
         public IReadOnlyDictionary<int, RemotePlayer> RemotePlayers => _remotePlayers;
 
@@ -71,6 +75,18 @@ namespace CairnMultiplayerMod.Internal.Networking
 
         public void SendPlayerState(float x, float y, float z, float yaw, string sceneName, PlayerState state)
         {
+            if (state == PlayerState.InGame)
+            {
+                _hasLocalLinkPose = true;
+                _localLinkX = x;
+                _localLinkY = y;
+                _localLinkZ = z;
+            }
+            else
+            {
+                _hasLocalLinkPose = false;
+            }
+
             if (IsSteamTransportActive)
                 SendSteamPlayerState(x, y, z, yaw, sceneName, state);
         }
@@ -166,6 +182,7 @@ namespace CairnMultiplayerMod.Internal.Networking
         {
             IsHandshakeComplete = false;
             LocalPlayerId = 0;
+            _hasLocalLinkPose = false;
             ServerName = null;
             LastError = null;
             _remotePlayers.Clear();

@@ -122,6 +122,8 @@ public partial class Mod : MelonMod
         try
         {
             Features.RegisterAll(FeatureRegistry.CreateAll(), new Version(Protocol.GameVersion));
+            RopeInterop.BindPitonPoolChannel(
+                Features.RegisterStream("rope.piton-pool", RopeInterop.AcceptPitonPool));
         }
         catch (Exception ex)
         {
@@ -165,6 +167,10 @@ public partial class Mod : MelonMod
             new WorldAdapter(), _voice, new LifeAdapter(), new SpectatorAdapter());
 
         Rope = new RopeCoupleController(Network, _runtimeState);
+        PitonRecoverySession.Bind(
+            () => Network?.IsHandshakeComplete == true
+                  && _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam,
+            _hud);
         Player = new PlayerStateBroadcaster(
             Network, _runtimeState, Rope.Reset, () => Bivouac?.BlocksGameplaySync() == true,
             isSpeaking: playerId => _voice?.IsSpeaking(playerId) == true);
@@ -254,6 +260,7 @@ public partial class Mod : MelonMod
         {
             SetMultiplayerModeActive(false);
             StartGame.Cancel();
+            PitonRecoverySession.Hide();
             RopeInterop.ClearRemotePitons();
             WeatherInterop.ResetRemoteState();
             Rope.ClearLinks();
@@ -271,13 +278,35 @@ public partial class Mod : MelonMod
             RemotePlayerManager.OnPlayerLeft(id);
             RopeLinkState.RemovePlayer(id);
         };
-        Network.OnRopeClip += RopeLinkState.Apply;
+        Network.OnRopeClip += (from, target, clip) =>
+        {
+            var samePair = TeamAnchorSession.IsLinked
+                && TeamAnchorSession.LeaderId == from
+                && TeamAnchorSession.FollowerId == target;
+            RopeLinkState.Apply(from, target, clip);
+            TeamAnchorSession.OnClip(Network.LocalPlayerId, from, target, clip);
+            if (clip && !samePair && TeamAnchorSession.IsLinked)
+                RopeInterop.BeginPitonPool(Network);
+        };
 
         // Recorded whatever the local player is doing; the Lifeline catches up on the next
         // frame of play. Dropping them during a load or a camp lost those pitons for good.
-        Network.OnPitonPlaced += RopeInterop.KnowRemotePiton;
-        Network.OnPitonRemoved += pkt => RopeInterop.ForgetRemotePiton(pkt.PitonId);
-        Network.OnOwnPitonRecovered += RopeInterop.ForgetOwnPiton;
+        Network.OnPitonPlaced += placed =>
+        {
+            RopeInterop.KnowRemotePiton(placed);
+            TeamAnchorSession.NoteRemotePlacement(placed.FromPlayerId, placed.PitonId,
+                new System.Numerics.Vector3(placed.PosX, placed.PosY, placed.PosZ));
+        };
+        Network.OnPitonRemoved += pkt =>
+        {
+            RopeInterop.ForgetRemotePiton(pkt.PitonId);
+            TeamAnchorSession.NoteAuthoritativeRemoval(pkt.PitonId);
+        };
+        Network.OnOwnPitonRecovered += id =>
+        {
+            RopeInterop.ForgetOwnPiton(id);
+            TeamAnchorSession.NoteRemoved(id);
+        };
         Network.OnTeleport += pkt =>
         {
             // The player may have entered a bivouac between the host check and delivery.

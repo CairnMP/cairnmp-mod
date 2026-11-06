@@ -30,6 +30,8 @@ internal static class GamePatchRegistry
         new("netplay frame", NetplaySetFramePatch.Install, NetplaySetFramePatch.Uninstall),
         new("bivouac safety", BivouacDiagnostics.Install, BivouacDiagnostics.Uninstall),
         new("direct rope team", RopeTeamFallPatch.Install, RopeTeamFallPatch.Uninstall),
+        new("climbot piton recovery", ClimbotPitonRecoveryPatch.Install, ClimbotPitonRecoveryPatch.Uninstall),
+        new("team piton drill", TeamPitonPlacePatch.Install, TeamPitonPlacePatch.Uninstall),
         new("multiplayer pause", MultiplayerPausePatch.Install, MultiplayerPausePatch.Uninstall),
         new("main-menu buttons", MainMenuButtonIntegration.Install, MainMenuButtonIntegration.Uninstall),
         new("savegame piton guard", SavegamePitonGuardPatch.Install, SavegamePitonGuardPatch.Uninstall),

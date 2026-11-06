@@ -9,6 +9,31 @@ All notable CairnMP changes are documented here. Releases follow
 > even when the wire-protocol number is unchanged. Read the compatibility note
 > for the release you install.
 
+## [Unreleased]
+
+### Fixed
+- Rope Team: taking a nearby piton is P on the keyboard. E remains off-belay.
+- Rope Team: on a controller, a tap of D-pad up takes a nearby piton. Holding
+  D-pad up still places one.
+
+### Changed
+- Rope Team: press the right stick to tie or untie the rope. L still does it
+  on a keyboard.
+- Rope Team: L ties the rope only when the two climbers are within 1 m.
+- Rope Team: tying the rope pools the carried pitons into the leader's bag, up
+  to that bag's limit. Pitons the leader gains are new. The follower's piton
+  bag is emptied.
+- Rope Team: Climbot no longer collects pitons off the wall. A climber standing
+  next to a placed piton takes it with P, or a tap of D-pad up. The prompt shows
+  that tap. The piton they are hanging on stays put. Repairing pitons with
+  Climbot in the bivouac is unchanged.
+- Rope Team holds two climbers. The climber who ties the rope places the pitons,
+  and the partner takes them. The first piton protects both. Each later piton
+  protects the leader, and the partner stays on the earlier one. Taking a piton
+  splices it out of that chain. With no piton left, a fall drops both climbers
+  through Cairn's own unsecured fall. The rope line runs from harness to harness
+  through those pitons.
+
 ## Releases
 
 | Version | Date | Channel | Highlights |

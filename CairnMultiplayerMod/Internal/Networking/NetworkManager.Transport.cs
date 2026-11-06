@@ -308,6 +308,11 @@ internal sealed partial class NetworkManager
                     var pkt = new ClientRopeClip();
                     pkt.Deserialize(r);
                     var fromId = EnsureSteamRemotePlayer(remoteSteamId);
+                    if (pkt.Clip && !ClimbersAreWithinLinkRange(fromId, pkt.TargetPlayerId))
+                    {
+                        ModLog.Info($"[RopeCouple] Refused clip {fromId} -> {pkt.TargetPlayerId}: farther than {RopeRequests.LinkRangeMeters:F0}m");
+                        break;
+                    }
                     if (!RopeRequests.IsAllowed(fromId, pkt.TargetPlayerId, pkt.Clip, _ropeLinks(), IsAdmittedPlayer)) break;
                     if (pkt.Clip && !_ropeCreationBudget.Take(fromId)) break;
                     var outPkt = new ServerRopeClip { FromPlayerId = fromId, TargetPlayerId = pkt.TargetPlayerId, Clip = pkt.Clip };
@@ -477,6 +482,40 @@ internal sealed partial class NetworkManager
 
         SendSteamPacketToHost(PacketId.ClientFeatureStream,
             new ClientFeatureStream { Channel = channel, Reliable = reliable, Payload = payload }, reliable);
+    }
+
+    private bool ClimbersAreWithinLinkRange(int fromId, int targetId)
+        => TryGetLinkPosition(fromId, out var ax, out var ay, out var az)
+           && TryGetLinkPosition(targetId, out var bx, out var by, out var bz)
+           && RopeRequests.WithinLinkRange(ax, ay, az, bx, by, bz);
+
+    /// <summary>
+    /// The host's own pose is the last in-game position it broadcast. Everyone else is the
+    /// position already stored for that remote player.
+    /// </summary>
+    private bool TryGetLinkPosition(int playerId, out float x, out float y, out float z)
+    {
+        if (playerId == LocalPlayerId && _hasLocalLinkPose)
+        {
+            x = _localLinkX;
+            y = _localLinkY;
+            z = _localLinkZ;
+            return float.IsFinite(x) && float.IsFinite(y) && float.IsFinite(z);
+        }
+
+        if (_remotePlayers.TryGetValue(playerId, out var player)
+            && player != null
+            && player.State == PlayerState.InGame
+            && player.LastUpdateTime > 0)
+        {
+            x = player.X;
+            y = player.Y;
+            z = player.Z;
+            return float.IsFinite(x) && float.IsFinite(y) && float.IsFinite(z);
+        }
+
+        x = y = z = 0f;
+        return false;
     }
 
     private void SendSteamRopeClip(int targetPlayerId, bool clip)

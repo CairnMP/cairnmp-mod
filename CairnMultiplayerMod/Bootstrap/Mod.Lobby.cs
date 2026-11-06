@@ -120,7 +120,7 @@ public partial class Mod
     {
         PlayerName = GetSteamPlayerName(),
         LobbyName = config.LobbyName,
-        MaxPlayers = config.MaxPlayers,
+        MaxPlayers = MultiplayerModes.ClampLobbySize(config.Mode, config.MaxPlayers),
         Visibility = config.Visibility,
         Mode = config.Mode,
         World = config.World,

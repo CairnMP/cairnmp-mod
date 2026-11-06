@@ -38,6 +38,15 @@ public class GameModeTests
     }
 
     [Fact]
+    public void RopeTeamHoldsTwoClimbersAndOtherModesKeepTheirCeiling()
+    {
+        Assert.Equal(2, MultiplayerModes.ClampLobbySize(MultiplayerMode.RopeTeam, 8));
+        Assert.Equal(2, MultiplayerModes.ClampLobbySize(MultiplayerMode.RopeTeam, 1));
+        Assert.Equal(8, MultiplayerModes.ClampLobbySize(MultiplayerMode.Race, 8));
+        Assert.Equal(4, MultiplayerModes.ClampLobbySize(MultiplayerMode.FreeSolo, 4, 8));
+    }
+
+    [Fact]
     public void EveryModeNamesADifficultyTheGameKnows()
     {
         foreach (var rules in MultiplayerModes.Available)

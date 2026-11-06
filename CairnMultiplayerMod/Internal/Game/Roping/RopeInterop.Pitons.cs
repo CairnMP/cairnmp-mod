@@ -3,7 +3,10 @@ using System.Collections.Generic;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Networking;
+using Il2Cpp;
+using Il2CppTheGameBakers.Cairn;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace CairnMultiplayerMod.Internal.Game.Roping;
 
@@ -21,6 +24,23 @@ internal static partial class RopeInterop
     private static float _lastPitonCheckErrorLogAt;
     private const float PitonCheckErrorLogIntervalSeconds = 5f;
     private static Il2Cpp.ClimbingV2PawnController _localClimbControllerCached;
+    private static readonly List<RecoveryTarget> _recoveryTargets = new();
+    private static readonly List<PitonRecoveryPolicy.Candidate> _recoveryCandidates = new();
+    private static readonly List<uint> _teamDetachIds = new();
+    private static readonly List<uint> _teamReattachIds = new();
+    private static readonly Key TakeKey = Enum.Parse<Key>(PitonRecoverySession.TakeKeyName);
+    private static float _dpadUpPressedAt = -1f;
+    private static readonly Dictionary<uint, float> _teamDetachRetryAt = new();
+    private static ushort _pitonPoolChannel;
+    private static int _nextPitonPoolId;
+    private static int _pitonPoolId;
+    private static int _appliedPitonPoolId;
+
+    private struct RecoveryTarget
+    {
+        internal Il2Cpp.Piton Piton;
+        internal PitonRecoveryPolicy.Candidate Candidate;
+    }
 
     internal static void ResetCaches()
     {
@@ -90,12 +110,18 @@ internal static partial class RopeInterop
     internal static void SyncPitons(NetworkManager network)
     {
         var lifeline = TryGetLifeline();
-        if (lifeline == null || network == null) return;
+        if (lifeline == null || network == null)
+        {
+            PitonRecoverySession.Hide();
+            return;
+        }
 
         try
         {
             double now = Time.unscaledTime;
+            TeamAnchorSession.SetLocalPlayer(network.LocalPlayerId);
             _pitons.OnLifeline(lifeline.Pointer, now);
+            TickPitonRecovery(lifeline);
             if (!TryCollectPlacedPitons(lifeline)) return;
 
             System.Numerics.Vector3? localPosition = null;
@@ -103,17 +129,25 @@ internal static partial class RopeInterop
                 localPosition = new System.Numerics.Vector3(pose.x, pose.y, pose.z);
 
             var actions = _pitons.Reconcile(_placedPitons, localPosition, now);
-            if (actions.IsEmpty) return;
-
-            foreach (var pointer in actions.Detach) DetachWhenAllowed(pointer);
-            foreach (var placed in actions.Spawn) SpawnRemotePiton(lifeline, placed, now);
-            foreach (var (localId, pointer) in actions.Announce) AnnounceLocalPiton(network, localId, pointer);
-            foreach (var localId in actions.Removed) network.SendPitonRemoved(localId);
-            foreach (var pitonId in actions.Recovered)
+            if (!actions.IsEmpty)
             {
-                network.SendPitonRecovered(pitonId);
-                ModLog.Debug($"[Piton] Took up remote piton #{pitonId}");
+                foreach (var pointer in actions.Detach) DetachWhenAllowed(pointer);
+                foreach (var placed in actions.Spawn) SpawnRemotePiton(lifeline, placed, now);
+                foreach (var (localId, pointer) in actions.Announce) AnnounceLocalPiton(network, localId, pointer);
+                foreach (var localId in actions.Removed)
+                {
+                    network.SendPitonRemoved(localId);
+                    TeamAnchorSession.NoteRemoved(localId);
+                }
+                foreach (var pitonId in actions.Recovered)
+                {
+                    network.SendPitonRecovered(pitonId);
+                    TeamAnchorSession.NoteAuthoritativeRemoval(pitonId);
+                    ModLog.Debug($"[Piton] Took up remote piton #{pitonId}");
+                }
             }
+
+            ApplyFollowerAnchorRope();
         }
         catch (Exception ex)
         {
@@ -126,6 +160,421 @@ internal static partial class RopeInterop
                 ModLog.Warning($"[Piton] Sync failed (rate-limited): {ex.GetType().Name}: {GameInterop.FirstLine(ex.Message)}");
             }
         }
+    }
+
+    /// <summary>
+    /// Offers the nearest placed piton. A take happens before the reconcile, so the same frame
+    /// tells the session it left the wall. Climbot's bivouac repair is not involved.
+    /// </summary>
+    private static void TickPitonRecovery(Il2Cpp.Lifeline lifeline)
+    {
+        if (!PitonRecoverySession.SuppressesClimbot
+            || InputCaptureState.IsKeyboardCaptured
+            || MultiplayerPausePatch.IsPauseMenuActive)
+        {
+            _dpadUpPressedAt = -1f;
+            PitonRecoverySession.Hide();
+            return;
+        }
+
+        var dpadUpTapped = DpadUpTapped();
+        if (!TryGetClimberPosition(out var origin))
+        {
+            PitonRecoverySession.Hide();
+            return;
+        }
+
+        _recoveryTargets.Clear();
+        _recoveryCandidates.Clear();
+        try
+        {
+            var placed = lifeline.PlacedPitons;
+            if (placed != null)
+            {
+                for (var i = 0; i < placed.Count; i++)
+                {
+                    var piton = placed[i]?.Piton;
+                    if (piton == null || piton.Pointer == IntPtr.Zero || piton.ItemId.value == 0) continue;
+                    if (IsOffBelay(lifeline, piton) || !TryGetPitonPosition(piton, out var position)) continue;
+                    bool critical;
+                    try
+                    {
+                        critical = lifeline.IsPitonCriticalForLifeline(piton);
+                    }
+                    catch (Exception exception)
+                    {
+                        ModLog.SuppressedException("rope.piton-recovery-scan", exception);
+                        continue;
+                    }
+
+                    if (_pitons.TryGetId(piton.Pointer, out var tracked) && !TeamAnchorSession.AllowsTake(tracked))
+                        continue;
+                    var candidate = new PitonRecoveryPolicy.Candidate(position, critical, BagCanTake(piton));
+                    _recoveryTargets.Add(new RecoveryTarget { Piton = piton, Candidate = candidate });
+                    _recoveryCandidates.Add(candidate);
+                }
+            }
+
+            var choice = PitonRecoveryPolicy.Choose(_recoveryCandidates, origin);
+            switch (choice.Decision)
+            {
+                case PitonRecoveryPolicy.Decision.Take:
+                    PitonRecoverySession.Show(PitonRecoverySession.TakeText);
+                    if (RecoveryPressed(dpadUpTapped))
+                        TryTakePiton(lifeline, _recoveryTargets[choice.Index].Piton);
+                    break;
+                case PitonRecoveryPolicy.Decision.BagFull:
+                    PitonRecoverySession.Show(PitonRecoverySession.BagFullText);
+                    break;
+                default:
+                    PitonRecoverySession.Hide();
+                    break;
+            }
+        }
+        finally
+        {
+            _recoveryTargets.Clear();
+            _recoveryCandidates.Clear();
+        }
+    }
+
+    private static bool RecoveryPressed(bool dpadUpTapped)
+    {
+        var keyboard = Keyboard.current;
+        return dpadUpTapped || (keyboard != null && keyboard[TakeKey].wasPressedThisFrame);
+    }
+
+    /// <summary>
+    /// D-pad up places a piton when held. A short release takes one instead.
+    /// View/Share and the left trigger keep their own chords on this button.
+    /// </summary>
+    private static bool DpadUpTapped()
+    {
+        var pad = Gamepad.current;
+        if (pad == null)
+        {
+            _dpadUpPressedAt = -1f;
+            return false;
+        }
+
+        var cancel = pad.selectButton.isPressed || pad.leftTrigger.ReadValue() > 0.5f;
+        return PitonTakeTap.Advance(ref _dpadUpPressedAt, pad.dpad.up.isPressed, cancel,
+            Time.unscaledTime, PitonTakeTap.MaxSeconds);
+    }
+
+    private static bool BagCanTake(Il2Cpp.Piton piton)
+    {
+        try
+        {
+            var manager = InventoryManager.Instance;
+            return manager != null && manager.CanPutItemParts(StorageRequest(piton.ItemId));
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.piton-recovery-bag", exception);
+            return false;
+        }
+    }
+
+    private static InventoryStorageRequest StorageRequest(Il2Cpp.InventoryItemStringId itemId)
+        => new(itemId, 1, contentItemId: default, warmForSeconds: 0, lootTarget: LootTarget.Aava,
+            bagMode: BagSearchMode.BottomUp, printErrors: false, displayToasts: false);
+
+    /// <summary>
+    /// Climbot's per-piton recovery pulls the hardware off the wall into the bot.
+    /// <see cref="Il2Cpp.Lifeline.RemovePiton"/> and <see cref="Il2Cpp.Lifeline.DetachPiton"/> only
+    /// unclip the rope and leave the piton in the rock, so a take never calls them.
+    /// </summary>
+    private static void TryTakePiton(Il2Cpp.Lifeline lifeline, Il2Cpp.Piton piton)
+    {
+        if (piton == null || piton.Pointer == IntPtr.Zero) return;
+        if (!TryGetClimberPosition(out var climber)
+            || !TryGetPitonPosition(piton, out var pitonPosition)
+            || PitonRecoveryPolicy.Choose(
+                new[] { new PitonRecoveryPolicy.Candidate(pitonPosition, false, true) }, climber).Decision
+            != PitonRecoveryPolicy.Decision.Take)
+            return;
+        if (_pitons.TryGetId(piton.Pointer, out var tracked) && !TeamAnchorSession.AllowsTake(tracked))
+            return;
+        var quickdraw = piton.Quickdraw;
+        if (quickdraw == null || quickdraw.Pointer == IntPtr.Zero)
+        {
+            ModLog.Warning("[Piton] The placed piton has no quickdraw to recover");
+            return;
+        }
+
+        var robot = ResolveLocalClimbot();
+        var recovering = robot?.recoveringQuickdraw;
+        if (recovering == null)
+        {
+            ModLog.Warning("[Piton] Climbot has no quickdraw recovery");
+            return;
+        }
+
+        var manager = InventoryManager.Instance;
+        var pointer = piton.Pointer;
+        var itemId = piton.ItemId;
+        var climbotBefore = CountPitons(manager, manager?.ClimbotInventoryData);
+        var playerBefore = CountPitons(manager, manager?.PitonInventoryData);
+        var storedBefore = CountStored(manager, itemId);
+        bool recovered;
+        try
+        {
+            recovered = recovering.RecoverQuickDraw(quickdraw, showUi: false);
+        }
+        catch (Exception exception)
+        {
+            ModLog.Warning($"[Piton] RecoverQuickDraw failed: {exception.Message}");
+            return;
+        }
+
+        if (!recovered || LifelineHolds(lifeline, pointer))
+        {
+            ModLog.Warning("[Piton] The piton stayed on the wall");
+            return;
+        }
+
+        if (manager != null && CountPitons(manager, manager.PitonInventoryData) <= playerBefore)
+        {
+            if (CountPitons(manager, manager.ClimbotInventoryData) > climbotBefore)
+            {
+                try
+                {
+                    var moved = manager.TransferPitonsFromClimbotToPlayer(false, new Il2CppSystem.Nullable<int>(1));
+                    if (moved < 1)
+                        ModLog.Warning("[Piton] Climbot recovered a piton the backpack did not accept");
+                }
+                catch (Exception exception)
+                {
+                    ModLog.Warning($"[Piton] Could not store a recovered piton: {exception.Message}");
+                }
+            }
+            else if (CountStored(manager, itemId) <= storedBefore)
+            {
+                try
+                {
+                    var response = manager.PutItemParts(StorageRequest(itemId));
+                    if (!response.CompleteSuccess)
+                        ModLog.Warning("[Piton] The wall released a piton the backpack did not accept");
+                }
+                catch (Exception exception)
+                {
+                    ModLog.Warning($"[Piton] Could not store a recovered piton: {exception.Message}");
+                }
+            }
+        }
+
+        DestroyReleasedPiton(piton);
+    }
+
+    private static int CountStored(InventoryManager manager, Il2Cpp.InventoryItemStringId itemId)
+    {
+        if (manager == null) return 0;
+        try { return manager.GetItemCount(itemId, null); }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.piton-recovery-count", exception);
+            return 0;
+        }
+    }
+
+    internal static void BindPitonPoolChannel(ushort channel) => _pitonPoolChannel = channel;
+
+    /// <summary>
+    /// A new link. Both climbers advance the same link id because both saw the clip.
+    /// The follower empties the carried piton bag and tells the leader how many left it.
+    /// </summary>
+    internal static void BeginPitonPool(NetworkManager network)
+    {
+        _pitonPoolId = ++_nextPitonPoolId;
+        _appliedPitonPoolId = 0;
+        if (!TeamAnchorSession.IsLocalFollower) return;
+
+        var count = ClearCarriedPitons();
+        if (network == null || _pitonPoolChannel == 0)
+        {
+            ModLog.Warning("[RopeTeam] The follower's pitons were cleared and the count was not sent");
+            return;
+        }
+
+        network.SendFeatureStream(
+            _pitonPoolChannel, PitonPool.WriteContribution(_pitonPoolId, count), reliable: true);
+        ModLog.Info($"[RopeTeam] Follower emptied {count} carried pitons into the pool");
+    }
+
+    internal static void AcceptPitonPool(int fromPlayerId, byte[] payload)
+    {
+        if (!TeamAnchorSession.IsLocalLeader || fromPlayerId != TeamAnchorSession.FollowerId) return;
+        if (!PitonPool.TryReadContribution(payload, out var linkId, out var count)) return;
+        if (linkId != _pitonPoolId || _appliedPitonPoolId == linkId) return;
+        _appliedPitonPoolId = linkId;
+
+        var manager = InventoryManager.Instance;
+        var inventory = manager?.PitonInventoryData;
+        var leaderCount = CountPitons(manager, inventory);
+        var max = ReadPitonBagLimit(inventory);
+        var gain = PitonPool.FreshPitonsForLeader(leaderCount, count, max);
+        GrantFreshPitons(manager, gain);
+        ModLog.Info($"[RopeTeam] Leader bag held {leaderCount}, follower contributed {count}, gained {gain} new pitons");
+    }
+
+    private static int ClearCarriedPitons()
+    {
+        try
+        {
+            var manager = InventoryManager.Instance;
+            var inventory = manager?.PitonInventoryData;
+            if (manager == null || inventory == null) return 0;
+
+            var count = CountPitons(manager, inventory);
+            for (var index = inventory.Count - 1; index >= 0; index--)
+                inventory.RemoveAt(index);
+            if (CountPitons(manager, inventory) > 0)
+            {
+                manager.RemoveAllPitons(out _);
+            }
+            return count;
+        }
+        catch (Exception exception)
+        {
+            ModLog.Warning("[RopeTeam] Could not empty the follower's pitons: " + exception.Message);
+            return 0;
+        }
+    }
+
+    private static int ReadPitonBagLimit(InventoryData inventory)
+    {
+        if (inventory == null) return 0;
+        try { return inventory.MaxItemCount; }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.piton-pool-max", exception);
+            return 0;
+        }
+    }
+
+    private static void GrantFreshPitons(InventoryManager manager, int count)
+    {
+        if (manager == null || count <= 0) return;
+        var itemId = (InventoryItemStringId)(int)InventoryItemStringIdEnum.ITEM_PITON;
+        try
+        {
+            for (var index = 0; index < count; index++)
+            {
+                var request = StorageRequest(itemId);
+                if (!manager.CanPutItemParts(request)) break;
+                var response = manager.PutItemParts(request);
+                if (!response.CompleteSuccess) break;
+            }
+        }
+        catch (Exception exception)
+        {
+            ModLog.Warning("[RopeTeam] Could not store the pooled pitons: " + exception.Message);
+        }
+    }
+
+    private static int CountPitons(InventoryManager manager, InventoryDataBase inventory)
+    {
+        if (manager == null || inventory == null) return 0;
+        try { return manager.GetPitonCount(inventory, null); }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.piton-recovery-count", exception);
+            return 0;
+        }
+    }
+
+    /// <summary>The lifeline has already dropped the piton. A mesh left behind is the unclip ghost.</summary>
+    private static void DestroyReleasedPiton(Il2Cpp.Piton piton)
+    {
+        try
+        {
+            if (piton != null) UnityEngine.Object.Destroy(piton.gameObject);
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.piton-recovery-destroy", exception);
+        }
+    }
+
+    /// <summary>Where the climber is. The harness is on the body; the pawn root can lag behind it.</summary>
+    private static bool TryGetClimberPosition(out System.Numerics.Vector3 position)
+    {
+        position = default;
+        try
+        {
+            var harness = ResolveLocalHarness();
+            if (harness != null && TryGetHarnessAttachPosition(harness, out var harnessPosition)
+                && TryUsePosition(harnessPosition, out position))
+                return true;
+
+            var pawn = ResolveLocalClimbController();
+            var body = pawn?.bodySkinnedMeshRenderer;
+            if (body != null && TryUsePosition(body.bounds.center, out position)) return true;
+            if (pawn != null && TryUsePosition(pawn.Position, out position)) return true;
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.piton-recovery-climber", exception);
+        }
+
+        return Players.LocalPlayerInterop.TryGetPose(out var pose, out _) && TryUsePosition(pose, out position);
+    }
+
+    /// <summary>The drawn piton. Its root transform can sit on the climber while the mesh stays in the rock.</summary>
+    private static bool TryGetPitonPosition(Il2Cpp.Piton piton, out System.Numerics.Vector3 position)
+    {
+        position = default;
+        try
+        {
+            var mesh = piton.pitonRenderer?.mr;
+            if (mesh != null && TryUsePosition(mesh.bounds.center, out position)) return true;
+            if (TryUsePosition(piton.quickdrawBeginRigidBody?.position ?? default, out position)) return true;
+            if (TryUsePosition(piton.quickdrawEndRigidBody?.position ?? default, out position)) return true;
+            if (TryUsePosition(piton.transform?.position ?? default, out position)) return true;
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.piton-recovery-scan", exception);
+        }
+
+        return false;
+    }
+
+    private static bool IsOffBelay(Il2Cpp.Lifeline lifeline, Il2Cpp.Piton piton)
+    {
+        try
+        {
+            var offBelay = lifeline.OffBelayPiton;
+            return offBelay != null && offBelay.Pointer != IntPtr.Zero && offBelay.Pointer == piton.Pointer;
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.piton-recovery-scan", exception);
+            return false;
+        }
+    }
+
+    private static bool TryUsePosition(Vector3 world, out System.Numerics.Vector3 position)
+    {
+        position = default;
+        if (!float.IsFinite(world.x) || !float.IsFinite(world.y) || !float.IsFinite(world.z) || world == Vector3.zero)
+            return false;
+        position = new System.Numerics.Vector3(world.x, world.y, world.z);
+        return true;
+    }
+
+    private static bool LifelineHolds(Il2Cpp.Lifeline lifeline, IntPtr pointer)
+    {
+        var placed = lifeline?.PlacedPitons;
+        if (placed == null) return false;
+        for (var i = 0; i < placed.Count; i++)
+        {
+            var piton = placed[i]?.Piton;
+            if (piton != null && piton.Pointer == pointer) return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -194,6 +643,8 @@ internal static partial class RopeInterop
                 PitonHp = hp,
                 ItemId = itemId,
             });
+            TeamAnchorSession.NoteLocalLeaderPlacement(localId,
+                new System.Numerics.Vector3(position.x, position.y, position.z));
             ModLog.Debug($"[Piton] Local piton #{localId} detected @ ({position.x:F1},{position.y:F1},{position.z:F1}) quality={quality} hp={hp} itemId={itemId}");
         }
         catch (Exception exception)
@@ -284,6 +735,81 @@ internal static partial class RopeInterop
         {
             ModLog.Warning($"[Piton] DetachPiton failed: {ex.Message}");
             return false;
+        }
+    }
+
+    /// <summary>
+    /// The follower's securing rope stops at their anchor. Newer team pitons stay in the rock
+    /// for the leader and are unclipped here so they are not the follower's last protection.
+    /// </summary>
+    private static void ApplyFollowerAnchorRope()
+    {
+        if (!TeamAnchorSession.IsLocalFollower)
+        {
+            _teamDetachRetryAt.Clear();
+            return;
+        }
+
+        TeamAnchorSession.CopyRopeEdits(_teamDetachIds, _teamReattachIds);
+        var now = Time.unscaledTime;
+        foreach (var id in _teamDetachIds)
+        {
+            if (TeamEditWaiting(id, now) || !_pitons.TryGetRemotePointer(id, out var pointer)) continue;
+            if (TryDetachPitonViaLifeline(pointer))
+            {
+                _teamDetachRetryAt.Remove(id);
+                TeamAnchorSession.MarkDetached(id);
+            }
+            else _teamDetachRetryAt[id] = now + DetachRetrySeconds;
+        }
+
+        foreach (var id in _teamReattachIds)
+        {
+            if (TeamEditWaiting(id, now) || !_pitons.TryGetRemotePointer(id, out var pointer)) continue;
+            if (TryAttachTeamPiton(pointer))
+            {
+                _teamDetachRetryAt.Remove(id);
+                TeamAnchorSession.MarkAttached(id);
+            }
+            else _teamDetachRetryAt[id] = now + DetachRetrySeconds;
+        }
+    }
+
+    private static bool TeamEditWaiting(uint id, float now)
+        => _teamDetachRetryAt.TryGetValue(id, out var retryAt) && now < retryAt;
+
+    private static bool TryAttachTeamPiton(IntPtr pitonPtr)
+    {
+        var lifeline = TryGetLifeline();
+        var controller = ResolveLocalClimbController();
+        if (lifeline == null || controller == null || pitonPtr == IntPtr.Zero) return false;
+        try
+        {
+            lifeline.AttachToPiton(new Il2Cpp.Piton(pitonPtr), controller, true);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ModLog.Warning("[Piton] AttachToPiton failed: " + ex.Message);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Cairn plays the fall. With no piton on the chain, the partner's fall starts this one too.
+    /// </summary>
+    internal static void FallUnsecuredWithPartner()
+    {
+        var pawn = ResolveLocalClimbController();
+        if (pawn == null) return;
+        try
+        {
+            if (pawn.IsFalling || pawn.IsSecureFalling) return;
+            pawn.ToFallingModuleUnsecure(FallReason.Unknown, default, null);
+        }
+        catch (Exception ex)
+        {
+            ModLog.Warning("[RopeTeam] Cairn refused the unsecured fall: " + ex.Message);
         }
     }
 

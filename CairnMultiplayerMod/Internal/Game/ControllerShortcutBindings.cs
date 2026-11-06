@@ -5,7 +5,6 @@ namespace CairnMultiplayerMod.Internal.Game;
 internal enum ControllerShortcut
 {
     TogglePanel,
-    ToggleRope,
     ToggleNames,
     PickupSharedItem,
     PreviousSharedItem,
@@ -40,7 +39,6 @@ internal static class ControllerShortcutBindings
     internal static ControllerButton ButtonFor(ControllerShortcut shortcut) => shortcut switch
     {
         ControllerShortcut.TogglePanel => ControllerButton.Menu,
-        ControllerShortcut.ToggleRope => ControllerButton.North,
         ControllerShortcut.ToggleNames => ControllerButton.DpadUp,
         ControllerShortcut.PickupSharedItem => ControllerButton.South,
         ControllerShortcut.PreviousSharedItem => ControllerButton.DpadLeft,

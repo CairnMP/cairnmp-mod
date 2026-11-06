@@ -4,6 +4,7 @@ using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game.Life;
 using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Networking;
+using CairnMultiplayerMod.Internal.Networking.Authoritative;
 using Il2CppTheGameBakers.Cairn.Netplay;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -12,8 +13,6 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 
 internal sealed class RopeCoupleController
 {
-    private const float RopeClipRangeMeters = 3f;
-
     /// <summary>How long a fresh death counts as undecided: the game rules on the death screen
     /// a moment after the body goes limp, and the rope must not be cut before it has.</summary>
     private const float DeathDecisionGraceSeconds = 2f;
@@ -26,6 +25,7 @@ internal sealed class RopeCoupleController
 
     // Hard teardown is broadcast once per episode to avoid reliable-packet spam.
     private bool _ropeHardTornDown;
+    private bool _partnerWasFalling;
     private float _deadSince = -1f;
 
     internal RopeCoupleController(NetworkManager network, RuntimeState state)
@@ -47,7 +47,9 @@ internal sealed class RopeCoupleController
 
         if (!InputCaptureState.IsKeyboardCaptured)
             HandleRopeClipInput();
+        TeamAnchorSession.ReconcileLink();
         TickRopeTeam();
+        TickUnanchoredFall();
     }
 
     /// <summary>
@@ -127,41 +129,38 @@ internal sealed class RopeCoupleController
     {
         var keyboard = Keyboard.current;
         var keyboardPressed = keyboard != null && keyboard[ToggleKey].wasPressedThisFrame;
-        if (!keyboardPressed && !ModControllerInput.WasPressed(ControllerShortcut.ToggleRope))
+        if (!keyboardPressed && !RightStickLinkPressed())
             return;
 
         // An existing rope must always be releasable, including at zero slack.
+        // PartnerOf returns -1 when this climber has no partner.
         int self = _network.LocalPlayerId;
         int linkedPartner = RopeLinkState.PartnerOf(self);
-        if (linkedPartner >= 0)
+        if (linkedPartner != -1)
         {
-            _network.SendRopeClip(linkedPartner, false);
-            RopeLinkState.Apply(self, linkedPartner, false);
-            RopeInterop.ReleaseAllAnchors();
+            ReleaseClip(self, linkedPartner);
+            ModLog.Info($"[RopeCouple] Unclip from player {linkedPartner}");
             return;
         }
 
         if (!LocalPlayerInterop.TryGetPose(out var localPos, out _))
             return;
 
-        // The debug mirror has a negative id, so a separate flag avoids sentinel collisions.
-        bool found = false;
-        int bestId = 0;
-        float bestDist = RopeClipRangeMeters;
+        int bestId = -1;
+        float bestDist = float.MaxValue;
         foreach (var kv in _network.RemotePlayers)
         {
             var rp = kv.Value;
             if (rp == null || rp.State != PlayerState.InGame) continue;
             var d = Vector3.Distance(localPos, new Vector3(rp.X, rp.Y, rp.Z));
-            if (d < bestDist)
+            if (d <= RopeRequests.LinkRangeMeters && d < bestDist)
             {
                 bestDist = d;
                 bestId = kv.Key;
-                found = true;
             }
         }
 
-        if (!found)
+        if (bestId < 0)
         {
             int total = _network.RemotePlayers.Count;
             var sb = new System.Text.StringBuilder();
@@ -172,23 +171,41 @@ internal sealed class RopeCoupleController
                 float d = Vector3.Distance(localPos, new Vector3(rp.X, rp.Y, rp.Z));
                 sb.Append($" [{kv.Key} state={rp.State} dist={d:F1}m hasFrame={rp.HasPlayerFrame}]");
             }
-            ModLog.Info($"[RopeCouple] {ToggleKey} pressed — no eligible ghost within {RopeClipRangeMeters:F0}m " +
+            ModLog.Info($"[RopeCouple] Link pressed — no eligible ghost within {RopeRequests.LinkRangeMeters:F0}m " +
                 $"(remote players: {total}):{(total == 0 ? " none" : sb.ToString())}");
             return;
         }
 
         if (RopeLinkState.IsLinked(self, bestId))
         {
-            _network.SendRopeClip(bestId, false);
+            ReleaseClip(self, bestId);
             ModLog.Info($"[RopeCouple] Unclip from player {bestId}");
             return;
         }
 
         int current = RopeLinkState.PartnerOf(self);
-        if (current >= 0 && current != bestId)
-            _network.SendRopeClip(current, false);
+        if (current != -1 && current != bestId)
+            ReleaseClip(self, current);
+
         _network.SendRopeClip(bestId, true);
         ModLog.Info($"[RopeCouple] Clip to player {bestId} at {bestDist:F1}m");
+    }
+
+    /// <summary>
+    /// A bare right-stick click ties or unties. The same click with View/Share held is the
+    /// emergency input release, so that chord leaves the rope alone.
+    /// </summary>
+    private static bool RightStickLinkPressed()
+    {
+        var pad = Gamepad.current;
+        return pad != null && !pad.selectButton.isPressed && pad.rightStickButton.wasPressedThisFrame;
+    }
+
+    private void ReleaseClip(int self, int partner)
+    {
+        _network.SendRopeClip(partner, false);
+        RopeLinkState.Apply(self, partner, false);
+        RopeInterop.ReleaseAllAnchors();
     }
 
     private void TickRopeTeam()
@@ -196,7 +213,7 @@ internal sealed class RopeCoupleController
         int self = _network.LocalPlayerId;
         int partner = RopeLinkState.PartnerOf(self);
 
-        if (partner < 0 || !_network.RemotePlayers.TryGetValue(partner, out var remote)
+        if (partner == -1 || !_network.RemotePlayers.TryGetValue(partner, out var remote)
             || remote == null || remote.State != PlayerState.InGame
             || !RemotePlayerManager.TryGetGhostHarness(partner, out var partnerAnchor))
         {
@@ -206,18 +223,41 @@ internal sealed class RopeCoupleController
 
         if (!RopeInterop.UpdateRopeTeamAnchor(partner, partnerAnchor))
         {
-            _network.SendRopeClip(partner, false);
-            RopeLinkState.Apply(self, partner, false);
-            RopeInterop.ReleaseAllAnchors();
+            ReleaseClip(self, partner);
             ModLog.Warning("[RopeCouple] Rope attachment was refused; the link has been released.");
         }
+    }
+
+    private void TickUnanchoredFall()
+    {
+        if (!TeamAnchorSession.IsLinked || TeamAnchorSession.HasProtection)
+        {
+            _partnerWasFalling = false;
+            return;
+        }
+
+        var partner = RopeLinkState.PartnerOf(_network.LocalPlayerId);
+        if (partner == -1 || !_network.RemotePlayers.TryGetValue(partner, out var remote)
+            || remote == null || !remote.HasPlayerFrame)
+        {
+            _partnerWasFalling = false;
+            return;
+        }
+
+        var falling = PawnCaptureInterop.GetPawnStateFromFrame(remote.PlayerFrame)
+            == NetFrame.PawnStateType.Falling;
+        if (falling && !_partnerWasFalling)
+            RopeInterop.FallUnsecuredWithPartner();
+        _partnerWasFalling = falling;
     }
 
     internal void ClearLinks()
     {
         RopeLinkState.Clear();
+        TeamAnchorSession.Clear();
         RopeInterop.ReleaseAllAnchors();
         _ropeHardTornDown = false;
+        _partnerWasFalling = false;
     }
 
     /// <summary>Logical links intentionally survive scene streaming and clear only on disconnect.</summary>
