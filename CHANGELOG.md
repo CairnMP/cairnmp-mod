@@ -26,6 +26,11 @@ All notable CairnMP changes are documented here. Releases follow
   coil, and "paid out" when a further step away is refused.
 
 ### Fixed
+- Rope Team: a save made in a bivouac can be loaded. Cairn writes that file on
+  the way out, after the bivouac flag is already clear. That write is the
+  bivouac save: its last-bivouac age is still the exit itself.
+- Rope Team: quitting from the pause menu away from a bivouac no longer waits
+  on a save. The wall save is still refused, and the quit continues.
 - Rope Team: after the leader unclips at a planted staff, the coil comes off
   their harness. They can walk the ledge. The follower keeps the rope to the staff.
 - Rope Team: taking a nearby piton is P on the keyboard. E remains off-belay.
@@ -33,12 +38,14 @@ All notable CairnMP changes are documented here. Releases follow
   D-pad up still places one.
 
 ### Changed
-- Rope Team saves and loads only at a bivouac. A marker, an autosave, a quick
-  save, and save-and-quit on the pitch do not write. A save that does not resume
-  in camp does not load. The file stays on disk. Solo play is unchanged.
-- A Rope Team save made at a bivouac leaves the pitons out of the file and leaves
-  Climbot on the belay Cairn uses at camp. Pitons that were in the rock are not
-  put back in the bag. The bag is the one the climber is carrying.
+- Rope Team: the climbot rope, leader-only placement, Climbot collection, and the
+  other climber's pitons start when the pair links, and they start again on the
+  link after a bivouac. A wall untie leaves them in place. Until the first link,
+  and after camp, the climber is on Cairn's own rope.
+- Rope Team saves and loads only at a bivouac. Entering camp ends the tie, drops
+  the staff and the other climber's pitons, and hands the rope back to Cairn.
+  The save Cairn writes then loads in a solo game, and a solo bivouac save loads
+  in Rope Team. A save from the wall does not.
 - Rope Team: press the right stick to tie or untie the rope. L still does it
   on a keyboard.
 - Rope Team: L ties the rope only when the two climbers are within 1 m.

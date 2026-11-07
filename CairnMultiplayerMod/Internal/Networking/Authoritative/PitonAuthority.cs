@@ -84,11 +84,30 @@ internal sealed class PitonAuthority
         }
     }
 
+    /// <summary>A piton placed by the other climber. This climber's own stays out of the replica list.</summary>
+    internal static bool IsOtherClimbersPiton(int fromPlayerId, int localPlayerId)
+        => fromPlayerId != localPlayerId;
+
     /// <summary>Only pitons need this legacy snapshot; feature state has its own replay path.</summary>
     public void SendSnapshotTo(int playerId)
     {
         foreach (var pkt in _pitons.Values)
             _sink.SendTo(playerId, PacketId.ServerPitonPlaced, pkt, NetReliability.ReliableOrdered);
+    }
+
+    /// <summary>
+    /// Pitons this host should create on its own wall after a new tie. Skips the host's own,
+    /// which are already in the rock, and anything placed by <paramref name="localPlayerId"/>.
+    /// </summary>
+    internal void CopyForLocalReplay(int localPlayerId, List<ServerPitonPlaced> into)
+    {
+        into.Clear();
+        foreach (var pkt in _pitons.Values)
+        {
+            if (_hostOwned.Contains(pkt.PitonId)) continue;
+            if (!IsOtherClimbersPiton(pkt.FromPlayerId, localPlayerId)) continue;
+            into.Add(pkt);
+        }
     }
 
 

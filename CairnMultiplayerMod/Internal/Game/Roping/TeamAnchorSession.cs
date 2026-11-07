@@ -36,6 +36,13 @@ internal static class TeamAnchorSession
 
     internal static bool IsLinked { get; private set; }
 
+    /// <summary>
+    /// A tie has been made since the last camp. A wall untie leaves this set. Camp and
+    /// leaving the session clear it. The climbot rope, placement, and Climbot collection
+    /// follow this, not the live tie.
+    /// </summary>
+    internal static bool RulesArmed { get; private set; }
+
     /// <summary>The leader unclipped after a stick was planted. The chain stays for the follower.</summary>
     internal static bool LeaderLeft { get; private set; }
 
@@ -47,7 +54,8 @@ internal static class TeamAnchorSession
     internal static bool IsLocalLeader => IsLinked && LocalPlayerId == LeaderId;
     internal static bool IsLocalFollower => IsLinked && LocalPlayerId == FollowerId;
     internal static bool InRopeTeam => _inRopeTeam?.Invoke() == true;
-    internal static bool AllowsPlacement => TeamAnchorChain.MayPlace(InRopeTeam, IsLinked && !LeaderLeft, IsLocalLeader);
+    internal static bool AllowsPlacement =>
+        TeamAnchorChain.MayPlace(InRopeTeam, RulesArmed, IsLocalLeader && !LeaderLeft);
     internal static bool LeaderIsUnprotected => IsLinked && Chain.LeaderAnchor == 0;
 
     internal static void Bind(Func<bool> inRopeTeam)
@@ -98,9 +106,13 @@ internal static class TeamAnchorSession
 
         Clear();
         IsLinked = true;
+        RulesArmed = true;
         LeaderId = from;
         FollowerId = target;
     }
+
+    /// <summary>Camp, or the session ending. A wall untie does not call this.</summary>
+    internal static void DisarmRules() => RulesArmed = false;
 
     /// <summary>The link was cleared without an unclip packet.</summary>
     internal static void ReconcileLink()

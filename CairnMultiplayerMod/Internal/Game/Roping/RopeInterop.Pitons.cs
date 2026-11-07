@@ -17,6 +17,7 @@ internal static partial class RopeInterop
     private static int _lastLifelineSearchFrame;
     private static readonly PitonSync _pitons = new();
     private static readonly List<PlacedPiton> _placedPitons = new();
+    private static readonly List<ServerPitonPlaced> LinkReplay = new();
     private static readonly HashSet<IntPtr> _pitonPointers = new();
     private static readonly HashSet<IntPtr> _pitonPointersAfterSpawn = new();
     // A refused native detach is tried again, but not every frame.
@@ -83,8 +84,6 @@ internal static partial class RopeInterop
 
     /// <summary>The host announced a piton. It is created on the next frame of play, so one
     /// announced during a load or a camp is not lost.</summary>
-    internal static bool IsReplicaPiton(IntPtr pointer) => _pitons.IsReplica(pointer);
-
     internal static void KnowRemotePiton(ServerPitonPlaced placed) => _pitons.Know(placed);
 
     internal static void ForgetRemotePiton(uint pitonId) => _pitons.Forget(pitonId);
@@ -146,6 +145,7 @@ internal static partial class RopeInterop
             if (Players.LocalPlayerInterop.TryGetPose(out var pose, out _))
                 localPosition = new System.Numerics.Vector3(pose.x, pose.y, pose.z);
 
+            _pitons.SpawnReplicas = TeamAnchorSession.RulesArmed;
             var actions = _pitons.Reconcile(_placedPitons, localPosition, now);
             if (!actions.IsEmpty)
             {
@@ -447,6 +447,20 @@ internal static partial class RopeInterop
     }
 
     internal static void BindPitonPoolChannel(ushort channel) => _pitonPoolChannel = channel;
+
+    /// <summary>
+    /// A new tie after camp has an empty local book. The host sends the committed pitons
+    /// again and records the partner's on this wall. A piton already live is only updated.
+    /// </summary>
+    internal static void ReplayPitonsOnLink(NetworkManager network)
+    {
+        if (network == null) return;
+        var partner = RopeLinkState.PartnerOf(network.LocalPlayerId);
+        if (partner < 0) return;
+        if (!network.ReplayPitonsForLink(partner, LinkReplay)) return;
+        foreach (var placed in LinkReplay)
+            KnowRemotePiton(placed);
+    }
 
     /// <summary>
     /// A new link. Both climbers advance the same link id because both saw the clip.

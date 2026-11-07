@@ -291,6 +291,7 @@ internal sealed class RopeCoupleController
     {
         RopeLinkState.Clear();
         TeamAnchorSession.Clear();
+        TeamAnchorSession.DisarmRules();
         RopeInterop.ReleaseAllAnchors();
         _ropeHardTornDown = false;
         _partnerWasFalling = false;

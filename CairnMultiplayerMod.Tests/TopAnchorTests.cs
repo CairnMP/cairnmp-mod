@@ -336,6 +336,7 @@ public sealed class TopAnchorTests
     {
         RopeLinkState.Clear();
         TeamAnchorSession.Clear();
+        TeamAnchorSession.DisarmRules();
         TeamAnchorSession.DiscardRelease();
         TeamAnchorSession.Bind(() => true);
     }

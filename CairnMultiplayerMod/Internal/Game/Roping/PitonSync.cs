@@ -82,6 +82,12 @@ internal sealed class PitonSync
     internal const double SpawnRetrySeconds = 5;
     internal const int MaxRemotePitons = 1024;
 
+    /// <summary>
+    /// Known replicas stay pending until this is on. The session turns it on once a tie
+    /// has been made since camp, so partner pitons are not created before that.
+    /// </summary>
+    internal bool SpawnReplicas { get; set; } = true;
+
     private enum RemoteState { Pending, Spawning, Live, Abandoned, Withdrawn }
 
     private sealed class Remote
@@ -324,7 +330,7 @@ internal sealed class PitonSync
 
     private void QueueSpawns(double now)
     {
-        if (_settling) return;
+        if (_settling || !SpawnReplicas) return;
         foreach (var remote in _remote.Values)
         {
             if (_actions.Spawn.Count >= MaxSpawnsPerReconcile) break;
@@ -374,15 +380,6 @@ internal sealed class PitonSync
         remote.RetryAt = now + SpawnRetrySeconds;
     }
 
-    /// <summary>
-    /// A piton this client did not spawn as its own gear. An own piton stays writable
-    /// even if something else also noted the pointer.
-    /// </summary>
-    internal bool IsReplica(IntPtr pointer)
-        => pointer != IntPtr.Zero
-           && !_ownByPointer.ContainsKey(pointer)
-           && (_remoteByPointer.ContainsKey(pointer) || _foreign.Contains(pointer));
-
     /// <summary>True for a pointer already accounted for, whose position need not be read.</summary>
     internal bool Tracks(IntPtr pointer)
         => _ownByPointer.ContainsKey(pointer) || _remoteByPointer.ContainsKey(pointer) || _foreign.Contains(pointer);
@@ -423,6 +420,27 @@ internal sealed class PitonSync
 
     /// <summary>Pointers of other climbers' pitons on this Lifeline, for leaving a session.</summary>
     internal IEnumerable<IntPtr> RemotePointers => _remoteByPointer.Keys;
+
+    /// <summary>
+    /// Other climbers' pitons and ignored extras, such as a staff. This climber's own
+    /// pitons are not included.
+    /// </summary>
+    internal void CopyLeaving(List<IntPtr> into)
+    {
+        into.Clear();
+        foreach (var pointer in _remoteByPointer.Keys)
+            if (pointer != IntPtr.Zero && !into.Contains(pointer)) into.Add(pointer);
+        foreach (var pointer in _foreign)
+            if (pointer != IntPtr.Zero && !into.Contains(pointer)) into.Add(pointer);
+    }
+
+    /// <summary>Drops replica bookkeeping. Own pitons stay, and nothing is announced withdrawn.</summary>
+    internal void ForgetReplicas()
+    {
+        _remote.Clear();
+        _remoteByPointer.Clear();
+        _foreign.Clear();
+    }
 
     internal void ForgetSession()
     {

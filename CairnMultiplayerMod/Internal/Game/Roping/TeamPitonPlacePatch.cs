@@ -7,8 +7,9 @@ using Il2CppTheGameBakers.Cairn.Netplay;
 namespace CairnMultiplayerMod.Internal.Game.Roping;
 
 /// <summary>
-/// In Rope Team only the tied leader plants pitons, with Cairn's own tool, so they land on
-/// the leader's securing rope in chain order. An untied climber does not plant one.
+/// In Rope Team, once a tie has been made, only the leader who is still on the rope plants
+/// pitons, with Cairn's own tool, so they land on the leader's securing rope in chain order.
+/// Before that tie, and after camp clears it, Cairn decides. A wall untie does not.
 /// Cairn also refuses anyone who is not <see cref="SharedRopeGamemode.IsLocalClientRopeHead"/>.
 /// That flag stays false for our tie, so the leader was refused with the same reason as a follower.
 /// </summary>

@@ -344,7 +344,12 @@ internal static class RemotePlayerManager
                     {
                         var climbot = entry.NrpComponent.Climbot;
                         if (climbot != null && !PracticePartner.Is(rp.Id))
-                            ClimbotRopePatch.HideRemote(climbot);
+                        {
+                            if (TeamAnchorSession.RulesArmed)
+                                ClimbotRopePatch.HideRemote(climbot);
+                            else
+                                ClimbotRopePatch.ShowRemote(climbot);
+                        }
                         if (!entry.ClimbotLerpApplied && climbot != null)
                         {
                             climbot.lerp = true;

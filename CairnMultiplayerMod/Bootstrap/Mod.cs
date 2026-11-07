@@ -14,6 +14,7 @@ using CairnMultiplayerMod.Internal.Game.Roping;
 using CairnMultiplayerMod.Internal.Game.World;
 using CairnMultiplayerMod.Internal.Game.Voice;
 using CairnMultiplayerMod.Internal.Networking;
+using CairnMultiplayerMod.Internal.Networking.Authoritative;
 using CairnMultiplayerMod.Internal.UI;
 using MelonLoader;
 using UnityEngine;
@@ -171,14 +172,15 @@ public partial class Mod : MelonMod
         Rope = new RopeCoupleController(Network, _runtimeState);
         PitonRecoverySession.Bind(
             () => Network?.IsHandshakeComplete == true
-                  && _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam,
+                  && _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam
+                  && TeamAnchorSession.RulesArmed,
             _hud);
         TeamAnchorSession.Bind(
             () => Network?.IsHandshakeComplete == true
                   && _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam);
         // The mode defaults to Rope Team for solo too. The lobby, the handshake, or the
         // story-save handoff is what makes this a Rope Team session.
-        CampSaveSession.Bind(
+        BivouacSaveSession.Bind(
             () => _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam
                   && (Network?.IsHandshakeComplete == true
                       || Lobby.IsInLobby
@@ -301,13 +303,19 @@ public partial class Mod : MelonMod
             RopeLinkState.Apply(from, target, clip);
             TeamAnchorSession.OnClip(Network.LocalPlayerId, from, target, clip);
             if (clip && !samePair && TeamAnchorSession.IsLinked)
+            {
                 RopeInterop.BeginPitonPool(Network);
+                if (!BivouacSyncGate.AtCamp)
+                    RopeInterop.ReplayPitonsOnLink(Network);
+            }
         };
 
         // Recorded whatever the local player is doing; the Lifeline catches up on the next
         // frame of play. Dropping them during a load or a camp lost those pitons for good.
         Network.OnPitonPlaced += placed =>
         {
+            if (!PitonAuthority.IsOtherClimbersPiton(placed.FromPlayerId, Network.LocalPlayerId))
+                return;
             RopeInterop.KnowRemotePiton(placed);
             TeamAnchorSession.NoteRemotePlacement(placed.FromPlayerId, placed.PitonId,
                 new System.Numerics.Vector3(placed.PosX, placed.PosY, placed.PosZ));

@@ -238,21 +238,24 @@ public sealed class PitonSyncTests
     }
 
     [Fact]
-    public void AReplicaIsSomeoneElsesPitonAndAnOwnPitonIsNot()
+    public void DroppingReplicasKeepsOurOwnPiton()
     {
-        var remote = WithLiveRemote(out _);
-        Assert.True(remote.IsReplica(new IntPtr(70)));
-        Assert.False(remote.IsReplica(IntPtr.Zero));
-        Assert.False(remote.IsReplica(new IntPtr(1)));
+        var sync = WithLiveRemote(out var now);
+        var own = Assert.Single(sync.Reconcile(Placed((70, C), (1, A)), null, now += 0.1).Announce).LocalId;
+        sync.Ignore(new IntPtr(80));
 
-        var own = Started(out var t);
-        own.Reconcile(Placed((1, A)), null, t + Settled);
-        Assert.False(own.IsReplica(new IntPtr(1)));
+        var leaving = new List<IntPtr>();
+        sync.CopyLeaving(leaving);
 
-        own.Ignore(new IntPtr(1));
-        Assert.False(own.IsReplica(new IntPtr(1)));
-        own.Ignore(new IntPtr(9));
-        Assert.True(own.IsReplica(new IntPtr(9)));
+        Assert.Contains(new IntPtr(70), leaving);
+        Assert.Contains(new IntPtr(80), leaving);
+        Assert.DoesNotContain(new IntPtr(1), leaving);
+
+        sync.ForgetReplicas();
+
+        Assert.True(sync.TryGetOwnPointer(own, out var pointer));
+        Assert.Equal(new IntPtr(1), pointer);
+        Assert.False(sync.TryGetRemotePointer(7, out _));
     }
 
     [Fact]
@@ -266,6 +269,33 @@ public sealed class PitonSyncTests
         var after = sync.Reconcile(Placed((1, A)), null, t + Settled).Announce[0].LocalId;
 
         Assert.NotEqual(before, after);
+    }
+
+    [Fact]
+    public void AReplicaStaysPendingUntilSpawningIsAllowed()
+    {
+        var sync = Started(out var now);
+        sync.SpawnReplicas = false;
+        sync.Know(Piton(7, C));
+        Assert.Empty(sync.Reconcile(Placed(), null, now += Settled).Spawn);
+
+        sync.SpawnReplicas = true;
+        Assert.Equal(7u, Assert.Single(sync.Reconcile(Placed(), null, now + 0.1).Spawn).PitonId);
+    }
+
+    [Fact]
+    public void AForgottenReplicaSpawnsAgainWhenSpawningIsAllowed()
+    {
+        var sync = Started(out var now);
+        sync.Know(Piton(7, C));
+        sync.Reconcile(Placed(), null, now += Settled);
+        sync.ForgetReplicas();
+        sync.SpawnReplicas = false;
+        sync.Know(Piton(7, C));
+        Assert.Empty(sync.Reconcile(Placed(), null, now + 0.1).Spawn);
+
+        sync.SpawnReplicas = true;
+        Assert.Equal(7u, Assert.Single(sync.Reconcile(Placed(), null, now + 0.2).Spawn).PitonId);
     }
 
     private static PitonSync Started(out double now)

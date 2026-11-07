@@ -163,6 +163,23 @@ public sealed class PitonAuthorityTests
         Assert.Empty(sink.Sends);
     }
 
+    [Fact]
+    public void LocalReplayCopiesThePartnersPitonsAndNotTheHostsOwn()
+    {
+        var sink = new RecordingSink();
+        var authority = new PitonAuthority(sink, _ => { }, _ => { });
+        authority.HandleHostPitonPlaced(1, Placement(clientPitonId: 3));
+        PlaceFromClient(authority, playerId: 10, clientPitonId: 7);
+
+        var copies = new List<ServerPitonPlaced>();
+        authority.CopyForLocalReplay(localPlayerId: 1, copies);
+
+        var copy = Assert.Single(copies);
+        Assert.Equal(10, copy.FromPlayerId);
+        Assert.False(PitonAuthority.IsOtherClimbersPiton(1, 1));
+        Assert.True(PitonAuthority.IsOtherClimbersPiton(10, 1));
+    }
+
     private static ClientPitonPlaced Placement(uint clientPitonId) => new()
     {
         PitonId = clientPitonId,

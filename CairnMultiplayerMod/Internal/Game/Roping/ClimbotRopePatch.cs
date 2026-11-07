@@ -11,13 +11,14 @@ using UnityEngine;
 namespace CairnMultiplayerMod.Internal.Game.Roping;
 
 /// <summary>
-/// The rope Cairn draws from a climber to Climbot stays hidden. The rope object is left in place:
-/// a partner rope still clones its segment prefab from it.
+/// After a tie has been made, the rope Cairn draws from a climber to Climbot stays hidden
+/// until camp. The rope object is left in place: a partner rope still clones its segment prefab from it.
 /// The logical tether is clipped to the harness only while this climber is the tied leader
 /// and has not left at a staff. That clip is what lets a piton attach, and it is also
 /// Cairn's paid-out stop. After the leader unclips there, the coil stays with the follower
-/// and this harness comes off. Anyone else keeps it down, so Climbot does not belay
-/// a climber who is not leading.
+/// and this harness comes off. Anyone else keeps it down, including a climber who untied
+/// on the wall, so Climbot does not belay a climber who is not leading. Before the first
+/// tie, and after camp, the rope is Cairn's.
 /// Do not force <see cref="RobotPawnController.ShouldDisplayRope"/> off, and do not patch the
 /// remote climbot's own update. Either one calls into il2cpp while that climbot has no frame
 /// and kills the runtime. The practice climber's climbot stays inactive. A real partner's rope
@@ -67,10 +68,9 @@ internal static class ClimbotRopePatch
         // A walking save restores Climbot off the belay inside ReadFromSavegame.
         // Taking the rope down on the frames before that removes the coroutine the
         // restore starts, and the loading screen stays on the dots it has shown.
-        if (__instance == null || SaveStillLoading()) return;
-        // The tent does not clip the rope back on by itself. Leaving it as Cairn has it
-        // is what a rest at camp stores. Hiding it here writes a climber who walked off.
-        if (BivouacSyncGate.AtCamp) return;
+        // At camp the rope is Cairn's. Hiding it here would store a climber who walked off.
+        if (__instance == null || SaveStillLoading() || BivouacSyncGate.AtCamp) return;
+        if (!TeamAnchorSession.RulesArmed) return;
         try
         {
             // The mesh stays hidden below. A piton needs the securing rope clipped to the
@@ -140,6 +140,40 @@ internal static class ClimbotRopePatch
         }
     }
 
+    /// <summary>
+    /// Gives the rope object back once, after this patch has been standing it down.
+    /// Does not clip or unclip the harness. Cairn's own off-belay does that.
+    /// </summary>
+    internal static void HandBackToCairn()
+    {
+        if (SaveStillLoading()) return;
+        try
+        {
+            RobotPawnController robot = null;
+            var all = UnityEngine.Object.FindObjectsOfType<RobotPawnController>();
+            if (all != null)
+            {
+                foreach (var candidate in all)
+                {
+                    if (candidate == null) continue;
+                    robot = candidate;
+                    break;
+                }
+            }
+
+            if (robot == null) return;
+            var rope = robot.GetRope();
+            if (rope != null) rope.SetVisible(true, false);
+            var coil = robot.ropeBetweenArmAndStock;
+            if (coil != null) coil.SetVisible(true, false);
+            robot.SetRopeActive(true, false);
+        }
+        catch (Exception ex)
+        {
+            ModLog.SuppressedException("rope.climbot-hand-back", ex);
+        }
+    }
+
     private static bool LeaderLifelineIsAttached(RobotPawnController robot)
     {
         var harness = robot.AssociatedPawn != null ? robot.AssociatedPawn.harness : null;
@@ -155,7 +189,7 @@ internal static class ClimbotRopePatch
     /// </summary>
     internal static void HideRemote(NetplayRemoteClimbot climbot)
     {
-        if (climbot == null || climbot.Pointer == IntPtr.Zero) return;
+        if (climbot == null || climbot.Pointer == IntPtr.Zero || SaveStillLoading()) return;
         try
         {
             var rope = climbot.Rope;
@@ -165,12 +199,57 @@ internal static class ClimbotRopePatch
         catch (Exception ex) { ModLog.SuppressedException("rope.remote-climbot-hide", ex); }
     }
 
+    /// <summary>
+    /// Puts a partner climbot rope back once the latch is clear. Does not destroy it.
+    /// A partner rope still clones its segment prefab from this object.
+    /// </summary>
+    internal static void ShowRemote(NetplayRemoteClimbot climbot)
+    {
+        if (climbot == null || climbot.Pointer == IntPtr.Zero || SaveStillLoading()) return;
+        try
+        {
+            var rope = climbot.Rope;
+            if (rope == null || rope.Pointer == IntPtr.Zero || !rope.IsInitialized) return;
+            Reveal(rope);
+        }
+        catch (Exception ex) { ModLog.SuppressedException("rope.remote-climbot-show", ex); }
+    }
+
     private static void AfterRopeLine(LogicalRopeRenderer __instance)
     {
-        if (__instance == null || BivouacSyncGate.AtCamp) return;
+        if (__instance == null || SaveStillLoading() || BivouacSyncGate.AtCamp) return;
+        if (!TeamAnchorSession.RulesArmed) return;
         if (!RendererPointers.Contains(__instance.Pointer)) return;
         try { HideLine(__instance); }
         catch (Exception ex) { ModLog.SuppressedException("rope.climbot-line", ex); }
+    }
+
+    private static void Reveal(LogicalRope rope)
+    {
+        if (rope == null || rope.Pointer == IntPtr.Zero || !rope.IsInitialized) return;
+        rope.SetVisible(true, false);
+        rope.shouldUseRopeLineRendererLateUpdate = true;
+        var renderer = rope.logicalRopeRenderer;
+        if (renderer != null)
+        {
+            RendererPointers.Remove(renderer.Pointer);
+            renderer.shouldUseRopeLineRendererLateUpdate = true;
+            var line = renderer.lineRenderer;
+            if (line != null) line.enabled = true;
+        }
+
+        var parts = rope.ropeParts;
+        if (parts == null) return;
+        for (var i = 0; i < parts.Count; i++)
+        {
+            var part = parts[i];
+            if (part == null) continue;
+            part.Visible = true;
+            var meshes = part.GetComponentsInChildren<Renderer>(true);
+            if (meshes == null) continue;
+            for (var mesh = 0; mesh < meshes.Length; mesh++)
+                if (meshes[mesh] != null) meshes[mesh].enabled = true;
+        }
     }
 
     private static void Suppress(LogicalRope rope)
