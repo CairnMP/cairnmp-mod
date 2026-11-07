@@ -13,6 +13,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.4.4](#244--2026-11-07-stable) | 2026-11-07 | Stable | The 2.4.2 and 2.4.3 fixes on the stable channel |
 | [2.4.3](#243--2026-11-05-beta) | 2026-11-05 | Beta | New Story saves keep their difficulty instead of turning into Summit |
 | [2.4.2](#242--2026-11-04-beta) | 2026-11-04 | Beta | Main menu label and partner rope line fixes |
 | [2.4.1](#241--2026-10-30-stable) | 2026-10-30 | Stable | First stable build for Cairn 1.1.593 |
@@ -42,6 +43,23 @@ All notable CairnMP changes are documented here. Releases follow
 | [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
 | [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.4.4] — 2026-11-07 (stable)
+
+> Brings the stable channel the fixes from the 2.4.2 and 2.4.3 betas. The code is the
+> same as 2.4.3. The protocol stays **16**, so a lobby can mix this build with 2.4.1.
+
+### Fixed
+
+- A new multiplayer Story game keeps the difficulty the lobby picked, instead of turning into Summit mode. (#43)
+- The main menu no longer shows two Story buttons. (#33)
+- A new or retied partner rope stays between the two harnesses instead of stretching to the horizon. (#42)
+
+### Thanks
+
+- @Tippy-Tipster and @fakedude2 for these fixes.
 
 ---
 
