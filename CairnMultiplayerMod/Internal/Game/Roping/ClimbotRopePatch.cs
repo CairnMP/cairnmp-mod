@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CairnMultiplayerMod.Internal.Diagnostics;
+using CairnMultiplayerMod.Internal.Game.Bivouac;
 using HarmonyLib;
 using Il2Cpp;
 using Il2CppTheGameBakers.Cairn;
@@ -67,6 +68,9 @@ internal static class ClimbotRopePatch
         // Taking the rope down on the frames before that removes the coroutine the
         // restore starts, and the loading screen stays on the dots it has shown.
         if (__instance == null || SaveStillLoading()) return;
+        // The tent does not clip the rope back on by itself. Leaving it as Cairn has it
+        // is what a rest at camp stores. Hiding it here writes a climber who walked off.
+        if (BivouacSyncGate.AtCamp) return;
         try
         {
             // The mesh stays hidden below. A piton needs the securing rope clipped to the
@@ -163,7 +167,8 @@ internal static class ClimbotRopePatch
 
     private static void AfterRopeLine(LogicalRopeRenderer __instance)
     {
-        if (__instance == null || !RendererPointers.Contains(__instance.Pointer)) return;
+        if (__instance == null || BivouacSyncGate.AtCamp) return;
+        if (!RendererPointers.Contains(__instance.Pointer)) return;
         try { HideLine(__instance); }
         catch (Exception ex) { ModLog.SuppressedException("rope.climbot-line", ex); }
     }

@@ -374,6 +374,15 @@ internal sealed class PitonSync
         remote.RetryAt = now + SpawnRetrySeconds;
     }
 
+    /// <summary>
+    /// A piton this client did not spawn as its own gear. An own piton stays writable
+    /// even if something else also noted the pointer.
+    /// </summary>
+    internal bool IsReplica(IntPtr pointer)
+        => pointer != IntPtr.Zero
+           && !_ownByPointer.ContainsKey(pointer)
+           && (_remoteByPointer.ContainsKey(pointer) || _foreign.Contains(pointer));
+
     /// <summary>True for a pointer already accounted for, whose position need not be read.</summary>
     internal bool Tracks(IntPtr pointer)
         => _ownByPointer.ContainsKey(pointer) || _remoteByPointer.ContainsKey(pointer) || _foreign.Contains(pointer);

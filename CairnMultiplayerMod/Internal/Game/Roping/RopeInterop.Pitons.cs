@@ -83,6 +83,8 @@ internal static partial class RopeInterop
 
     /// <summary>The host announced a piton. It is created on the next frame of play, so one
     /// announced during a load or a camp is not lost.</summary>
+    internal static bool IsReplicaPiton(IntPtr pointer) => _pitons.IsReplica(pointer);
+
     internal static void KnowRemotePiton(ServerPitonPlaced placed) => _pitons.Know(placed);
 
     internal static void ForgetRemotePiton(uint pitonId) => _pitons.Forget(pitonId);

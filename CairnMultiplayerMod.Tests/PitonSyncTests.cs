@@ -238,6 +238,24 @@ public sealed class PitonSyncTests
     }
 
     [Fact]
+    public void AReplicaIsSomeoneElsesPitonAndAnOwnPitonIsNot()
+    {
+        var remote = WithLiveRemote(out _);
+        Assert.True(remote.IsReplica(new IntPtr(70)));
+        Assert.False(remote.IsReplica(IntPtr.Zero));
+        Assert.False(remote.IsReplica(new IntPtr(1)));
+
+        var own = Started(out var t);
+        own.Reconcile(Placed((1, A)), null, t + Settled);
+        Assert.False(own.IsReplica(new IntPtr(1)));
+
+        own.Ignore(new IntPtr(1));
+        Assert.False(own.IsReplica(new IntPtr(1)));
+        own.Ignore(new IntPtr(9));
+        Assert.True(own.IsReplica(new IntPtr(9)));
+    }
+
+    [Fact]
     public void ANewSessionNeverReusesOneOfOurIds()
     {
         var sync = Started(out var t);

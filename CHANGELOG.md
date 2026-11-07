@@ -26,11 +26,6 @@ All notable CairnMP changes are documented here. Releases follow
   coil, and "paid out" when a further step away is refused.
 
 ### Fixed
-- Loading a rope-team save no longer stays on the loading screen when that
-  save was made while walking. Restoring Climbot off the belay asked for a
-  state change that had no coroutine, and that error stopped the save. A save
-  made while climbing was not affected. The climbot rope is left alone until
-  that restore has finished.
 - Rope Team: after the leader unclips at a planted staff, the coil comes off
   their harness. They can walk the ledge. The follower keeps the rope to the staff.
 - Rope Team: taking a nearby piton is P on the keyboard. E remains off-belay.
@@ -41,6 +36,9 @@ All notable CairnMP changes are documented here. Releases follow
 - Rope Team saves and loads only at a bivouac. A marker, an autosave, a quick
   save, and save-and-quit on the pitch do not write. A save that does not resume
   in camp does not load. The file stays on disk. Solo play is unchanged.
+- A Rope Team save made at a bivouac leaves the pitons out of the file and leaves
+  Climbot on the belay Cairn uses at camp. Pitons that were in the rock are not
+  put back in the bag. The bag is the one the climber is carrying.
 - Rope Team: press the right stick to tie or untie the rope. L still does it
   on a keyboard.
 - Rope Team: L ties the rope only when the two climbers are within 1 m.

@@ -29,6 +29,33 @@ public sealed class CampSavePolicyTests
     }
 
     [Fact]
+    public void OnlyARopeTeamCampIsRewritten()
+    {
+        Assert.False(CampSavePolicy.IsCampFile(ropeTeamSession: false, atCamp: true));
+        Assert.False(CampSavePolicy.IsCampFile(ropeTeamSession: true, atCamp: false));
+        Assert.True(CampSavePolicy.IsCampFile(ropeTeamSession: true, atCamp: true));
+    }
+
+    [Fact]
+    public void ACampWriteSkipsPitonsReplicasAndTheStaff()
+    {
+        Assert.False(CampSavePackage.WritePiton(campWrite: true, replica: false, plantedStaff: false));
+        Assert.False(CampSavePackage.WritePiton(campWrite: false, replica: true, plantedStaff: false));
+        Assert.False(CampSavePackage.WritePiton(campWrite: false, replica: false, plantedStaff: true));
+        Assert.True(CampSavePackage.WritePiton(campWrite: false, replica: false, plantedStaff: false));
+    }
+
+    [Fact]
+    public void CampBelayIsNotOrderedOff()
+    {
+        var stopped = true;
+        byte streak = 4;
+        CampSavePackage.KeepCampBelay(ref stopped, ref streak);
+        Assert.False(stopped);
+        Assert.Equal(0, streak);
+    }
+
+    [Fact]
     public void AStuckBivouacFlagOnTheWallIsNotCamp()
     {
         Assert.False(CampSavePolicy.AtCamp(

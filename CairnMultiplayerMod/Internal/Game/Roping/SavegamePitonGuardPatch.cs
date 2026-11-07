@@ -6,7 +6,10 @@ using UnityEngine;
 
 namespace CairnMultiplayerMod.Internal.Game.Roping;
 
-/// <summary>Reports piton save failures without hiding a failed or partial save.</summary>
+/// <summary>
+/// Skips a piton Cairn must not store, and reports every other piton failure
+/// without hiding a failed or partial save.
+/// </summary>
 internal static unsafe class SavegamePitonGuardPatch
 {
     private static readonly HarmonyLib.Harmony SaveGuardHarmony = new("CairnMultiplayerMod.SaveGuard");
@@ -34,7 +37,7 @@ internal static unsafe class SavegamePitonGuardPatch
             }
 
             var prefix = typeof(SavegamePitonGuardPatch).GetMethod(
-                nameof(SkipPlantedStaff),
+                nameof(AllowPitonWrite),
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
             SaveGuardHarmony.Patch(target, prefix: new HarmonyMethod(prefix), finalizer: new HarmonyMethod(finalizer));
             _saveGuardInstalled = true;
@@ -59,16 +62,24 @@ internal static unsafe class SavegamePitonGuardPatch
         }
     }
 
-    /// <summary>A planted staff is not gear. Leaving it out of the save does not hide a failed write.</summary>
-    private static bool SkipPlantedStaff(Piton __instance)
+    /// <summary>
+    /// False skips the original. A camp file stores none of them. A replica is skipped
+    /// in every mode, and so is a planted staff. Any other failure still runs and still throws.
+    /// </summary>
+    private static bool AllowPitonWrite(Piton __instance)
     {
+        if (CampSaveSession.WritingCampFile) return false;
         try
         {
-            return __instance == null || !TopAnchorSession.OwnsPointer(__instance.Pointer);
+            if (__instance == null) return true;
+            return CampSavePackage.WritePiton(
+                campWrite: false,
+                replica: RopeInterop.IsReplicaPiton(__instance.Pointer),
+                plantedStaff: TopAnchorSession.OwnsPointer(__instance.Pointer));
         }
         catch (Exception exception)
         {
-            ModLog.SuppressedException("rope.staff-save", exception);
+            ModLog.SuppressedException("rope.piton-save", exception);
             return true;
         }
     }

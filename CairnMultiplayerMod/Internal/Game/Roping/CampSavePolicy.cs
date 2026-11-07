@@ -12,6 +12,10 @@ internal static class CampSavePolicy
     internal static bool MayLoad(bool ropeTeamSession, bool fileIsInBivouac)
         => !ropeTeamSession || fileIsInBivouac;
 
+    /// <summary>The write that may correct the file. Solo and a pitch save are not it.</summary>
+    internal static bool IsCampFile(bool ropeTeamSession, bool atCamp)
+        => ropeTeamSession && atCamp;
+
     /// <summary>
     /// The indoor scene counts. A lifecycle flag that has been judged stuck does not,
     /// because that flag can stay on after the climber is back on the wall.

@@ -22,4 +22,15 @@ internal static class CampSaveSession
 
     internal static bool MayLoad(bool fileIsInBivouac)
         => CampSavePolicy.MayLoad(RopeTeamSession, fileIsInBivouac);
+
+    /// <summary>
+    /// True from the start of a Rope Team bivouac <c>WriteToSavegame</c> until its
+    /// callback. The fill can finish after the method returns.
+    /// </summary>
+    internal static bool WritingCampFile { get; private set; }
+
+    internal static void BeginCampFile()
+        => WritingCampFile = CampSavePolicy.IsCampFile(RopeTeamSession, BivouacSyncGate.AtCamp);
+
+    internal static void EndCampFile() => WritingCampFile = false;
 }
