@@ -12,6 +12,9 @@ All notable CairnMP changes are documented here. Releases follow
 ## [Unreleased]
 
 ### Added
+- Rope Team: the rope between the two climbers stops at the coil. Cairn's own
+  rope check refuses a step that would stretch it. The rope does not catch a
+  fall, and pitons stay on each climber's own rope.
 - Temporary: F9 spawns a practice climber beside the host. H takes over his
   body and flies it with the mouse and keyboard, so the piton chain can be
   tried alone. Tie him with the rope control. He takes a chain piton when he
@@ -19,8 +22,17 @@ All notable CairnMP changes are documented here. Releases follow
 - Temporary: while the rope is tied, a gold marker shows the piton protecting
   the leader and a red marker shows the follower's. The HUD says "Leader
   unprotected" when the leader has none.
+- Temporary: while the rope is tied, the HUD shows the rope path against the
+  coil, and "paid out" when a further step away is refused.
 
 ### Fixed
+- Loading a rope-team save no longer stays on the loading screen when that
+  save was made while walking. Restoring Climbot off the belay asked for a
+  state change that had no coroutine, and that error stopped the save. A save
+  made while climbing was not affected. The climbot rope is left alone until
+  that restore has finished.
+- Rope Team: after the leader unclips at a planted staff, the coil comes off
+  their harness. They can walk the ledge. The follower keeps the rope to the staff.
 - Rope Team: taking a nearby piton is P on the keyboard. E remains off-belay.
 - Rope Team: on a controller, a tap of D-pad up takes a nearby piton. Holding
   D-pad up still places one.

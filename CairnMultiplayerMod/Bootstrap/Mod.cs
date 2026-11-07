@@ -124,6 +124,8 @@ public partial class Mod : MelonMod
             Features.RegisterAll(FeatureRegistry.CreateAll(), new Version(Protocol.GameVersion));
             RopeInterop.BindPitonPoolChannel(
                 Features.RegisterStream("rope.piton-pool", RopeInterop.AcceptPitonPool));
+            RopeInterop.BindTopAnchorChannel(
+                Features.RegisterStream("rope.top-anchor", RopeInterop.AcceptTopAnchor));
         }
         catch (Exception ex)
         {
@@ -175,6 +177,7 @@ public partial class Mod : MelonMod
             () => Network?.IsHandshakeComplete == true
                   && _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam);
         LeaderProtectionMarker.Bind(_hud);
+        RopeLengthReadout.Bind(_hud);
         PracticePartnerController.Bind(_hud);
         Player = new PlayerStateBroadcaster(
             Network, _runtimeState, Rope.Reset, () => Bivouac?.BlocksGameplaySync() == true,

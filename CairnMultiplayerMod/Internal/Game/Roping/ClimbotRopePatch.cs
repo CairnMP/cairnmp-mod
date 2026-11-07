@@ -12,8 +12,10 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 /// <summary>
 /// The rope Cairn draws from a climber to Climbot stays hidden. The rope object is left in place:
 /// a partner rope still clones its segment prefab from it.
-/// The logical tether is clipped to the harness only while this climber is the tied leader,
-/// which is what lets a piton attach. Anyone else keeps it down, so Climbot does not belay
+/// The logical tether is clipped to the harness only while this climber is the tied leader
+/// and has not left at a staff. That clip is what lets a piton attach, and it is also
+/// Cairn's paid-out stop. After the leader unclips there, the coil stays with the follower
+/// and this harness comes off. Anyone else keeps it down, so Climbot does not belay
 /// a climber who is not leading.
 /// Do not force <see cref="RobotPawnController.ShouldDisplayRope"/> off, and do not patch the
 /// remote climbot's own update. Either one calls into il2cpp while that climbot has no frame
@@ -27,6 +29,7 @@ internal static class ClimbotRopePatch
     private static bool _installed;
     private static bool _logged;
     private static bool _loggedLeaderRope;
+    private static bool _loggedLeaderRelease;
 
     public static void Install()
     {
@@ -55,24 +58,45 @@ internal static class ClimbotRopePatch
         _installed = false;
         _logged = false;
         _loggedLeaderRope = false;
+        _loggedLeaderRelease = false;
     }
 
     private static void AfterLocalRobot(RobotPawnController __instance)
     {
-        if (__instance == null) return;
+        // A walking save restores Climbot off the belay inside ReadFromSavegame.
+        // Taking the rope down on the frames before that removes the coroutine the
+        // restore starts, and the loading screen stays on the dots it has shown.
+        if (__instance == null || SaveStillLoading()) return;
         try
         {
             // The mesh stays hidden below. A piton needs the securing rope clipped to the
-            // harness. Turning the rope object on is not that clip. Only the tied leader gets it.
-            // Everyone else stays unclipped, so Climbot does not belay them.
-            if (TeamAnchorSession.IsLocalLeader)
+            // harness. Turning the rope object on is not that clip. Only the tied leader who
+            // is still on the rope gets it. After they unclip at a staff, IsLocalLeader stays
+            // true for the follower's chain, and this clip is what keeps Cairn's paid-out stop.
+            if (TeamAnchorChain.KeepsClimbotCoil(TeamAnchorSession.IsLocalLeader, TeamAnchorSession.LeaderLeft))
             {
+                _loggedLeaderRelease = false;
                 if (!LeaderLifelineIsAttached(__instance))
                     __instance.SetAttachedToHarness(true);
                 else if (!_loggedLeaderRope)
                 {
                     _loggedLeaderRope = true;
                     ModLog.Info("[Rope] The leader's lifeline is clipped on.");
+                }
+            }
+            else if (TeamAnchorSession.IsLocalLeader && TeamAnchorSession.LeaderLeft)
+            {
+                // The rope object stays. The follower's pitons are still on it. Only the
+                // harness comes off, which is the clip Cairn's paid-out stop follows.
+                if (LeaderLifelineIsAttached(__instance))
+                {
+                    __instance.SetAttachedToHarness(false);
+                    if (!_loggedLeaderRelease)
+                    {
+                        _loggedLeaderRelease = true;
+                        _loggedLeaderRope = false;
+                        ModLog.Info("[Rope] The leader left the rope. The lifeline is off their harness.");
+                    }
                 }
             }
             else if (__instance.RopeDisplayed || __instance.HasSecuringRope || LeaderLifelineIsAttached(__instance))
@@ -88,6 +112,27 @@ internal static class ClimbotRopePatch
         catch (Exception ex)
         {
             ModLog.SuppressedException("rope.climbot-hide", ex);
+        }
+    }
+
+    private static bool SaveStillLoading()
+    {
+        try
+        {
+            var manager = GlobalGameManager.Instance;
+            if (manager == null) return false;
+            var loading = manager.loadingState;
+            return loading == GlobalGameManager.LoadingState.Loading
+                || loading == GlobalGameManager.LoadingState.PreLoaded
+                || loading == GlobalGameManager.LoadingState.Loaded
+                || loading == GlobalGameManager.LoadingState.GearingUp
+                || loading == GlobalGameManager.LoadingState.Initialized
+                || loading == GlobalGameManager.LoadingState.LoadingSave;
+        }
+        catch (Exception ex)
+        {
+            ModLog.SuppressedException("rope.climbot-save-load", ex);
+            return false;
         }
     }
 

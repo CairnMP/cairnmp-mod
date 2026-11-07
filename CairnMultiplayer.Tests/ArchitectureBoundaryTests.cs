@@ -246,9 +246,76 @@ public sealed class ArchitectureBoundaryTests
             StringComparison.Ordinal);
         Assert.Contains("ToFallingModuleUnsecure", pitons, StringComparison.Ordinal);
 
-        var rope = interop + pitons + couple + chain + session;
+        var lengthPatch = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "RopeLengthPatch.cs"));
+        var lengthPolicy = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "RopeLengthPolicy.cs"));
+        Assert.DoesNotMatch(@"\.securingRope\s*=(?!=)", lengthPatch);
+        Assert.DoesNotMatch(@"\.securingRope\s*=(?!=)", lengthPolicy);
+
+        var lengthReadout = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "RopeLengthReadout.cs"));
+        Assert.DoesNotMatch(@"\.securingRope\s*=(?!=)", lengthReadout);
+
+        var staff = File.ReadAllText(Path.Combine(
+                ProjectDirectory, "Internal", "Game", "Roping", "RopeInterop.TopAnchor.cs"))
+            + File.ReadAllText(Path.Combine(
+                ProjectDirectory, "Internal", "Game", "Roping", "TopAnchorPolicy.cs"))
+            + File.ReadAllText(Path.Combine(
+                ProjectDirectory, "Internal", "Game", "Roping", "TopAnchorSession.cs"))
+            + File.ReadAllText(Path.Combine(
+                ProjectDirectory, "Internal", "Game", "Roping", "TopAnchorPlant.cs"))
+            + File.ReadAllText(Path.Combine(
+                ProjectDirectory, "Internal", "Game", "Roping", "TopAnchorMessage.cs"));
+        Assert.DoesNotMatch(@"\.securingRope\s*=(?!=)", staff);
+
+        var heldPath = MethodBody(lengthPatch, "private static bool TryBuildHeldPath(");
+        Assert.Contains("AppendChain", heldPath, StringComparison.Ordinal);
+        Assert.DoesNotContain("partner", heldPath, StringComparison.Ordinal);
+
+        var topAnchor = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "RopeInterop.TopAnchor.cs"));
+        var tick = MethodBody(topAnchor, "private static void TickTopAnchor(");
+        Assert.Contains("if (TeamAnchorSession.LeaderLeft)", tick, StringComparison.Ordinal);
+        Assert.DoesNotContain("LeaderLeft && TeamAnchorSession.IsLocalFollower", tick, StringComparison.Ordinal);
+        var heldDraw = MethodBody(topAnchor, "private static void DrawHeldLine(");
+        Assert.Contains("TryGetHeldFollowerPosition", heldDraw, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryGetClimberPosition", heldDraw, StringComparison.Ordinal);
+
+        var rope = interop + pitons + couple + chain + session + lengthPatch + lengthPolicy + lengthReadout + staff;
         Assert.DoesNotContain(".AddForce(", rope, StringComparison.Ordinal);
         Assert.DoesNotContain(".velocity", rope, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TeamRopeStopsAtTheCoilThroughCairnsOwnCheck()
+    {
+        var patch = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "RopeLengthPatch.cs"));
+        var registry = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "GamePatchRegistry.cs"));
+        var draw = MethodBody(File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "RopeInterop.Belay.cs")),
+            "internal void DrawHarnessLine()");
+
+        Assert.Contains("nameof(Harness.LifelineCanGoToward)", patch, StringComparison.Ordinal);
+        Assert.Contains("postfix:", patch, StringComparison.Ordinal);
+        Assert.Contains("PawnStateType.Falling", patch, StringComparison.Ordinal);
+        Assert.Contains("PawnStateType.Dead", patch, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClampDist", patch, StringComparison.Ordinal);
+        Assert.DoesNotContain("HardValidateTargetBodyPosition", patch, StringComparison.Ordinal);
+        Assert.DoesNotContain("OnRopeForbidGoingToward", patch, StringComparison.Ordinal);
+        Assert.Contains("RopeLengthPatch.Install", registry, StringComparison.Ordinal);
+        Assert.Contains("RopeLengthPatch.Uninstall", registry, StringComparison.Ordinal);
+        Assert.Contains("RopeLengthPolicy.IsPaidOut", draw, StringComparison.Ordinal);
+
+        var sync = MethodBody(File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "RopeInterop.Pitons.cs")),
+            "internal static void SyncPitons(");
+        var bootstrap = File.ReadAllText(Path.Combine(ProjectDirectory, "Bootstrap", "Mod.cs"));
+        Assert.Contains("RopeLengthReadout.Tick()", sync, StringComparison.Ordinal);
+        Assert.Contains("RopeLengthReadout.Hide()", sync, StringComparison.Ordinal);
+        Assert.Contains("RopeLengthReadout.Bind", bootstrap, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -264,16 +331,40 @@ public sealed class ArchitectureBoundaryTests
         Assert.DoesNotContain("NetplayRemoteClimbot.Update", source, StringComparison.Ordinal);
         Assert.Contains("HideRemote", source, StringComparison.Ordinal);
         Assert.Contains("TeamAnchorSession.IsLocalLeader", source, StringComparison.Ordinal);
+        Assert.Contains("TeamAnchorChain.KeepsClimbotCoil", source, StringComparison.Ordinal);
+        Assert.Contains("TeamAnchorSession.LeaderLeft", source, StringComparison.Ordinal);
         Assert.Contains("HasSecuringRope", source, StringComparison.Ordinal);
         Assert.Contains("SetAttachedToHarness(true)", source, StringComparison.Ordinal);
         Assert.Contains("SetAttachedToHarness(false)", source, StringComparison.Ordinal);
         Assert.Contains("IsAttached", source, StringComparison.Ordinal);
         Assert.Contains("SetRopeActive(false, false)", source, StringComparison.Ordinal);
         Assert.Contains("SetVisible(false, false)", source, StringComparison.Ordinal);
+        Assert.Contains("SaveStillLoading()", source, StringComparison.Ordinal);
+        Assert.Contains("LoadingState.LoadingSave", source, StringComparison.Ordinal);
         Assert.DoesNotContain("IsLinked", source, StringComparison.Ordinal);
         Assert.DoesNotContain("Object.Destroy", source, StringComparison.Ordinal);
         Assert.Contains("ClimbotRopePatch.Install", registry, StringComparison.Ordinal);
         Assert.Contains("ClimbotRopePatch.Uninstall", registry, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AMissingClimbotCoroutineDoesNotStopTheSaveLoad()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "SavegameLoadPatch.cs"));
+        var registry = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "GamePatchRegistry.cs"));
+        var goToState = MethodBody(source, "private static Exception GoToStateFinalizer(");
+        var read = MethodBody(source, "private static Exception ReadFromSavegameFinalizer(");
+
+        Assert.Contains("!_readingSave", goToState, StringComparison.Ordinal);
+        Assert.Contains("IsMissingStateCoroutine(__exception)", goToState, StringComparison.Ordinal);
+        Assert.Contains("return __exception", goToState, StringComparison.Ordinal);
+        Assert.Contains("return null", goToState, StringComparison.Ordinal);
+        Assert.Contains("callback?.Invoke(true)", read, StringComparison.Ordinal);
+        Assert.Contains("return __exception", read, StringComparison.Ordinal);
+        Assert.Contains("SavegameLoadPatch.Install", registry, StringComparison.Ordinal);
+        Assert.Contains("SavegameLoadPatch.Uninstall", registry, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -288,6 +379,7 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("AllowsPlacement", source, StringComparison.Ordinal);
         Assert.Contains("NetplayNotRopeHead", source, StringComparison.Ordinal);
         Assert.Contains("PitonUnusabilityReason.Usable", source, StringComparison.Ordinal);
+        Assert.Contains("LeaderLeft", source, StringComparison.Ordinal);
         Assert.DoesNotContain("RefuseWhenFollower", source, StringComparison.Ordinal);
     }
 

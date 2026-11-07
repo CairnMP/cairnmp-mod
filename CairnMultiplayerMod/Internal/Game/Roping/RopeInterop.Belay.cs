@@ -65,6 +65,30 @@ internal static partial class RopeInterop
         }
     }
 
+    /// <summary>The coil and the two harnesses of the rope tied for this client.</summary>
+    internal static bool TryGetLiveTeamRope(out Harness local, out Harness partner, out float coil)
+    {
+        local = null;
+        partner = null;
+        coil = 0f;
+        var binding = _ropeBinding;
+        if (binding == null || !binding.CanMeasure) return false;
+        local = binding.MeasuredLocal;
+        partner = binding.MeasuredPartner;
+        coil = binding.CoilLength;
+        if (float.IsFinite(coil) && coil > 0f) _heldCoil = coil;
+        return float.IsFinite(coil) && coil > 0f;
+    }
+
+    private static float _heldCoil;
+
+    /// <summary>The last coil length, kept after the leader unclips and the partner rope is gone.</summary>
+    internal static bool TryGetHeldCoil(out float coil)
+    {
+        coil = _heldCoil;
+        return float.IsFinite(coil) && coil > 0f;
+    }
+
     internal static bool BeforeRopePhysics(LogicalRope rope)
     {
         // A retie calls ForceInitialize while the session is still waiting. Skipping
@@ -106,6 +130,57 @@ internal static partial class RopeInterop
         _ropeSession = null; _ropeBinding = null; _ropePartner = -1;
         _dropRopeAfterPhysics = false;
         session?.Dispose();
+    }
+
+    /// <summary>
+    /// The visible rope. A two-point span sags in the middle. A longer span sags on each
+    /// segment, which is how the line runs through pitons and up to a planted staff.
+    /// </summary>
+    private static void DrawRopeSpan(LineRenderer line, List<Vector3> points, bool taut)
+    {
+        if (line == null || points == null || points.Count < 2)
+        {
+            if (line != null) line.enabled = false;
+            return;
+        }
+
+        line.useWorldSpace = true;
+        if (points.Count == 2)
+        {
+            const int pointCount = 12;
+            var span = Vector3.Distance(points[0], points[1]);
+            var sag = taut ? 0f : Mathf.Min(0.35f, span * 0.08f);
+            line.positionCount = pointCount;
+            for (var i = 0; i < pointCount; i++)
+            {
+                var t = i / (float)(pointCount - 1);
+                var point = Vector3.Lerp(points[0], points[1], t);
+                point.y -= 4f * t * (1f - t) * sag;
+                line.SetPosition(i, point);
+            }
+            line.enabled = true;
+            return;
+        }
+
+        const int samples = 4;
+        var segments = points.Count - 1;
+        line.positionCount = segments * samples + 1;
+        var index = 0;
+        for (var segment = 0; segment < segments; segment++)
+        {
+            var from = points[segment];
+            var to = points[segment + 1];
+            var sag = taut ? 0f : Mathf.Min(0.35f, Vector3.Distance(from, to) * 0.08f);
+            for (var i = 0; i < samples; i++)
+            {
+                var t = i / (float)samples;
+                var point = Vector3.Lerp(from, to, t);
+                point.y -= 4f * t * (1f - t) * sag;
+                line.SetPosition(index++, point);
+            }
+        }
+        line.SetPosition(index, points[points.Count - 1]);
+        line.enabled = true;
     }
 
     private static Il2CppTheGameBakers.Cairn.RobotPawnController _localClimbotCached;
@@ -155,6 +230,10 @@ internal static partial class RopeInterop
             => _renderer != null && renderer != null && _renderer.Pointer == renderer.Pointer;
         internal bool HasBothAttachments => !_disposed && _attached && _rope != null && _local != null && _partner != null
             && _rope.IsAttached(_local.Cast<IRopeHolder>()) && _rope.IsAttached(_partner.Cast<IRopeHolder>());
+        internal bool CanMeasure => !_disposed && _local != null && _partner != null;
+        internal Harness MeasuredLocal => _local;
+        internal Harness MeasuredPartner => _partner;
+        internal float CoilLength => _length;
 
         public bool IsReady
         {
@@ -380,9 +459,19 @@ internal static partial class RopeInterop
             if (_disposed || line == null) return;
             if (_rope != null) _rope.shouldUseRopeLineRendererLateUpdate = false;
             if (_renderer != null) _renderer.shouldUseRopeLineRendererLateUpdate = false;
+            var held = TeamAnchorSession.LeaderLeft;
+            // The leader's harness is off this rope. The follower's line is drawn
+            // on its own, including on the leader's screen for the practice ghost.
+            if (held && TeamAnchorSession.IsLocalLeader)
+            {
+                line.enabled = false;
+                return;
+            }
+
+            var partner = default(Vector3);
             if (!TryGetHarnessAttachPosition(_local, out var local)
-                || !TryGetHarnessAttachPosition(_partner, out var partner)
-                || !IsFinitePosition(local) || !IsFinitePosition(partner))
+                || !IsFinitePosition(local)
+                || (!held && (!TryGetHarnessAttachPosition(_partner, out partner) || !IsFinitePosition(partner))))
             {
                 line.enabled = false;
                 return;
@@ -395,77 +484,43 @@ internal static partial class RopeInterop
             {
                 // The stored point is the piton in the rock. The rope runs through the
                 // quickdraw's rope carabiner, which hangs off that piton and swings.
+                // A staff anchor ties at the top of the planted stick instead.
                 TeamAnchorSession.CopyIds(_chainIds);
                 if (TeamAnchorSession.IsLocalLeader) _linePoints.Add(partner);
                 else _linePoints.Add(local);
                 for (var i = 0; i < _chainPoints.Count; i++)
                 {
                     var stored = _chainPoints[i];
-                    var point = i < _chainIds.Count && TryGetQuickdrawCarabiner(_chainIds[i], out var carabiner)
-                        ? carabiner
-                        : new Vector3(stored.X, stored.Y, stored.Z);
+                    var id = i < _chainIds.Count ? _chainIds[i] : 0;
+                    var point = ChainDrawPoint(id, new System.Numerics.Vector3(stored.X, stored.Y, stored.Z));
                     if (IsFinitePosition(point)) _linePoints.Add(point);
                 }
-                _linePoints.Add(TeamAnchorSession.IsLocalLeader ? local : partner);
+
+                if (!held) _linePoints.Add(TeamAnchorSession.IsLocalLeader ? local : partner);
             }
-            else
+            else if (!held)
             {
                 _linePoints.Add(local);
                 _linePoints.Add(partner);
             }
-
-            DrawSagged(line, _linePoints);
-            if (_harnessLineLogged) return;
-            _harnessLineLogged = true;
-            ModLog.Info("[RopeTeam] Rope drawn between the harnesses, points=" + _linePoints.Count);
-        }
-
-        private static void DrawSagged(LineRenderer line, List<Vector3> points)
-        {
-            if (points.Count < 2)
+            else
             {
                 line.enabled = false;
                 return;
             }
 
-            line.useWorldSpace = true;
-            if (points.Count == 2)
-            {
-                const int pointCount = 12;
-                var span = Vector3.Distance(points[0], points[1]);
-                var sag = Mathf.Min(0.35f, span * 0.08f);
-                line.positionCount = pointCount;
-                for (var i = 0; i < pointCount; i++)
-                {
-                    var t = i / (float)(pointCount - 1);
-                    var point = Vector3.Lerp(points[0], points[1], t);
-                    point.y -= 4f * t * (1f - t) * sag;
-                    line.SetPosition(i, point);
-                }
-                line.enabled = true;
-                return;
-            }
-
-            const int samples = 4;
-            var segments = points.Count - 1;
-            line.positionCount = segments * samples + 1;
-            var index = 0;
-            for (var segment = 0; segment < segments; segment++)
-            {
-                var from = points[segment];
-                var to = points[segment + 1];
-                var sag = Mathf.Min(0.35f, Vector3.Distance(from, to) * 0.08f);
-                for (var i = 0; i < samples; i++)
-                {
-                    var t = i / (float)samples;
-                    var point = Vector3.Lerp(from, to, t);
-                    point.y -= 4f * t * (1f - t) * sag;
-                    line.SetPosition(index++, point);
-                }
-            }
-            line.SetPosition(index, points[points.Count - 1]);
-            line.enabled = true;
+            // The line goes straight once the coil is paid out. The sag is only drawn while there is slack.
+            var length = 0f;
+            for (var i = 1; i < _linePoints.Count; i++)
+                length += Vector3.Distance(_linePoints[i - 1], _linePoints[i]);
+            DrawSagged(line, _linePoints, RopeLengthPolicy.IsPaidOut(length, _length));
+            if (_harnessLineLogged) return;
+            _harnessLineLogged = true;
+            ModLog.Info("[RopeTeam] Rope drawn between the harnesses, points=" + _linePoints.Count);
         }
+
+        private static void DrawSagged(LineRenderer line, List<Vector3> points, bool taut)
+            => DrawRopeSpan(line, points, taut);
 
         private static bool IsFinitePosition(Vector3 point)
             => float.IsFinite(point.x) && float.IsFinite(point.y) && float.IsFinite(point.z);

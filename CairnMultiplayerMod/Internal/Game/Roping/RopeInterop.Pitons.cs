@@ -121,6 +121,7 @@ internal static partial class RopeInterop
         {
             PitonRecoverySession.Hide();
             LeaderProtectionMarker.Hide();
+            RopeLengthReadout.Hide();
             return;
         }
 
@@ -129,10 +130,15 @@ internal static partial class RopeInterop
             double now = Time.unscaledTime;
             TeamAnchorSession.SetLocalPlayer(network.LocalPlayerId);
             LeaderProtectionMarker.Tick();
+            RopeLengthReadout.Tick();
             _pitons.OnLifeline(lifeline.Pointer, now);
             ReleaseUnhookedPitons(lifeline);
             TickPitonRecovery(lifeline, network);
-            if (!TryCollectPlacedPitons(lifeline)) return;
+            if (!TryCollectPlacedPitons(lifeline))
+            {
+                TickTopAnchor(network);
+                return;
+            }
 
             System.Numerics.Vector3? localPosition = null;
             if (Players.LocalPlayerInterop.TryGetPose(out var pose, out _))
@@ -158,6 +164,7 @@ internal static partial class RopeInterop
             }
 
             ApplyFollowerAnchorRope();
+            TickTopAnchor(network);
         }
         catch (Exception ex)
         {
@@ -926,7 +933,7 @@ internal static partial class RopeInterop
         var now = Time.unscaledTime;
         foreach (var id in _teamDetachIds)
         {
-            if (TeamEditWaiting(id, now) || !_pitons.TryGetRemotePointer(id, out var pointer)) continue;
+            if (TeamEditWaiting(id, now) || !TryChainPointer(id, own: false, out var pointer)) continue;
             if (TryDetachPitonViaLifeline(pointer))
             {
                 _teamDetachRetryAt.Remove(id);
@@ -937,7 +944,7 @@ internal static partial class RopeInterop
 
         foreach (var id in _teamReattachIds)
         {
-            if (TeamEditWaiting(id, now) || !_pitons.TryGetRemotePointer(id, out var pointer)) continue;
+            if (TeamEditWaiting(id, now) || !TryChainPointer(id, own: false, out var pointer)) continue;
             if (TryAttachTeamPiton(pointer))
             {
                 _teamDetachRetryAt.Remove(id);

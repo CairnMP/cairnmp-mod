@@ -132,6 +132,19 @@ public partial class Mod
             : null;
     }
 
+    public override void OnLateUpdate()
+    {
+        if (CrashHandler.IsFatal) return;
+        try
+        {
+            Internal.Game.Roping.TopAnchorPlant.Apply();
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.staff-plant", exception);
+        }
+    }
+
     public override void OnUpdate()
     {
         if (CrashHandler.IsFatal)

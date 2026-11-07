@@ -33,7 +33,10 @@ internal static unsafe class SavegamePitonGuardPatch
                 return;
             }
 
-            SaveGuardHarmony.Patch(target, finalizer: new HarmonyMethod(finalizer));
+            var prefix = typeof(SavegamePitonGuardPatch).GetMethod(
+                nameof(SkipPlantedStaff),
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            SaveGuardHarmony.Patch(target, prefix: new HarmonyMethod(prefix), finalizer: new HarmonyMethod(finalizer));
             _saveGuardInstalled = true;
             // Msg (not LogDebug): the user must be able to confirm the protection is active.
             ModLog.Info("[SaveGuard] Diagnostic sauvegarde actif : les erreurs restent visibles et interrompent la sauvegarde.");
@@ -53,6 +56,20 @@ internal static unsafe class SavegamePitonGuardPatch
             _saveGuardInstalled = false;
             _saveGuardFailed = false;
             _lastSaveGuardLogAt = 0f;
+        }
+    }
+
+    /// <summary>A planted staff is not gear. Leaving it out of the save does not hide a failed write.</summary>
+    private static bool SkipPlantedStaff(Piton __instance)
+    {
+        try
+        {
+            return __instance == null || !TopAnchorSession.OwnsPointer(__instance.Pointer);
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.staff-save", exception);
+            return true;
         }
     }
 

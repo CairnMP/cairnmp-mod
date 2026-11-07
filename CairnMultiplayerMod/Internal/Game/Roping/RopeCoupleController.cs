@@ -122,6 +122,12 @@ internal sealed class RopeCoupleController
             return;
 
         bool canNotify = _network.IsConnected && _network.IsHandshakeComplete;
+        if (canNotify)
+        {
+            TopAnchorSession.RequestDrop();
+            RopeInterop.SendTopAnchorDrop(_network);
+        }
+
         foreach (var partner in partners)
         {
             if (canNotify)
@@ -214,6 +220,12 @@ internal sealed class RopeCoupleController
 
     private void ReleaseClip(int self, int partner)
     {
+        if (TeamAnchorSession.IsLocalLeader && TopAnchorSession.HasStick)
+        {
+            TopAnchorSession.RequestHold();
+            RopeInterop.SendTopAnchorLeave(_network);
+        }
+
         _network.SendRopeClip(partner, false);
         RopeLinkState.Apply(self, partner, false);
         RopeInterop.ReleaseAllAnchors();

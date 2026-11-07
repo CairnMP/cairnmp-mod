@@ -35,6 +35,10 @@ internal static class TeamAnchorSession
     }
 
     internal static bool IsLinked { get; private set; }
+
+    /// <summary>The leader unclipped after a stick was planted. The chain stays for the follower.</summary>
+    internal static bool LeaderLeft { get; private set; }
+
     internal static int LeaderId { get; private set; } = -1;
     internal static int FollowerId { get; private set; } = -1;
     internal static int LocalPlayerId { get; private set; } = -1;
@@ -43,7 +47,7 @@ internal static class TeamAnchorSession
     internal static bool IsLocalLeader => IsLinked && LocalPlayerId == LeaderId;
     internal static bool IsLocalFollower => IsLinked && LocalPlayerId == FollowerId;
     internal static bool InRopeTeam => _inRopeTeam?.Invoke() == true;
-    internal static bool AllowsPlacement => TeamAnchorChain.MayPlace(InRopeTeam, IsLinked, IsLocalLeader);
+    internal static bool AllowsPlacement => TeamAnchorChain.MayPlace(InRopeTeam, IsLinked && !LeaderLeft, IsLocalLeader);
     internal static bool LeaderIsUnprotected => IsLinked && Chain.LeaderAnchor == 0;
 
     internal static void Bind(Func<bool> inRopeTeam)
@@ -59,12 +63,39 @@ internal static class TeamAnchorSession
         SetLocalPlayer(localPlayerId);
         if (!clip)
         {
-            if (IsLinked && Pair(from, target)) Clear();
+            var paired = IsLinked && Pair(from, target);
+            if (!paired && !LeaderLeft) return;
+            // A death or a disconnect asks the chain to go. A voluntary unclip after a
+            // stick is planted only lets the leader leave.
+            if (from == LeaderId && TopAnchorSession.DropRequested)
+            {
+                Clear();
+                return;
+            }
+
+            if (from == LeaderId && (TopAnchorSession.HoldRequested || TopAnchorSession.HasStick))
+            {
+                HoldForFollower();
+                TopAnchorSession.ConsumeHold();
+                return;
+            }
+
+            if (paired) Clear();
             return;
         }
 
         if (!RopeLinkState.IsLinked(from, target)) return;
-        if (IsLinked && LeaderId == from && FollowerId == target) return;
+        if (IsLinked && LeaderId == from && FollowerId == target)
+        {
+            if (LeaderLeft)
+            {
+                LeaderLeft = false;
+                TopAnchorSession.ConsumeHold();
+            }
+
+            return;
+        }
+
         Clear();
         IsLinked = true;
         LeaderId = from;
@@ -74,11 +105,23 @@ internal static class TeamAnchorSession
     /// <summary>The link was cleared without an unclip packet.</summary>
     internal static void ReconcileLink()
     {
+        if (LeaderLeft) return;
         if (IsLinked && !RopeLinkState.IsLinked(LeaderId, FollowerId)) Clear();
     }
 
+    /// <summary>
+    /// The partnership is over. Every piton stays on the chain. The stick remains the top end.
+    /// It becomes the follower's anchor only after the pitons below it are gone.
+    /// </summary>
+    internal static void HoldForFollower()
+    {
+        if (!IsLinked) return;
+        LeaderLeft = true;
+    }
+
     internal static bool AllowsTake(uint pitonId)
-        => TeamAnchorChain.MayTake(IsLinked, IsLocalLeader, Chain.Contains(pitonId));
+        => !TopAnchorPolicy.IsStickId(pitonId)
+           && TeamAnchorChain.MayTake(IsLinked, IsLocalLeader, Chain.Contains(pitonId));
 
     /// <summary>The piton the leader is on, and where it was placed.</summary>
     internal static bool TryGetLeaderAnchor(out uint id, out Vector3 position)
@@ -217,8 +260,10 @@ internal static class TeamAnchorSession
         Live.Clear();
         Dropped.Clear();
         IsLinked = false;
+        LeaderLeft = false;
         LeaderId = -1;
         FollowerId = -1;
+        TopAnchorSession.Reset();
     }
 
     private static void QueueRelease()
@@ -227,7 +272,7 @@ internal static class TeamAnchorSession
         Chain.CopyFromOldest(Order);
         foreach (var id in Order)
         {
-            if (id == 0) continue;
+            if (id == 0 || TopAnchorPolicy.IsStickId(id)) continue;
             var release = new ChainRelease(id, localIds);
             if (!Released.Contains(release)) Released.Add(release);
         }

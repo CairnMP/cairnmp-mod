@@ -62,7 +62,9 @@ a practice climber beside the host. `H` takes over his body. The mouse looks,
 `WASD` flies, `Space` rises, `Ctrl` descends, and `Shift` goes faster. `H` again
 puts you back in your own climber. While the rope is tied, a gold marker sits on
 the piton protecting the leader and a red marker sits on the follower's. The HUD
-says "Leader unprotected" when the leader's piton is gone.
+says "Leader unprotected" when the leader's piton is gone. While the rope is
+tied, the HUD also shows the rope path against the coil, and "paid out" when a
+further step away is refused.
 
 | Controller shortcut | Action |
 | --- | --- |

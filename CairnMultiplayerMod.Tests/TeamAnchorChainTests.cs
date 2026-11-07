@@ -5,6 +5,7 @@ using Xunit;
 
 namespace CairnMultiplayerMod.Tests;
 
+[Collection("RopeTeamSession")]
 public sealed class TeamAnchorChainTests
 {
     [Fact]
@@ -130,6 +131,11 @@ public sealed class TeamAnchorChainTests
         Assert.False(TeamAnchorChain.MayTake(linked: true, isLeader: true, onChain: true));
         Assert.True(TeamAnchorChain.MayTake(linked: true, isLeader: true, onChain: false));
         Assert.True(TeamAnchorChain.MayTake(linked: true, isLeader: false, onChain: true));
+
+        Assert.True(TeamAnchorChain.KeepsClimbotCoil(isLocalLeader: true, leaderLeft: false));
+        Assert.False(TeamAnchorChain.KeepsClimbotCoil(isLocalLeader: true, leaderLeft: true));
+        Assert.False(TeamAnchorChain.KeepsClimbotCoil(isLocalLeader: false, leaderLeft: false));
+        Assert.False(TeamAnchorChain.KeepsClimbotCoil(isLocalLeader: false, leaderLeft: true));
     }
 
     [Fact]

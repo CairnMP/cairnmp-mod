@@ -33,6 +33,14 @@ internal sealed class TeamAnchorChain
     internal static bool MayTake(bool linked, bool isLeader, bool onChain)
         => !(linked && isLeader && onChain);
 
+    /// <summary>
+    /// Cairn's paid-out stop follows the climbot coil on this harness. It stays only while
+    /// they are the leader and still tied. After they unclip at a staff, they remain the
+    /// leader on the held chain, and the coil has to come off or the ledge keeps the stop.
+    /// </summary>
+    internal static bool KeepsClimbotCoil(bool isLocalLeader, bool leaderLeft)
+        => isLocalLeader && !leaderLeft;
+
     internal bool Contains(uint id) => id != 0 && _nodes.ContainsKey(id);
 
     internal uint ParentOf(uint id)
