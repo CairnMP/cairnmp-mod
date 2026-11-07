@@ -368,6 +368,26 @@ public sealed class ArchitectureBoundaryTests
     }
 
     [Fact]
+    public void RopeTeamSaveGateRefusesAnythingOutsideCamp()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "CampSaveGatePatch.cs"));
+        var registry = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "GamePatchRegistry.cs"));
+
+        Assert.Contains("CannotSaveReason.PawnSaidNo", source, StringComparison.Ordinal);
+        Assert.Contains("\"LoadInternal\"", source, StringComparison.Ordinal);
+        Assert.Contains("success = false", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Invoke(true)", source, StringComparison.Ordinal);
+        Assert.Contains("nameof(SavegameManager.AutoSave)", source, StringComparison.Ordinal);
+        Assert.Contains("nameof(SavegameManager.QuickSave)", source, StringComparison.Ordinal);
+        Assert.Contains("nameof(SavegameManager.SaveAndClose)", source, StringComparison.Ordinal);
+        Assert.Contains("PawnControllerSwitcher.CanSave", source, StringComparison.Ordinal);
+        Assert.Contains("CampSaveGatePatch.Install", registry, StringComparison.Ordinal);
+        Assert.Contains("CampSaveGatePatch.Uninstall", registry, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheTiedLeaderPassesCairnsRopeHeadCheck()
     {
         var source = File.ReadAllText(Path.Combine(

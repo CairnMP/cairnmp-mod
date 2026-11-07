@@ -38,6 +38,9 @@ All notable CairnMP changes are documented here. Releases follow
   D-pad up still places one.
 
 ### Changed
+- Rope Team saves and loads only at a bivouac. A marker, an autosave, a quick
+  save, and save-and-quit on the pitch do not write. A save that does not resume
+  in camp does not load. The file stays on disk. Solo play is unchanged.
 - Rope Team: press the right stick to tie or untie the rope. L still does it
   on a keyboard.
 - Rope Team: L ties the rope only when the two climbers are within 1 m.

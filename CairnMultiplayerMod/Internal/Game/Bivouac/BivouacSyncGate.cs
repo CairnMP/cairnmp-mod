@@ -81,6 +81,12 @@ internal sealed class BivouacSyncGate
     public bool IsSuspended => _suspended;
 
     /// <summary>
+    /// True while this climber is in the bivouac scene, or the game still says so and
+    /// that flag has not been judged stuck. Published every update for the save gate.
+    /// </summary>
+    internal static bool AtCamp { get; private set; }
+
+    /// <summary>
     /// Whether callers should skip applying remote gameplay state right now. Unlike
     /// <see cref="IsSuspended"/> this also covers the frame we enter a bivouac, before
     /// <see cref="Update"/> has run.
@@ -92,6 +98,7 @@ internal sealed class BivouacSyncGate
     public void Update()
     {
         UpdateSuspension();
+        PublishCamp();
         // Must run every frame, including while suspended (it self-cancels then).
         UpdateDeferredPatchResume();
     }
@@ -133,6 +140,7 @@ internal sealed class BivouacSyncGate
     {
         _suspended = false;
         _stuckFlagOverridden = false;
+        PublishCamp();
         ResumePatch(immediate: true);
     }
 
@@ -237,6 +245,14 @@ internal sealed class BivouacSyncGate
         _stuckSince = 0f;
         _stuckFlagOverridden = true;
         return false;
+    }
+
+    private void PublishCamp()
+    {
+        var scene = SceneRoles.IsBivouac(_state.CurrentScene);
+        var lifecycle = GameLifecycleService.TryGetGameLifecycle(out var state, out _)
+            && state == CairnGameLifecycleState.Bivouac;
+        AtCamp = CampSavePolicy.AtCamp(scene, _stuckFlagOverridden, lifecycle);
     }
 
     private bool IsGameReportingGameplay()

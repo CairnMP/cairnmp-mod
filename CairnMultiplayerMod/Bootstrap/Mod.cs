@@ -176,6 +176,13 @@ public partial class Mod : MelonMod
         TeamAnchorSession.Bind(
             () => Network?.IsHandshakeComplete == true
                   && _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam);
+        // The mode defaults to Rope Team for solo too. The lobby, the handshake, or the
+        // story-save handoff is what makes this a Rope Team session.
+        CampSaveSession.Bind(
+            () => _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam
+                  && (Network?.IsHandshakeComplete == true
+                      || Lobby.IsInLobby
+                      || StoryLaunchSetupPatch.MultiplayerStoryPending));
         LeaderProtectionMarker.Bind(_hud);
         RopeLengthReadout.Bind(_hud);
         PracticePartnerController.Bind(_hud);
