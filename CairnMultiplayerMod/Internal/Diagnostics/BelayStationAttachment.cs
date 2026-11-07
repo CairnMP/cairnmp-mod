@@ -15,6 +15,8 @@ internal sealed class BelayStationAttachment
     private readonly BelayTopologySnapshot _before;
     private readonly long[] _order;
     private readonly long _station, _stationHolder;
+    private readonly long _robotHolder;
+    private readonly int _robotOccurrences;
     private readonly double _started;
     private double _last, _candidateSince, _confirmedSince;
     private BelayTopologySnapshot _candidate;
@@ -22,7 +24,7 @@ internal sealed class BelayStationAttachment
     internal StationConnectionFailure Failure { get; private set; }
 
     internal BelayStationAttachment(BelayTopologySnapshot before, IReadOnlyList<long> order,
-        long station, long stationHolder, double now)
+        long station, long stationHolder, double now, long robotHolder = 0)
     {
         if (before?.IsValid != true || before.Parts.Length >= 64 || before.Holders.Length >= 66
             || order == null || order.Count != before.ProtectionCount || order.Count >= 63
@@ -36,6 +38,12 @@ internal sealed class BelayStationAttachment
         }
         if (_order.Length == 0 || _order[_order.Length - 1] != before.LastPiton
             || Array.IndexOf(before.Holders, stationHolder) >= 0) throw new ArgumentException("The backup must remain the last protection.");
+        _robotHolder = robotHolder;
+        if (robotHolder != 0)
+        {
+            foreach (var holder in before.Holders) if (holder == robotHolder) _robotOccurrences++;
+            if (_robotOccurrences == 0) throw new ArgumentException("The native robot holder must belong to the original route.");
+        }
         _before = new BelayTopologySnapshot(before.Rope, before.LastPiton, before.Parts, before.Holders, before.Available, before.ProtectionCount);
         _station = station; _stationHolder = stationHolder; _started = _last = now;
     }
@@ -94,21 +102,32 @@ internal sealed class BelayStationAttachment
     }
 
     private bool TerminalRouteMatches(BelayTopologySnapshot snapshot)
+    {
         // Native geometry can place an accepted initial or replacement station
         // at the final protection. The personal backup stays attached separately;
-        // require the exact original walk plus that station before the harness.
-        => _before.Parts.Length == _order.Length + 1 && _before.Holders.Length == _order.Length + 2
-            && snapshot.Holders[snapshot.Holders.Length - 2] == _stationHolder;
+        // require the retained protection walk plus that station before the harness.
+        // Repeated native root holders do not add physical rope parts. Their
+        // identity and multiplicity are checked by OriginalHoldersRetained.
+        if (_before.Parts.Length != _order.Length + 1) return false;
+        var previous = snapshot.Holders.Length - 2;
+        while (previous >= 0 && _robotHolder != 0 && snapshot.Holders[previous] == _robotHolder) previous--;
+        return previous >= 0 && snapshot.Holders[previous] == _stationHolder;
+    }
 
     private bool OriginalHoldersRetained(long[] holders)
     {
         if (holders.Length != _before.Holders.Length + 1) return false;
-        var old = 0; var stationOccurrences = 0;
+        var old = 0; var stationOccurrences = 0; var robotOccurrences = 0;
         foreach (var holder in holders)
         {
             if (holder == _stationHolder) { stationOccurrences++; continue; }
+            // Only the explicitly identified native robot may move within the
+            // walk. Every occurrence and all other ordered holders must remain.
+            if (holder == _robotHolder) { robotOccurrences++; continue; }
+            while (old < _before.Holders.Length && _before.Holders[old] == _robotHolder) old++;
             if (old >= _before.Holders.Length || holder != _before.Holders[old++]) return false;
         }
-        return stationOccurrences == 1 && old == _before.Holders.Length;
+        while (old < _before.Holders.Length && _before.Holders[old] == _robotHolder) old++;
+        return stationOccurrences == 1 && robotOccurrences == _robotOccurrences && old == _before.Holders.Length;
     }
 }

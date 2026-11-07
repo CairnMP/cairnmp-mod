@@ -7,6 +7,44 @@ namespace CairnMultiplayerMod.Tests;
 public sealed class BelayFallRopeRouteTests
 {
     [Fact]
+    public void R38ClimbotPaddingAfterTheBackupDoesNotAddTheUpstreamRopeToTheMeasuredRoute()
+    {
+        // The native holder list is S, B, repeated Climbot markers, harness.
+        // The adapter excludes only typed Climbot padding from the connector walk.
+        long[] holders = { 100, 200, 900, 900, 900, 900, 300 };
+        long[] connectors = { holders[0], holders[1], holders[^1] };
+        BelayFallRopePart[] parts =
+        {
+            new(1, 900, 100, 30, true),
+            new(2, 100, 200, 2.5f, true),
+            new(3, 200, 300, .75f, true)
+        };
+        Span<int> selected = stackalloc int[2];
+
+        Assert.True(BelayFallRopeRoute.TryMeasure(connectors, parts, selected,
+            out var length, out var failure, out var failedLeg));
+        Assert.Equal(3.25f, length);
+        Assert.Equal(BelayFallRouteFailure.None, failure);
+        Assert.Equal(-1, failedLeg);
+        Assert.Equal(1, selected[0]);
+        Assert.Equal(2, selected[1]);
+    }
+
+    [Fact]
+    public void ExcludingClimbotPaddingCannotInventABackupToHarnessPhysicalPart()
+    {
+        // A genuine physical detour through the Climbot is not holder padding:
+        // no direct B-to-harness part exists, so no geometry fallback is allowed.
+        AssertFailure(new long[] { 100, 200, 300 }, new BelayFallRopePart[]
+        {
+            new(1, 900, 100, 30, true),
+            new(2, 100, 200, 2.5f, true),
+            new(3, 200, 900, .25f, true),
+            new(4, 900, 300, .5f, true)
+        }, BelayFallRouteFailure.MissingPart, 1);
+    }
+
+    [Fact]
     public void R31SixHoldersAndThreePartsMeasureOnlyTheStationToHarnessWalk()
     {
         // The R31 trace repeats the same robot three times before A, B and harness.

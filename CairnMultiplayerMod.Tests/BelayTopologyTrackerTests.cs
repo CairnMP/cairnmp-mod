@@ -141,4 +141,32 @@ public sealed class BelayTopologyTrackerTests
         Assert.Equal(BelayTopologyChange.Unchanged, tracker.Observe(Route(), false, 1));
         Assert.Equal(2u, tracker.Revision);
     }
+
+    [Fact]
+    public void ControlCannotAcquireATemporarySplitAsItsPermanentBaseline()
+    {
+        // R38: three protections plus two temporary rope holders were acquired
+        // as six parts, then ordinary cleanup reduced the same route to four.
+        var transient = new BelayTopologySnapshot(1, 30,
+            new long[] { 100, 101, 102, 103, 104, 105 },
+            new long[] { 9, 9, 9, 9, 9, 9, 20, 51, 52, 21, 22, 40 }, 30, 3);
+        Assert.True(transient.IsValid);
+        Assert.False(transient.TryValidateControlStart(40, out var reason));
+        Assert.Contains("settle", reason);
+        var settled = new BelayTopologySnapshot(1, 30, new long[] { 100, 101, 104, 105 },
+            new long[] { 9, 9, 9, 9, 9, 9, 20, 21, 22, 40 }, 30, 3);
+        Assert.True(settled.TryValidateControlStart(40, out _));
+        Assert.False(settled.TryValidateControlStart(41, out _));
+    }
+
+    [Fact]
+    public void ControlStartDoesNotMistakeRepeatedRootPaddingForExtraPhysicalParts()
+    {
+        var padded = new BelayTopologySnapshot(1, 30, new long[] { 100, 101 },
+            new long[] { 9, 9, 20, 40, 9 }, 30, 1);
+        Assert.True(padded.TryValidateControlStart(40, out _));
+        var repeatedHarness = new BelayTopologySnapshot(1, 30, new long[] { 100, 101 },
+            new long[] { 9, 40, 20, 40 }, 30, 1);
+        Assert.False(repeatedHarness.TryValidateControlStart(40, out _));
+    }
 }

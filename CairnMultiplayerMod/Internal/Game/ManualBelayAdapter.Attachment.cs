@@ -37,7 +37,7 @@ internal sealed partial class ManualBelayAdapter
             || Id(backup) == Id(station) || backup.pitonHp <= 0
             || lifeline.pawn == null || lifeline.harness == null || lifeline.pawn.IsFalling || lifeline.SwingHasPivotAndExtremity()
             || Vector3.Distance(lifeline.harness.GetAttachPosition(), backup.transform.position) > 1.5f) return false;
-        if (!TrySnapshot(lifeline, out var before, out reason)) return false;
+        if (!TryStartSnapshot(lifeline, out var before, out reason)) return false;
         reason = "The climber's rope cannot reach the station while retaining the personal backup.";
         if (!BelayRoutePlanner.TryPlan(ToNumerics(station.Quickdraw.Cast<IRopeHolder>().Position),
             new[] { new BelayProtectionPoint(unchecked((uint)backup.GetInstanceID()), ToNumerics(backup.Quickdraw.Cast<IRopeHolder>().Position)) },
@@ -52,7 +52,7 @@ internal sealed partial class ManualBelayAdapter
         reason = "The station attachment session is invalid.";
         if (session == Guid.Empty || _attachment != null) return false;
         var lifeline = LocalLifeline();
-        if (!CanAttachStation(lifeline, station, out reason) || !TrySnapshot(lifeline, out var before, out reason)) return false;
+        if (!CanAttachStation(lifeline, station, out reason) || !TryStartSnapshot(lifeline, out var before, out reason)) return false;
         var backup = PersonalAnchor(lifeline);
         var placed = ConnectionPlaced(lifeline);
         reason = "The station and backup must already exist in the same synchronized native piton collection.";
@@ -66,10 +66,19 @@ internal sealed partial class ManualBelayAdapter
         };
         var holders = lifeline.securingRope.ropeHolders;
         var colliders = new HashSet<long> { Id(state.Quickdraw.GetAttachEnd()) };
+        long robotHolder = 0;
         reason = "Existing protection quickdraws must have distinct healthy native attachment colliders.";
         for (var i = 0; i < holders.Count; i++)
         {
-            var quickdraw = holders[i]?.TryCast<LogicalQuickdraw>();
+            var holder = holders[i];
+            if (holder?.TryCast<Il2CppTheGameBakers.Cairn.RobotPawnController>() != null)
+            {
+                var identity = holder.Pointer.ToInt64();
+                if (robotHolder != 0 && robotHolder != identity)
+                { reason = "The native route contains different Climbot holders; wait for it to settle."; return false; }
+                robotHolder = identity;
+            }
+            var quickdraw = holder?.TryCast<LogicalQuickdraw>();
             if (quickdraw == null) continue;
             var piton = quickdraw.Piton;
             var collider = Id(quickdraw.GetAttachEnd());
@@ -82,7 +91,7 @@ internal sealed partial class ManualBelayAdapter
         // The accepted pair retains its personal backup and every original pin.
         // Native insertion may put S before or after those protections, in both
         // initial connections and role exchanges; confirm the actual native path.
-        state.Observer = new BelayStationAttachment(before, ConnectionOrder(lifeline), Id(station), state.Quickdraw.Pointer.ToInt64(), Now);
+        state.Observer = new BelayStationAttachment(before, ConnectionOrder(lifeline), Id(station), state.Quickdraw.Pointer.ToInt64(), Now, robotHolder);
         _lease = new BelayInputLease(session, Now);
         _localRopeNotice = null;
         _attachment = state;
@@ -175,13 +184,17 @@ internal sealed partial class ManualBelayAdapter
     private static bool AttachmentPinsReady(StationAttachment state, bool stationAttached)
     {
         var parts = state.Lifeline.securingRope.ropeParts;
-        if (parts == null || parts.Count > 64) return false;
+        if (parts == null || parts.Count < 1 || parts.Count > 64) return false;
         var pins = new List<long>();
-        foreach (var part in parts)
+        var physical = new BelayFallRopePart[parts.Count];
+        for (var i = 0; i < parts.Count; i++)
         {
+            var part = parts[i];
             if (part?.obiRope == null || !part.obiRope.isLoaded || part.pinConstraintHandler == null) return false;
-            pins.Add(Id(part.pinConstraintHandler.GetAttachCollider(RopeSide.Begin)));
-            pins.Add(Id(part.pinConstraintHandler.GetAttachCollider(RopeSide.End)));
+            var begin = Id(part.pinConstraintHandler.GetAttachCollider(RopeSide.Begin));
+            var end = Id(part.pinConstraintHandler.GetAttachCollider(RopeSide.End));
+            pins.Add(begin); pins.Add(end);
+            physical[i] = new(Id(part), begin, end, part.obiRope.restLength, true);
         }
         var station = Id(state.Quickdraw.GetAttachEnd());
         var backup = Id(state.Backup.Quickdraw.GetAttachEnd());
@@ -192,7 +205,32 @@ internal sealed partial class ManualBelayAdapter
             foreach (var pin in pins) if (pin == protection.Collider) count++;
             if (count < 2) return false;
         }
-        return true;
+        if (!stationAttached) return true;
+        // Robot holders can move in the logical list without adding physical
+        // segments. Confirm the actual station-to-harness pin walk separately.
+        var holders = state.Lifeline.securingRope.ropeHolders;
+        var harness = state.Lifeline.harness;
+        if (holders == null || holders.Count > 66 || harness == null) return false;
+        var walk = new List<long>();
+        var started = false; var ended = false;
+        for (var i = 0; i < holders.Count; i++)
+        {
+            var holder = holders[i];
+            if (holder == null) return false;
+            if (!started)
+            {
+                if (holder.Pointer != state.Quickdraw.Pointer) continue;
+                started = true;
+            }
+            if (holder.Pointer == harness.Pointer)
+            { walk.Add(Id(harness.GetAttachEnd())); ended = true; break; }
+            if (holder.TryCast<Il2CppTheGameBakers.Cairn.RobotPawnController>() != null) continue;
+            var quickdraw = holder.TryCast<LogicalQuickdraw>();
+            if (quickdraw?.Piton == null || !(quickdraw.Piton.pitonHp > 0)) return false;
+            walk.Add(Id(quickdraw.GetAttachEnd()));
+        }
+        return started && ended && BelayFallRopeRoute.TryMeasure(walk.ToArray(), physical,
+            new int[physical.Length], out _, out _, out _);
     }
 
     private void CancelStationAttachment(string reason)

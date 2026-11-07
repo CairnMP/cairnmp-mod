@@ -17,7 +17,7 @@ internal sealed partial class ManualBelayAdapter
     private uint _partnerRouteRevision;
 
     // Both measurement and drawing use this exact native station-to-harness
-    // pin walk. Repeated Climbot holders before the station are not segments.
+    // pin walk. Climbot holder-list padding is not a protection or physical leg.
     private bool TryReadPartnerRoute(out float length, out string reason)
     {
         length = float.NaN;
@@ -67,6 +67,14 @@ internal sealed partial class ManualBelayAdapter
         for (var i = first; i <= end; i++)
         {
             var holder = holders[i];
+            if (i != end && holder.TryCast<Il2CppTheGameBakers.Cairn.RobotPawnController>() != null)
+            {
+                // Native insertion can move repeated Climbot markers after the
+                // station. Retain their identity/order in the revision, but only
+                // exact quickdraw-to-harness pin matches can form measured legs.
+                scratch[size++] = holder.Pointer.ToInt64(); scratch[size++] = 0; scratch[size++] = 0;
+                continue;
+            }
             var quickdraw = holder.TryCast<LogicalQuickdraw>();
             var piton = quickdraw?.Piton;
             if (i != end && (quickdraw == null || piton == null || !(piton.pitonHp > 0)))

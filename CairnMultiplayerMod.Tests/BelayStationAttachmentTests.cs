@@ -161,6 +161,132 @@ public sealed class BelayStationAttachmentTests
         Assert.Equal(StationConnectionFailure.None, trial.Failure);
     }
 
+    [Theory]
+    [InlineData(5)]
+    [InlineData(6)]
+    public void TerminalStationRetainsRepeatedNativeRootOccurrencesThroughConfirmation(int rootOccurrences)
+    {
+        // R38 retained the repeated Climbot prefix and inserted S after P.
+        // Those root occurrences did not create additional physical parts.
+        var (before, after, original, connected) = TerminalInsertion(1, rootOccurrences);
+        var trial = new BelayStationAttachment(before, original, 10, 100, 0);
+        trial.Observe(after, connected, true, .1);
+        trial.Observe(after, connected, true, .3);
+        for (var i = 1; i < 10; i++) trial.Observe(after, connected, true, .3 + i * .5);
+        Assert.Equal(BelayStationAttachmentStage.Confirming, trial.Stage);
+        trial.Observe(after, connected, true, 5.31);
+        Assert.Equal(BelayStationAttachmentStage.Ready, trial.Stage);
+        Assert.Equal(StationConnectionFailure.None, trial.Failure);
+    }
+
+    [Theory]
+    [InlineData(0)] // replaced one repeated root occurrence
+    [InlineData(1)] // replaced harness
+    [InlineData(2)] // inserted an unrelated hand holder
+    public void RepeatedRootPrefixDoesNotPermitOtherTerminalHolderChanges(int corruption)
+    {
+        var (before, after, original, connected) = TerminalInsertion(1, 5);
+        var holders = (long[])after.Holders.Clone();
+        if (corruption == 0) holders[0] = 999;
+        else if (corruption == 1) holders[^1] = 999;
+        else
+        {
+            holders = new long[after.Holders.Length + 1];
+            Array.Copy(after.Holders, holders, after.Holders.Length - 2);
+            holders[^3] = 902;
+            holders[^2] = after.Holders[^2];
+            holders[^1] = after.Holders[^1];
+        }
+        var corrupt = new BelayTopologySnapshot(after.Rope, after.LastPiton, after.Parts,
+            holders, after.Available, after.ProtectionCount);
+        var trial = new BelayStationAttachment(before, original, 10, 100, 0);
+        trial.Observe(corrupt, connected, true, .1);
+        trial.Observe(corrupt, connected, true, 3.01);
+        Assert.Equal(StationConnectionFailure.Timeout, trial.Failure);
+    }
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(900, true)]
+    public void ObservedHeadInsertionMayRepositionOnlyTheExplicitNativeRobot(long robotHolder, bool accepted)
+    {
+        var (before, after) = HeadInsertionWithRepeatedRoot();
+        var trial = new BelayStationAttachment(before, new long[] { 20 }, 10, 100, 0, robotHolder);
+        for (var i = 1; i <= 13; i++) trial.Observe(after, new long[] { 10, 20 }, true, i * .5);
+        Assert.Equal(accepted ? BelayStationAttachmentStage.Ready : BelayStationAttachmentStage.Failed, trial.Stage);
+        Assert.Equal(accepted ? StationConnectionFailure.None : StationConnectionFailure.Timeout, trial.Failure);
+    }
+
+    [Theory]
+    [InlineData(0)] // replaced one robot occurrence with a different root
+    [InlineData(1)] // added a robot occurrence
+    [InlineData(2)] // exchanged the original protection and harness
+    public void ExplicitRobotIdentityDoesNotPermitCountIdentityOrOtherHolderOrderChanges(int corruption)
+    {
+        var (before, after) = HeadInsertionWithRepeatedRoot();
+        var holders = (long[])after.Holders.Clone();
+        if (corruption == 0) holders[2] = 999;
+        else if (corruption == 1)
+        {
+            holders = new long[after.Holders.Length + 1];
+            Array.Copy(after.Holders, holders, after.Holders.Length);
+            holders[^1] = 900;
+        }
+        else (holders[1], holders[^1]) = (holders[^1], holders[1]);
+        var corrupt = new BelayTopologySnapshot(after.Rope, after.LastPiton, after.Parts,
+            holders, after.Available, after.ProtectionCount);
+        var trial = new BelayStationAttachment(before, new long[] { 20 }, 10, 100, 0, 900);
+        trial.Observe(corrupt, new long[] { 10, 20 }, true, .1);
+        trial.Observe(corrupt, new long[] { 10, 20 }, true, 3.01);
+        Assert.Equal(StationConnectionFailure.Timeout, trial.Failure);
+    }
+
+    [Fact]
+    public void ExplicitRobotRepositionDoesNotPermitMovingANativeHandPastAProtection()
+    {
+        var before = new BelayTopologySnapshot(1000, 20, new long[] { 11, 12 },
+            new long[] { 900, 900, 900, 900, 902, 200, 901 }, 30, 1);
+        var after = new BelayTopologySnapshot(1000, 20, new long[] { 30, 31, 32 },
+            new long[] { 100, 200, 900, 900, 900, 900, 902, 901 }, 30, 2);
+        var trial = new BelayStationAttachment(before, new long[] { 20 }, 10, 100, 0, 900);
+        trial.Observe(after, new long[] { 10, 20 }, true, .1);
+        trial.Observe(after, new long[] { 10, 20 }, true, 3.01);
+        Assert.Equal(StationConnectionFailure.Timeout, trial.Failure);
+    }
+
+    [Fact]
+    public void RepositionPermissionRequiresARobotIdentityPresentInTheOriginalWalk()
+    {
+        Assert.Throws<ArgumentException>(() => new BelayStationAttachment(Before(), new long[] { 20 }, 10, 100, 0, 999));
+    }
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(900, true)]
+    public void TerminalStationMayPrecedeOnlyExplicitRobotPaddingBeforeTheHarness(long robotHolder, bool accepted)
+    {
+        var (before, _, original, connected) = TerminalInsertion(1, 5);
+        var after = new BelayTopologySnapshot(1000, 10, new long[] { 40, 41, 42 },
+            new long[] { 900, 900, 200, 100, 900, 900, 900, 901 }, 30, 2);
+        var trial = new BelayStationAttachment(before, original, 10, 100, 0, robotHolder);
+        for (var i = 1; i <= 13; i++) trial.Observe(after, connected, true, i * .5);
+        Assert.Equal(accepted ? BelayStationAttachmentStage.Ready : BelayStationAttachmentStage.Failed, trial.Stage);
+        Assert.Equal(accepted ? StationConnectionFailure.None : StationConnectionFailure.Timeout, trial.Failure);
+    }
+
+    [Fact]
+    public void TerminalRobotPermissionCannotHideAHandBetweenStationAndHarness()
+    {
+        var before = new BelayTopologySnapshot(1000, 20, new long[] { 11, 12 },
+            new long[] { 900, 900, 200, 902, 901 }, 30, 1);
+        var after = new BelayTopologySnapshot(1000, 10, new long[] { 40, 41, 42 },
+            new long[] { 900, 200, 100, 900, 902, 901 }, 30, 2);
+        var trial = new BelayStationAttachment(before, new long[] { 20 }, 10, 100, 0, 900);
+        trial.Observe(after, new long[] { 20, 10 }, true, .1);
+        trial.Observe(after, new long[] { 20, 10 }, true, 3.01);
+        Assert.Equal(StationConnectionFailure.Timeout, trial.Failure);
+    }
+
     [Fact]
     public void TerminalRoleStationRequiresItsNativeLastPitonAndRetainedOriginalOrder()
     {
@@ -202,16 +328,16 @@ public sealed class BelayStationAttachmentTests
     }
 
     private static (BelayTopologySnapshot Before, BelayTopologySnapshot After, long[] Original, long[] Connected)
-        TerminalInsertion(int protections)
+        TerminalInsertion(int protections, int rootOccurrences = 1)
     {
         var original = new long[protections]; var connected = new long[protections + 1];
-        var holders = new long[protections + 2]; var nextHolders = new long[protections + 3];
+        var holders = new long[protections + rootOccurrences + 1]; var nextHolders = new long[protections + rootOccurrences + 2];
         var parts = new long[protections + 1]; var nextParts = new long[protections + 2];
-        holders[0] = nextHolders[0] = 900;
+        for (var i = 0; i < rootOccurrences; i++) holders[i] = nextHolders[i] = 900;
         for (var i = 0; i < protections; i++)
         {
             original[i] = connected[i] = 20 + i;
-            holders[i + 1] = nextHolders[i + 1] = 200 + i;
+            holders[i + rootOccurrences] = nextHolders[i + rootOccurrences] = 200 + i;
         }
         for (var i = 0; i < parts.Length; i++) parts[i] = 30 + i;
         for (var i = 0; i < nextParts.Length; i++) nextParts[i] = 40 + i;
@@ -221,6 +347,9 @@ public sealed class BelayStationAttachmentTests
     }
 
     private static BelayStationAttachment New() => new(Before(), new long[] { 20 }, 10, 100, 0);
+    private static (BelayTopologySnapshot Before, BelayTopologySnapshot After) HeadInsertionWithRepeatedRoot()
+        => (new(1000, 20, new long[] { 11, 12 }, new long[] { 900, 900, 900, 900, 200, 901 }, 30, 1),
+            new(1000, 20, new long[] { 30, 31, 32 }, new long[] { 100, 200, 900, 900, 900, 900, 901 }, 30, 2));
     private static BelayTopologySnapshot Before() => new(1000, 20, new long[] { 11, 12 }, new long[] { 900, 200, 901 }, 30, 1);
     private static BelayTopologySnapshot After() => new(1000, 20, new long[] { 30, 31, 32 }, new long[] { 900, 100, 200, 901 }, 30, 2);
     private static void Observe(BelayStationAttachment trial, double now) => trial.Observe(After(), new long[] { 10, 20 }, true, now);

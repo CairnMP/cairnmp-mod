@@ -190,7 +190,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         reason = "Disconnect the existing cooperative rope first.";
         if (RopeInterop.IsNativeBelayEngaged) return false;
         var lifeline = LocalLifeline();
-        return TrySnapshot(lifeline, out _, out reason);
+        return TryStartSnapshot(lifeline, out _, out reason);
     }
 
     public bool StationValid
@@ -285,7 +285,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         reason = "Disconnect the existing cooperative rope before starting this exercise.";
         if (RopeInterop.IsNativeBelayEngaged) return false;
         var lifeline = LocalLifeline();
-        if (!TrySnapshot(lifeline, out var snapshot, out reason)) return false;
+        if (!TryStartSnapshot(lifeline, out var snapshot, out reason)) return false;
         if (!TryPrepareLocalRope(lifeline, snapshot, localExercise, out var ropeControl, out reason)) return false;
         Install();
         _lifeline = lifeline; _rope = lifeline.securingRope;
@@ -426,6 +426,10 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         reason = "";
         return true;
     }
+
+    private static bool TryStartSnapshot(Lifeline lifeline, out BelayTopologySnapshot snapshot, out string reason)
+        => TrySnapshot(lifeline, out snapshot, out reason)
+            && snapshot.TryValidateControlStart(Id(lifeline.harness), out reason);
 
     private void BindTopology(BelayTopologySnapshot snapshot)
     {

@@ -46,6 +46,7 @@ internal sealed partial class ManualBelayAdapter
 
     private static bool CanUseAttachedStation(Lifeline lifeline, Piton station, out string reason)
     {
+        if (!TryStartSnapshot(lifeline, out _, out reason)) return false;
         reason = "The climber's rope cannot cover the station's ordered protection route.";
         var rope = lifeline.securingRope;
         var points = new System.Collections.Generic.List<BelayProtectionPoint>();

@@ -59,6 +59,17 @@ internal sealed class BelayTopologySnapshot
         return true;
     }
 
+    internal bool TryValidateControlStart(long harness, out string reason)
+    {
+        if (!TryValidate(out reason)) return false;
+        reason = "Release any rope grab and wait for the native protection route to settle before connecting.";
+        var harnessIndex = Array.IndexOf(Holders, harness);
+        if (Parts.Length != ProtectionCount + 1 || harness == 0 || harnessIndex < 0
+            || harnessIndex != Array.LastIndexOf(Holders, harness)) return false;
+        reason = "";
+        return true;
+    }
+
     internal bool Matches(BelayTopologySnapshot other)
         => other != null && Rope == other.Rope && LastPiton == other.LastPiton
             && Equal(Parts, other.Parts) && Equal(Holders, other.Holders);
