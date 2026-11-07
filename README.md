@@ -31,7 +31,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **16**; lobby admission may also require the exact mod version.
+> protocol is **27**; lobby admission may also require the exact mod version.
 
 ## Features
 
@@ -42,7 +42,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 | World | Weather, time of day, pitons, shared ground items, and world pings |
 | Communication | In-game chat, completion, host commands, and experimental proximity voice |
 | Sessions | Steam relay hosting, late-join state, and host-authoritative validation |
-| Modes | Rope team, free solo and race, with synchronized bivouac behavior |
+| Modes | Rope team, Belay Team, free solo and race, with synchronized bivouac behavior |
 | Destinations | Mount Kami from your own save, or a Summit-mode world from the free *On the Trail: Deep Water* DLC |
 | Reliability | Local crash reports, bounded diagnostics, and isolated feature failures |
 
@@ -131,6 +131,336 @@ instead of being destroyed or duplicated.
 > Quest items, containers, charms, unique objects, and equipment with individual
 > state cannot be shared. Items can only leave the selected backpack stack; there
 > is no chat command for giving or dropping.
+
+### Belay Team experiment
+
+Choose **Belay Team** when creating a lobby to enable partner belay. Rope team
+keeps its original direct harness tether; Belay Team rejects that tether in input,
+host validation, received packets and late-join snapshots. Every peer
+must use the same experimental build (protocol **27**, incompatible with the
+public 2.4.1/2.4.2/2.4.3 protocol-16 builds and earlier pilots). This branch
+includes upstream 2.4.3, including its Story-launch preset correction, main-menu
+label and harness-rope fixes. The upstream
+physics/render callbacks remain scoped to the dedicated harness rope, while
+Belay Team uses its own protection-rope controller. A missing station attachment can
+now be requested on the climber's synchronized native copy of that exact piton.
+This implementation has automated coverage; its initial attachment still needs
+native two-client validation. Belay Team does not create the direct harness tether.
+
+Press **L** to choose a player. With the panel open, **Up/Down** selects a partner,
+**I** requests belay, **O** offers it, **Enter** accepts and **Backspace** declines
+or cancels a pending invitation. **K** defines/removes an idle station. Shortcuts
+act once per press; Backspace does not end an active pair. Closing L does not
+accept an invitation. Gameplay action maps stay blocked while the panel is open,
+including mouse climbing; Enter belongs to the panel instead of opening chat.
+The belayer must remain secured at their native piton station. Both players must
+be in the same world. The fixed 6 m invitation limit is replaced by the climber's
+native rope capacity and protection-route checks. The climber declares capacity
+when requesting or accepting; an offer waits for that declaration. The host uses
+a bounded distance check with a 3 m allowance for replicated body/attachment
+offsets, while native station-to-backup geometry, ordered route and remaining
+rope remain decisive before control. Chat fallbacks remain available:
+`/belay request <player>`, `/belay offer <player>`, `/belay accept`, `/belay stop`.
+**Space** (or F7) toggles the latched brake, starting with free rope. Only one pair
+can use this pilot at a time. L opens this panel only in Belay Team; Rope team
+keeps its direct-tether shortcut.
+
+With the panel closed, the belayer holds **Up** to feed rope or **Down** to take
+in slack at up to 1 m/s. Feeding requires FREE; take-in also works while BRAKED,
+but stops at the loaded/geometric rope length rather than hauling the character.
+Release the key to stop; holding both directions cancels motion. Opening the
+panel, typing or captured input sends zero motion. The panel and HUD show
+the climber's reported slack, reserve, motion input and native length readback,
+separately from the host-accepted request. Those reports are not independent
+proof of physics.
+
+The belayer also receives a bounded, visual-only copy of the climber's native
+rope shape from the agreed station, through each protection, to the harness.
+Samples refresh at up to 10 Hz, with at most 192 points and interpolation between
+updates of the same topology. They do not create another physical rope or alter
+damage, brake input or the session lease. Stale drawings disappear after 0.75 s;
+ending the pair or resetting the scene clears the drawing. This visual candidate
+now selects physical parts by their actual consecutive attachment pins, allowing
+repeated Climbot holders outside that path. This correction still needs two-client
+validation for visibility in both roles, slack and protection updates.
+The drawing clones the belayer's local native rope material and LineRenderer
+style, preserving its texture/UV settings instead of applying a player-palette
+color. A supported flat fallback can be replaced when native styling becomes
+available; material diagnostics identify which source is in use. Only owned
+clones are destroyed. The corrected appearance still needs native confirmation.
+
+Held motion is renewed at up to 10 Hz and expires after 0.4 s without a fresh
+accepted command on the climber. This stops explicit feed/take-in, while retaining
+the latched brake; FREE can still pay out naturally as the climber moves or falls.
+The three-second session lease remains separate. The host permits a two-command
+delivery burst, bounds sustained input and retries the latest sampled keys after
+rate limiting. It never retries a saved old motion. A protection-route transition
+cancels held motion until a fresh post-rebind command arrives. The command path
+and budget/expiry behavior have simulated participant coverage; native keyboard,
+network latency and two-client behavior still need validation.
+
+The existing personal piton anchor can also be explicitly marked with **Define
+station** in the L panel, even before a partner joins. **Remove station** clears
+an idle station or cancels its pending invitation; it does not detach the personal
+anchor or retrieve the piton. Releasing the native anchor, losing/breaking/moving
+the piton, leaving Belay Team or changing scenes invalidates the station. Offering
+belay or accepting a request still records the current anchor when needed.
+Defining a station does not automatically create a pair or exchange roles.
+With the L panel open, **K** performs its visible Define/Remove station action
+without needing the mouse. One press performs one action; holding K does not
+toggle repeatedly. Outside the panel, the shortcut does not consume K. The panel
+keeps the cursor visible/unlocked while open and restores its previous state on close.
+
+After acceptance, the belayer's native personal-anchor input is locked and K
+cannot remove the active station. Use **L > End belay** before releasing that
+anchor manually or returning to climbing. Only the anchored belayer's climb-entry
+action is captured; camera, panel and rope controls remain available. The station
+is tied to its real piton rather than
+a frozen body coordinate, so ordinary anchored body motion stays inside the
+native tether area. Piton failure, lost anchoring, departure and disconnect still
+end control. This new input guard requires native validation.
+
+The current climber can personally anchor at a separate healthy upper piton,
+then choose **Define station / swap roles (K)** in L. The current belayer accepts
+with **Enter**, or either participant cancels the proposal with **Backspace**.
+The original pair stays active during preparation. Both personal anchors must
+remain attached and both endpoints must confirm readiness before the host commits
+a new control session with reversed roles and a closed brake. The future climber's
+own rope capacity and native station route are checked before transfer. If the
+station needs insertion, the existing native preparation/confirmation is reused
+while the old belayer remains anchored. Cancellation retains the original roles;
+it does not undo a native operation already queued. L stays open during preparation.
+After commit, wait for new rope readback before releasing the follower's personal
+anchor. This is an experimental anchored exchange, with automated participant
+coverage. One matched R23 exchange remained active for about 159 seconds, but
+reverse preparations failed. A later matched R35 session committed three
+consecutive exchanges in both directions; its final pair remained active for
+about 407 seconds until an explicit stop. This is scoped evidence with the same
+person hosting, not acceptance of the full exchange/lifecycle matrix. The current
+damage, material and station-input corrections still require native retesting.
+
+An unloaded personal-anchor transition may recreate rope segments without adding
+a piton. The controller restores only the original ordered holders/protections
+and physical pin walk after settling, preserving paid-out rope and the brake.
+An unloaded recovery may also remove older pitons before the station only if the
+entire station-to-harness holder, segment and physical pin suffix stays unchanged.
+Loaded route changes, downstream removals, reorders and incomplete pins are refused.
+
+Invitations carry the station's placer/source id and its lifecycle reference. The
+host checks that identity against its live piton registry; the climber resolves
+the corresponding native copy, with position used only as a secondary check.
+For a missing attachment, the climber must first be personally anchored at a
+separate healthy backup reachable within their native rope capacity. Acceptance requests one native
+quickdraw insertion into the existing protection route. The panel reports
+preparation while the original backup, ordered holders, native piton collection
+and loaded pin connections are checked for five observed seconds. Feed/take-in
+remain inactive during preparation; only fresh commands after confirmation can
+move rope. No extra piton is spawned by this attachment and cancellation does not
+rewind an operation already queued in the game. Replacing the station requires
+a new invitation. Both invitation directions use this station-bound controller.
+Native geometry can insert the station before or after the original protections,
+in both initial connections and exchanges. Both orders require the same retained
+backup, original holder walk, physical pins and confirmation interval. Protections
+before the station remain attached but are outside its controlled suffix; only
+the actual station-to-harness path contributes downstream protections and budget.
+An already attached station can bind directly after its existing route validates.
+The route budget includes the fixed path from that station through downstream
+protections; FREE pays out as needed and BRAKED limits falls and outward climbing
+using the paid-out length. Remote feed/take-in uses this same bounded budget;
+native acceptance of the anchored role exchange remains pending. The R12 H1 session exercised remote
+controls, climbing limits and short catches, but also exposed premature session
+ends. Its two initial-insertion attempts failed; later sessions used an existing
+attachment. These stability changes and initial insertion need native retesting.
+
+Piton synchronization also creates native copies that may be saved by the game.
+Existing save duplication is not repaired by this pilot. References inferred only
+from position after a reload cannot define/bind a station; use a freshly placed
+piton rather than selecting a nearby duplicate. Save/reload and duplication checks
+are included in [the cooperative test plan](BELAY-TEAM-TESTS.txt).
+
+Multiple protection pitons are accepted. Adding one piton while unloaded waits
+for a complete stable native split before rebinding the final segment without a
+new invitation. The same station-route budget rules as the local rehearsal apply;
+removal/reordering is not supported. A topology change during suspension ends
+ownership instead of switching the loaded constraint to an unverified route. Native
+piton failure is observed once and retains its original result. Returning to the
+wall rearms the next fall with a new application generation and current intent.
+
+The HUD distinguishes host-accepted intent from the climber's measured suspension
+readback. Input permission expires after three seconds without renewal. A valid
+owned suspension requests hold at its current geometry before ownership ends;
+scene/invalid loaded-topology changes invalidate old native references without restoring an old
+radius. Pause, cutscene or focus loss ends the invitation/session; return to
+gameplay, re-anchor and send a new invitation. Automatic suspension/resume is a
+later milestone, not a function of this pilot. The two-minute diagnostic limit
+applies to solo exercises; partner sessions instead require fresh input permission.
+Native two-client braking, station
+integration, damage/failure coherence and crash stability still require testing.
+Remote control does not depend on a diagnostic capture or its recording limits.
+The opt-in `Debug.BelaySharedDamageExperiment` adds a cooperative fall-damage
+experiment to this build. After a measured catch remains suspended for one second,
+the climber reports the vertical drop, station-to-climber rope budget and observed
+native fall HP loss. The host validates the current pair and approves at most one
+addition per catch. The existing height-attenuated curve is retained: low falls
+receive less damage even at a high estimated fall factor. Native fall loss is
+credited against that target; exhaustion loss is not credited as fall damage.
+
+After the climber confirms the completed native call and its actual HP change,
+the host sends the belayer 30% of the climber's observed native-plus-added fall
+loss, normalized by the climber's maximum HP and applied to the belayer's maximum
+HP. Both doses use the game's native Fall damage path, preserving difficulty,
+protections and death handling. A zero addition consumes the catch without a
+damage call. Incomplete calls, expired sessions and changed roles cannot issue
+a stale or duplicate dose. Exchanges wait for a pending damage decision to finish
+or expire. The HUD and `[BelayDamage]` logs report both local requested and observed
+damage. The host validates bounded reports from the authorized climber; it does
+not independently simulate that client's physics. This combined build still
+requires native two-client validation. A forced belayer ragdoll is not implemented.
+
+`Debug.BelayRouteExperiment` also enables an independent solo exercise: Ctrl+F11
+starts/ends control and Space/F7 brakes/releases. It uses the same native adapter
+and shows piton count, route generation and applied distance.
+The inactive banner shows any rejected start reason for 15 seconds, so a failed
+Ctrl+F11 attempt is visible without opening the log. A geometric preview
+calculates station -> ordered pitons -> climber capacity, with the first piton
+standing in for a simulated station. That preview does not attach or reroute the
+physical rope. The earlier solo brake trial and empty-panel trial provide partial
+native evidence; populated panels and real partner operation remain unverified.
+
+`Debug.BelayRopeExperiment` enables a separate **local rope-budget exercise**,
+off by default. It takes precedence over the previous solo exercise. Start/end
+with Ctrl+F11 while stable on the wall; Space/F7 toggles the brake. Hold Up to feed
+rope or Down to take in slack at 1 m/s. Pausing or switching windows ends the
+exercise; the inactive banner and local log report the stop reason. An open brake
+permits passive payout in a fall up to the rope-end cap. Closing the brake preserves the released length,
+including existing slack. Take-in is one-way and cannot shorten a loaded segment;
+the brake blocks additional manual feed. Releasing either arrow stops that command.
+Open payout follows both geometric and native loaded distance. When braking an
+already falling character, the next physics step captures at least the loaded
+length once, preserving any additional slack; later steps hold that target.
+The end-knot capacity remains the cap even during native stretch. This avoids
+rewinding a falling body to an older, shorter geometric measurement; actual catch
+motion and rebound still require native validation.
+
+For the local ascent/take-in exercise, Ctrl+Down toggles a simulated belayer
+holding take-in for at most 20 seconds, leaving the mouse and movement keys free.
+The HUD shows the remaining time. Ctrl+Down again or a manual arrow interrupts it;
+pause, lost focus/input capture and ending the exercise also cancel it. This
+supplies the same bounded take-in command and does not automate the brake or
+change character movement. Native route rejections name the failed mapping guard,
+and bounded samples include the actual securing-point position for this trial.
+
+The local experiment also restricts the native climbing-permission decision while
+braked: existing slack can be used, but movement farther from the last piton stops
+at the paid-out limit. Movement toward it remains possible, including upward
+climbing below an upper piton. Release the brake and feed more rope to continue.
+The filter preserves native denials and neither changes the coil's total capacity
+nor sets character position/velocity. This new native integration needs a separate
+above-piton movement test for each changed integration; a scoped offline
+block/retreat/release-payout-resume trial passed on local `667fb93`. It does not
+yet extend the remote partner pilot.
+
+For an opt-in **local station rehearsal**, anchor yourself on a healthy piton
+already attached to your native protection rope, then press Ctrl+F10 to record
+it. Release your personal anchor, keep that piton on the same rope and use Ctrl+F11
+to start the rope-budget exercise. The captured station must occur exactly once
+on the ordered holder walk; intermediate protections retain their order and
+repeated occurrences. The HUD reports the station-to-last-protection path.
+Its remaining capacity is intersected with the native final-segment allowance,
+so station accounting cannot grant additional rope. This rehearsal uses the
+existing physical protection chain; it does not attach a partner endpoint or
+replace the Climbot. The recorded piton stands in for the absent anchored belayer.
+Unlike a real player's station, this solo test marker remains after releasing
+your personal anchor. End Ctrl+F11 before Ctrl+F10 clears it; scene changes and
+native identity loss invalidate it. With a recorded station, adding one new piton
+while stable on the wall now pauses manual length writes, waits for the ordered
+native route to settle and rebinds its new final segment. Temporary holder walks
+are not accepted as completed clips: the existing protection order plus exactly
+one new piton, one additional physical part and one additional holder must be
+present before the new mapping can settle. This also waits for the held rope to
+be released after attaching the piton. Bounded local diagnostics record the
+observed protection sequences. The station-to-protection
+geometry plus paid-out final length is conserved; FREE can pay out only the extra
+length needed by the new geometry. BRAKED cannot silently gain rope. The brake
+state is retained and held take-in is cancelled during the transition. Existing
+native permission failures are preserved.
+
+The transition has a three-second deadline. A fall, suspension, missing station,
+removal/reordering, insufficient paid-out rope or invalid capacity ends the local
+controller. It does not roll back pitons or restore an older rope length. The
+exercise without a recorded station still uses a fixed route. This new integration
+needs native validation independently of the already-passed fixed two-piton
+rehearsal on `1234e4e`; no partner endpoint or role transfer is implemented.
+
+`Debug.BelayAppendGuide` optionally replaces the diagnostic overlay with an
+observation-only guide for one offline BRAKED protection addition. It checks the
+recorded station and initial route, asks for 3.5 m of confirmed slack before
+closing the brake, follows the addition and requires five observed seconds of
+BRAKED control with two intermediate protections and matching length readback.
+The current instruction, controller ACTIVE/STOPPED state and final PASS/RETRY
+remain visible; stopping control, changing scenes or returning to the menu does
+not erase a result. A new exercise or station action starts a fresh attempt.
+The guide never changes rope commands or native physics. It defaults off;
+`Debug.BelayAppendGuideLanguage` defaults to `en`, with `pt` available for the
+local tester. A guide pass covers this local workflow only, not partner operation.
+
+This experiment controls the final segment of the existing native protection
+route. The HUD separates released length, estimated straight-line slack, geometric
+reserve, native rest/particle measurements and the suspension readback. Rope and
+suspension coordinates are translated at each new suspension; that experimental
+mapping needs matched native fall tests. The budget persists when returning to the
+wall. The geometric capacity can change while unloaded without resetting paid-out
+length or the current command; suspension retains a fixed capacity until unloaded.
+An invalid capacity or one below the paid-out length ends control. Without a
+recorded station, a route change also ends the fixed-route exercise rather than
+silently resetting its budget. With a locked budget, the climbing permission hook
+blocks outward wall movement at the released limit and permits retreat; an
+unexpected overrun still ends control without pulling the character back. These
+budget rules also apply to station-bound partner control. Native `RefreshRopeLength` consumes the owned
+length goal in its normal solver phase, even when Climbot stops issuing instant
+setters. The HUD reports whether native rest-length readback matches the requested
+length; this is not a fall/visual-equilibrium confirmation. Sampling is bounded
+to two records per second, including read-only stretch/compression observations.
+No remote take-in, shared station attachment or protected role transfer is added
+by this local exercise. Native damage/piton coherence is still unverified.
+
+An independent opt-in **station reconnection trial** is enabled by
+`Debug.BelayStationConnectionExperiment` together with `Debug.BelayRopeExperiment`.
+Enter Story directly without Multiplayer. Place/anchor at A and record it with
+Ctrl+F10, then release personal anchoring, place B about 2 m higher and personally
+anchor at B. Keep exactly the native A -> B protection route. Ctrl+F12 requests
+unclipping only A's quickdraw from that rope; the second press is enabled after
+the game confirms A is absent and B is still attached. It requests native
+geometric reinsertion of the same existing quickdraw, then checks the original
+protection order, loaded rope parts, native pin-collider references for A/B,
+usable station route and five observed seconds of stable connection. The panel
+gives the current instruction and retains PASS/NOT APPROVED.
+An unmet preflight check instead retains NOT STARTED: no unclip or connection
+request was issued in that attempt. The panel distinguishes missing A, invalid
+personal B, route preparation, unloaded segment physics and mismatched A/B pins,
+and displays the specific check. Bounded per-segment pin readbacks stay in the
+local log so an unavailable collider is distinguishable from unloaded physics.
+Quickdraw pin checks use the native `GetAttachEnd()` collider on both neighboring
+rope parts, rather than requiring the separate `attachBegin` field. Both actual
+pin occurrences are required for attached A/B; detached A requires zero, with B
+still present twice.
+The earlier append guide is suppressed while this trial is selected.
+Readiness and the preparation panel use Cairn's native lifecycle rather than
+the multiplayer player-state cache, which can remain Menu during offline Story.
+Ctrl+F11 cannot start the separate rope-budget controller while this trial is
+selected; use Ctrl+F12 and follow the panel.
+
+This diagnostic does not spawn/delete pitons, write inventory/HP/positions or
+control rope length/brake. It requires the same healthy personal B anchor, native
+rope identity and piton collection throughout. Only one native request is issued
+per phase. Native topology changes have a three-second deadline and require a
+complete stable snapshot; missing frames do not count toward confirmation. Pause,
+focus/mode/scene changes, movement or anchor/route loss stop further requests.
+Cancellation does not rewind rope state or clear the game's native request queue;
+an already queued operation can still finish. Keep B attached. Ctrl+F12 can retry
+a detached A only if the original B anchor and exact remaining route are verified
+again. This is a no-fall, solo reconnection experiment; no initial partner
+attachment, two-client routing or role transfer acceptance is established.
 
 ### Proximity voice
 

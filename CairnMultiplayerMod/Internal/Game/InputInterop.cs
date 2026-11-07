@@ -15,6 +15,7 @@ internal static class InputInterop
     private static bool _savedDisableInputs;
     // Track the applied state, rather than the request, so a missing singleton is retried.
     private static bool _blockApplied;
+    private static bool _ignoreInputApplied;
     private static bool _mapDiagLogged;
 
     /// <summary>
@@ -23,7 +24,9 @@ internal static class InputInterop
     /// </summary>
     public static void ReconcileGameplayInput(bool wantBlocked)
     {
-        if (wantBlocked == _blockApplied) return;
+        var wantIgnoreInput = wantBlocked && InputCaptureState.IsKeyboardCaptured;
+        if (wantBlocked == _blockApplied && wantIgnoreInput == _ignoreInputApplied
+            && !(wantBlocked && InputCaptureState.IsBelayPanelCaptured)) return;
 
         try
         {
@@ -32,18 +35,34 @@ internal static class InputInterop
 
             if (wantBlocked)
             {
-                _savedDisableInputs = mgr.disabledInputs;
+                if (!_blockApplied)
+                {
+                    _savedDisableInputs = mgr.disabledInputs;
+                }
                 mgr.disabledInputs = true;
-                // While the game ignores input events, the gamepad's own state can stop updating,
-                // and the radial menu reads that state directly. Only the chat needs the flag.
-                if (InputCaptureState.IsKeyboardCaptured) mgr.SetIgnoreInputEvents(true);
                 _blockApplied = true;
+                // Native ignore-input state is a counter, owned separately from
+                // the gameplay block. Chat/Belay acquire it once; the radial menu
+                // must keep the gamepad state updating while gameplay is blocked.
+                if (wantIgnoreInput != _ignoreInputApplied)
+                {
+                    mgr.SetIgnoreInputEvents(wantIgnoreInput);
+                    _ignoreInputApplied = wantIgnoreInput;
+                }
+                // Mouse climbing actions use native action maps. The two input
+                // flags alone do not disable those maps; contexts may refresh
+                // while the panel is open, so reassert its modal ownership.
+                if (InputCaptureState.IsBelayPanelCaptured) mgr.DisableAllMaps();
             }
             else
             {
-                mgr.SetIgnoreInputEvents(false);
-                mgr.disabledInputs = _savedDisableInputs;
+                if (_ignoreInputApplied)
+                {
+                    mgr.SetIgnoreInputEvents(false);
+                    _ignoreInputApplied = false;
+                }
                 mgr.EnableInputs();
+                mgr.disabledInputs = _savedDisableInputs;
                 mgr.UpdateInputContext();
                 _blockApplied = false;
                 LogMapStatusOnce(mgr);
@@ -132,8 +151,23 @@ internal static class InputInterop
 
     private static void RestoreDisabled(List<UnityEngine.InputSystem.InputAction> actions)
     {
-        foreach (var action in actions)
-            if (action != null && DisabledByUs.Remove(action) && !action.enabled) action.Enable();
+        var restored = false;
+        try
+        {
+            foreach (var action in actions)
+                if (action != null && DisabledByUs.Remove(action) && !action.enabled)
+                {
+                    restored = true;
+                    action.Enable();
+                }
+        }
+        finally
+        {
+            // Radial/backpack suppression can end after Belay captured this
+            // frame. Restoring its individual actions must not reopen climbing
+            // maps behind L; normal panel close rebuilds the native context.
+            if (restored && InputCaptureState.IsBelayPanelCaptured) FindInputManager()?.DisableAllMaps();
+        }
     }
 
     private static void ScanNativeActions()
@@ -258,7 +292,11 @@ internal static class InputInterop
             var mgr = FindInputManager();
             if (mgr != null)
             {
-                mgr.SetIgnoreInputEvents(false);
+                if (_ignoreInputApplied)
+                {
+                    mgr.SetIgnoreInputEvents(false);
+                    _ignoreInputApplied = false;
+                }
                 mgr.disabledInputs = false;
                 mgr.EnableInputs();
                 mgr.UpdateInputContext();
