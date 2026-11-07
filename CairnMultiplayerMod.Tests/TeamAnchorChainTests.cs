@@ -313,6 +313,31 @@ public sealed class TeamAnchorChainTests
     }
 
     [Fact]
+    public void AHeldDeathUnclipsLikePressingTheRope()
+    {
+        Reset();
+        TeamAnchorSession.Bind(() => true);
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+        TeamAnchorSession.NoteLocalLeaderPlacement(1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(2, new Vector3(0f, 2f, 0f));
+
+        // No planted staff, so the death takes the voluntary unclip: the chain comes off
+        // the rope and placement stays armed until camp.
+        RopeLinkState.Apply(4, 7, false);
+        TeamAnchorSession.OnClip(4, 4, 7, false);
+
+        var released = new List<TeamAnchorSession.ChainRelease>();
+        TeamAnchorSession.CopyReleased(released);
+        Assert.Equal(2, released.Count);
+        Assert.False(TeamAnchorSession.IsLinked);
+        Assert.False(TeamAnchorSession.HasProtection);
+        Assert.False(TeamAnchorSession.LeaderLeft);
+        Assert.True(TeamAnchorSession.RulesArmed);
+        Assert.False(TeamAnchorSession.AllowsPlacement);
+    }
+
+    [Fact]
     public void ANewTieArmsTheRulesAndAWallUntieLeavesThemArmed()
     {
         Reset();

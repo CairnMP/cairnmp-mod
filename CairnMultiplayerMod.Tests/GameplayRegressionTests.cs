@@ -283,18 +283,24 @@ public sealed class GameplayRegressionTests
     [Fact]
     public void DyingWithATeammateStandingLeavesTheClimberDown()
     {
-        var (_, _, game) = Create(new ReviveFeature());
+        var (_, host, game) = Create(new ReviveFeature());
         game.PlayersImpl.InGame = new[] { 2 };
 
         Assert.True(game.LifeImpl.ReportDeath());
         Assert.True(game.LifeImpl.IsDown);
         Assert.False(game.LifeImpl.RunEnded);
+
+        // Rope Team has no countdown. Waiting does not end the run.
+        game.TimeImpl.Now += 600f;
+        host.Tick(FeaturePhase.Always);
+        Assert.False(game.LifeImpl.RunEnded);
+        Assert.True(game.LifeImpl.IsDown);
     }
 
     [Fact]
     public void ATeammateStandsTheDownedClimberBackUpOnPartialHealth()
     {
-        var (runtime, host, game) = Create(new ReviveFeature());
+        var (runtime, host, game) = Create(new ReviveFeature(), rules: () => FaceRescue);
         game.PlayersImpl.InGame = new[] { 2 };
         Assert.True(game.LifeImpl.ReportDeath());
 
@@ -309,7 +315,7 @@ public sealed class GameplayRegressionTests
     [Fact]
     public void NobodyComingInTimeEndsTheRun()
     {
-        var (_, host, game) = Create(new ReviveFeature());
+        var (_, host, game) = Create(new ReviveFeature(), rules: () => FaceRescue);
         game.PlayersImpl.InGame = new[] { 2 };
         Assert.True(game.LifeImpl.ReportDeath());
 
@@ -333,12 +339,14 @@ public sealed class GameplayRegressionTests
         host.Tick(FeaturePhase.Always);
 
         Assert.True(game.LifeImpl.RunEnded);
+        Assert.True(TryGetCondition(runtime, 1, out var condition));
+        Assert.Equal(ClimberCondition.Out, condition);
     }
 
     [Fact]
     public void RevivingCostsAHealingItemAndIsRefusedWithoutOne()
     {
-        var (runtime, _, game) = Create(new ReviveFeature());
+        var (runtime, _, game) = Create(new ReviveFeature(), rules: () => FaceRescue);
         runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
 
         Assert.True(game.LifeImpl.CanRevive(2));
@@ -346,6 +354,18 @@ public sealed class GameplayRegressionTests
         Assert.Equal(0, game.InventoryImpl.HealingItems);
 
         Assert.False(game.LifeImpl.CanRevive(2));
+    }
+
+    [Fact]
+    public void RopeTeamDoesNotReviveOnTheFace()
+    {
+        var (runtime, _, game) = Create(new ReviveFeature());
+        runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
+
+        Assert.False(game.LifeImpl.CanRevive(2));
+        Assert.False(runtime.ExecuteHostCommand(2, Command("revive.request", new ReviveRequest(1))).Committed);
+        Assert.Equal(1, game.InventoryImpl.HealingItems);
+        Assert.Equal("Guest is down. Reach a bivouac to bring them back.", game.HudImpl.Messages["revive.notice"]);
     }
 
     [Fact]
@@ -443,6 +463,39 @@ public sealed class GameplayRegressionTests
     }
 
     [Fact]
+    public void PressingTheKeyOnTheApproachCallsTheFallenBack()
+    {
+        var bridge = new Bridge();
+        var (runtime, host, game) = Create(new ReviveFeature(), bridge: bridge);
+        runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
+        game.StateImpl.InVolume = true;
+        game.StateImpl.Camp = new WorldPosition(4, 5, 6);
+
+        game.InputImpl.Press(GameKey.R);
+        host.Tick(FeaturePhase.Always);
+
+        Assert.Contains("revive.recall.relayed", bridge.Events);
+        Assert.False(game.StateImpl.InBivouac);
+    }
+
+    [Fact]
+    public void ACallFromTheApproachBringsTheFallenToThatCamp()
+    {
+        var (runtime, host, game) = Create(new ReviveFeature());
+        game.PlayersImpl.InGame = new[] { 2 };
+        Assert.True(game.LifeImpl.ReportDeath());
+        game.StateImpl.SameVolume = true;
+
+        runtime.ExecuteHostCommand(2, Command("revive.recall",
+            new BivouacRecall(new WorldPosition(4, 5, 6))));
+
+        Assert.Equal(0.5f, game.LifeImpl.RevivedAtRatio);
+        Assert.False(game.LifeImpl.IsDown);
+        host.Tick(FeaturePhase.Always);
+        Assert.Equal(5, game.WorldImpl.TeleportedTo.Value.Y);
+    }
+
+    [Fact]
     public void ATeammateAtCampStillCountsAsStanding()
     {
         var (_, host, game) = Create(new ReviveFeature());
@@ -530,7 +583,7 @@ public sealed class GameplayRegressionTests
     [Fact]
     public void ARunThatEndsDoesNotAnnounceTheClimberStanding()
     {
-        var (runtime, host, game) = Create(new ReviveFeature());
+        var (runtime, host, game) = Create(new ReviveFeature(), rules: () => FaceRescue);
         game.PlayersImpl.InGame = new[] { 2 };
         Assert.True(game.LifeImpl.ReportDeath());
 
@@ -572,7 +625,7 @@ public sealed class GameplayRegressionTests
     [Fact]
     public void ALatecomerKnowsWhoIsLyingOnTheFace()
     {
-        var (runtime, _, game) = Create(new ReviveFeature(), bridge: new Bridge(isHost: false));
+        var (runtime, _, game) = Create(new ReviveFeature(), bridge: new Bridge(isHost: false), rules: () => FaceRescue);
         // A body is not enough: nobody said this one is waiting for help.
         Assert.False(game.LifeImpl.CanRevive(2));
 
@@ -594,7 +647,7 @@ public sealed class GameplayRegressionTests
     {
         var bridge = new Bridge();
         bridge.Others.Add(new MultiplayerPlayer(3, "Third", false, false));
-        var (runtime, _, game) = Create(new ReviveFeature(), bridge: bridge);
+        var (runtime, _, game) = Create(new ReviveFeature(), bridge: bridge, rules: () => FaceRescue);
         runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
 
         // A third climber's rescue was granted first...
@@ -609,7 +662,7 @@ public sealed class GameplayRegressionTests
     [Fact]
     public void ARescueFromAcrossTheMountainIsRefused()
     {
-        var (runtime, _, game) = Create(new ReviveFeature());
+        var (runtime, _, game) = Create(new ReviveFeature(), rules: () => FaceRescue);
         runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
         game.PlayersImpl.TargetX = 500f;
 
@@ -642,7 +695,19 @@ public sealed class GameplayRegressionTests
         host.Tick(FeaturePhase.Always);
         Assert.False(game.HudImpl.Messages.ContainsKey("revive.recall"));
 
+        // The approach, before the rest. The dead partner still holds the door.
+        game.StateImpl.InVolume = true;
+        game.StateImpl.Camp = new WorldPosition(4, 5, 6);
+        host.Tick(FeaturePhase.Always);
+        Assert.Contains("revive.recall", game.HudImpl.Messages.Keys);
+
+        game.StateImpl.InVolume = false;
+        game.StateImpl.Camp = null;
+        host.Tick(FeaturePhase.Always);
+        Assert.False(game.HudImpl.Messages.ContainsKey("revive.recall"));
+
         game.StateImpl.InBivouac = true;
+        game.StateImpl.Camp = new WorldPosition(10, 20, 30);
         host.Tick(FeaturePhase.Always);
         Assert.Contains("revive.recall", game.HudImpl.Messages.Keys);
 
@@ -657,6 +722,7 @@ public sealed class GameplayRegressionTests
     {
         var (_, host, game) = Create(new SpectatorFeature(), MultiplayerMode.FreeSolo);
         game.LifeImpl.IsDown = true;
+        game.LifeImpl.DeathHeld = true;
 
         host.Tick(FeaturePhase.Always);
 
@@ -669,6 +735,7 @@ public sealed class GameplayRegressionTests
     {
         var (_, host, game) = Create(new SpectatorFeature(), MultiplayerMode.FreeSolo);
         game.LifeImpl.IsDown = true;
+        game.LifeImpl.DeathHeld = true;
         game.PlayersImpl.InGame = new[] { 2 };
         game.SpectatorImpl.Watchable.Add(2);
         host.Tick(FeaturePhase.Always);
@@ -687,6 +754,7 @@ public sealed class GameplayRegressionTests
     {
         var (_, host, game) = Create(new SpectatorFeature(), MultiplayerMode.FreeSolo);
         game.LifeImpl.IsDown = true;
+        game.LifeImpl.DeathHeld = true;
         host.Tick(FeaturePhase.Always);
         Assert.True(game.SpectatorImpl.IsActive);
 
@@ -698,13 +766,33 @@ public sealed class GameplayRegressionTests
     }
 
     [Fact]
-    public void ARopeTeamLobbyNeverTakesTheCameraAway()
+    public void ARopeTeamDeathOpensTheSpectatorSeatWhileTheScreenIsHeld()
+    {
+        var (_, host, game) = Create(new SpectatorFeature());
+        game.LifeImpl.IsDown = true;
+        game.LifeImpl.DeathHeld = true;
+
+        host.Tick(FeaturePhase.Always);
+
+        Assert.True(game.SpectatorImpl.IsActive);
+        Assert.Contains("bivouac", game.HudImpl.Messages["spectator.hint"]);
+    }
+
+    [Fact]
+    public void OpeningTheGameOverMenuLeavesTheSpectatorCamera()
     {
         var (_, host, game) = Create(new SpectatorFeature());
         game.LifeImpl.IsDown = true;
 
         host.Tick(FeaturePhase.Always);
+        Assert.False(game.SpectatorImpl.IsActive);
 
+        game.LifeImpl.DeathHeld = true;
+        host.Tick(FeaturePhase.Always);
+        Assert.True(game.SpectatorImpl.IsActive);
+
+        game.LifeImpl.DeathHeld = false;
+        host.Tick(FeaturePhase.Always);
         Assert.False(game.SpectatorImpl.IsActive);
     }
 
@@ -887,44 +975,6 @@ public sealed class GameplayRegressionTests
     }
 
     [Fact]
-    public void APartnerComingOffTheWallShakesTheRopeTeam()
-    {
-        var (runtime, host, game) = Create(new RopeShakeFeature());
-        game.PlayersImpl.Roped.Add(2);
-
-        runtime.ExecuteHostCommand(2, Command("rope-shake.fell", new PartnerFell()));
-
-        Assert.Equal(1, game.PlayersImpl.Shaken);
-    }
-
-    [Fact]
-    public void AFallOnAnotherRopeIsNotFelt()
-    {
-        var (runtime, _, game) = Create(new RopeShakeFeature());
-
-        runtime.ExecuteHostCommand(2, Command("rope-shake.fell", new PartnerFell()));
-
-        Assert.Equal(0, game.PlayersImpl.Shaken);
-    }
-
-    [Fact]
-    public void ALongFallIsOneShakeNotOnePerFrame()
-    {
-        var (_, host, game) = Create(new RopeShakeFeature());
-        game.PlayersImpl.Falling = true;
-
-        host.Tick(FeaturePhase.Gameplay);
-        host.Tick(FeaturePhase.Gameplay);
-        host.Tick(FeaturePhase.Gameplay);
-
-        // The host commits its own broadcast locally, and the feature filters itself out, so
-        // what is observable here is that a second send never happens while still falling.
-        game.PlayersImpl.Falling = false;
-        host.Tick(FeaturePhase.Gameplay);
-        Assert.Equal(0, game.PlayersImpl.Shaken);
-    }
-
-    [Fact]
     public void ARationOpenedOnTheRopeFeedsThePartners()
     {
         var (runtime, _, game) = Create(new SharedRationsFeature());
@@ -1018,32 +1068,6 @@ public sealed class GameplayRegressionTests
         host.NotifySceneReset();
 
         Assert.Single(game.WorldImpl.Marks[2]);
-    }
-
-    [Fact]
-    public void APartnerHangingOnYourRopeIsWeightYouCarry()
-    {
-        var (runtime, host, game) = Create(new ReviveFeature());
-        game.PlayersImpl.InGame = new[] { 2 };
-        game.PlayersImpl.Roped.Add(2);
-        runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
-
-        host.Tick(FeaturePhase.Always);
-
-        // Two per second, one carried partner, one second of frame time.
-        Assert.Equal(2f, game.LifeImpl.Exhausted);
-    }
-
-    [Fact]
-    public void AClimberOnAnotherRopeCostsYouNothing()
-    {
-        var (runtime, host, game) = Create(new ReviveFeature());
-        game.PlayersImpl.InGame = new[] { 2 };
-        runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
-
-        host.Tick(FeaturePhase.Always);
-
-        Assert.Equal(0f, game.LifeImpl.Exhausted);
     }
 
     [Fact]
@@ -1146,14 +1170,21 @@ public sealed class GameplayRegressionTests
         Assert.DoesNotContain(2, game.WorldImpl.Trails.Keys);
     }
 
+    /// <summary>Not a lobby mode. Keeps the on-the-face rescue covered after Rope Team turned it off.</summary>
+    private static readonly MultiplayerModeRules FaceRescue = new(
+        MultiplayerMode.RopeTeam, "Face rescue", "Test rules.",
+        GameDifficulty.Alpinist, ClimbConstraints.None,
+        teammateRevive: true, bivouacRevive: true, spectateAfterDeath: false);
+
     private static (ExtensionRuntime runtime, FeatureHost host, Game game) Create(
         MultiplayerFeature feature, MultiplayerMode mode = MultiplayerMode.RopeTeam, Bridge bridge = null,
-        Func<MultiplayerMode> currentMode = null)
+        Func<MultiplayerMode> currentMode = null, Func<MultiplayerModeRules> rules = null)
     {
         var runtime = new ExtensionRuntime();
         var game = new Game();
         currentMode ??= () => mode;
-        var host = new FeatureHost(runtime, game, rules: () => MultiplayerModes.RulesFor(currentMode()));
+        var host = new FeatureHost(runtime, game,
+            rules: () => rules != null ? rules() : MultiplayerModes.RulesFor(currentMode()));
         host.RegisterAll(new[] { feature }, new Version(1, 0));
         runtime.Attach(bridge ?? new Bridge());
         return (runtime, host, game);
@@ -1261,6 +1292,16 @@ public sealed class GameplayRegressionTests
             position = Camp ?? default;
             return Camp.HasValue;
         }
+
+        internal bool InVolume;
+        internal bool SameVolume;
+        public bool IsInCampVolume => InVolume;
+        public bool TryGetRecallCamp(out WorldPosition position)
+        {
+            position = Camp ?? default;
+            return Camp.HasValue && (InBivouac || InVolume);
+        }
+        public bool SameCampVolume(WorldPosition camp, WorldPosition pose) => SameVolume;
     }
 
     private sealed class Spectator : ISpectatorApi
@@ -1368,10 +1409,12 @@ public sealed class GameplayRegressionTests
         internal Func<int, bool> CanRevive;
         internal Action<int> OnRevive;
         internal bool IsDown;
+        internal bool DeathHeld;
         internal bool RunEnded;
         internal float RevivedAtRatio = -1;
 
         public bool IsLocalPlayerDown => IsDown;
+        public bool IsDeathScreenHeld => DeathHeld;
 
         public IGameRegistration HoldBackDeathScreen(Func<bool> keepHolding, Action onWentDown)
         {
@@ -1387,9 +1430,7 @@ public sealed class GameplayRegressionTests
             IsDown = false;
         }
 
-        internal float Exhausted;
-        public void ExhaustLocalPlayer(float amount) => Exhausted += amount;
-        public float FallenPartnerStaminaCost(float fallback) => 2f;
+        public void ExhaustLocalPlayer(float amount) { }
 
         public bool ReviveLocalPlayer(float healthRatio)
         {
@@ -1496,10 +1537,8 @@ public sealed class GameplayRegressionTests
         public void ResetHandPoseCaches() { }
         internal bool Falling;
         internal readonly HashSet<int> Roped = new();
-        internal int Shaken;
         public bool IsLocalPlayerFalling => Falling;
         public bool IsRopedToLocalPlayer(int playerId) => Roped.Contains(playerId);
-        public bool ShakeLocalClimberGrip() { Shaken++; return true; }
         public void ResetAppearanceCaches() { }
     }
 

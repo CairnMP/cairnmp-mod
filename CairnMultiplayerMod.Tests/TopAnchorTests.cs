@@ -198,6 +198,7 @@ public sealed class TopAnchorTests
 
         Assert.True(TeamAnchorSession.LeaderLeft);
         Assert.True(TeamAnchorSession.IsLinked);
+        Assert.True(TeamAnchorSession.RulesArmed);
         Assert.Equal(2, TeamAnchorSession.Count);
         Assert.Equal(1u, FollowerAnchor());
         Assert.Equal(Stick, LeaderAnchor());

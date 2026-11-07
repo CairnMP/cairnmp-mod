@@ -127,6 +127,8 @@ public partial class Mod : MelonMod
                 Features.RegisterStream("rope.piton-pool", RopeInterop.AcceptPitonPool));
             RopeInterop.BindTopAnchorChannel(
                 Features.RegisterStream("rope.top-anchor", RopeInterop.AcceptTopAnchor));
+            RopeInterop.BindFallChannel(
+                Features.RegisterStream("rope.fall-state", RopeInterop.AcceptFallState));
         }
         catch (Exception ex)
         {
@@ -185,8 +187,13 @@ public partial class Mod : MelonMod
                   && (Network?.IsHandshakeComplete == true
                       || Lobby.IsInLobby
                       || StoryLaunchSetupPatch.MultiplayerStoryPending));
+        BivouacEntryGatePatch.Bind(
+            _hud,
+            () => Network,
+            () => SceneRoles.ResolveNetworkScene(_runtimeState.CurrentScene, _runtimeState.LastGameplayScene));
         LeaderProtectionMarker.Bind(_hud);
         RopeLengthReadout.Bind(_hud);
+        RopeInterop.BindFallHud(_hud);
         PracticePartnerController.Bind(_hud);
         Player = new PlayerStateBroadcaster(
             Network, _runtimeState, Rope.Reset, () => Bivouac?.BlocksGameplaySync() == true,
@@ -297,6 +304,8 @@ public partial class Mod : MelonMod
         };
         Network.OnRopeClip += (from, target, clip) =>
         {
+            if (!clip)
+                RopeInterop.PrepareUntie(from, target, TeamAnchorSession.IsLocalLeader, from == Network.LocalPlayerId);
             var samePair = TeamAnchorSession.IsLinked
                 && TeamAnchorSession.LeaderId == from
                 && TeamAnchorSession.FollowerId == target;

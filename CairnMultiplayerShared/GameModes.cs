@@ -70,7 +70,7 @@ public readonly struct MultiplayerModeRules
     /// <summary>A teammate can put a downed climber back on their feet where they fell.</summary>
     public bool TeammateRevive { get; }
 
-    /// <summary>The dead can be brought back at a bivouac by whoever is still standing.</summary>
+    /// <summary>The dead can be brought back from a bivouac by whoever is still standing.</summary>
     public bool BivouacRevive { get; }
 
     /// <summary>A player with no way back watches the climb instead of ending their session.</summary>
@@ -83,12 +83,12 @@ public static class MultiplayerModes
     public static readonly MultiplayerModeRules RopeTeam = new(
         MultiplayerMode.RopeTeam,
         "Rope team",
-        "Two climbers, roped together. A downed partner can be brought back on the spot.",
+        "Two climbers, roped together. A dead partner watches, and comes back only from a bivouac.",
         GameDifficulty.Alpinist,
         ClimbConstraints.None,
-        teammateRevive: true,
+        teammateRevive: false,
         bivouacRevive: true,
-        spectateAfterDeath: false);
+        spectateAfterDeath: true);
 
     public static readonly MultiplayerModeRules FreeSolo = new(
         MultiplayerMode.FreeSolo,

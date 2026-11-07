@@ -38,6 +38,7 @@ internal static class GamePatchRegistry
         new("main-menu buttons", MainMenuButtonIntegration.Install, MainMenuButtonIntegration.Uninstall),
         new("savegame piton guard", SavegamePitonGuardPatch.Install, SavegamePitonGuardPatch.Uninstall),
         new("bivouac save", BivouacSaveGatePatch.Install, BivouacSaveGatePatch.Uninstall),
+        new("bivouac entry", BivouacEntryGatePatch.Install, BivouacEntryGatePatch.Uninstall),
         new("native performance probe", NativePerformanceProbe.Install, NativePerformanceProbe.Uninstall),
         new("downed climbers", DeathScreenPatch.Install, DeathScreenPatch.Uninstall),
         new("revive prompt", RevivePromptPatch.Install, RevivePromptPatch.Uninstall),

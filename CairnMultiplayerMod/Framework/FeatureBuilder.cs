@@ -233,12 +233,12 @@ internal sealed class FeatureBuilder
         { _inner = inner; _own = own; }
 
         public bool IsLocalPlayerDown => _inner.IsLocalPlayerDown;
+        public bool IsDeathScreenHeld => _inner.IsDeathScreenHeld;
         public IGameRegistration HoldBackDeathScreen(Func<bool> keepHolding, Action onWentDown)
             => _own(_inner.HoldBackDeathScreen(keepHolding, onWentDown));
         public void EndLocalPlayer() => _inner.EndLocalPlayer();
         public bool ReviveLocalPlayer(float healthRatio) => _inner.ReviveLocalPlayer(healthRatio);
         public void ExhaustLocalPlayer(float amount) => _inner.ExhaustLocalPlayer(amount);
-        public float FallenPartnerStaminaCost(float fallback) => _inner.FallenPartnerStaminaCost(fallback);
         public IGameRegistration AddRevivePrompt(Func<int, bool> canRevive, Action<int> onRevive)
             => _own(_inner.AddRevivePrompt(canRevive, onRevive));
     }

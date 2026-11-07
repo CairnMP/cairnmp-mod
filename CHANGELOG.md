@@ -12,6 +12,9 @@ All notable CairnMP changes are documented here. Releases follow
 ## [Unreleased]
 
 ### Added
+- Rope Team: resting at a bivouac waits until the other climber is at that same
+  camp. A partner who has already gone in, or who has left, does not hold the
+  door. Free Solo and Race are unchanged.
 - Rope Team: the rope between the two climbers stops at the coil. Cairn's own
   rope check refuses a step that would stretch it. The rope does not catch a
   fall, and pitons stay on each climber's own rope.
@@ -24,6 +27,11 @@ All notable CairnMP changes are documented here. Releases follow
   unprotected" when the leader has none.
 - Temporary: while the rope is tied, the HUD shows the rope path against the
   coil, and "paid out" when a further step away is refused.
+- Rope Team: when the other climber falls or sits off belay, the follower braces
+  in place until the leader is climbing again, and the leader's grip is empty
+  after 5 seconds. Untying drops whoever is hanging. The leader's untie, while
+  the follower is hanging, fills the leader's grip. With no piton on the rope,
+  a fall still drops both climbers.
 
 ### Fixed
 - Rope Team: a save made in a bivouac can be loaded. Cairn writes that file on
@@ -38,6 +46,10 @@ All notable CairnMP changes are documented here. Releases follow
   D-pad up still places one.
 
 ### Changed
+- Rope Team: a dead climber stays in the session and watches. The partner brings
+  them back from the approach to a bivouac, and that rest stays shut until they
+  are back on their feet or they leave. There is no rescue on the face. A death
+  while tied unties the rope. If both die, the game over menu plays as usual.
 - Rope Team: the climbot rope, leader-only placement, Climbot collection, and the
   other climber's pitons start when the pair links, and they start again on the
   link after a bivouac. A wall untie leaves them in place. Until the first link,
@@ -69,6 +81,11 @@ All notable CairnMP changes are documented here. Releases follow
   they no longer catch a fall. With no piton left on the rope, a fall drops
   both climbers through Cairn's own unsecured fall. The rope line runs from
   harness to harness through the carabiner on each quickdraw.
+
+### Removed
+
+- Rope shake. A partner coming off the wall no longer knocks loose holds off.
+- Dead weight. A downed climber on the rope no longer spends endurance.
 
 ## Releases
 

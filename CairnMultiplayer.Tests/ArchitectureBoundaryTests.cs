@@ -246,6 +246,22 @@ public sealed class ArchitectureBoundaryTests
             StringComparison.Ordinal);
         Assert.Contains("ToFallingModuleUnsecure", pitons, StringComparison.Ordinal);
 
+        var fall = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "RopeInterop.Fall.cs"));
+        var fallPolicy = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "PartnerFallPenalty.cs"));
+        Assert.DoesNotMatch(@"\.securingRope\s*=(?!=)", fall);
+        Assert.DoesNotMatch(@"\.securingRope\s*=(?!=)", fallPolicy);
+        Assert.DoesNotContain("AddForce", fall, StringComparison.Ordinal);
+        Assert.DoesNotContain(".velocity", fall, StringComparison.Ordinal);
+        Assert.DoesNotContain("FallUnsecuredWithPartner", fall, StringComparison.Ordinal);
+        Assert.Contains("ToFallingModuleUnsecure", fall, StringComparison.Ordinal);
+        Assert.Contains("SetStaminaRatio(1f)", fall, StringComparison.Ordinal);
+        var unanchored = MethodBody(couple, "private void TickUnanchoredFall(");
+        Assert.Contains("PawnStateType.Falling", unanchored, StringComparison.Ordinal);
+        Assert.Contains("FallUnsecuredWithPartner", unanchored, StringComparison.Ordinal);
+        Assert.DoesNotContain("OffBelay", unanchored, StringComparison.Ordinal);
+
         var lengthPatch = File.ReadAllText(Path.Combine(
             ProjectDirectory, "Internal", "Game", "Roping", "RopeLengthPatch.cs"));
         var lengthPolicy = File.ReadAllText(Path.Combine(

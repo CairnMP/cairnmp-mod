@@ -25,6 +25,7 @@ internal sealed class RopeCoupleController
 
     // Hard teardown is broadcast once per episode to avoid reliable-packet spam.
     private bool _ropeHardTornDown;
+    private bool _unclippedForDeath;
     private bool _partnerWasFalling;
     private bool _practiceAttachRefused;
     private float _deadSince = -1f;
@@ -56,6 +57,7 @@ internal sealed class RopeCoupleController
         TeamAnchorSession.ReconcileLink();
         TickRopeTeam();
         TickUnanchoredFall();
+        RopeInterop.TickPartnerFall(_network);
         if (!TeamAnchorSession.IsLinked) LeaderProtectionMarker.Hide();
     }
 
@@ -72,40 +74,81 @@ internal sealed class RopeCoupleController
                         && lifecycle == CairnGameLifecycleState.GameOver;
         bool atMainMenu = SceneRoles.IsMainMenuArea(_state.CurrentScene);
 
-        if (!dead) _deadSince = -1f;
-        else if (_deadSince < 0f) _deadSince = Time.unscaledTime;
-        // A climber down and waiting for help has not left the rope: Cairn's own rope teams
-        // carry a corpse, and the partner pays for it in endurance. Only a death that plays
-        // out breaks the link.
-        bool downed = dead && (DeathScreenPatch.IsHoldingDeath
-                               || Time.unscaledTime - _deadSince < DeathDecisionGraceSeconds);
-
-        bool hardUnsafe = !connected || (dead && !downed) || gameOver || atMainMenu;
-
-        if (hardUnsafe)
+        if (!dead)
         {
-            if (RopeInterop.HasRopeTeamAnchors)
-                RopeInterop.ReleaseAllAnchors();
-
-            if (!_ropeHardTornDown)
-            {
-                _ropeHardTornDown = true;
-                string reason = !connected ? "disconnected"
-                    : dead ? "local player died"
-                    : gameOver ? "game over"
-                    : "returned to main menu";
-                TearDownAllLocalRopeLinks(reason);
-            }
-            return false;
+            _deadSince = -1f;
+            _unclippedForDeath = false;
+            // A climber back on their feet can die again. Leave the flag set through a
+            // disconnect or the menu, or the teardown would repeat every frame.
+            if (connected && !gameOver && !atMainMenu)
+                _ropeHardTornDown = false;
+        }
+        else if (_deadSince < 0f)
+        {
+            _deadSince = Time.unscaledTime;
         }
 
-        _ropeHardTornDown = false;
+        // The grace is the moment before the death screen has been held or opened. A held
+        // death unclips once, as if this climber pressed the rope control. A death that
+        // plays out still takes the hard teardown.
+        var withinGrace = dead && Time.unscaledTime - _deadSince < DeathDecisionGraceSeconds;
+        var action = RopeSafety.Decide(
+            connected,
+            inGame,
+            dead,
+            DeathScreenPatch.IsHoldingDeath,
+            withinGrace,
+            gameOver,
+            atMainMenu,
+            _unclippedForDeath,
+            _ropeHardTornDown);
 
-        // The body keeps its link but not its anchors: a dead pawn is no harness to hang
-        // the rope from. The partner's side still holds it.
-        if ((downed || !inGame) && RopeInterop.HasRopeTeamAnchors)
-            RopeInterop.ReleaseAllAnchors();
-        return inGame && !downed;
+        switch (action)
+        {
+            case RopeSafetyAction.TearDown:
+                if (RopeInterop.HasRopeTeamAnchors)
+                    RopeInterop.ReleaseAllAnchors();
+                _ropeHardTornDown = true;
+                TearDownAllLocalRopeLinks(!connected ? "disconnected"
+                    : dead ? "local player died"
+                    : gameOver ? "game over"
+                    : "returned to main menu");
+                return false;
+
+            case RopeSafetyAction.UnclipOnce:
+                _unclippedForDeath = true;
+                _ropeHardTornDown = false;
+                UnclipHeldDeath();
+                return false;
+
+            case RopeSafetyAction.ReleaseAnchors:
+                // Leave _ropeHardTornDown as it is. Clearing it here made the next hard
+                // frame tear the rope down again.
+                if (RopeInterop.HasRopeTeamAnchors)
+                    RopeInterop.ReleaseAllAnchors();
+                return false;
+
+            default:
+                _ropeHardTornDown = false;
+                return true;
+        }
+    }
+
+    /// <summary>One voluntary unclip. A planted staff holds the chain. Anything else clears it.</summary>
+    private void UnclipHeldDeath()
+    {
+        int self = _network.LocalPlayerId;
+        var partners = new List<int>();
+        foreach (var (a, b) in RopeLinkState.Links())
+        {
+            if (a == self) partners.Add(b);
+            else if (b == self) partners.Add(a);
+        }
+
+        if (partners.Count == 0) return;
+        foreach (var partner in partners)
+            ReleaseClip(self, partner);
+        ModLog.Info($"[RopeCouple] Unclipped {partners.Count} link(s): a climber died");
     }
 
     private void TearDownAllLocalRopeLinks(string reason)
@@ -220,7 +263,8 @@ internal sealed class RopeCoupleController
 
     private void ReleaseClip(int self, int partner)
     {
-        if (TeamAnchorSession.IsLocalLeader && TopAnchorSession.HasStick)
+        var untie = RopeInterop.PrepareUntie(self, partner, TeamAnchorSession.IsLocalLeader, localUntied: true);
+        if (untie.HoldStaff && TeamAnchorSession.IsLocalLeader && TopAnchorSession.HasStick)
         {
             TopAnchorSession.RequestHold();
             RopeInterop.SendTopAnchorLeave(_network);
@@ -293,6 +337,7 @@ internal sealed class RopeCoupleController
         TeamAnchorSession.Clear();
         TeamAnchorSession.DisarmRules();
         RopeInterop.ReleaseAllAnchors();
+        RopeInterop.ResetPartnerFall();
         _ropeHardTornDown = false;
         _partnerWasFalling = false;
     }

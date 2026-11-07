@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.GameApi;
+using CairnMultiplayerMod.Internal.Game.Bivouac;
 using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Game.World;
 using CairnMultiplayerMod.Internal.Networking;
@@ -31,6 +32,31 @@ internal sealed class GameStateAdapter : IGameStateApi
         position = new WorldPosition(camp.x, camp.y, camp.z);
         return true;
     }
+
+    public bool IsInCampVolume
+        => LocalPlayerInterop.TryGetPose(out var pose, out _) && BivouacVolume.TryApproach(pose, out _);
+
+    public bool TryGetRecallCamp(out WorldPosition position)
+    {
+        position = default;
+        if (LocalPlayerInterop.TryGetPose(out var pose, out _) && BivouacVolume.TryApproach(pose, out var marker))
+        {
+            BivouacVolume.Remember(marker);
+            position = new WorldPosition(marker.x, marker.y, marker.z);
+            return true;
+        }
+
+        if (IsLocalPlayerInBivouac && BivouacVolume.TryRemembered(out var remembered))
+        {
+            position = new WorldPosition(remembered.x, remembered.y, remembered.z);
+            return true;
+        }
+
+        return false;
+    }
+
+    public bool SameCampVolume(WorldPosition camp, WorldPosition pose)
+        => BivouacVolume.Same(new Vector3(camp.X, camp.Y, camp.Z), new Vector3(pose.X, pose.Y, pose.Z));
 }
 
 internal sealed class GameTimeAdapter : IGameTimeApi
@@ -250,8 +276,6 @@ internal sealed class PlayersAdapter : IPlayersApi
         var network = _network();
         return network != null && Roping.RopeLinkState.IsLinked(network.LocalPlayerId, playerId);
     }
-
-    public bool ShakeLocalClimberGrip() => Roping.RopeShakeInterop.ShakeLocalClimber();
 
     public bool TryGetLocation(int playerId, out PlayerLocation location)
     {

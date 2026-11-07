@@ -51,6 +51,9 @@ internal static class TeamAnchorSession
     internal static int LocalPlayerId { get; private set; } = -1;
     internal static int Count => Chain.Count;
     internal static bool HasProtection => Chain.Count > 0;
+
+    /// <summary>Untie pitons still waiting to leave the rope. A hanging drop waits for these.</summary>
+    internal static bool HasPendingRelease => Released.Count > 0;
     internal static bool IsLocalLeader => IsLinked && LocalPlayerId == LeaderId;
     internal static bool IsLocalFollower => IsLinked && LocalPlayerId == FollowerId;
     internal static bool InRopeTeam => _inRopeTeam?.Invoke() == true;
@@ -73,6 +76,7 @@ internal static class TeamAnchorSession
         {
             var paired = IsLinked && Pair(from, target);
             if (!paired && !LeaderLeft) return;
+            var forceRelease = PartnerFallSession.TakeForceRelease();
             // A death or a disconnect asks the chain to go. A voluntary unclip after a
             // stick is planted only lets the leader leave.
             if (from == LeaderId && TopAnchorSession.DropRequested)
@@ -81,7 +85,7 @@ internal static class TeamAnchorSession
                 return;
             }
 
-            if (from == LeaderId && (TopAnchorSession.HoldRequested || TopAnchorSession.HasStick))
+            if (from == LeaderId && !forceRelease && (TopAnchorSession.HoldRequested || TopAnchorSession.HasStick))
             {
                 HoldForFollower();
                 TopAnchorSession.ConsumeHold();

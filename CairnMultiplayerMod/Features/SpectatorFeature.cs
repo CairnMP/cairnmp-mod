@@ -62,7 +62,8 @@ internal sealed class SpectatorFeature : MultiplayerFeature
     }
 
     private bool ShouldSpectate()
-        => Rules.SpectateAfterDeath && IsConnected && Game.Life.IsLocalPlayerDown;
+        => Rules.SpectateAfterDeath && IsConnected && Game.Life.IsLocalPlayerDown
+           && Game.Life.IsDeathScreenHeld;
 
     private void HandleInput()
     {
@@ -112,6 +113,8 @@ internal sealed class SpectatorFeature : MultiplayerFeature
         var hint = followed >= 0
             ? $"Watching {GetPlayerName(followed)} — {ToggleViewKey}: free camera, {NextClimberKey}: next climber"
             : $"Spectating — WASD/Space to fly, {ToggleViewKey}: follow a climber";
+        if (Rules.BivouacRevive)
+            hint += ". Your partner can bring you back at a bivouac";
 
         // The HUD message expires on its own, so it is refreshed before it fades as well as
         // whenever the view changes: a spectator keeps the controls in front of them.

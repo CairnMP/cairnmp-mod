@@ -51,6 +51,9 @@ internal sealed class UnavailableGameApi : IGameApi
         public bool IsLocalPlayerInBivouac => false;
         public bool HasReachedSummit => false;
         public bool TryGetCampPosition(out WorldPosition position) { position = default; return false; }
+        public bool IsInCampVolume => false;
+        public bool TryGetRecallCamp(out WorldPosition position) { position = default; return false; }
+        public bool SameCampVolume(WorldPosition camp, WorldPosition pose) => false;
     }
 
     private sealed class UnavailableTimeApi : IGameTimeApi
@@ -149,7 +152,6 @@ internal sealed class UnavailableGameApi : IGameApi
         public void ResetHandPoseCaches() { }
         public bool IsLocalPlayerFalling => false;
         public bool IsRopedToLocalPlayer(int playerId) => false;
-        public bool ShakeLocalClimberGrip() => false;
         public void ResetAppearanceCaches() { }
     }
 

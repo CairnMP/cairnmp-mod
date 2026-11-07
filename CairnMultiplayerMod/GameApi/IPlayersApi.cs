@@ -35,12 +35,6 @@ internal interface IPlayersApi
 
     /// <summary>True when that player and the local climber share a rope.</summary>
     bool IsRopedToLocalPlayer(int playerId);
-
-    /// <summary>
-    /// Shakes the local climber's holds loose, the way the game does when a roped partner
-    /// falls. A firm hold resists it. Returns whether anything actually let go.
-    /// </summary>
-    bool ShakeLocalClimberGrip();
 }
 
 internal readonly struct PlayerLocation

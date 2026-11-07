@@ -14,6 +14,12 @@ internal interface ILifeApi
     bool IsLocalPlayerDown { get; }
 
     /// <summary>
+    /// True from the moment a death is held back until that hold is released. Standing
+    /// back up does not clear it. Opening the game-over menu does.
+    /// </summary>
+    bool IsDeathScreenHeld { get; }
+
+    /// <summary>
     /// Holds the death screen back for as long as <paramref name="keepHolding"/> answers
     /// true. <paramref name="onWentDown"/> fires at the exact moment the game decided the
     /// climber died, which is when the countdown starts.
@@ -45,9 +51,6 @@ internal interface ILifeApi
     /// before a critical state, so this costs endurance without being lethal on its own.
     /// </summary>
     void ExhaustLocalPlayer(float amount);
-
-    /// <summary>The endurance per second a fallen rope member costs, as the game balances it.</summary>
-    float FallenPartnerStaminaCost(float fallback);
 }
 
 /// <summary>
@@ -62,6 +65,7 @@ internal sealed class UnavailableLifeApi : ILifeApi
     private UnavailableLifeApi() { }
 
     public bool IsLocalPlayerDown => false;
+    public bool IsDeathScreenHeld => false;
 
     public IGameRegistration HoldBackDeathScreen(Func<bool> keepHolding, Action onWentDown)
     {
@@ -74,8 +78,6 @@ internal sealed class UnavailableLifeApi : ILifeApi
     public bool ReviveLocalPlayer(float healthRatio) => false;
 
     public void ExhaustLocalPlayer(float amount) { }
-
-    public float FallenPartnerStaminaCost(float fallback) => fallback;
 
     public IGameRegistration AddRevivePrompt(Func<int, bool> canRevive, Action<int> onRevive)
     {

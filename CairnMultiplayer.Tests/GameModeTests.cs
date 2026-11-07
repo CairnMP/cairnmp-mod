@@ -94,12 +94,15 @@ public class GameModeTests
     }
 
     [Fact]
-    public void RopeTeamPromisesBothWaysHome()
+    public void RopeTeamWatchesAndComesBackOnlyAtCamp()
     {
-        var promises = MultiplayerModeText.Promises(MultiplayerModes.RopeTeam);
+        var rules = MultiplayerModes.RopeTeam;
 
-        Assert.Contains("Rescue on the face", promises);
-        Assert.Contains("Brought back at camp", promises);
+        Assert.False(rules.TeammateRevive);
+        Assert.True(rules.BivouacRevive);
+        Assert.True(rules.SpectateAfterDeath);
+        Assert.Equal(new[] { "Brought back at camp", "Watch after death" },
+            MultiplayerModeText.Promises(rules));
     }
 
     [Fact]

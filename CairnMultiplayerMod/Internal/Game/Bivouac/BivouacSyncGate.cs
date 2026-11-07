@@ -150,6 +150,8 @@ internal sealed class BivouacSyncGate
     {
         _suspended = false;
         _stuckFlagOverridden = false;
+        // A new session must not call anyone back to the previous camp.
+        BivouacVolume.Clear();
         // A disconnect while still inside the tent keeps the rest. Ending it here would
         // refuse the save until another enter. Leaving the scene ends the visit.
         if (!SceneRoles.IsBivouac(_state.CurrentScene))
