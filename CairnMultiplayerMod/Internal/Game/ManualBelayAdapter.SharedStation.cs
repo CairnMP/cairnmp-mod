@@ -71,18 +71,21 @@ internal sealed partial class ManualBelayAdapter
         return attached ? BindPartnerStation(session, station, piton, out reason) : BeginStationAttachment(session, station, piton, out reason);
     }
 
-    private bool BindPartnerStation(Guid session, BelaySharedStation station, Piton piton, out string reason)
+    private bool BindPartnerStation(Guid session, BelaySharedStation station, Piton piton, out string reason,
+        bool initiallyBraked = false)
     {
         var lifeline = LocalLifeline();
         var anchor = new BelayStationAnchor(Id(lifeline), Id(lifeline.securingRope), Id(piton), ToNumerics(piton.transform.position));
+        if (!initiallyBraked) RememberRecoveryStation(station, anchor, session);
         _partnerStation = station;
         _localStation = anchor;
         _localStationPiton = piton;
         _localStationId = unchecked((uint)piton.GetInstanceID());
         try
         {
-            if (BeginClimber(session, false, out reason))
+            if (BeginClimber(session, false, out reason, initiallyBraked))
             {
+                if (initiallyBraked) RememberRecoveryStation(station, anchor, session);
                 ModLog.Info("[BelayStation] Partner station bound to the climber's existing native protection route; station=" + station.Id);
                 return true;
             }

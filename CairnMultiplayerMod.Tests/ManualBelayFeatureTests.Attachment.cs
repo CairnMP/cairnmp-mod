@@ -45,7 +45,7 @@ public sealed partial class ManualBelayFeatureTests
     [InlineData(1, 2, true)]
     [InlineData(2, 1, true)]
     [InlineData(2, 2, true)]
-    public void PauseCutsceneOrFocusLossEndsThePairWithoutAutomaticResume(int interruption, int participant, bool preparing)
+    public void AnInterruptionRecoversOnlyAPairWhoseNativeControlWasConfirmed(int interruption, int participant, bool preparing)
     {
         using var world = new World();
         world.Nodes[2].Game.BelayImpl.NeedsAttachment = preparing;
@@ -55,14 +55,14 @@ public sealed partial class ManualBelayFeatureTests
         if (interruption == 1) interrupted.Cutscene = true;
         if (interruption == 2) interrupted.Keys.Focused = false;
         world.Tick();
-        Assert.Equal(ManualBelayPhase.Ended, world.Messages.Last().Phase);
+        Assert.Equal(preparing ? ManualBelayPhase.Ended : ManualBelayPhase.Interrupted, world.Messages.Last().Phase);
         Assert.False(world.Nodes[2].Game.BelayImpl.Active);
         Assert.Null(world.Nodes[2].Game.BelayImpl.Preparation);
         var begins = world.Nodes[2].Game.BelayImpl.BeginCalls;
         interrupted.Keys.Paused = false; interrupted.Cutscene = false; interrupted.Keys.Focused = true;
         for (var i = 0; i < 5; i++) Advance(world, .5f);
-        Assert.False(world.Nodes[2].Game.BelayImpl.Active);
-        Assert.Equal(begins, world.Nodes[2].Game.BelayImpl.BeginCalls);
+        Assert.Equal(!preparing, world.Nodes[2].Game.BelayImpl.Active);
+        Assert.Equal(begins + (preparing ? 0 : 1), world.Nodes[2].Game.BelayImpl.BeginCalls);
     }
 
     [Theory]

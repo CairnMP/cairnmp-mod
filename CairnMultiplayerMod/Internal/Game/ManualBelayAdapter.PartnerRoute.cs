@@ -25,8 +25,16 @@ internal sealed partial class ManualBelayAdapter
         reason = "The agreed station is unavailable or unhealthy.";
         var station = _localStationPiton;
         if (station == null || !(station.pitonHp > 0) || !LocalStationMatches(_lifeline, out _)) return false;
-        var rope = _lifeline?.securingRope;
-        var harness = _lifeline?.harness;
+        return TryReadPartnerRoute(_lifeline, station, out length, out reason);
+    }
+
+    private bool TryReadPartnerRoute(Lifeline lifeline, Piton station, out float length, out string reason,
+        bool trackRevision = true)
+    {
+        length = float.NaN;
+        if (trackRevision) _partnerRouteLegs = 0;
+        var rope = lifeline?.securingRope;
+        var harness = lifeline?.harness;
         reason = "The native protection rope is not initialized.";
         if (rope?.IsInitialized != true || harness == null) return false;
         var holders = rope.ropeHolders;
@@ -55,7 +63,7 @@ internal sealed partial class ManualBelayAdapter
         }
         reason = "The agreed station-to-harness holder order is not ready.";
         if (first < 0 || end <= first || end - first > 64) return false;
-        var last = _lifeline.GetLastSecuringPiton();
+        var last = lifeline.GetLastSecuringPiton();
         reason = "The last securing piton is unavailable or unhealthy.";
         if (last == null || !(last.pitonHp > 0)) return false;
         var scratch = _partnerRouteScratch;
@@ -108,6 +116,7 @@ internal sealed partial class ManualBelayAdapter
             reason = "Native pin path: " + failure + (failedLeg >= 0 ? "; segment=" + (failedLeg + 1) : "");
             return false;
         }
+        if (!trackRevision) { length = measured; reason = ""; return true; }
         for (var i = 0; i < connectorCount - 1; i++)
         {
             var selected = _partnerRouteParts[_partnerRouteSelected[i]];

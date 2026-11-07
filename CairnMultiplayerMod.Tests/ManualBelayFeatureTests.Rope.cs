@@ -122,7 +122,7 @@ public sealed partial class ManualBelayFeatureTests
         Assert.Equal(stoppedLength, target.Rope.Released);
         Advance(world, 2);
         Assert.False(target.Active);
-        Assert.Equal(ManualBelayPhase.Ended, world.Messages.Last().Phase);
+        Assert.Equal(ManualBelayPhase.Interrupted, world.Messages.Last().Phase);
     }
 
     [Theory]
@@ -212,7 +212,7 @@ public sealed partial class ManualBelayFeatureTests
     }
 
     [Fact]
-    public void NativeInputRefusalEndsTheSessionWithoutFallingBackToBrakeOnlyControl()
+    public void NativeInputRefusalInterruptsWithoutFallingBackToBrakeOnlyControl()
     {
         using var world = World.Started();
         world.Nodes[2].Game.BelayImpl.CanApplyInput = false;
@@ -220,7 +220,7 @@ public sealed partial class ManualBelayFeatureTests
         Advance(world, .11f);
         Assert.False(world.Nodes[2].Game.BelayImpl.Active);
         Assert.Equal(0, world.Nodes[2].Game.BelayImpl.Rope.Motion);
-        Assert.Equal(ManualBelayPhase.Ended, world.Messages.Last().Phase);
+        Assert.Equal(ManualBelayPhase.Interrupted, world.Messages.Last().Phase);
     }
 
     [Fact]
@@ -232,7 +232,7 @@ public sealed partial class ManualBelayFeatureTests
         Advance(world, .11f);
         Assert.False(target.Active);
         Assert.Equal(0, target.Rope.Motion);
-        Assert.Equal(ManualBelayPhase.Ended, world.Messages.Last().Phase);
+        Assert.Equal(ManualBelayPhase.Interrupted, world.Messages.Last().Phase);
     }
 
     [Theory]

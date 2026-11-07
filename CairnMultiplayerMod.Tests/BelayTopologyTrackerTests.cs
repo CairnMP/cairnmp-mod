@@ -9,6 +9,32 @@ public sealed class BelayTopologyTrackerTests
     private static BelayTopologySnapshot Route(long last = 30, float available = 36, long[] parts = null, long[] holders = null)
         => new(10, last, parts ?? new long[] { 11, 12 }, holders ?? new long[] { 20, 21, 22 }, available, (parts?.Length ?? 2) - 1);
 
+    [Theory]
+    [InlineData(false, false, -1, true)]
+    [InlineData(false, false, 0, true)]
+    [InlineData(true, false, 0, false)]
+    [InlineData(false, true, 0, false)]
+    [InlineData(false, false, 1, false)]
+    [InlineData(false, false, float.NaN, false)]
+    [InlineData(false, false, float.PositiveInfinity, false)]
+    [InlineData(false, false, float.NegativeInfinity, false)]
+    public void RecoveryCannotAcquireDuringAFallSuspensionOrNativeLengthOverride(
+        bool falling, bool suspended, float lengthOverride, bool expected)
+        => Assert.Equal(expected, Route().TryValidateControlResume(22, falling, suspended, lengthOverride, out _));
+
+    [Fact]
+    public void RecoveryStillRequiresTheCurrentCompleteProtectionAndUniqueHarnessWalk()
+    {
+        var transient = new BelayTopologySnapshot(10, 30, new long[] { 11, 12, 13 },
+            new long[] { 20, 21, 99, 22 }, 36, 1);
+        Assert.False(transient.TryValidateControlResume(22, false, false, 0, out _));
+        Assert.False(Route(holders: new long[] { 20, 22, 21, 22 })
+            .TryValidateControlResume(22, false, false, 0, out _));
+        Assert.False(Route().TryValidateControlResume(99, false, false, 0, out _));
+        Assert.True(Route(parts: new long[] { 31, 32 }, holders: new long[] { 20, 21, 22, 20 })
+            .TryValidateControlResume(22, false, false, 0, out _));
+    }
+
     [Fact]
     public void AddingAndRemovingProtectionRebindsOnlyAfterAStableInterval()
     {

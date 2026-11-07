@@ -232,6 +232,12 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
             }
             else if (Button(new Rect(x, contentY + 28f, width, buttonHeight), "Cancel exchange (Backspace)", BelayPanelAction.CancelSwap)) return;
         }
+        else if (view.Phase == BelayPanelPhase.Recovering)
+        {
+            GUI.Label(new Rect(x, contentY, width, 24f), view.PartnerName, _name);
+            if (Button(new Rect(x, contentY + 28f, width, Math.Min(44f, available - 28f)),
+                "End belay / cancel resume (Backspace)", BelayPanelAction.Cancel)) return;
+        }
         else if (view.Phase == BelayPanelPhase.Active)
         {
             GUI.Label(new Rect(x, contentY, width, 24f), view.PartnerName, _name);
@@ -252,6 +258,7 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
             ? "Up/Down: partner | I: ask | O: offer | K: station | L: close"
             : view.Phase == BelayPanelPhase.Invitation ? "Enter: accept | Backspace: decline | L: close"
             : view.Phase is BelayPanelPhase.SwapInvitation or BelayPanelPhase.SwapPreparing ? "Enter: accept roles | Backspace: cancel exchange"
+            : view.Phase == BelayPanelPhase.Recovering ? "Automatic resume waits for both players | Backspace: end | L: close"
             : "L: open/close | Space: brake/release with panel closed", _body);
         Button(new Rect(x, rect.yMax - 44f, width, 32f), view.Phase == BelayPanelPhase.SwapPreparing
             ? "Remain anchored while preparing" : "Close", BelayPanelAction.Close, enabled: view.Phase != BelayPanelPhase.SwapPreparing);

@@ -225,6 +225,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     public void EndStation()
     {
+        RememberRecoveryStation(_definedStation, _stationAnchor, _stationSession);
         if (HasStation) ModLog.Info("[BelayStation] Removed; personal native anchoring unchanged; reason="
             + (_stationInvalidReason ?? "Session or station ended explicitly.") + ", session=" + _stationSession);
         if (_stationSession != Guid.Empty && _installed && _control == null) _unpatchPending = true;
@@ -269,7 +270,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     public bool BeginClimber(Guid session, out string reason)
         => BeginClimber(session, false, out reason);
 
-    private bool BeginClimber(Guid session, bool localExercise, out string reason)
+    private bool BeginClimber(Guid session, bool localExercise, out string reason, bool initiallyBraked = false)
     {
         reason = "The station connection trial is selected. Use Ctrl+F12 and follow its panel; Ctrl+F11 belongs to the separate rope-budget exercise.";
         if (localExercise && ModConfig.BelayStationConnectionExperiment?.Value == true) return false;
@@ -287,12 +288,14 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         var lifeline = LocalLifeline();
         if (!TryStartSnapshot(lifeline, out var snapshot, out reason)) return false;
         if (!TryPrepareLocalRope(lifeline, snapshot, localExercise, out var ropeControl, out reason)) return false;
+        if (initiallyBraked) ropeControl?.SetBrake(true);
         Install();
         _lifeline = lifeline; _rope = lifeline.securingRope;
         _topology = new BelayTopologyTracker();
         _topology.Observe(snapshot, false, Now);
         BindTopology(snapshot);
-        _lease = new BelayInputLease(session, Now);
+        if (initiallyBraked) _control.ToggleBrake();
+        _lease = new BelayInputLease(session, Now, initiallyBraked);
         _started = Now;
         _stopping = _holdApplied = false;
         _hasLoggedApplication = false;
@@ -759,6 +762,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     private void ClearControl(string reason = null)
     {
+        if (_partnerStation.HasValue) RememberRecoveryStation(_partnerStation.Value, _localStation, _lease?.Session ?? Guid.Empty);
         ResetPartnerFallCapture();
         CancelStationAttachment(reason ?? "Native control was cleared.");
         ReleaseLocalRopeGoal();
@@ -791,6 +795,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         if (_localStation != null) ModLog.Info("[BelayStation] Captured station cleared by a scene reset.");
         EndStation(); ReleaseStationClimbInput(force: true);
         ClearControl("A scene reset invalidated the native rope and station."); ClearLocalStation();
+        ForgetRecoveryStation();
     }
     public void Shutdown()
     {

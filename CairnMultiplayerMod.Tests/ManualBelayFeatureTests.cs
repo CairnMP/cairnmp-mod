@@ -322,7 +322,7 @@ public sealed partial class ManualBelayFeatureTests
         world.Time += 3.1f;
         world.Tick();
         Assert.False(world.Nodes[2].Game.BelayImpl.Active);
-        Assert.Equal(ManualBelayPhase.Ended, world.Messages.Last().Phase);
+        Assert.Equal(ManualBelayPhase.Interrupted, world.Messages.Last().Phase);
         Assert.False(world.Execute(1, new() { Operation = ManualBelayOperation.Intent, Session = id, Sequence = 999 }).Committed);
     }
 
@@ -475,7 +475,7 @@ public sealed partial class ManualBelayFeatureTests
         Assert.Equal(7u, decoded.AppliedSequence);
         Assert.Equal(1.5f, decoded.Limit);
         Assert.Equal(1.4f, decoded.RealDistance);
-        Assert.Equal(118, Bytes(request).Length);
+        Assert.Equal(134, Bytes(request).Length);
         Assert.Equal(40, decoded.RopeCapacity);
         Assert.Equal(request.Station, decoded.Station);
         Assert.Equal(-1, decoded.Motion);
@@ -493,7 +493,7 @@ public sealed partial class ManualBelayFeatureTests
         Assert.Equal(2, eventCopy.Climber);
         Assert.Equal(7u, eventCopy.AppliedSequence);
         Assert.True(eventCopy.Braked);
-        Assert.Equal(126, Bytes(message).Length);
+        Assert.Equal(142, Bytes(message).Length);
         Assert.Equal(40, eventCopy.RopeCapacity);
         Assert.Equal(message.Station, eventCopy.Station);
         Assert.Equal(-1, eventCopy.Motion);
@@ -780,6 +780,9 @@ public sealed partial class ManualBelayFeatureTests
         internal readonly List<string> Failures = new();
         internal bool DeferCommands;
         internal int DroppedEventRecipient = -1;
+        internal int DeferredEventRecipient = -1;
+        internal ManualBelayPhase DeferredPhase;
+        internal readonly Queue<(int Recipient, ServerExtensionEvent Packet)> DeferredEvents = new();
         internal readonly Queue<(int Sender, ClientExtensionCommand Packet)> Pending = new();
         internal World(int participants = 3)
         {
@@ -804,6 +807,10 @@ public sealed partial class ManualBelayFeatureTests
         internal void FlushCommands()
         {
             while (Pending.TryDequeue(out var item)) Deliver(item.Sender, item.Packet);
+        }
+        internal void FlushEvents()
+        {
+            while (DeferredEvents.TryDequeue(out var item)) Nodes[item.Recipient].Runtime.ApplyEvent(item.Packet);
         }
         public void Dispose() { foreach (var node in Nodes.Values) node.Host.Dispose(); }
     }
@@ -840,7 +847,12 @@ public sealed partial class ManualBelayFeatureTests
         {
             _world.Events.Add(message);
             foreach (var (id, node) in _world.Nodes)
-                if (id != 1 && id != _world.DroppedEventRecipient) node.Runtime.ApplyEvent(message);
+            {
+                if (id == 1 || id == _world.DroppedEventRecipient) continue;
+                if (id == _world.DeferredEventRecipient && message.EventId == "manual-belay.changed"
+                    && Decode(message).Phase == _world.DeferredPhase) _world.DeferredEvents.Enqueue((id, message));
+                else node.Runtime.ApplyEvent(message);
+            }
         }
         public void BroadcastState(ServerExtensionState state, string extensionId) { }
         public void ReportExtensionFailure(string extensionId, string message) => _world.Failures.Add(message);
@@ -899,6 +911,27 @@ public sealed partial class ManualBelayFeatureTests
     private sealed class Belay : IManualBelayApi
     {
         public bool SharedDamageEnabled { get; set; }
+        internal bool RecoveryAlive = true, ResumeStationReady = true, ResumeClimberReady = true;
+        public bool RecoveryCharacterAlive => RecoveryAlive;
+        public bool TryResumeStation(BelaySharedStation station, out string reason)
+        {
+            reason = "The same personally anchored station is not ready.";
+            if (!RecoveryAlive || !ResumeStationReady || !Anchored || !SharedStationReady || !KnownStation || StationReference != station) return false;
+            StationRecorded = true; return true;
+        }
+        public bool CanResumeClimber(BelaySharedStation station, out string reason)
+        {
+            reason = "The existing station-to-climber route is not ready.";
+            return RecoveryAlive && ResumeClimberReady && !Active && CanBegin && ProtectionReady
+                && KnownStation && SharedStationReady && BoundStation == station;
+        }
+        public bool BeginResumedClimber(Guid session, BelaySharedStation station, out string reason)
+        {
+            if (!CanResumeClimber(station, out reason) || !BeginClimber(session, out reason)) return false;
+            BoundStation = station; Sequence = 0; LastBrake = true; Rope.SetBrake(true); Rope.TrySetMotion(0);
+            _inputLease = new BelayInputLease(session, Clock(), true);
+            return true;
+        }
         internal PartnerFallObservation? PartnerFall;
         internal readonly List<PartnerDamageRequest> DamageRequests = new();
         internal int NativeDamageCalls;

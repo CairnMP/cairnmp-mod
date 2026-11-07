@@ -31,7 +31,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **27**; lobby admission may also require the exact mod version.
+> protocol is **28**; lobby admission may also require the exact mod version.
 
 ## Features
 
@@ -137,7 +137,7 @@ instead of being destroyed or duplicated.
 Choose **Belay Team** when creating a lobby to enable partner belay. Rope team
 keeps its original direct harness tether; Belay Team rejects that tether in input,
 host validation, received packets and late-join snapshots. Every peer
-must use the same experimental build (protocol **27**, incompatible with the
+must use the same experimental build (protocol **28**, incompatible with the
 public 2.4.1/2.4.2/2.4.3 protocol-16 builds and earlier pilots). This branch
 includes upstream 2.4.3, including its Story-launch preset correction, main-menu
 label and harness-rope fixes. The upstream
@@ -301,10 +301,25 @@ The HUD distinguishes host-accepted intent from the climber's measured suspensio
 readback. Input permission expires after three seconds without renewal. A valid
 owned suspension requests hold at its current geometry before ownership ends;
 scene/invalid loaded-topology changes invalidate old native references without restoring an old
-radius. Pause, cutscene or focus loss ends the invitation/session; return to
-gameplay, re-anchor and send a new invitation. Automatic suspension/resume is a
-later milestone, not a function of this pilot. The two-minute diagnostic limit
-applies to solo exercises; partner sessions instead require fresh input permission.
+radius. After native control has actually been confirmed, a temporary pause,
+cutscene, focus loss, missing native control or input timeout can retain the
+pair's consent for up to 120 seconds. The HUD then says **WAITING TO RESUME** and
+**PARTNER BRAKE OFF**: the pair's brake is inactive while native protection runs.
+Both clients recheck the same healthy station, world, roles and original rope
+capacity before the host commits a new session. Recovery uses the existing
+station route only, never inserts a new protection automatically, and starts
+with the brake closed and no rope motion. Release Space/F7/Up/Down before using
+those controls again. At most five recoveries are allowed before a new invitation.
+
+**End belay** (including while recovery is pending) cancels consent permanently;
+an event arriving late cannot undo it. Death, leaving the room, scene reset,
+mode exit or a changed capacity/identity also requires a new invitation.
+An initial attachment that never confirmed control is not automatically retried.
+A proposed role exchange keeps the last committed roles; an unsuccessful native
+role commit ends the pair instead of guessing the roles. Protocol **28** adds a
+recovery nonce and is incompatible with the previous protocol-27 packet layout.
+The two-minute diagnostic limit applies to solo exercises; active partner
+sessions still require fresh input permission.
 Native two-client braking, station
 integration, damage/failure coherence and crash stability still require testing.
 Remote control does not depend on a diagnostic capture or its recording limits.

@@ -88,6 +88,7 @@ internal sealed partial class ManualBelayAdapter
         }
         reason = "Wait for all original protection pins to load before connecting the station.";
         if (colliders.Contains(0) || !AttachmentPinsReady(state, false)) return false;
+        RememberRecoveryStation(reference, state.Anchor, session);
         // The accepted pair retains its personal backup and every original pin.
         // Native insertion may put S before or after those protections, in both
         // initial connections and role exchanges; confirm the actual native path.

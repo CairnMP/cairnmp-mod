@@ -46,6 +46,7 @@ internal sealed class BelayPanelNavigation
             { action = BelayPanelAction.CancelSwap; return true; }
             if (view.Phase == BelayPanelPhase.Invitation) { action = BelayPanelAction.Decline; return true; }
             if (view.Phase == BelayPanelPhase.Waiting) { action = BelayPanelAction.Cancel; return true; }
+            if (view.Phase == BelayPanelPhase.Recovering) { action = BelayPanelAction.Cancel; return true; }
             return false; // Declining an invitation must never end an active belay.
         }
         if (view.Phase != BelayPanelPhase.Partners) return false;

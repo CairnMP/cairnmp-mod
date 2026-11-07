@@ -70,6 +70,18 @@ internal sealed class BelayTopologySnapshot
         return true;
     }
 
+    internal bool TryValidateControlResume(long harness, bool falling, bool suspended, float lengthOverride,
+        out string reason)
+    {
+        if (!TryValidateControlStart(harness, out reason)) return false;
+        reason = "Wait for the fall or suspension to finish before resuming partner control.";
+        if (falling || suspended) return false;
+        reason = "Wait for the native fixed-length rope interaction to end before resuming.";
+        if (!float.IsFinite(lengthOverride) || lengthOverride > 0) return false;
+        reason = "";
+        return true;
+    }
+
     internal bool Matches(BelayTopologySnapshot other)
         => other != null && Rope == other.Rope && LastPiton == other.LastPiton
             && Equal(Parts, other.Parts) && Equal(Holders, other.Holders);
