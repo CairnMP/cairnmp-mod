@@ -543,11 +543,12 @@ internal sealed partial class NetworkManager
 
     private void BroadcastSteamServerPacket(PacketId id, IPacket packet, ulong exceptSteamId, bool reliable)
     {
-        var payload = BuildPayload(id, packet);
+        byte[] payload = null;
         foreach (var member in _steamLobby.Members)
         {
             if (member.SteamId == 0 || member.SteamId == _steamLocalId || member.SteamId == exceptSteamId) continue;
             if (_steamLobby.IsHost && !IsExtensionPeerAdmitted(member.SteamId)) continue;
+            payload ??= BuildPayload(id, packet);
             SendSteamPayload(new CSteamID(member.SteamId), payload, reliable);
         }
     }

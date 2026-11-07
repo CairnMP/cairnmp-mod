@@ -513,7 +513,13 @@ internal static class PawnCaptureInterop
         for (int i = 0; i < count; i++)
         {
             int offset = i * 3;
-            vectors[i] = new Vector3(values[offset], values[offset + 1], values[offset + 2]);
+            // The generated Vector3 constructor invokes IL2CPP. These fields
+            // already contain the captured components, with no native math needed.
+            var vector = default(Vector3);
+            vector.x = values[offset];
+            vector.y = values[offset + 1];
+            vector.z = values[offset + 2];
+            vectors[i] = vector;
         }
         return vectors;
     }
