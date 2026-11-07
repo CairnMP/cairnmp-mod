@@ -1,0 +1,55 @@
+CAIRNMP - LOCAL PERFORMANCE CAPTURE
+
+Performance diagnostics are opt-in. With Cairn closed, set Debug.PerformanceDiagnostics
+to true in UserData/MelonPreferences.cfg. Leave NativeProfiling false initially and
+JobWorkerCount at 0 to retain the engine's worker configuration. PerformanceHudLanguage
+supports en (default) and pt-BR. No capture starts automatically and no data is uploaded.
+
+SOLO FIRST
+1. Open Cairn manually through Steam and enter Story directly. Play the route where
+   the stutter occurs; a multiplayer partner and the solo rope-test hotkeys are not needed.
+2. Press Ctrl+F8 once. The status overlay shows a 30-second warmup and then three
+   minutes of recording. Continue playing normally with the same graphics settings.
+3. Wait for SAVED (complete). The result stays visible. Ctrl+F8 during a recording
+   stops it early and produces a partial result; it is not a completed three-minute run.
+4. Reports are saved locally under UserData/CairnMultiplayer/Performance as JSON and
+   Markdown. Keep the build and scenario information with the report.
+
+The next comparison can use the same route/settings in a private Belay Team room
+without a partner. This measures idle multiplayer overhead, not an active pair,
+remote avatars or the belayer's rope drawing. Those require matched two-player runs.
+
+MEASUREMENT SCOPE
+- The frame interval is the time between CairnMP OnUpdate callbacks. It is not a
+  display-present measurement and does not separately identify CPU and GPU time.
+- TimingScopeRevision 2 includes local belay and diagnostics in ModUpdate. Ropes
+  includes the local belay adapter and the direct harness tether. Older scope
+  revisions omitted that local belay work; do not treat their ModUpdate values as
+  the same measurement when comparing results.
+- UI includes OnGUI calls between Updates. ModUpdate and subsystem scopes overlap;
+  do not sum every area as if they were independent parts of a frame.
+- Native callbacks outside instrumented scopes, background transport/voice work,
+  GPU time and uninstrumented game work remain unavailable. Stopwatch scopes measure
+  elapsed wall time, including synchronous native calls and preemption, not CPU usage.
+- Scene/session transitions are retained. Focus and time scale are sampled once per
+  second during capture. Loading, pauses and focus changes can produce long intervals;
+  they must be interpreted with context instead of silently discarded.
+- The lightweight GameTuning log now retains finite positive gaps above five seconds.
+  Its bounded rolling samples and Unity delta source are separate from the recorder's
+  Stopwatch intervals.
+
+THE VISUAL OPTIMIZATION
+The belayer's remote drawing uses persistent playback/native point buffers and
+managed interpolation, followed by one SetPositions call per update. It avoids
+per-point Vector3.Lerp/constructor calls and renderer readbacks for blending.
+Material, sample limits, topology identity, interpolation timing and stale drawing
+expiry remain unchanged. This drawing is inactive in ordinary solo Story.
+
+Allocation tests and fewer engine calls do not establish an FPS gain. Compare actual
+captures before attributing stutter or improvement to the game, loader or mod. The
+first solo capture requires no external profiler or system/graphics tuning changes.
+The optional scripts/capture-performance.ps1 separately requires a supplied PresentMon
+executable for external display measurements; it is not used by Ctrl+F8.
+
+When sharing a report, review local paths and hardware metadata. NativeProfiling is
+a separate opt-in probe with additional hooks; leave it off for this first capture.

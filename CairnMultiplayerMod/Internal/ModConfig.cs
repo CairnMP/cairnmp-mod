@@ -19,6 +19,7 @@ internal static class ModConfig
 
     public static MelonPreferences_Entry<bool> VerboseLogging;
     public static MelonPreferences_Entry<bool> PerformanceDiagnostics;
+    public static MelonPreferences_Entry<string> PerformanceHudLanguage;
     public static MelonPreferences_Entry<bool> BelayRouteExperiment;
     public static MelonPreferences_Entry<bool> BelayRopeExperiment;
     public static MelonPreferences_Entry<bool> BelaySharedDamageExperiment;
@@ -45,6 +46,7 @@ internal static class ModConfig
         var debug = MelonPreferences.CreateCategory(CategoryDebug);
         VerboseLogging = debug.CreateEntry("VerboseLogging", false);
         PerformanceDiagnostics = debug.CreateEntry("PerformanceDiagnostics", false);
+        PerformanceHudLanguage = debug.CreateEntry("PerformanceHudLanguage", "en");
         // Independent solo route exercise; partner belay is selected through the lobby mode.
         BelayRouteExperiment = debug.CreateEntry("BelayRouteExperiment", false);
         BelayRopeExperiment = debug.CreateEntry("BelayRopeExperiment", false);

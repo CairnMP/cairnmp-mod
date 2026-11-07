@@ -53,10 +53,39 @@ public sealed class FrameRateMonitorTests
         m.Add(0);
         m.Add(-1);
         m.Add(double.NaN);
-        m.Add(10);  // a load screen, not a stutter
+        m.Add(double.PositiveInfinity);
+        m.Add(double.NegativeInfinity);
 
         Assert.Equal(0, m.SampleCount);
         Assert.Equal(0, m.ElapsedSeconds);
+    }
+
+    [Fact]
+    public void ASixSecondGapRemainsVisibleInAverageWorstAndOnePercentLow()
+    {
+        var m = WithSteadyFps(60, 60);
+        m.Add(6);
+
+        Assert.Equal(61, m.SampleCount);
+        Assert.Equal(7, m.ElapsedSeconds, 6);
+        Assert.Equal(61.0 / 7, m.AverageFps, 6);
+        Assert.Equal(6000, m.WorstFrameMs, 6);
+        Assert.Equal(1.0 / 6, m.OnePercentLowFps, 6);
+    }
+
+    [Fact]
+    public void RepeatedLowReadsAndResetDoNotIncludeOldScratchSamples()
+    {
+        var m = WithSteadyFps(60, 120);
+        m.Add(6);
+        Assert.Equal(1.0 / 6, m.OnePercentLowFps, 6);
+        Assert.Equal(1.0 / 6, m.OnePercentLowFps, 6);
+
+        m.Reset();
+        for (var i = 0; i < 60; i++) m.Add(1.0 / 120);
+        Assert.Equal(120, m.OnePercentLowFps, 6);
+        Assert.Equal(120, m.AverageFps, 6);
+        Assert.Equal(1000.0 / 120, m.WorstFrameMs, 6);
     }
 
     [Fact]

@@ -146,12 +146,15 @@ public partial class Mod
         try
         {
             TickPerformance();
-            TickBelayRouteInput();
-            _game?.Belay.Tick(); // Complete a pending hold even after leaving multiplayer.
-            TickBelayAppendGuide();
+            using var performance = Measure(PerformanceArea.ModUpdate);
+            using (Measure(PerformanceArea.Ropes))
+            {
+                TickBelayRouteInput();
+                _game?.Belay.Tick(); // Complete a pending hold even after leaving multiplayer.
+                TickBelayAppendGuide();
+            }
             NativePerformanceProbe.Tick();
             GameTuning.Tick();
-            using var performance = Measure(PerformanceArea.ModUpdate);
             TickMod();
         }
         catch (Exception exception)
@@ -406,8 +409,9 @@ public partial class Mod
 
     private void DrawModUi()
     {
-        DrawLocalBelayExercise();
         using var performance = Measure(PerformanceArea.Ui);
+        DrawPerformanceStatus();
+        DrawLocalBelayExercise();
         _panel?.OnGUI();
         Features?.DrawHud();
         if (_multiplayerModeActive)

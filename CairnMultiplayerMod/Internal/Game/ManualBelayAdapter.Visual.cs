@@ -2,6 +2,7 @@ using System;
 using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2Cpp;
+using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
 
 namespace CairnMultiplayerMod.Internal.Game;
@@ -11,10 +12,8 @@ internal sealed partial class ManualBelayAdapter
     private GameObject _visualRoot;
     private LineRenderer _visualLine;
     private Material _visualMaterial;
-    private Vector3[] _visualFrom, _visualTarget;
-    private Guid _visualSession;
-    private uint _visualRevision;
-    private double _visualUpdated;
+    private readonly BelayRopeVisualPlayback _visualPlayback = new();
+    private Il2CppStructArray<Vector3> _visualPositions;
     private double _nextVisualCaptureLog;
     private bool _visualCaptureReady;
     private bool _visualUsingFallback;
@@ -151,16 +150,10 @@ internal sealed partial class ManualBelayAdapter
         {
             if (_stationSession != session || !StationValid || points == null || points.Length < 2 || points.Length > 192) return;
             if (!EnsureRopeVisualStyle()) return;
-            var blend = _visualSession == session && _visualRevision == revision && _visualTarget?.Length == points.Length;
-            _visualFrom = new Vector3[points.Length]; _visualTarget = new Vector3[points.Length];
-            for (var i = 0; i < points.Length; i++)
-            {
-                var p = points[i];
-                _visualTarget[i] = new(p.X, p.Y, p.Z);
-                _visualFrom[i] = blend && _visualLine.positionCount == points.Length ? _visualLine.GetPosition(i) : _visualTarget[i];
-            }
+            if (!_visualPlayback.SetTarget(session, revision, points, Now)) return;
+            if (_visualPositions == null || _visualPositions.Length != points.Length)
+                _visualPositions = new Il2CppStructArray<Vector3>((long)points.Length);
             _visualLine.positionCount = points.Length;
-            _visualSession = session; _visualRevision = revision; _visualUpdated = Now;
             TickRopeVisual();
         }
         catch (Exception exception) { ModLog.SuppressedException("belay.draw-rope", exception); ClearRopeVisual(); }
@@ -296,10 +289,19 @@ internal sealed partial class ManualBelayAdapter
         if (_visualLine == null) return;
         try
         {
-            if (_stationSession != _visualSession || !Enabled || !ContextValid || !StationValid || Now - _visualUpdated >= .75)
+            if (_stationSession != _visualPlayback.Session || !Enabled || !ContextValid || !StationValid || Now - _visualPlayback.UpdatedAt >= .75)
             { ClearRopeVisual(); return; }
-            var t = Mathf.Clamp01((float)((Now - _visualUpdated) / .1));
-            for (var i = 0; i < _visualTarget.Length; i++) _visualLine.SetPosition(i, Vector3.Lerp(_visualFrom[i], _visualTarget[i], t));
+            var points = _visualPlayback.Sample(Now);
+            for (var i = 0; i < points.Length; i++)
+            {
+                // Field initialization avoids the generated Vector3 constructor
+                // and Lerp wrappers, which invoke IL2CPP for each vertex.
+                var p = points[i];
+                var position = default(Vector3);
+                position.x = p.X; position.y = p.Y; position.z = p.Z;
+                _visualPositions[i] = position;
+            }
+            _visualLine.SetPositions(_visualPositions);
         }
         catch (Exception exception) { ModLog.SuppressedException("belay.update-rope-drawing", exception); ClearRopeVisual(); }
     }
@@ -309,7 +311,8 @@ internal sealed partial class ManualBelayAdapter
         if (_visualRoot != null) UnityEngine.Object.Destroy(_visualRoot);
         if (_visualMaterial != null) UnityEngine.Object.Destroy(_visualMaterial);
         _visualRoot = null; _visualLine = null; _visualMaterial = null;
-        _visualFrom = _visualTarget = null; _visualSession = Guid.Empty;
+        _visualPositions = null;
+        _visualPlayback.Clear();
         _visualUsingFallback = false; _nextVisualMaterialAttempt = 0;
     }
 }
