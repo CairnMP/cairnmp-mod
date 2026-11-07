@@ -851,6 +851,7 @@ public sealed partial class ManualBelayFeatureTests
         private readonly World _world;
         internal readonly Belay BelayImpl = new(); internal readonly Chat ChatImpl = new(); internal readonly Keys Keys = new();
         internal readonly Panel PanelImpl = new();
+        internal readonly RoleHud HudImpl = new();
         internal bool Cutscene;
         internal IReadOnlyDictionary<int, PlayerLocation> InteractionLocations;
         internal Game(World world, int id)
@@ -860,7 +861,7 @@ public sealed partial class ManualBelayFeatureTests
         public IGameStateApi State => new State(() => Cutscene);
         public IGameTimeApi Time => this;
         public IGameInputApi Input => Keys;
-        public IGameHudApi Hud => UnavailableGameApi.Instance.Hud;
+        public IGameHudApi Hud => HudImpl;
         public IChatApi Chat => ChatImpl;
         public IInventoryApi Inventory => UnavailableGameApi.Instance.Inventory;
         public IClockApi Clock => UnavailableGameApi.Instance.Clock;

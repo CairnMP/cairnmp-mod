@@ -8,6 +8,31 @@ namespace CairnMultiplayerMod.Tests;
 public sealed partial class ManualBelayFeatureTests
 {
     [Theory]
+    [InlineData(1, 2)]
+    [InlineData(2, 1)]
+    public void AnExistingStationRouteCanBeAcceptedWithoutAClimberStationOrPersonalAnchor(int belayer, int climber)
+    {
+        using var world = new World();
+        var target = world.Nodes[climber].Game;
+        target.BelayImpl.Anchored = false;
+        target.BelayImpl.NeedsAttachment = false;
+        world.Nodes[belayer].Game.ChatImpl.Run("offer " + climber);
+        var offer = world.Last(ManualBelayPhase.Offered);
+        Assert.False(target.BelayImpl.HasStation);
+        Assert.True(target.PanelImpl.View.CanAccept);
+        target.PanelImpl.Act(BelayPanelAction.Accept);
+        world.Tick();
+        Assert.True(target.BelayImpl.Active);
+        Assert.Equal(1, target.BelayImpl.BeginCalls);
+        Assert.Null(target.BelayImpl.Preparation);
+        Assert.Equal(offer.Station, target.BelayImpl.BoundStation);
+        Assert.False(target.BelayImpl.Anchored);
+        Assert.False(target.BelayImpl.HasStation);
+        Assert.Equal(offer.Session, world.Nodes[belayer].Game.BelayImpl.ProtectedSession);
+        Assert.Empty(world.Failures);
+    }
+
+    [Theory]
     [InlineData(0, 1, false)]
     [InlineData(0, 2, false)]
     [InlineData(1, 1, false)]

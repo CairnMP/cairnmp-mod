@@ -153,8 +153,14 @@ or cancels a pending invitation. **K** defines/removes an idle station. Shortcut
 act once per press; Backspace does not end an active pair. Closing L does not
 accept an invitation. Gameplay action maps stay blocked while the panel is open,
 including mouse climbing; Enter belongs to the panel instead of opening chat.
-The belayer must remain secured at their native piton station. Both players must
-be in the same world. The fixed 6 m invitation limit is replaced by the climber's
+The belayer must remain personally anchored (**E**) at their native piton station.
+**K** can mark that anchor as the station before inviting a partner. The initial
+climber does not define a station. When their native rope already includes the
+belayer's exact healthy, synchronized station piton in the validated route, they
+can accept without using **E**. Connecting a station that is not yet on that rope
+instead requires the climber to remain personally anchored with **E** at a separate
+healthy backup until attachment is confirmed. Both players must be in the same
+world. The fixed 6 m invitation limit is replaced by the climber's
 native rope capacity and protection-route checks. The climber declares capacity
 when requesting or accepting; an offer waits for that declaration. The host uses
 a bounded distance check with a 3 m allowance for replicated body/attachment
@@ -164,6 +170,11 @@ rope remain decisive before control. Chat fallbacks remain available:
 **Space** (or F7) toggles the latched brake, starting with free rope. Only one pair
 can use this pilot at a time. L opens this panel only in Belay Team; Rope team
 keeps its direct-tether shortcut.
+
+A separate HUD line identifies your confirmed role as **SEGURADOR / BELAYER** or
+**ESCALADOR / CLIMBER**, with your partner's name. It shows **CONECTANDO / CONNECTING**
+until control is ready, and keeps the previous roles during a proposed exchange
+until the host commits it.
 
 With the panel closed, the belayer holds **Up** to feed rope or **Down** to take
 in slack at up to 1 m/s. Feeding requires FREE; take-in also works while BRAKED,

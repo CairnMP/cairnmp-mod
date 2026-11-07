@@ -484,6 +484,7 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
                 || (message.Initiator != LocalPlayerId && _accepted != message.Session)) return;
             var stationMatchesOffer = !_offer.Station.IsValid || _offer.Station == message.Station;
             _active = message; _offer = null; _sequence = 0; _desiredBrake = false;
+            ClearRoleHud();
             ResetRopeVisual();
             _sentBrake = false; _sentMotion = 0; _sendNotBefore = 0;
             _nextIntent = _nextReport = _nextHint = 0; _stopSent = false; _telemetry = null;
@@ -500,6 +501,7 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
             if (message.Belayer == LocalPlayerId
                 && (!OwnStationMatches(message.Station) || !Game.Belay.ProtectStation(message.Session)))
                 RequestStop("The belayer's native station could not be protected.");
+            RefreshRoleHud();
             Game.BelayPanel.Close();
             return;
         }
@@ -523,7 +525,11 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
         else if (message.Phase == ManualBelayPhase.Telemetry
             && (_telemetry == null || (message.TopologyRevision > _telemetry.TopologyRevision)
                 || (message.TopologyRevision == _telemetry.TopologyRevision && message.Sequence >= _telemetry.Sequence
-                    && message.AppliedSequence >= _telemetry.AppliedSequence))) _telemetry = message;
+                    && message.AppliedSequence >= _telemetry.AppliedSequence)))
+        {
+            _telemetry = message;
+            if (!_roleHudReady && !message.Rebinding && message.LengthApplied) RefreshRoleHud();
+        }
     }
 
     private void Tick()
@@ -617,6 +623,7 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
         TickRopeVisual(now);
         if (_active == null || now < _nextHint) return;
         _nextHint = now + .5f;
+        RefreshRoleHud();
         var desired = _active.Braked ? "BRAKED" : "FREE";
         var applied = _telemetry?.Rebinding == true ? (_telemetry.TopologyRevision == 0 ? "connecting station; keep personal backup attached" : "updating protection route") : _telemetry?.Suspended == true
             ? (_telemetry.AppliedSequence >= _active.Sequence ? (_telemetry.Braked ? "BRAKED" : "FREE") : "awaiting confirmation")
@@ -650,7 +657,7 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
         ClearRoleSwap();
         ResetRopeVisual();
         if (_active != null) Game.Belay.Stop(_active.Session);
-        Game.Belay.EndStation(); Game.Hud.HideMessage("belay");
+        Game.Belay.EndStation(); ClearRoleHud(); Game.Hud.HideMessage("belay");
         Game.BelayPanel.Close();
         _active = _offer = _telemetry = null; _accepted = Guid.Empty; _offeredTarget = -1; _stopSent = _cancelPending = false;
     }

@@ -163,6 +163,7 @@ internal sealed partial class ManualBelayFeature
                 Game.Belay.Stop(previous);
                 _active = new() { Session = message.Swap, Station = message.Station,
                     Belayer = message.Belayer, Climber = message.Climber, RopeCapacity = message.RopeCapacity };
+                ClearRoleHud();
                 _roleCommitFailure = reason;
                 Notice("Role exchange stopped: " + reason); return true;
             }
@@ -174,6 +175,9 @@ internal sealed partial class ManualBelayFeature
             _localUntil = Game.Time.UnscaledTime + 3;
             _telemetry = null; _stopSent = false;
             ClearRoleSwap(); ResetRopeVisual();
+            // The host committed only after both native routes were ready, and
+            // this client's native commit above succeeded. Keep old roles until here.
+            RefreshRoleHud(committedSwap: true);
             Notice(message.Belayer == LocalPlayerId ? "Roles exchanged. You are the belayer; brake is closed. Close L to take in slack."
                 : "Roles exchanged. You are the climber. Keep your personal anchor until the new rope readback is ready.");
             RefreshPanel(); return true;
