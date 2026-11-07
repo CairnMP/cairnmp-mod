@@ -4,11 +4,14 @@ Status: experimental source, protocol 27. Full native two-client acceptance is p
 Both participants must install the exact same build. Automated participants and
 the accepted offline local-station reconnection do not establish multiplayer success.
 
-R23 native pilot: one anchored role exchange completed and the new pair remained
-active for about 159 seconds. The reverse preparation failed when native insertion
-placed the station after the original protections. Rope drawing was visible to one
-belayer only. These are partial results; neither T01 in both directions nor V01
-in both roles is accepted yet. The next revision needs both cases repeated.
+R35 native pilot: matched builds committed three consecutive anchored exchanges
+in both directions, with the same person hosting; the final pair remained active
+about 407 seconds until an explicit stop. Both PCs displayed rope, but its material
+was inconsistent. Only the host applied added fall damage: guest local validation
+incorrectly consulted a host-only piton registry. Initial terminal insertion also
+failed before an existing-route retry succeeded. The new peer-damage, material,
+connection and belayer-input corrections need native retesting; these observations
+do not establish full T/V/D/lifecycle acceptance.
 
 Roles and order
   H1: host is belayer; guest is climber.
@@ -62,12 +65,19 @@ Connection / consent
       confirmation for five observed seconds, then control. If the station was
       already attached and no request occurred, record the existing-route branch;
       this does not pass initial missing attachment. Check both logs.
+      Native insertion may place S first or last while retaining the original
+      protection order, holders and personal backup. Both initial orders need
+      physical pins and five observed seconds. Do not count pitons before S as
+      downstream protections; the controller uses the actual S-to-harness path.
   C04 Reverse invitation: climber requests, anchored belayer accepts; same station
       reference and protection checks apply. Decline/cancel must not start control.
   C05 Station guard: after acceptance/preparation, K/Remove station cannot end
       belay and the belayer's personal-anchor input is locked. L > End belay
       explicitly ends control and unlocks it. Native station failure or identity
       loss must still end the pair; no rollback of queued native operations.
+      Attempt the normal wall-grab/climb input as the belayer: the personal
+      anchor and pair must remain active. Camera, L, feed/take-in and brake stay
+      available. L > End belay must permit climbing again after closing L.
       The agreed native station is also critical for Climbot recovery on both
       lifelines during an active session. After clipping a new protection and
       personally anchoring there, wait ten seconds: the original station must
@@ -120,6 +130,9 @@ Belayer rope drawing - candidate, native acceptance pending
   V01 While both remain personally anchored, confirm the belayer sees the route
       from S through the climber's protections to the climber. The climber keeps
       the original native rope. Repeat with the host and guest as belayer.
+      Check the native rope material/texture rather than player-palette colors.
+      BelayVisual material logs distinguish native clone from a flat supported
+      fallback; a white native rope is not evidence that a remote tint is needed.
   V02 Feed and take in slack while anchored: the belayer's drawing should follow
       the climber's rope shape rather than remain a straight station/body line.
       Confirm R01-R03 readbacks and brake control still behave as before.

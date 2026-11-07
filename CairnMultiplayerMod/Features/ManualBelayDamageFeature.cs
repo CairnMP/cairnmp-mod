@@ -124,9 +124,11 @@ internal sealed partial class ManualBelayFeature
     private bool LocalDamageContext(Guid session)
     {
         var now = Game.Time.UnscaledTime;
+        // The piton registry is host-only. Peers use the agreed station's area
+        // and their own native role below; the host still authorizes both commands.
         if (!DamageGameplayActive(now) || _active?.Session != session || _stopSent || _swap != null || _roleOfferPending
             || now >= _localUntil || !TryLocations(_active.Belayer, _active.Climber, out var station, out var climber)
-            || !ValidStation(_active.Station, station) || !WithinRopeRange(station, climber, _active.RopeCapacity)) return false;
+            || !WithinStationArea(_active.Station, station) || !WithinRopeRange(station, climber, _active.RopeCapacity)) return false;
         if (_active.Belayer == LocalPlayerId) return Game.Belay.StationValid && OwnStationMatches(_active.Station);
         var status = Game.Belay.Status;
         return _active.Climber == LocalPlayerId && status.Active && !status.Rebinding && status.Rope.HasValue;

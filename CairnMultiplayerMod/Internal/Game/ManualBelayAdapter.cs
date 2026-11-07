@@ -232,6 +232,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         if (ReferenceEquals(_stationOwner, this)) _stationOwner = null;
         _stationLifeline = null; _stationPiton = 0; _stationAnchor = null;
         _definedStation = default;
+        ReleaseStationClimbInput();
     }
 
     public bool ProtectStation(Guid session)
@@ -240,6 +241,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         Install();
         _unpatchPending = false;
         _stationSession = session; _stationOwner = this;
+        if (!RefreshStationClimbInput()) return false;
         ModLog.Info("[BelayStation] Personal anchor input locked; use L > End belay to leave; session=" + session);
         return true;
     }
@@ -518,6 +520,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         TickStationConnection();
         TickStationAttachment();
         if (HasStation && !StationValid) EndStation();
+        RefreshStationClimbInput();
         if (_unpatchPending && _control == null)
         {
             _harmony.UnpatchSelf();
@@ -671,6 +674,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
                 prefix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(BeforeHoldingRopeItem)));
             _harmony.Patch(AccessTools.Method(typeof(Lifeline), nameof(Lifeline.IsPitonCriticalForLifeline)),
                 postfix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(AfterStationCriticality)));
+            InstallStationClimbGuard();
             _installed = true;
         }
         catch { _harmony.UnpatchSelf(); throw; }
@@ -781,11 +785,13 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         if (ConnectionActive) FailStationConnection(StationConnectionFailure.Context, "Scene changed; no further rope requests will be issued.");
         ReleaseConnectionReferences();
         if (_localStation != null) ModLog.Info("[BelayStation] Captured station cleared by a scene reset.");
-        EndStation(); ClearControl("A scene reset invalidated the native rope and station."); ClearLocalStation();
+        EndStation(); ReleaseStationClimbInput(force: true);
+        ClearControl("A scene reset invalidated the native rope and station."); ClearLocalStation();
     }
     public void Shutdown()
     {
         ResetScene();
+        ReleaseStationClimbInput(force: true);
         ShutdownSharedDamage();
         if (_installed) _harmony.UnpatchSelf();
         _installed = _unpatchPending = false;

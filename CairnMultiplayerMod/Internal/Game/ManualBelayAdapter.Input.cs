@@ -8,8 +8,10 @@ internal sealed partial class ManualBelayAdapter
 {
     private double _ropeInputNoticeUntil, _nextRopeInputLog;
 
-    public string InteractionNotice => _control != null && Now < _ropeInputNoticeUntil
-        ? "Your belayer controls the protection rope. Grab the wall to continue climbing." : null;
+    public string InteractionNotice => _stationSession != Guid.Empty && HasStation
+        ? "You are belaying from this station. Use L > End belay before climbing."
+        : _control != null && Now < _ropeInputNoticeUntil
+            ? "Your belayer controls the protection rope. Grab the wall to continue climbing." : null;
 
     private bool OwnsClimberRopeInput(ClimbingV2PawnController pawn, LogicalRope overrideRope = null)
         => _control != null && _ropeControl != null && _localStation != null && _lifeline?.pawn != null

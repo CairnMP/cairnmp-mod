@@ -183,6 +183,11 @@ ending the pair or resetting the scene clears the drawing. This visual candidate
 now selects physical parts by their actual consecutive attachment pins, allowing
 repeated Climbot holders outside that path. This correction still needs two-client
 validation for visibility in both roles, slack and protection updates.
+The drawing clones the belayer's local native rope material and LineRenderer
+style, preserving its texture/UV settings instead of applying a player-palette
+color. A supported flat fallback can be replaced when native styling becomes
+available; material diagnostics identify which source is in use. Only owned
+clones are destroyed. The corrected appearance still needs native confirmation.
 
 Held motion is renewed at up to 10 Hz and expires after 0.4 s without a fresh
 accepted command on the climber. This stops explicit feed/take-in, while retaining
@@ -208,7 +213,9 @@ keeps the cursor visible/unlocked while open and restores its previous state on 
 
 After acceptance, the belayer's native personal-anchor input is locked and K
 cannot remove the active station. Use **L > End belay** before releasing that
-anchor manually. The station is tied to its real piton rather than
+anchor manually or returning to climbing. Only the anchored belayer's climb-entry
+action is captured; camera, panel and rope controls remain available. The station
+is tied to its real piton rather than
 a frozen body coordinate, so ordinary anchored body motion stays inside the
 native tether area. Piton failure, lost anchoring, departure and disconnect still
 end control. This new input guard requires native validation.
@@ -226,8 +233,11 @@ it does not undo a native operation already queued. L stays open during preparat
 After commit, wait for new rope readback before releasing the follower's personal
 anchor. This is an experimental anchored exchange, with automated participant
 coverage. One matched R23 exchange remained active for about 159 seconds, but
-reverse preparations failed. The current terminal-insertion correction and
-repeated exchanges in both host arrangements still need native validation.
+reverse preparations failed. A later matched R35 session committed three
+consecutive exchanges in both directions; its final pair remained active for
+about 407 seconds until an explicit stop. This is scoped evidence with the same
+person hosting, not acceptance of the full exchange/lifecycle matrix. The current
+damage, material and station-input corrections still require native retesting.
 
 An unloaded personal-anchor transition may recreate rope segments without adding
 a piton. The controller restores only the original ordered holders/protections
@@ -241,13 +251,18 @@ host checks that identity against its live piton registry; the climber resolves
 the corresponding native copy, with position used only as a secondary check.
 For a missing attachment, the climber must first be personally anchored at a
 separate healthy backup reachable within their native rope capacity. Acceptance requests one native
-quickdraw insertion ahead of the existing protection route. The panel reports
+quickdraw insertion into the existing protection route. The panel reports
 preparation while the original backup, ordered holders, native piton collection
 and loaded pin connections are checked for five observed seconds. Feed/take-in
 remain inactive during preparation; only fresh commands after confirmation can
 move rope. No extra piton is spawned by this attachment and cancellation does not
 rewind an operation already queued in the game. Replacing the station requires
 a new invitation. Both invitation directions use this station-bound controller.
+Native geometry can insert the station before or after the original protections,
+in both initial connections and exchanges. Both orders require the same retained
+backup, original holder walk, physical pins and confirmation interval. Protections
+before the station remain attached but are outside its controlled suffix; only
+the actual station-to-harness path contributes downstream protections and budget.
 An already attached station can bind directly after its existing route validates.
 The route budget includes the fixed path from that station through downstream
 protections; FREE pays out as needed and BRAKED limits falls and outward climbing

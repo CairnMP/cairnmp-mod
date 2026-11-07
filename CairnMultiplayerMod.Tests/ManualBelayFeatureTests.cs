@@ -854,7 +854,8 @@ public sealed partial class ManualBelayFeatureTests
         internal bool Cutscene;
         internal IReadOnlyDictionary<int, PlayerLocation> InteractionLocations;
         internal Game(World world, int id)
-        { _world = world; BelayImpl.StationPosition = new WorldPosition(id - 1, 0, 0); BelayImpl.StationOwner = id; BelayImpl.Clock = () => world.Time; }
+        { _world = world; BelayImpl.StationPosition = new WorldPosition(id - 1, 0, 0); BelayImpl.StationOwner = id; BelayImpl.Clock = () => world.Time;
+            BelayImpl.HostRegistryAvailable = id == 1; }
         public IMainMenuApi MainMenu => UnavailableGameApi.Instance.MainMenu;
         public IGameStateApi State => new State(() => Cutscene);
         public IGameTimeApi Time => this;
@@ -933,6 +934,8 @@ public sealed partial class ManualBelayFeatureTests
         internal Guid ProtectedSession;
         internal int StationOwner;
         internal bool KnownStation = true;
+        internal bool HostRegistryAvailable;
+        internal int KnownStationChecks;
         internal WorldPosition StationPosition;
         internal BelaySharedStation BoundStation;
         internal bool RolePreparationReady = true, RolePreparationFailed, RoleCommitFailed;
@@ -987,7 +990,8 @@ public sealed partial class ManualBelayFeatureTests
         internal BelaySharedStation StationReference => new(StationId, StationPosition, StationOwner, 7);
         private Guid _session;
         public bool Enabled => OptIn;
-        public bool IsStationKnown(BelaySharedStation station) => KnownStation && station.IsValid;
+        public bool IsStationKnown(BelaySharedStation station)
+        { KnownStationChecks++; return HostRegistryAvailable && KnownStation && station.IsValid; }
         public bool CanBeginStation(out string reason) { ReadinessChecks++; reason = "Need station"; return Anchored; }
         public bool CanClimb(out string reason) { ReadinessChecks++; reason = "Need protection"; return ProtectionReady && !StationRecorded; }
         public bool CanClimb(BelaySharedStation station, out string reason)

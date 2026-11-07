@@ -130,6 +130,55 @@ public sealed partial class ManualBelayFeatureTests
         Assert.Empty(world.Failures);
     }
 
+    [Theory]
+    [InlineData(1, 2)]
+    [InlineData(2, 1)]
+    public void AHostOnlyPitonRegistryDoesNotBlockTheGuestsClimberOrBelayerDamage(int belayer, int climber)
+    {
+        using var world = DamageWorld(belayer, climber);
+        var session = world.Last(ManualBelayPhase.Started);
+        var host = world.Nodes[1].Game.BelayImpl;
+        var guest = world.Nodes[2].Game.BelayImpl;
+        Assert.True(host.HostRegistryAvailable);
+        Assert.False(guest.HostRegistryAvailable);
+        Assert.False(guest.IsStationKnown(session.Station));
+        var guestRegistryChecks = guest.KnownStationChecks;
+        // R35's guest captured this measurable catch but never polled/sent it.
+        var falling = world.Nodes[climber].Game.BelayImpl;
+        var holding = world.Nodes[belayer].Game.BelayImpl;
+        falling.PartnerFall = new(session.Session, 1, 15.209f, 10.670f, 0);
+        DamageTicks(world, 4);
+        Assert.InRange(Assert.Single(falling.DamageRequests).Fraction, .54f, .55f);
+        Assert.InRange(Assert.Single(holding.DamageRequests).Fraction, .162f, .163f);
+        Assert.Equal(1, falling.NativeDamageCalls); Assert.Equal(1, holding.NativeDamageCalls);
+        Assert.True(falling.Hp < 100); Assert.True(holding.Hp < 100);
+        Assert.Equal(guestRegistryChecks, guest.KnownStationChecks);
+        Assert.True(host.KnownStationChecks > 0);
+
+        foreach (var node in world.Nodes.Values)
+        {
+            node.Runtime.ApplyEvent(DamageEvent(world, ManualBelayDamagePhase.ClimberApproval));
+            node.Runtime.ApplyEvent(DamageEvent(world, ManualBelayDamagePhase.BelayerDose));
+        }
+        DamageTicks(world);
+        Assert.Single(falling.DamageRequests); Assert.Single(holding.DamageRequests);
+        Assert.Equal(1, falling.NativeDamageCalls); Assert.Equal(1, holding.NativeDamageCalls);
+        Assert.Empty(world.Failures);
+    }
+
+    [Theory]
+    [InlineData(1, 2)]
+    [InlineData(2, 1)]
+    public void TheHostStillRejectsDamageWhenItsAuthoritativeStationIsUnknown(int belayer, int climber)
+    {
+        using var world = DamageWorld(belayer, climber);
+        world.Nodes[1].Game.BelayImpl.KnownStation = false;
+        Assert.False(DamageCommand(world, climber, "claim", Claim(world)).Committed);
+        DamageTicks(world);
+        Assert.DoesNotContain(world.Events, e => e.EventId == "manual-belay.damage-approved");
+        Assert.All(world.Nodes.Values, node => Assert.Empty(node.Game.BelayImpl.DamageRequests));
+    }
+
     [Fact]
     public void ShieldReductionSharesTheObservedAdditionRatherThanTheRequestedAddition()
     {

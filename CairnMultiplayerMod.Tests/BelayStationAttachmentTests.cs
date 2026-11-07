@@ -36,7 +36,7 @@ public sealed class BelayStationAttachmentTests
     [InlineData(20, 10)]
     [InlineData(10, 10)]
     [InlineData(10, 21)]
-    public void AppendedStationDuplicatedStationOrReplacedProtectionCannotPass(long first, long last)
+    public void InconsistentTerminalStationDuplicatedStationOrReplacedProtectionCannotPass(long first, long last)
     {
         var trial = New();
         trial.Observe(After(), new[] { first, last }, true, .1);
@@ -128,7 +128,7 @@ public sealed class BelayStationAttachmentTests
     public void AnchoredRolePreparationAcceptsAnUpperStationAfterAllOriginalProtections(int protections)
     {
         var (before, after, original, connected) = TerminalInsertion(protections);
-        var trial = new BelayStationAttachment(before, original, 10, 100, 0, allowTerminalStation: true);
+        var trial = new BelayStationAttachment(before, original, 10, 100, 0);
         trial.Observe(after, connected, true, .1);
         trial.Observe(after, connected, true, .3);
         for (var i = 1; i < 10; i++) trial.Observe(after, connected, true, .3 + i * .5);
@@ -144,25 +144,34 @@ public sealed class BelayStationAttachmentTests
     }
 
     [Fact]
-    public void InitialConnectionStillRejectsATerminalStationWithoutRoleConsent()
+    public void InitialConnectionAcceptsTheObservedTerminalInsertionOnlyAfterFiveSecondsOfPins()
     {
-        var (before, after, original, connected) = TerminalInsertion(1);
+        // R35 retained P1/P2/P3 and appended S immediately before the harness;
+        // the first invitation rejected this route, while a retry accepted it.
+        var (before, after, original, connected) = TerminalInsertion(3);
         var trial = new BelayStationAttachment(before, original, 10, 100, 0);
-        trial.Observe(after, connected, true, .1);
-        Assert.Equal(StationConnectionFailure.RouteChanged, trial.Failure);
+        trial.Observe(before, original, true, .01);
+        trial.Observe(after, connected, false, .1);
+        trial.Observe(after, connected, true, .2);
+        trial.Observe(after, connected, true, .4);
+        for (var i = 1; i <= 9; i++) trial.Observe(after, connected, true, .4 + i * .5);
+        Assert.Equal(BelayStationAttachmentStage.Confirming, trial.Stage);
+        trial.Observe(after, connected, true, 5.41);
+        Assert.Equal(BelayStationAttachmentStage.Ready, trial.Stage);
+        Assert.Equal(StationConnectionFailure.None, trial.Failure);
     }
 
     [Fact]
     public void TerminalRoleStationRequiresItsNativeLastPitonAndRetainedOriginalOrder()
     {
         var (before, after, original, connected) = TerminalInsertion(3);
-        var wrongLast = new BelayStationAttachment(before, original, 10, 100, 0, allowTerminalStation: true);
+        var wrongLast = new BelayStationAttachment(before, original, 10, 100, 0);
         wrongLast.Observe(new(after.Rope, before.LastPiton, after.Parts, after.Holders, 30, after.ProtectionCount), connected, true, .1);
         Assert.Equal(StationConnectionFailure.RouteChanged, wrongLast.Failure);
-        var reordered = new BelayStationAttachment(before, original, 10, 100, 0, allowTerminalStation: true);
+        var reordered = new BelayStationAttachment(before, original, 10, 100, 0);
         reordered.Observe(after, new long[] { 20, 22, 21, 10 }, true, .1);
         Assert.Equal(StationConnectionFailure.RouteChanged, reordered.Failure);
-        var repeated = new BelayStationAttachment(before, original, 10, 100, 0, allowTerminalStation: true);
+        var repeated = new BelayStationAttachment(before, original, 10, 100, 0);
         repeated.Observe(after, new long[] { 20, 10, 22, 10 }, true, .1);
         Assert.Equal(StationConnectionFailure.RouteChanged, repeated.Failure);
     }
@@ -175,7 +184,7 @@ public sealed class BelayStationAttachmentTests
     public void TerminalRoleStationCannotApproveADifferentPhysicalWalk(long root, long a, long b, long end)
     {
         var (before, after, original, connected) = TerminalInsertion(1);
-        var trial = new BelayStationAttachment(before, original, 10, 100, 0, allowTerminalStation: true);
+        var trial = new BelayStationAttachment(before, original, 10, 100, 0);
         var corrupt = new BelayTopologySnapshot(after.Rope, 10, after.Parts, new[] { root, a, b, end }, 30, 2);
         for (var i = 1; i <= 13; i++) trial.Observe(corrupt, connected, true, i * .5);
         Assert.Equal(BelayStationAttachmentStage.Failed, trial.Stage);

@@ -15,7 +15,6 @@ internal sealed class BelayStationAttachment
     private readonly BelayTopologySnapshot _before;
     private readonly long[] _order;
     private readonly long _station, _stationHolder;
-    private readonly bool _allowTerminalStation;
     private readonly double _started;
     private double _last, _candidateSince, _confirmedSince;
     private BelayTopologySnapshot _candidate;
@@ -23,7 +22,7 @@ internal sealed class BelayStationAttachment
     internal StationConnectionFailure Failure { get; private set; }
 
     internal BelayStationAttachment(BelayTopologySnapshot before, IReadOnlyList<long> order,
-        long station, long stationHolder, double now, bool allowTerminalStation = false)
+        long station, long stationHolder, double now)
     {
         if (before?.IsValid != true || before.Parts.Length >= 64 || before.Holders.Length >= 66
             || order == null || order.Count != before.ProtectionCount || order.Count >= 63
@@ -39,7 +38,6 @@ internal sealed class BelayStationAttachment
             || Array.IndexOf(before.Holders, stationHolder) >= 0) throw new ArgumentException("The backup must remain the last protection.");
         _before = new BelayTopologySnapshot(before.Rope, before.LastPiton, before.Parts, before.Holders, before.Available, before.ProtectionCount);
         _station = station; _stationHolder = stationHolder; _started = _last = now;
-        _allowTerminalStation = allowTerminalStation;
     }
 
     internal void Observe(BelayTopologySnapshot snapshot, IReadOnlyList<long> order, bool pinsReady, double now)
@@ -88,7 +86,7 @@ internal sealed class BelayStationAttachment
         {
             if (order.Count != _order.Length + 1) return false;
             if (order[0] == _station) offset = 1;
-            else if (_allowTerminalStation && order[order.Count - 1] == _station) terminal = true;
+            else if (order[order.Count - 1] == _station) terminal = true;
             else return false;
         }
         for (var i = 0; i < _order.Length; i++) if (_order[i] != order[i + offset]) return false;
@@ -96,8 +94,8 @@ internal sealed class BelayStationAttachment
     }
 
     private bool TerminalRouteMatches(BelayTopologySnapshot snapshot)
-        // During an anchored role exchange, the upper station can be the new
-        // final protection. The old personal backup stays attached separately;
+        // Native geometry can place an accepted initial or replacement station
+        // at the final protection. The personal backup stays attached separately;
         // require the exact original walk plus that station before the harness.
         => _before.Parts.Length == _order.Length + 1 && _before.Holders.Length == _order.Length + 2
             && snapshot.Holders[snapshot.Holders.Length - 2] == _stationHolder;
