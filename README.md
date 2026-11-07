@@ -171,6 +171,13 @@ rope remain decisive before control. Chat fallbacks remain available:
 can use this pilot at a time. L opens this panel only in Belay Team; Rope team
 keeps its direct-tether shortcut.
 
+During dialogue, **L** lists room peers without assuming distance or rope readiness.
+**O/I** queues only a local invitation and closes the panel so dialogue can continue.
+It sends once when active gameplay, fresh positions and normal native checks return,
+within 120 seconds. Closing L keeps the queue; **Backspace / End belay** cancels it.
+The queue never accepts an invitation or activates rope control during a cutscene.
+Death, leaving the room, changing scenes, partner departure or expiry clears it.
+
 A separate HUD line identifies your confirmed role as **SEGURADOR / BELAYER** or
 **ESCALADOR / CLIMBER**, with your partner's name. It shows **CONECTANDO / CONNECTING**
 until control is ready, and keeps the previous roles during a proposed exchange

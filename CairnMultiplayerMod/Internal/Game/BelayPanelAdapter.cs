@@ -75,7 +75,7 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
         if (_onAction != null && keyEvent != null && keyEvent.keyCode == KeyCode.K
             && keyEvent.type is EventType.KeyDown or EventType.KeyUp)
         {
-            var eligible = IsOpen && (_view.Phase == BelayPanelPhase.Partners
+            var eligible = IsOpen && !_view.AwaitingGameplay && (_view.Phase == BelayPanelPhase.Partners
                 || (_view.Phase == BelayPanelPhase.Active && !_view.LocalBelayer && _view.CanSwap)) && Application.isFocused && !keyEvent.control && !keyEvent.alt
                 && !keyEvent.command && !keyEvent.shift;
             if (_stationKey.Observe(keyEvent.type == EventType.KeyDown, eligible))
@@ -164,7 +164,7 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
         var x = rect.x + 20f;
         var width = rect.width - 40f;
         var half = (width - 10f) * .5f;
-        var stationRow = view.StationDefined || view.Phase == BelayPanelPhase.Partners;
+        var stationRow = !view.AwaitingGameplay && (view.StationDefined || view.Phase == BelayPanelPhase.Partners);
         var contentY = rect.y + (stationRow ? 190f : 146f);
         var footerY = rect.yMax - 78f;
         var available = Math.Max(48f, footerY - 42f - contentY);
@@ -199,7 +199,8 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
                     var partner = view.Partners[index];
                     var y = contentY + row * rowHeight;
                     var selected = partner.Id == _navigation.SelectedPartner ? "> " : "";
-                    GUI.Label(new Rect(x, y, width, 24f), $"{selected}{partner.Name} — {partner.Distance:F1} m", _name);
+                    var distance = float.IsFinite(partner.Distance) ? $"{partner.Distance:F1} m" : "distance checked after dialogue";
+                    GUI.Label(new Rect(x, y, width, 24f), $"{selected}{partner.Name} — {distance}", _name);
                     var buttonHeight = Math.Min(40f, rowHeight - 30f);
                     if (Button(new Rect(x, y + 26f, half, buttonHeight), "Ask for belay (I)", BelayPanelAction.Request, partner.Id, view.CanRequest && partner.CanRequest)) return;
                     if (Button(new Rect(x + half + 10f, y + 26f, half, buttonHeight), "Offer belay (O)", BelayPanelAction.Offer, partner.Id, view.CanOffer && partner.CanOffer)) return;
@@ -253,12 +254,15 @@ internal sealed class BelayPanelAdapter : IBelayPanelApi
                 if (Button(new Rect(x + half + 10f, contentY + 28f, half, buttonHeight), "End belay", BelayPanelAction.Cancel)) return;
             }
         }
-        else if (Button(new Rect(x, contentY, width, Math.Min(40f, available)), "Cancel invitation (Backspace)", BelayPanelAction.Cancel)) return;
+        else if (Button(new Rect(x, contentY, width, Math.Min(40f, available)),
+            view.AwaitingGameplay ? "Cancel queued invitation (Backspace)" : "Cancel invitation (Backspace)", BelayPanelAction.Cancel)) return;
         GUI.Label(new Rect(x, footerY, width, 34f), view.Phase == BelayPanelPhase.Partners
-            ? "Up/Down: partner | I: ask | O: offer | K: station | L: close"
+            ? view.AwaitingGameplay ? "Up/Down: partner | I/O: queue invitation | L: close"
+                : "Up/Down: partner | I: ask | O: offer | K: station | L: close"
             : view.Phase == BelayPanelPhase.Invitation ? "Enter: accept | Backspace: decline | L: close"
             : view.Phase is BelayPanelPhase.SwapInvitation or BelayPanelPhase.SwapPreparing ? "Enter: accept roles | Backspace: cancel exchange"
             : view.Phase == BelayPanelPhase.Recovering ? "Automatic resume waits for both players | Backspace: end | L: close"
+            : view.AwaitingGameplay ? "Invitation queued, not sent | Backspace: cancel | L: close"
             : "L: open/close | Space: brake/release with panel closed", _body);
         Button(new Rect(x, rect.yMax - 44f, width, 32f), view.Phase == BelayPanelPhase.SwapPreparing
             ? "Remain anchored while preparing" : "Close", BelayPanelAction.Close, enabled: view.Phase != BelayPanelPhase.SwapPreparing);

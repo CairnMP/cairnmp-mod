@@ -20,6 +20,7 @@ internal sealed class BelayPanelView
     internal bool Braked { get; init; }
     internal bool StationDefined { get; init; }
     internal bool CanSwap { get; init; }
+    internal bool AwaitingGameplay { get; init; }
     internal IReadOnlyList<BelayPartnerRow> Partners { get; init; } = Array.Empty<BelayPartnerRow>();
 }
 

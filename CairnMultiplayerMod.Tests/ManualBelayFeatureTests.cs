@@ -776,6 +776,7 @@ public sealed partial class ManualBelayFeatureTests
         internal readonly Dictionary<int, Node> Nodes = new();
         internal readonly Dictionary<int, PlayerLocation> Locations = new();
         internal readonly List<ServerExtensionEvent> Events = new();
+        internal readonly List<ClientExtensionCommand> SentBelayCommands = new();
         internal IEnumerable<ManualBelayMessage> Messages => Events.Where(e => e.EventId == "manual-belay.changed").Select(Decode);
         internal readonly List<string> Failures = new();
         internal bool DeferCommands;
@@ -839,6 +840,7 @@ public sealed partial class ManualBelayFeatureTests
         public bool IsExtensionEnabled(string extensionId, int playerId) => _world.Nodes.ContainsKey(playerId);
         public void SendCommand(ClientExtensionCommand command)
         {
+            if (command.CommandId == "manual-belay.request") _world.SentBelayCommands.Add(command);
             if (_world.DeferCommands) _world.Pending.Enqueue((LocalPlayerId, command));
             else _world.Deliver(LocalPlayerId, command);
         }
@@ -865,12 +867,14 @@ public sealed partial class ManualBelayFeatureTests
         internal readonly Panel PanelImpl = new();
         internal readonly RoleHud HudImpl = new();
         internal bool Cutscene;
+        internal bool InGame = true;
+        internal int InteractionQueries;
         internal IReadOnlyDictionary<int, PlayerLocation> InteractionLocations;
         internal Game(World world, int id)
         { _world = world; BelayImpl.StationPosition = new WorldPosition(id - 1, 0, 0); BelayImpl.StationOwner = id; BelayImpl.Clock = () => world.Time;
             BelayImpl.HostRegistryAvailable = id == 1; }
         public IMainMenuApi MainMenu => UnavailableGameApi.Instance.MainMenu;
-        public IGameStateApi State => new State(() => Cutscene);
+        public IGameStateApi State => new State(() => Cutscene, () => InGame);
         public IGameTimeApi Time => this;
         public IGameInputApi Input => Keys;
         public IGameHudApi Hud => HudImpl;
@@ -892,6 +896,7 @@ public sealed partial class ManualBelayFeatureTests
         public bool TryGetLocation(int id, out PlayerLocation location) => _world.Locations.TryGetValue(id, out location);
         public bool TryGetInteractionLocation(int id, out PlayerLocation location, out string reason)
         {
+            InteractionQueries++;
             var found = (InteractionLocations ?? _world.Locations).TryGetValue(id, out location);
             reason = found ? "" : "The synchronized player position is not ready.";
             return found;
@@ -959,7 +964,9 @@ public sealed partial class ManualBelayFeatureTests
         { Visual = points; VisualCalls++; }
         public void ClearRopeVisual() => Visual = null;
         internal bool OptIn = true, Anchored = true, CanBegin = true, ProtectionReady = true, Active, LastBrake, StationRecorded;
-        public float RopeCapacity { get; set; } = 40;
+        private float _ropeCapacity = 40;
+        internal int CapacityReads, StatusReads, StationDefineCalls;
+        public float RopeCapacity { get { CapacityReads++; return _ropeCapacity; } set => _ropeCapacity = value; }
         internal int BeginCalls, SetCalls, StopCalls, ReadinessChecks;
         internal uint Sequence;
         internal bool SharedStationReady = true;
@@ -1033,7 +1040,7 @@ public sealed partial class ManualBelayFeatureTests
         public bool HasStation => StationRecorded;
         public bool StationValid => Anchored && StationRecorded;
         public bool BeginStation(out string reason)
-        { reason = "Need station"; if (Anchored && !StationRecorded) StationId = Guid.NewGuid(); return StationRecorded = Anchored; }
+        { StationDefineCalls++; reason = "Need station"; if (Anchored && !StationRecorded) StationId = Guid.NewGuid(); return StationRecorded = Anchored; }
         public bool TryGetStation(out BelaySharedStation station) { station = StationReference; return StationValid; }
         public bool ProtectStation(Guid session) { ProtectedSession = session; return StationValid; }
         public void EndStation() { StationRecorded = false; ProtectedSession = Guid.Empty; }
@@ -1067,10 +1074,10 @@ public sealed partial class ManualBelayFeatureTests
         }
         private void RefreshMotion()
         { var motion = _inputLease.MotionAt(Clock()); Rope.TrySetMotion(LastBrake && motion > 0 ? 0 : motion); }
-        public ManualBelayStatus Status => Preparation != null
+        public ManualBelayStatus Status { get { StatusReads++; return Preparation != null
             ? new(Active, false, LastBrake, Sequence, 0, 0, 0, 1, 0, true, new BelayRopeReadback(0, 0, 0, 0, false))
             : new(Active, false, LastBrake, Sequence, 0, 0, 0,
-            rope: Rope == null || SuppressRopeReadback ? null : new BelayRopeReadback(Rope.Motion, Rope.Released, Rope.Slack, Rope.Reserve, true));
+            rope: Rope == null || SuppressRopeReadback ? null : new BelayRopeReadback(Rope.Motion, Rope.Released, Rope.Slack, Rope.Reserve, true)); } }
         public void Stop(Guid id) { if (id == _session) { Active = false; Preparation = null; Rope?.TrySetMotion(0); StopCalls++; } }
         public void Tick()
         {
@@ -1143,10 +1150,12 @@ public sealed partial class ManualBelayFeatureTests
     private sealed class State : IGameStateApi
     {
         private readonly Func<bool> _cutscene;
-        internal State(Func<bool> cutscene = null) => _cutscene = cutscene ?? (() => false);
+        private readonly Func<bool> _inGame;
+        internal State(Func<bool> cutscene = null, Func<bool> inGame = null)
+        { _cutscene = cutscene ?? (() => false); _inGame = inGame ?? (() => true); }
         public bool IsLocalPlayerInCutscene => _cutscene();
         public PlayerState LocalPlayerState => PlayerState.InGame;
-        public bool IsLocalPlayerInGame => true;
+        public bool IsLocalPlayerInGame => _inGame();
         public bool IsLocalPlayerInBivouac => false;
         public bool HasReachedSummit => false;
         public bool TryGetCampPosition(out WorldPosition position) { position = default; return false; }

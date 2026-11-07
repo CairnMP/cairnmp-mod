@@ -73,25 +73,32 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
         feature.Game.BelayPanel.Register(HandlePanelAction);
         feature.OnDrawHud(feature.Game.BelayPanel.Draw);
         feature.EveryFrame(Tick, FeaturePhase.Always);
+        feature.OnSessionStarted(ResetInvitationEpoch);
         feature.OnPlayerLeft((id, _) =>
         {
+            if (_queuedInvitation?.Target == id) CancelQueuedInvitation("The queued partner left the room.");
             if (IsHost && _hostSession != null && (id == _hostSession.Belayer || id == _hostSession.Climber)) EndHost("A participant disconnected.");
             if (IsHost && _hostRecovery != null && (id == _hostRecovery.Pair.Belayer || id == _hostRecovery.Pair.Climber)) EndHostRecovery("A participant disconnected.");
             if (_active != null && (id == _active.Belayer || id == _active.Climber)) ClearLocal();
             if (_recovery != null && (id == _recovery.Pair.Belayer || id == _recovery.Pair.Climber)) { ClearLocal(); ResetRecoveryLifecycle(); }
         });
-        feature.OnSceneReset(() => { RequestStop("The local gameplay scene reset."); Game.Belay.ResetScene(); ClearLocal(); ResetRecoveryLifecycle(); });
-        feature.OnSessionEnded(() => { ClearLocal(); _hostSession = null; _offer = null; _accepted = Guid.Empty; ResetRecoveryLifecycle(); });
+        feature.OnSceneReset(() => { RequestStop("The local gameplay scene reset."); Game.Belay.ResetScene(); ClearLocal(); ResetRecoveryLifecycle(); ResetInvitationEpoch(); });
+        feature.OnSessionEnded(() => { ClearLocal(); _hostSession = null; _offer = null; _accepted = Guid.Empty; ResetRecoveryLifecycle(); ResetInvitationEpoch(); });
     }
 
     private void HandleChat(string args)
     {
         args = (args ?? "").Trim();
+        if (args.Equals("stop", StringComparison.OrdinalIgnoreCase) && _queuedInvitation != null)
+        { CancelQueuedInvitation("The queued invitation was cancelled."); Game.BelayPanel.Close(); return; }
         if (!IsBelayMode || !IsConnected)
         { Notice("Join a Belay Team lobby before requesting partner belay."); return; }
         if (args.Equals("stop", StringComparison.OrdinalIgnoreCase)) { RequestStop("Belay ended by local request."); return; }
+        if (_queuedInvitation != null)
+        { Notice("An invitation is queued locally. Cancel it before choosing another action."); return; }
         if (args.Equals("accept", StringComparison.OrdinalIgnoreCase))
         {
+            if (!InvitationGameplayReady) { Notice("Wait for active gameplay before accepting a native rope connection."); return; }
             if (_offer == null || _offer.Initiator == LocalPlayerId || Game.Time.UnscaledTime >= _localUntil)
             { Notice("No current belay offer to accept."); return; }
             var station = _offer.Station;
@@ -113,6 +120,12 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
             if (!player.IsLocal && (player.Name.Equals(targetName, StringComparison.OrdinalIgnoreCase)
                 || player.Id.ToString() == targetName)) { target = player.Id; break; }
         if (target < 0) { Notice("Player not found."); return; }
+        if (!InvitationGameplayReady)
+        {
+            if (Game.State.IsLocalPlayerInCutscene) QueueInvitation(target, asking);
+            else Notice("Return to active gameplay before inviting a partner.");
+            return;
+        }
         var offeredStation = default(BelaySharedStation);
         var canSend = asking ? Game.Belay.CanClimb(out var failure) : TryBeginStation(out offeredStation, out failure);
         if (!canSend) { Notice(failure); return; }
@@ -177,11 +190,14 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
 
     private void HandlePanelAction(BelayPanelAction action, int target)
     {
+        if (_queuedInvitation != null && action is not (BelayPanelAction.Toggle or BelayPanelAction.Close or BelayPanelAction.Cancel or BelayPanelAction.Decline))
+        { Notice("An invitation is queued locally. Backspace cancels it."); RefreshPanel(); return; }
         switch (action)
         {
             case BelayPanelAction.Toggle:
-                if (!IsBelayMode || !IsConnected || !Game.State.IsLocalPlayerInGame
-                    || Game.Chat.IsTyping || Game.Input.IsPauseMenuActive) return;
+                if (!IsBelayMode || !IsConnected || (!Game.State.IsLocalPlayerInGame && !Game.State.IsLocalPlayerInCutscene)
+                    || !Game.Input.IsWindowFocused || Game.Chat.IsTyping || Game.Input.IsPauseMenuActive) return;
+                if (Game.State.IsLocalPlayerInCutscene && _active != null) return;
                 if (_swap?.Phase == ManualBelayPhase.SwapPreparing) return;
                 if (Game.BelayPanel.IsOpen) Game.BelayPanel.Close();
                 else if (!KeyboardCaptured) { RefreshPanel(); Game.BelayPanel.Show(); }
@@ -191,14 +207,14 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
             case BelayPanelAction.AcceptSwap: AcceptRoleSwap(); break;
             case BelayPanelAction.CancelSwap: CancelRoleSwapRequest("The local player cancelled the role exchange."); break;
             case BelayPanelAction.DefineStation:
-                if (!IsBelayMode || !IsConnected || !Game.State.IsLocalPlayerInGame) return;
+                if (!IsBelayMode || !IsConnected || !InvitationGameplayReady) return;
                 if (_active != null || _offer != null || _offeredTarget >= 0 || _recovery != null)
                 { Notice("End the current invitation or belay before changing the station."); break; }
                 Game.Belay.BeginStation(out var stationReason);
                 Notice(stationReason);
                 break;
             case BelayPanelAction.RemoveStation:
-                if (!IsBelayMode || !IsConnected || !Game.State.IsLocalPlayerInGame || !Game.Belay.HasStation) return;
+                if (!IsBelayMode || !IsConnected || !InvitationGameplayReady || !Game.Belay.HasStation) return;
                 if (_active != null) { Notice("Station locked during belay. Use End belay before removing it."); break; }
                 RequestStop("The local player removed the station.");
                 Game.Belay.EndStation();
@@ -220,6 +236,7 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
 
     private void RefreshPanel()
     {
+        if (RefreshInvitationQueuePanel()) return;
         if (RefreshRecoveryPanel()) return;
         if (RefreshRoleSwapPanel()) return;
         if (_active != null)
@@ -501,12 +518,14 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
             if (_recovery != null || _retiredBelaySessions.Contains(message.Session)) return;
             var partner = message.Belayer == LocalPlayerId ? message.Climber : message.Belayer;
             if (message.Initiator == LocalPlayerId && _offeredTarget != partner) return;
+            CancelQueuedInvitation("An incoming invitation replaced the local queued request. It still needs your acceptance.");
             _offer = message; _localUntil = Game.Time.UnscaledTime + 20;
             if (_cancelPending && message.Initiator == LocalPlayerId) { RequestStop("The local player cancelled the pending invitation."); return; }
             Notice(message.Initiator == LocalPlayerId ? "Invitation sent. Waiting for your partner."
                 : $"{GetPlayerName(message.Initiator)} invites you to partner belay. Press L to respond.");
             RefreshPanel();
-            if (message.Initiator != LocalPlayerId && !KeyboardCaptured && !Game.Players.IsLocalPlayerFalling) Game.BelayPanel.Show();
+            if (message.Initiator != LocalPlayerId && !Game.State.IsLocalPlayerInCutscene
+                && !KeyboardCaptured && !Game.Players.IsLocalPlayerFalling) Game.BelayPanel.Show();
             return;
         }
         if (message.Phase == ManualBelayPhase.Started)
@@ -569,6 +588,7 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
     {
         var now = Game.Time.UnscaledTime;
         if (TickRecovery(now)) return;
+        if (TickQueuedInvitation(now)) return;
         if (!IsBelayMode || !IsConnected)
         {
             if (IsHost) EndHost("Belay Team mode or the network connection ended.");
@@ -673,6 +693,8 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
 
     private void RequestStop(string reason)
     {
+        if (_queuedInvitation != null)
+        { CancelQueuedInvitation(reason); Game.BelayPanel.Close(); return; }
         if (_recovery != null)
         {
             var recovery = _recovery;
@@ -701,6 +723,7 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
 
     private void ClearLocal(bool preserveRecovery = false)
     {
+        CancelQueuedInvitation();
         if (_active != null)
         {
             RememberRecoveryId(_retiredBelaySessions, _retiredBelayOrder, _active.Session);
