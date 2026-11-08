@@ -25,6 +25,7 @@ internal sealed class InventoryAdapter : IInventoryApi
     private readonly List<ShareableItem> _items = new();
     private readonly Dictionary<uint, GroundVisual> _groundVisuals = new();
     private readonly List<BagInventorySection> _sectionCandidates = new();
+    private readonly GroundPiles _piles = new(IsSceneLoaded);
     private ShareActionsRegistration _shareActions;
     private BagInventorySection _section;
     private InventoryInputPrompt _givePrompt;
@@ -40,6 +41,7 @@ internal sealed class InventoryAdapter : IInventoryApi
 
     internal void Tick()
     {
+        _piles.Tick();
         TickNativeActions();
     }
 
@@ -109,8 +111,11 @@ internal sealed class InventoryAdapter : IInventoryApi
         return _shareActions;
     }
 
+    public void SetGroundTakeHandler(Action<uint> take) => _piles.SetTakeHandler(take);
+
     public void SetGroundItems(IReadOnlyList<GroundItem> items)
     {
+        _piles.SetItems(items);
         var keep = new HashSet<uint>();
         if (items != null)
             foreach (var item in items)
@@ -129,7 +134,7 @@ internal sealed class InventoryAdapter : IInventoryApi
         foreach (var id in removed) DestroyGroundVisual(id);
     }
 
-    private static bool IsSceneLoaded(string sceneName)
+    internal static bool IsSceneLoaded(string sceneName)
     {
         // SceneManager.GetSceneByName(string) goes through an Il2Cpp ReadOnlySpan wrapper
         // that is missing at runtime in Cairn's generated assemblies. Indexed lookup keeps
@@ -157,7 +162,8 @@ internal sealed class InventoryAdapter : IInventoryApi
         if (_section != null && _section.isActiveAndEnabled
             && _section.CanvasGroup != null && _section.CanvasGroup.alpha > .01f)
             return 0;
-        _pickupItems.AddRange(nearbyItems);
+        foreach (var nearby in nearbyItems)
+            if (!_piles.IsInBag(nearby.Id)) _pickupItems.Add(nearby);
         // Replicated ground state can arrive while Cairn is still streaming the gameplay
         // scene. Retry visual creation here, once the player is actually close enough to
         // interact, instead of leaving the carousel with permanent question marks.
@@ -218,11 +224,16 @@ internal sealed class InventoryAdapter : IInventoryApi
             var y = Mathf.Clamp(Screen.height - screen.y - 155f * scale,
                 110f * scale, Screen.height - 175f * scale);
             GUI.color = Color.white;
+            var pad = ModControllerInput.UsingController;
             GroundLabel(x, y - 60f * scale, selected.Name, 360f * scale, scale);
             if (_pickupItems.Count == 1)
             {
-                GroundKey(x, y, scale);
-                GroundLabel(x, y + 42f * scale, "E  /  View+ A   Pick up", 360f * scale, scale);
+                if (pad) GroundLabel(x, y + 42f * scale, "View/Share + A   Pick up", 360f * scale, scale);
+                else
+                {
+                    GroundKey(x - 65f * scale, y + 42f * scale, scale);
+                    GroundLabel(x + 50f * scale, y + 42f * scale, "Pick up", 230f * scale, scale);
+                }
                 GroundLine(new Vector2(x, y + 23f * scale),
                     new Vector2(screen.x, Screen.height - screen.y), scale);
                 return;
@@ -249,9 +260,14 @@ internal sealed class InventoryAdapter : IInventoryApi
             GroundLabel(left + (visible - 1) * 72f * scale + 45f * scale, y, "▶", 40f * scale, scale);
             GroundLine(new Vector2(left - 25f * scale, y + 38f * scale),
                 new Vector2(left + (visible - 1) * 72f * scale + 25f * scale, y + 41f * scale), scale);
-            GroundLabel(x, y + 88f * scale, "Scroll / ← →   Navigate", 360f * scale, scale);
-            GroundKey(x - 65f * scale, y + 126f * scale, scale);
-            GroundLabel(x + 70f * scale, y + 126f * scale, "Pick up  /  View+ A", 230f * scale, scale);
+            GroundLabel(x, y + 88f * scale, pad ? "View/Share + ◀ ▶   Navigate" : "Scroll / ← →   Navigate",
+                360f * scale, scale);
+            if (pad) GroundLabel(x, y + 126f * scale, "View/Share + A   Pick up", 360f * scale, scale);
+            else
+            {
+                GroundKey(x - 65f * scale, y + 126f * scale, scale);
+                GroundLabel(x + 50f * scale, y + 126f * scale, "Pick up", 230f * scale, scale);
+            }
         }
         finally { GUI.color = previousColor; }
     }
@@ -616,6 +632,20 @@ internal sealed class InventoryAdapter : IInventoryApi
         _nextSectionSearchFrame = 0;
     }
 
+    /// <summary>True while a backpack screen is showing, whether or not it accepts input right now.</summary>
+    internal bool IsBackpackVisible
+    {
+        get
+        {
+            try
+            {
+                return _section != null && _section.isActiveAndEnabled
+                       && _section.CanvasGroup != null && _section.CanvasGroup.alpha > .01f;
+            }
+            catch { return false; }
+        }
+    }
+
     private bool IsInventoryInteractive()
         => _section != null && _section.isActiveAndEnabled
            && _section.CanvasGroup != null && _section.CanvasGroup.alpha > .01f
@@ -636,9 +666,9 @@ internal sealed class InventoryAdapter : IInventoryApi
             var map = _shareInputAsset.AddActionMap("CairnMPInventory");
             _giveInput = map.AddAction("GiveNearest", InputActionType.Button, "<Keyboard>/g");
             _dropInput = map.AddAction("DropItem", InputActionType.Button, "<Keyboard>/x");
-            _givePrompt = ClonePrompt(template, "CairnMP Give nearest", "Give nearest (View/Share + X)",
+            _givePrompt = ClonePrompt(template, "CairnMP Give nearest", "Give <size=60%>View/Share + X</size>",
                 _giveInput, out _giveDelegate, InvokeGive);
-            _dropPrompt = ClonePrompt(template, "CairnMP Drop item", "Drop (View/Share + B)",
+            _dropPrompt = ClonePrompt(template, "CairnMP Drop item", "Drop <size=60%>View/Share + B</size>",
                 _dropInput, out _dropDelegate, InvokeDrop);
             _creationErrorReported = false;
         }
@@ -744,10 +774,52 @@ internal sealed class InventoryAdapter : IInventoryApi
         _shareInputAsset = null;
     }
 
+    private readonly HashSet<string> _lootScan = new();
+
+    /// <summary>
+    /// Research for dropping items into a real in-world backpack: logs, once per scene, the
+    /// game's own loot containers (what they are, how they are built and whether they are
+    /// saved) so a spawned backpack can be modelled on one. Read-only; spawns nothing.
+    /// </summary>
+    private void LogLootContainers(string scene)
+    {
+        if (!_lootScan.Add(scene)) return;
+        try
+        {
+            var providers = UnityEngine.Object.FindObjectsOfType<LootProvider>(true);
+            ModLog.Info($"[Loot] scene '{scene}': {providers.Length} loot providers");
+            var logged = 0;
+            foreach (var provider in providers)
+            {
+                if (provider == null || logged++ >= 25) continue;
+                var go = provider.gameObject;
+                var path = go.name;
+                for (var parent = go.transform.parent; parent != null; parent = parent.parent)
+                    path = parent.name + "/" + path;
+                var components = new List<string>();
+                foreach (var component in go.GetComponents<Component>())
+                    if (component != null) components.Add(component.GetIl2CppType().Name);
+                var table = provider.lootTable;
+                var tableText = table != null ? table.name + "/" + table.loots.Length : "none";
+                var position = go.transform.position;
+                ModLog.Info($"[Loot]  {provider.source} persistent={provider.IsPersistent} "
+                            + $"active={go.activeInHierarchy} multi={provider.alwaysUseMultiLoot} "
+                            + $"table={tableText} "
+                            + $"pos=({position.x:F0},{position.y:F0},{position.z:F0}) path={path} "
+                            + $"components=[{string.Join(",", components)}]");
+            }
+        }
+        catch (Exception exception)
+        {
+            ModLog.Warning($"[Loot] scan failed: {exception.Message}");
+        }
+    }
+
     private void CreateGroundVisual(GroundItem item)
     {
         try
         {
+            LogLootContainers(item.Scene);
             var definition = InventoryManager.Instance?.GetItem((InventoryItemStringId)item.DefinitionId);
             var sprite = definition?.GetIcon(forBackpack: true);
             if (sprite == null) return;

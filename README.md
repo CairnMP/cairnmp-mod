@@ -51,8 +51,29 @@ base URL for local testing with `CAIRNMP_API_URL`.
 ### Controller
 
 CairnMP uses **View/Share/Create** as a modifier so its commands do not replace
-Cairn's normal controller layout. Hold the modifier first, then press the action
-button; Cairn's native actions are temporarily blocked while it is held.
+Cairn's normal controller layout. Cairn's native actions are temporarily blocked
+while it is held.
+
+Hold `View/Share` to open a radial menu. Aim with the right stick, then release
+`View/Share` to choose the highlighted action. Release with the stick centred to
+choose nothing.
+
+| Radial menu item | Action |
+| --- | --- |
+| Multiplayer panel | Open or close the multiplayer panel |
+| Attach or detach rope | Attach or detach the cooperative rope |
+| Ping | Place a multiplayer ping |
+| Show or hide names | Show or hide player names |
+| Pick up shared item | Pick up a shared ground item |
+
+Prefer button combinations? In the game's settings, open the **CairnMP** page and set
+**Shortcut style** to *Button combos*. Hold `View/Share` and press `Y/Triangle` (rope),
+`D-pad ↑` (names), `A/Cross` (pick up), `RB/R1` (ping) or `Menu` (multiplayer panel). The same page lists the shortcuts for the
+style you have chosen.
+
+A few actions stay as button combinations in either style because they are held or
+repeated, or because they only apply in the backpack.
+Hold `View/Share` first, then press the button; the menu steps aside.
 
 Press the right stick to attach or detach the cooperative rope. `L` does the same
 on a keyboard.
@@ -73,8 +94,6 @@ further step away is refused.
 | `View/Share` + `X/□` | Give the selected backpack item |
 | `View/Share` + `B/○` | Drop the selected backpack item |
 | `View/Share` + D-pad `←` / `→` | Select a shared ground item |
-| `View/Share` + D-pad `↑` | Show or hide player names |
-| `View/Share` + `RB/R1` | Place a multiplayer ping |
 | Hold `View/Share` + `LB/L1` | Push to talk |
 | `View/Share` + right-stick click | Emergency input release |
 
@@ -104,8 +123,8 @@ an argument as `<player>`.
 
 Select an ordinary consumable in Cairn’s backpack. The native action bar adds:
 
-- **`G` or `View/Share + X/□` — Give nearest:** transfer one unit to the nearest eligible player;
-- **`X` or `View/Share + B/○` — Drop:** place one unit into the shared world.
+- **`G` or `View/Share` + `X/Square` — Give nearest:** transfer one unit to the nearest eligible player;
+- **`X` or `View/Share` + `B/Circle` — Drop:** place one unit into the shared world.
 
 | Rule | Limit |
 | --- | ---: |
@@ -119,7 +138,7 @@ the same area. The prompts are disabled while an item is being dragged or the ba
 is busy.
 
 Dropped items are owned by the host, synchronized to every player, and picked up
-with **`E`** or **`View/Share + A/✕`**. If the recipient’s backpack is full, the item returns to the ground
+with **`E`** or the radial menu's *Pick up shared item*. If the recipient’s backpack is full, the item returns to the ground
 instead of being destroyed or duplicated.
 
 > [!NOTE]

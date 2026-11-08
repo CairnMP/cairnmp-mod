@@ -20,7 +20,7 @@ using MelonLoader;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-[assembly: MelonInfo(typeof(CairnMultiplayerMod.Bootstrap.Mod), "Cairn Multiplayer Mod", "2.4.3", "CairnModTeam")]
+[assembly: MelonInfo(typeof(CairnMultiplayerMod.Bootstrap.Mod), "Cairn Multiplayer Mod", "2.4.4", "CairnModTeam")]
 [assembly: MelonGame("TheGameBakers", "Cairn")]
 
 namespace CairnMultiplayerMod.Bootstrap;
@@ -78,6 +78,7 @@ public partial class Mod : MelonMod
         {
             ModConfig.Register();
             VoicePreferences.Register();
+            ControllerPreferences.Register();
             VerboseLogging = ModConfig.VerboseLogging.Value;
             ModLog.Initialize(
                 message => LoggerInstance.Msg(message),
