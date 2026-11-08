@@ -32,4 +32,22 @@ public sealed class PitonPoolTests
         payload[7] = 0xFF;
         Assert.False(PitonPool.TryReadContribution(payload, out _, out _));
     }
+
+    [Fact]
+    public void ACountThatArrivesBeforeTheClipIsHeldUntilThisClimberIsTheLeader()
+    {
+        Assert.True(PitonPool.ShouldHold(isLeader: false));
+        Assert.False(PitonPool.ShouldHold(isLeader: true));
+
+        Assert.False(PitonPool.ShouldApply(
+            isLeader: false, fromPlayerId: 7, followerId: 7, linkId: 1, tieId: 1, appliedTieId: 0));
+        Assert.True(PitonPool.ShouldApply(
+            isLeader: true, fromPlayerId: 7, followerId: 7, linkId: 1, tieId: 1, appliedTieId: 0));
+        Assert.False(PitonPool.ShouldApply(
+            isLeader: true, fromPlayerId: 7, followerId: 7, linkId: 1, tieId: 1, appliedTieId: 1));
+        Assert.False(PitonPool.ShouldApply(
+            isLeader: true, fromPlayerId: 4, followerId: 7, linkId: 1, tieId: 1, appliedTieId: 0));
+        Assert.False(PitonPool.ShouldApply(
+            isLeader: true, fromPlayerId: 7, followerId: 7, linkId: 1, tieId: 2, appliedTieId: 0));
+    }
 }

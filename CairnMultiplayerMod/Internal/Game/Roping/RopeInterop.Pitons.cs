@@ -42,6 +42,10 @@ internal static partial class RopeInterop
     private static int _nextPitonPoolId;
     private static int _pitonPoolId;
     private static int _appliedPitonPoolId;
+    private static bool _heldPool;
+    private static int _heldPoolFrom;
+    private static int _heldPoolLink;
+    private static int _heldPoolCount;
 
     private struct RecoveryTarget
     {
@@ -470,8 +474,14 @@ internal static partial class RopeInterop
     {
         _pitonPoolId = ++_nextPitonPoolId;
         _appliedPitonPoolId = 0;
-        if (!TeamAnchorSession.IsLocalFollower) return;
+        if (!TeamAnchorSession.IsLocalFollower)
+        {
+            // The count may already be here. The guest becomes leader only when the clip arrives.
+            if (TeamAnchorSession.IsLocalLeader) TakeHeldPool();
+            return;
+        }
 
+        _heldPool = false;
         var count = ClearCarriedPitons();
         if (network == null || _pitonPoolChannel == 0)
         {
@@ -486,9 +496,39 @@ internal static partial class RopeInterop
 
     internal static void AcceptPitonPool(int fromPlayerId, byte[] payload)
     {
-        if (!TeamAnchorSession.IsLocalLeader || fromPlayerId != TeamAnchorSession.FollowerId) return;
         if (!PitonPool.TryReadContribution(payload, out var linkId, out var count)) return;
-        if (linkId != _pitonPoolId || _appliedPitonPoolId == linkId) return;
+        if (PitonPool.ShouldHold(TeamAnchorSession.IsLocalLeader))
+        {
+            _heldPool = true;
+            _heldPoolFrom = fromPlayerId;
+            _heldPoolLink = linkId;
+            _heldPoolCount = count;
+            return;
+        }
+
+        GrantPool(fromPlayerId, linkId, count);
+    }
+
+    private static void TakeHeldPool()
+    {
+        if (!_heldPool) return;
+        var from = _heldPoolFrom;
+        var linkId = _heldPoolLink;
+        var count = _heldPoolCount;
+        _heldPool = false;
+        GrantPool(from, linkId, count);
+    }
+
+    private static void GrantPool(int fromPlayerId, int linkId, int count)
+    {
+        if (!PitonPool.ShouldApply(
+                TeamAnchorSession.IsLocalLeader,
+                fromPlayerId,
+                TeamAnchorSession.FollowerId,
+                linkId,
+                _pitonPoolId,
+                _appliedPitonPoolId))
+            return;
         _appliedPitonPoolId = linkId;
 
         var manager = InventoryManager.Instance;

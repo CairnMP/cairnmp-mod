@@ -35,14 +35,15 @@ public sealed class PartnerFallPenaltyTests
     }
 
     [Fact]
-    public void TheFollowerBracesUntilTheLeaderIsClimbingAgain()
+    public void TheFollowerBracesWhileTheLeaderHangsAndLetsGoOnTheGround()
     {
         var hanging = Hold(localIsLeader: false, partner: PartnerPose.Hanging, wasLatched: false);
         Assert.True(hanging.Brace);
         Assert.True(hanging.Latched);
 
         var walking = Hold(localIsLeader: false, partner: PartnerPose.OnGround, wasLatched: hanging.Latched);
-        Assert.True(walking.Brace);
+        Assert.False(walking.Brace);
+        Assert.False(walking.Latched);
 
         var offBelay = PartnerFallPenalty.Tick(
             linked: true, leaderLeft: false, localIsLeader: false,
@@ -51,7 +52,7 @@ public sealed class PartnerFallPenaltyTests
         Assert.False(offBelay.Brace);
         Assert.True(offBelay.Latched);
 
-        var climbing = Hold(localIsLeader: false, partner: PartnerPose.Climbing, wasLatched: walking.Latched);
+        var climbing = Hold(localIsLeader: false, partner: PartnerPose.Climbing, wasLatched: true);
         Assert.False(climbing.Brace);
         Assert.False(climbing.Latched);
     }

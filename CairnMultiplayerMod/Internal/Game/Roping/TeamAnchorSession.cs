@@ -96,6 +96,13 @@ internal static class TeamAnchorSession
             return;
         }
 
+        // The staff is holding the pitch. The follower's button must not start a new tie.
+        if (IsLinked && LeaderLeft && from == FollowerId && target == LeaderId)
+        {
+            RopeLinkState.Apply(from, target, false);
+            return;
+        }
+
         if (!RopeLinkState.IsLinked(from, target)) return;
         if (IsLinked && LeaderId == from && FollowerId == target)
         {

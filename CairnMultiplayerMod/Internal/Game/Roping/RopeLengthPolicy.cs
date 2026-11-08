@@ -7,12 +7,19 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 
 /// <summary>
 /// The team rope's answer for Cairn's own "can the rope still pay out this way" check.
-/// It does not move a climber. The piton rope keeps its own answer.
+/// It does not move a climber. While the span between the harnesses is known, that span
+/// is the only length limit, including when Cairn's own rope is already spent.
 /// </summary>
 internal static class RopeLengthPolicy
 {
     /// <summary>Stop this far inside the coil so the answer does not flicker on the boundary.</summary>
     internal const float SkinMeters = 0.05f;
+
+    /// <summary>
+    /// A vector longer than this is a place in the world. The climb sits hundreds of metres
+    /// from the origin, so that place is not a direction arrow.
+    /// </summary>
+    internal const float WorldPointMeters = 50f;
 
     /// <summary>
     /// The path from the follower's harness through each clipped point to the leader's harness
@@ -32,6 +39,67 @@ internal static class RopeLengthPolicy
 
     private static bool IsFiniteCoil(float coilLength)
         => float.IsFinite(coilLength) && coilLength > 0f;
+
+    /// <summary>
+    /// The step, once a team span is known. Null leaves Cairn's answer alone.
+    /// A known span allows the step unless that span refuses it.
+    /// </summary>
+    internal static bool? StepAllowed(bool teamSpanKnown, bool teamRefuses)
+        => teamSpanKnown ? !teamRefuses : null;
+
+    /// <summary>
+    /// The step while this climber is still on the team rope. A measured span decides.
+    /// A gap uses the last answer. No answer yet allows the step. Null leaves Cairn's
+    /// answer alone, which is a fall, a death, or a leader who has already left.
+    /// </summary>
+    internal static bool? AnswerForStep(bool stillOnRope, bool? measuredAllows, bool? lastAllows)
+    {
+        if (!stillOnRope) return null;
+        if (measuredAllows.HasValue) return measuredAllows;
+        return lastAllows ?? true;
+    }
+
+    /// <summary>
+    /// Metres still paying out while this climber is still on the team rope.
+    /// Null leaves Cairn's remaining distance alone. No answer yet reports a metre
+    /// of slack so a spent climbot coil cannot stop the step.
+    /// </summary>
+    internal static float? AnswerForRemaining(bool stillOnRope, float measured, float last)
+    {
+        if (!stillOnRope) return null;
+        if (float.IsFinite(measured) && measured >= 0f) return measured;
+        if (float.IsFinite(last) && last >= 0f) return last;
+        return 1f;
+    }
+
+    /// <summary>
+    /// Metres still paying out. The team remainder wins whenever it can be measured,
+    /// including when Cairn's own rope is already at zero.
+    /// </summary>
+    internal static float ReportedRemaining(float nativeRemaining, float teamRemaining)
+        => float.IsFinite(teamRemaining) ? teamRemaining : nativeRemaining;
+
+    /// <summary>Metres of coil still unused. Zero once paid out, including a path past the coil.</summary>
+    internal static float RemainingMeters(float pathLength, float coilLength)
+    {
+        if (!float.IsFinite(pathLength) || pathLength < 0f || !IsFiniteCoil(coilLength))
+            return float.NaN;
+        if (IsPaidOut(pathLength, coilLength)) return 0f;
+        var left = coilLength - pathLength;
+        return float.IsFinite(left) && left > 0f ? left : 0f;
+    }
+
+    /// <summary>
+    /// The step Cairn is asking about. A short vector is already a direction. A far one is
+    /// a world point, and the step is from this harness to that point.
+    /// </summary>
+    internal static Vector3 StepFromToward(Vector3 toward, Vector3 here)
+    {
+        if (!IsFinite(toward)) return toward;
+        if (toward.LengthSquared() > WorldPointMeters * WorldPointMeters && IsFinite(here))
+            return toward - here;
+        return toward;
+    }
 
     /// <summary>Length of a follower-to-leader path. False when a point is missing or not finite.</summary>
     internal static bool TryMeasureLength(IReadOnlyList<Vector3> path, out float length)

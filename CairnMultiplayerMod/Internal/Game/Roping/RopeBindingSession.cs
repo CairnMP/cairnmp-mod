@@ -17,6 +17,12 @@ internal sealed class RopeBindingSession : IDisposable
     private IRopeBinding _binding;
     private readonly double _deadline;
     internal RopeBindingState State { get; private set; } = RopeBindingState.Waiting;
+
+    /// <summary>
+    /// Maintain failed after the rope existed. The drawing is dropped. The tie stays.
+    /// A refused attach and a missed deadline leave this false, and those still end the tie.
+    /// </summary>
+    internal bool HarnessLost { get; private set; }
     internal RopeBindingSession(IRopeBinding binding, double now)
     {
         _binding = binding;
@@ -39,6 +45,7 @@ internal sealed class RopeBindingSession : IDisposable
                 State = RopeBindingState.Attached;
             }
             if (_binding.Maintain()) return true;
+            HarnessLost = true;
             Dispose();
             return false;
         }

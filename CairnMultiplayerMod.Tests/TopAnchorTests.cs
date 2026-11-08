@@ -212,6 +212,33 @@ public sealed class TopAnchorTests
     }
 
     [Fact]
+    public void TheFollowerCannotRetieOverAHeldStaff()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(7, 4, 7, true);
+        TeamAnchorSession.NoteRemotePlacement(4, 1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteRemotePlacement(4, Stick, new Vector3(0f, 4f, 0f));
+        TopAnchorSession.Remember(Stick, new Vector3(0f, 4f, 0f));
+        TopAnchorSession.RequestHold();
+
+        RopeLinkState.Apply(4, 7, false);
+        TeamAnchorSession.OnClip(7, 4, 7, false);
+
+        RopeLinkState.Apply(7, 4, true);
+        TeamAnchorSession.OnClip(7, 7, 4, true);
+
+        Assert.True(TeamAnchorSession.LeaderLeft);
+        Assert.True(TeamAnchorSession.IsLinked);
+        Assert.Equal(4, TeamAnchorSession.LeaderId);
+        Assert.Equal(7, TeamAnchorSession.FollowerId);
+        Assert.False(TeamAnchorSession.IsLocalLeader);
+        Assert.Equal(2, TeamAnchorSession.Count);
+        Assert.True(TopAnchorSession.HasStick);
+        Assert.Equal(-1, RopeLinkState.PartnerOf(7));
+    }
+
+    [Fact]
     public void TheStaffBecomesTheFollowerAnchorOnlyAfterTheOtherPitonsAreGone()
     {
         Reset();

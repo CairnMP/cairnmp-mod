@@ -315,7 +315,13 @@ public sealed class ArchitectureBoundaryTests
             "internal void DrawHarnessLine()");
 
         Assert.Contains("nameof(Harness.LifelineCanGoToward)", patch, StringComparison.Ordinal);
+        Assert.Contains("nameof(Harness.GetRemainingSecuringRopeDistanceOnLifeline)", patch, StringComparison.Ordinal);
         Assert.Contains("postfix:", patch, StringComparison.Ordinal);
+        var canGo = MethodBody(patch, "private static void ApplyCoil(");
+        Assert.Contains("RopeLengthPolicy.StepAllowed", canGo, StringComparison.Ordinal);
+        Assert.Contains("__result = true", canGo, StringComparison.Ordinal);
+        var remaining = MethodBody(patch, "private static void CapRemaining(");
+        Assert.Contains("RopeLengthPolicy.ReportedRemaining", remaining, StringComparison.Ordinal);
         Assert.Contains("PawnStateType.Falling", patch, StringComparison.Ordinal);
         Assert.Contains("PawnStateType.Dead", patch, StringComparison.Ordinal);
         Assert.DoesNotContain("ClampDist", patch, StringComparison.Ordinal);
@@ -521,7 +527,8 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("RopeAttachmentPolicy.SnapLanded(length, reported)", finish, StringComparison.Ordinal);
         Assert.Contains("LayParticlesOnSegment()", finish, StringComparison.Ordinal);
         Assert.Contains("DrawHarnessLine()", finish, StringComparison.Ordinal);
-        Assert.Contains("DrawHarnessLine()", MethodBody(interop, "public bool Maintain()"), StringComparison.Ordinal);
+        Assert.Contains("FollowHarnesses(", MethodBody(interop, "public bool Maintain()"), StringComparison.Ordinal);
+        Assert.Contains("DrawHarnessLine()", MethodBody(interop, "private void FollowHarnesses("), StringComparison.Ordinal);
         Assert.DoesNotContain("SetRopeRendered(true)", interop, StringComparison.Ordinal);
         Assert.Contains("ApplyPendingSnap()", beforePhysics, StringComparison.Ordinal);
         // Skipping FixedUpdate while the session is still waiting aborts ForceInitialize

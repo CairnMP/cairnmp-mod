@@ -56,8 +56,9 @@ internal readonly struct PartnerUntie
 
 /// <summary>
 /// The rope-team answer when the other climber comes off the wall, dangles on the rope,
-/// or sits off belay. The follower braces until the leader is climbing again. The
-/// leader's grip empties while the follower hangs. An untie drops whoever is hanging.
+/// or sits off belay. The follower braces while the leader is hanging, and lets go when
+/// the leader is standing or walking. The leader's grip empties while the follower hangs.
+/// An untie drops whoever is hanging.
 /// Only the leader's cut fills their grip. An empty chain still uses Cairn's own
 /// unsecured fall, elsewhere.
 /// </summary>
@@ -96,7 +97,7 @@ internal static class PartnerFallPenalty
             latched = false;
         else if (partner == PartnerPose.Hanging)
             latched = true;
-        else if (partner is PartnerPose.Climbing or PartnerPose.Down)
+        else if (partner is PartnerPose.Climbing or PartnerPose.Down or PartnerPose.OnGround)
             latched = false;
 
         var brace = latched && !selfOffBelay;

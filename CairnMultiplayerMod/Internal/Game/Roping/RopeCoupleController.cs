@@ -202,6 +202,12 @@ internal sealed class RopeCoupleController
             return;
         }
 
+        if (TeamAnchorSession.IsLinked && TeamAnchorSession.LeaderLeft && TeamAnchorSession.IsLocalFollower)
+        {
+            ModLog.Info("[RopeCouple] Link pressed — the staff is holding the pitch.");
+            return;
+        }
+
         if (!LocalPlayerInterop.TryGetPose(out var localPos, out _))
             return;
 
@@ -253,10 +259,14 @@ internal sealed class RopeCoupleController
     private void TickClipPrompt()
     {
         var linked = RopeLinkState.PartnerOf(_network.LocalPlayerId) != -1;
+        var pitchHeld = TeamAnchorSession.IsLinked
+            && TeamAnchorSession.LeaderLeft
+            && TeamAnchorSession.IsLocalFollower;
         RopeClipPrompt.Tick(RopeClipPromptPolicy.ShouldShow(
             linked,
             !linked && HasClipTargetInRange(),
-            !InputCaptureState.IsKeyboardCaptured));
+            !InputCaptureState.IsKeyboardCaptured,
+            pitchHeld));
     }
 
     private bool HasClipTargetInRange()

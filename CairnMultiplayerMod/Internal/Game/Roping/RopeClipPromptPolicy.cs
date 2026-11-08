@@ -7,9 +7,10 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 internal static class RopeClipPromptPolicy
 {
     /// <summary>
-    /// An existing tie, nobody in reach, or a captured keyboard hides it.
-    /// Untie keeps the same keys and does not get a tip.
+    /// An existing tie, a staff still holding the pitch, nobody in reach, or a captured
+    /// keyboard hides it. Untie keeps the same keys and does not get a tip.
     /// </summary>
-    internal static bool ShouldShow(bool alreadyLinked, bool hasTargetInRange, bool inputAvailable)
-        => !alreadyLinked && hasTargetInRange && inputAvailable;
+    internal static bool ShouldShow(
+        bool alreadyLinked, bool hasTargetInRange, bool inputAvailable, bool pitchHeldForFollower = false)
+        => !alreadyLinked && !pitchHeldForFollower && hasTargetInRange && inputAvailable;
 }

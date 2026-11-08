@@ -24,4 +24,14 @@ public sealed class RopeClipPromptPolicyTests
             hasTargetInRange: true,
             inputAvailable: true));
     }
+
+    [Fact]
+    public void TheTipStaysHiddenWhileTheStaffHoldsThePitchForTheFollower()
+    {
+        Assert.False(RopeClipPromptPolicy.ShouldShow(
+            alreadyLinked: false,
+            hasTargetInRange: true,
+            inputAvailable: true,
+            pitchHeldForFollower: true));
+    }
 }

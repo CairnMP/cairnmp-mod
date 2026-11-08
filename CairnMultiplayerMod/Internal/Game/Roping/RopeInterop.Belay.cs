@@ -25,8 +25,9 @@ internal static partial class RopeInterop
         {
             if (_dropRopeAfterPhysics)
             {
+                // Physics lost the harnesses. Drop the drawing and try again. Do not untie.
                 ReleaseAllAnchors();
-                return false;
+                return true;
             }
             if (!RopeTeamFallPatch.IsInstalled) return false;
             var local = ResolveLocalHarness();
@@ -54,8 +55,11 @@ internal static partial class RopeInterop
                 _ropeSession = new RopeBindingSession(_ropeBinding, Time.realtimeSinceStartupAsDouble);
             }
             if (_ropeSession.Tick(Time.realtimeSinceStartupAsDouble)) return true;
+            var harnessLost = _ropeSession.HarnessLost;
             ReleaseAllAnchors();
-            return false;
+            // A missing harness drops the drawing. The next tick builds it again.
+            // A rope that cannot be created still unties a real partner.
+            return harnessLost;
         }
         catch (Exception ex)
         {
@@ -556,11 +560,38 @@ internal static partial class RopeInterop
             SynchronizePartnerAttachment();
             if (!HasBothAttachments || !TryGetHarnessAttachPosition(_local, out var local)
                 || !TryGetHarnessAttachPosition(_partner, out var partner)) return false;
-            // Teleports must not drag solver particles across the world.
-            if (Vector3.Distance(local, _lastLocal) > 5 || Vector3.Distance(partner, _lastPartner) > 5) return false;
-            _lastLocal = local; _lastPartner = partner;
-            DrawHarnessLine();
+            // A long move snaps the particles onto the new segment. Dragging them
+            // across the mountain is what the guard used to prevent by dropping the tie.
+            FollowHarnesses(local, partner);
             return true;
+        }
+
+        /// <summary>Remember the harnesses. A jump lays the rope on the new segment and keeps the tie.</summary>
+        private void FollowHarnesses(Vector3 local, Vector3 partner)
+        {
+            var jumped = RopeAttachmentPolicy.NeedsSnap(Vector3.Distance(local, _lastLocal))
+                || RopeAttachmentPolicy.NeedsSnap(Vector3.Distance(partner, _lastPartner));
+            _lastLocal = local;
+            _lastPartner = partner;
+            if (jumped)
+            {
+                try
+                {
+                    if (_rope != null && _rope.IsInitialized)
+                    {
+                        _rope.TeleportOnAttachPoints(RopeTeleportMode.PreTeleportOnLineAndFabrik, false, false);
+                        LayParticlesOnSegment();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ModLog.Warning("[RopeTeam] Could not snap the rope after a harness jump: " + ex.Message);
+                }
+
+                ModLog.Info("[RopeTeam] Harness jumped. The rope snapped and the tie stayed.");
+            }
+
+            DrawHarnessLine();
         }
 
         private void SynchronizePartnerAttachment()

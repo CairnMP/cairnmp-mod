@@ -42,6 +42,25 @@ internal static class PitonPool
         return linkId > 0 && count >= 0 && count <= MaxContribution;
     }
 
+    /// <summary>
+    /// A count that arrives before this climber is the leader is kept until the clip.
+    /// The leader applies it on arrival.
+    /// </summary>
+    internal static bool ShouldHold(bool isLeader) => !isLeader;
+
+    /// <summary>
+    /// The held count belongs to this tie. A second copy, a wall untie, and a count
+    /// from anyone but the follower do not move pitons.
+    /// </summary>
+    internal static bool ShouldApply(
+        bool isLeader, int fromPlayerId, int followerId, int linkId, int tieId, int appliedTieId)
+        => isLeader
+           && followerId > 0
+           && fromPlayerId == followerId
+           && tieId > 0
+           && linkId == tieId
+           && appliedTieId != tieId;
+
     private static void WriteInt(byte[] payload, int offset, int value)
     {
         payload[offset] = (byte)value;
