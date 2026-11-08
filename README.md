@@ -78,7 +78,9 @@ Hold `View/Share` first, then press the button; the menu steps aside.
 Press the right stick to attach or detach the cooperative rope. `L` does the same
 on a keyboard.
 
-Temporary test tools, taken out after the rope-team trial: `F9` spawns or removes
+Temporary test tools, taken out after the rope-team trial. The practice climber is
+off unless `PracticeClimber = true` is set under `[Debug]` in
+`UserData/MelonPreferences.cfg`. Then `F9` spawns or removes
 a practice climber beside the host. `H` takes over his body. The mouse looks,
 `WASD` flies, `Space` rises, `Ctrl` descends, and `Shift` goes faster. `H` again
 puts you back in your own climber. While the rope is tied, a gold marker sits on
