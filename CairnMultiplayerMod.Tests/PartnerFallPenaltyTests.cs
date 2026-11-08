@@ -16,6 +16,20 @@ public sealed class PartnerFallPenaltyTests
         Assert.Equal(PartnerPose.Climbing, PartnerFallPenalty.Classify(false, false, false, "GetUpFromClimb"));
         Assert.Equal(PartnerPose.OnGround, PartnerFallPenalty.Classify(false, false, false, "LedgeWalking"));
         Assert.Equal(PartnerPose.OnGround, PartnerFallPenalty.Classify(false, false, false, "Idle"));
+        Assert.Equal(PartnerPose.Hanging, PartnerFallPenalty.Classify(
+            false, false, false, "ClimbingV2PawnControllerModuleRappelAscendRopeHangIdle"));
+        Assert.Equal(PartnerPose.Hanging, PartnerFallPenalty.Classify(
+            false, false, false, "ClimbingV2PawnControllerModuleRopeAscending"));
+        Assert.Equal(PartnerPose.Hanging, PartnerFallPenalty.Classify(
+            false, false, false, "ClimbingV2PawnControllerModuleAbseiling"));
+        Assert.Equal(PartnerPose.Hanging, PartnerFallPenalty.Classify(
+            false, false, false, "ClimbingV2PawnControllerModuleRappel"));
+        Assert.Equal(PartnerPose.Climbing, PartnerFallPenalty.Classify(
+            false, false, false, "ClimbingV2PawnControllerModuleHangIdle"));
+        Assert.True(PartnerFallPenalty.IsUnsecuredFallModule("ClimbingV2PawnControllerModuleFalling"));
+        Assert.False(PartnerFallPenalty.IsUnsecuredFallModule("ClimbingV2PawnControllerModuleSecuredFalling"));
+        Assert.False(PartnerFallPenalty.IsUnsecuredFallModule(
+            "ClimbingV2PawnControllerModuleRappelAscendRopeHangIdle"));
         Assert.Equal(PartnerPose.Down, PartnerFallPenalty.Classify(true, true, true, "Falling"));
         Assert.Equal(5f, PartnerFallPenalty.FullGripSeconds);
     }

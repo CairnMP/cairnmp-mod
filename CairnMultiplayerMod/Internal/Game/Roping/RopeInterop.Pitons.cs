@@ -1000,7 +1000,7 @@ internal static partial class RopeInterop
         try
         {
             if (pawn.IsFalling || pawn.IsSecureFalling) return;
-            pawn.ToFallingModuleUnsecure(FallReason.Unknown, default, null);
+            StartUnsecuredFall(pawn, FallReason.Unknown);
         }
         catch (Exception ex)
         {

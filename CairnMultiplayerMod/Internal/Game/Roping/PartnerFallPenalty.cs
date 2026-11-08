@@ -55,10 +55,11 @@ internal readonly struct PartnerUntie
 }
 
 /// <summary>
-/// The rope-team answer when the other climber comes off the wall or sits off belay.
-/// The follower braces until the leader is climbing again. The leader's grip empties
-/// while the follower hangs. An untie drops whoever is hanging. Only the leader's cut
-/// fills their grip. An empty chain still uses Cairn's own unsecured fall, elsewhere.
+/// The rope-team answer when the other climber comes off the wall, dangles on the rope,
+/// or sits off belay. The follower braces until the leader is climbing again. The
+/// leader's grip empties while the follower hangs. An untie drops whoever is hanging.
+/// Only the leader's cut fills their grip. An empty chain still uses Cairn's own
+/// unsecured fall, elsewhere.
 /// </summary>
 internal static class PartnerFallPenalty
 {
@@ -70,6 +71,7 @@ internal static class PartnerFallPenalty
         if (dead) return PartnerPose.Down;
         if (offBelay || IsOffBelayModule(moduleName)) return PartnerPose.Hanging;
         if (falling || IsFallModule(moduleName)) return PartnerPose.Hanging;
+        if (IsSuspendedOnRope(moduleName)) return PartnerPose.Hanging;
         var module = TopAnchorPolicy.Classify(moduleName);
         if (module is TopAnchorModule.Wall or TopAnchorModule.Mantling or TopAnchorModule.GetUpFromClimb)
             return PartnerPose.Climbing;
@@ -108,6 +110,20 @@ internal static class PartnerFallPenalty
         var refill = localIsLeader && localUntied && partnerHanging;
         return new PartnerUntie(localHanging, refill, holdStaff: !hanging);
     }
+
+    /// <summary>A rappel, an abseil, or a rope hang. A hold on the wall is not this.</summary>
+    internal static bool IsSuspendedOnRope(string moduleName)
+        => moduleName != null
+           && (moduleName.Contains("Rappel", StringComparison.Ordinal)
+               || moduleName.Contains("Abseil", StringComparison.Ordinal)
+               || moduleName.Contains("RopeAscending", StringComparison.Ordinal)
+               || moduleName.Contains("RopeHang", StringComparison.Ordinal));
+
+    /// <summary>Cairn's own unsecured fall. A secured catch and a rope hang still need a drop.</summary>
+    internal static bool IsUnsecuredFallModule(string moduleName)
+        => moduleName != null
+           && moduleName.Contains("Falling", StringComparison.Ordinal)
+           && !moduleName.Contains("Secured", StringComparison.Ordinal);
 
     private static bool IsOffBelayModule(string moduleName)
         => moduleName != null && moduleName.Contains("OffBelay", StringComparison.Ordinal);

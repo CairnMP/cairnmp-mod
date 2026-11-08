@@ -27,13 +27,17 @@ All notable CairnMP changes are documented here. Releases follow
   unprotected" when the leader has none.
 - Temporary: while the rope is tied, the HUD shows the rope path against the
   coil, and "paid out" when a further step away is refused.
-- Rope Team: when the other climber falls or sits off belay, the follower braces
-  in place until the leader is climbing again, and the leader's grip is empty
-  after 5 seconds. Untying drops whoever is hanging. The leader's untie, while
-  the follower is hanging, fills the leader's grip. With no piton on the rope,
+- Rope Team: when the other climber falls, dangles on the rope, or sits off belay,
+  the follower braces in place until the leader is climbing again, and the leader's
+  grip is empty after 5 seconds. Untying drops whoever is hanging. A rappel, an
+  abseil, and a rope hang count. Hanging on a hold does not. The leader's untie,
+  while the follower is hanging, fills the leader's grip. With no piton on the rope,
   a fall still drops both climbers.
 
 ### Fixed
+- Rope Team: untying while dangling on the rope drops that climber. The fall is
+  Cairn's own unsecured fall, with a real position. Switching straight to the falling
+  module was an invalid fall and left the climber standing on the piton.
 - Rope Team: a save made in a bivouac can be loaded. Cairn writes that file on
   the way out, after the bivouac flag is already clear. That write is the
   bivouac save: its last-bivouac age is still the exit itself.

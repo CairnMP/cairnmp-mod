@@ -57,7 +57,16 @@ internal static partial class RopeInterop
             localIsLeader, localUntied, local.Hanging, PartnerFallSession.Partner == PartnerPose.Hanging);
         PartnerFallSession.ForceRelease = result.ForceRelease;
         if (result.RefillGrip) RefillGrip();
-        if (result.DropLocal) ArmDrop();
+        if (result.DropLocal)
+        {
+            // The rope-hang module crashes in OnModuleStop once the untie has cleared
+            // the rope. Leave it first, while that rope is still attached. A piton can
+            // still catch this, and the later drop runs again after the chain is clear.
+            if (PartnerFallPenalty.IsSuspendedOnRope(CurrentModuleName()))
+                DropHanging();
+            ArmDrop();
+        }
+
         return result;
     }
 
@@ -151,15 +160,22 @@ internal static partial class RopeInterop
         if (pawn == null) return;
         try
         {
-            if (pawn.IsFalling && !pawn.IsSecureFalling && !pawn.IsOffBelay) return;
-            if (pawn.IsOffBelay && pawn.FallingModule != null)
-                pawn.CurrentModule = pawn.FallingModule;
-            pawn.ToFallingModuleUnsecure(FallReason.Unknown, default, null);
+            var moduleName = ModuleName(pawn);
+            if (PartnerFallPenalty.IsUnsecuredFallModule(moduleName) && pawn.IsFalling) return;
+            if (PartnerFallPenalty.IsSuspendedOnRope(moduleName))
+            {
+                RopeTeamFallPatch.FallOffRope(pawn);
+                ModLog.Info("[RopeTeam] The untie dropped a hanging climber.");
+                return;
+            }
+
+            StartUnsecuredFall(pawn, FallReason.Voluntary);
             ModLog.Info("[RopeTeam] The untie dropped a hanging climber.");
         }
         catch (Exception exception)
         {
-            ModLog.Warning("[RopeTeam] Cairn refused the untie fall: " + exception.Message);
+            ModLog.Warning("[RopeTeam] Cairn refused the untie fall from "
+                + ModuleName(pawn) + ": " + exception);
         }
     }
 
@@ -317,7 +333,8 @@ internal static partial class RopeInterop
                            || (module == TopAnchorModule.Other
                                && moduleName.Contains("OffBelay", StringComparison.Ordinal));
             var falling = pawn.IsFalling || pawn.IsSecureFalling
-                          || module is TopAnchorModule.Falling or TopAnchorModule.SecuredFalling;
+                          || module is TopAnchorModule.Falling or TopAnchorModule.SecuredFalling
+                          || PartnerFallPenalty.IsSuspendedOnRope(moduleName);
             var status = PartnerFallPenalty.Classify(dead, falling, offBelay, moduleName);
             return new LocalPose(status, falling, offBelay, dead || status == PartnerPose.Down);
         }
@@ -326,6 +343,22 @@ internal static partial class RopeInterop
             ModLog.SuppressedException("rope.fall-pose", exception);
             return new LocalPose(PartnerPose.OnGround, false, false, dead);
         }
+    }
+
+    /// <summary>
+    /// Cairn's unsecured fall. The position is an Il2Cpp nullable object: a plain
+    /// default is null, and the call refuses it before the fall starts.
+    /// </summary>
+    internal static void StartUnsecuredFall(ClimbingV2PawnController pawn, FallReason reason)
+    {
+        var position = pawn.transform != null ? pawn.transform.position : Vector3.zero;
+        pawn.ToFallingModuleUnsecure(reason, new Il2CppSystem.Nullable<Vector3>(position), null);
+    }
+
+    private static string CurrentModuleName()
+    {
+        var pawn = ResolveLocalClimbController();
+        return pawn == null ? "" : ModuleName(pawn);
     }
 
     private static string ModuleName(ClimbingV2PawnController pawn)

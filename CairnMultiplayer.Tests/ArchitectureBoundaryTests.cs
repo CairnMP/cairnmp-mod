@@ -244,7 +244,7 @@ public sealed class ArchitectureBoundaryTests
             "TeamAnchorSession.CopyPath",
             MethodBody(interop, "internal void DrawHarnessLine()"),
             StringComparison.Ordinal);
-        Assert.Contains("ToFallingModuleUnsecure", pitons, StringComparison.Ordinal);
+        Assert.Contains("StartUnsecuredFall", pitons, StringComparison.Ordinal);
 
         var fall = File.ReadAllText(Path.Combine(
             ProjectDirectory, "Internal", "Game", "Roping", "RopeInterop.Fall.cs"));
