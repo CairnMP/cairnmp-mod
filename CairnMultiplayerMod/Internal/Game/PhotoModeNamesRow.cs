@@ -72,6 +72,13 @@ internal static class PhotoModeNamesRow
         if (_row == null) _label = null;
     }
 
+    /// <summary>True once this session has seen the photo panel and it is open.</summary>
+    internal static bool IsPhotoModeOpen()
+    {
+        var ui = _ui;
+        return ui != null && IsPhotoModeOpen(ui);
+    }
+
     private static bool IsPhotoModeOpen(PhotoModeUI ui)
     {
         try

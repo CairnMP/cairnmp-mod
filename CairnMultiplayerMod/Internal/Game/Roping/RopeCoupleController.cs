@@ -42,6 +42,7 @@ internal sealed class RopeCoupleController
         if (_network == null)
         {
             LeaderProtectionMarker.Hide();
+            RopeClipPrompt.Hide();
             return;
         }
 
@@ -49,9 +50,11 @@ internal sealed class RopeCoupleController
         if (!TickRopeSafety() || _state.LocalPlayerState != PlayerState.InGame)
         {
             if (!TeamAnchorSession.IsLinked) LeaderProtectionMarker.Hide();
+            RopeClipPrompt.Hide();
             return;
         }
 
+        TickClipPrompt();
         if (!InputCaptureState.IsKeyboardCaptured)
             HandleRopeClipInput();
         TeamAnchorSession.ReconcileLink();
@@ -202,15 +205,7 @@ internal sealed class RopeCoupleController
         if (!LocalPlayerInterop.TryGetPose(out var localPos, out _))
             return;
 
-        _linkCandidates.Clear();
-        foreach (var kv in _network.RemotePlayers)
-        {
-            var rp = kv.Value;
-            if (rp == null || rp.State != PlayerState.InGame) continue;
-            var d = Vector3.Distance(localPos, new Vector3(rp.X, rp.Y, rp.Z));
-            _linkCandidates.Add(new PracticePartner.LinkCandidate(kv.Key, d, PracticePartner.Is(kv.Key)));
-        }
-
+        FillLinkCandidates(localPos);
         int bestId = PracticePartner.ChooseLinkTarget(_linkCandidates, RopeRequests.LinkRangeMeters);
         float bestDist = float.MaxValue;
         for (var i = 0; i < _linkCandidates.Count; i++)
@@ -249,6 +244,39 @@ internal sealed class RopeCoupleController
 
         _network.SendRopeClip(bestId, true);
         ModLog.Info($"[RopeCouple] Clip to player {bestId} at {bestDist:F1}m");
+    }
+
+    /// <summary>
+    /// The tip uses the same reach test as the key, so the row cannot offer a clip the press would refuse.
+    /// Lobby games skip tutorials, and the row still shows.
+    /// </summary>
+    private void TickClipPrompt()
+    {
+        var linked = RopeLinkState.PartnerOf(_network.LocalPlayerId) != -1;
+        RopeClipPrompt.Tick(RopeClipPromptPolicy.ShouldShow(
+            linked,
+            !linked && HasClipTargetInRange(),
+            !InputCaptureState.IsKeyboardCaptured));
+    }
+
+    private bool HasClipTargetInRange()
+    {
+        if (!LocalPlayerInterop.TryGetPose(out var localPos, out _))
+            return false;
+        FillLinkCandidates(localPos);
+        return PracticePartner.ChooseLinkTarget(_linkCandidates, RopeRequests.LinkRangeMeters) >= 0;
+    }
+
+    private void FillLinkCandidates(Vector3 localPos)
+    {
+        _linkCandidates.Clear();
+        foreach (var kv in _network.RemotePlayers)
+        {
+            var rp = kv.Value;
+            if (rp == null || rp.State != PlayerState.InGame) continue;
+            var d = Vector3.Distance(localPos, new Vector3(rp.X, rp.Y, rp.Z));
+            _linkCandidates.Add(new PracticePartner.LinkCandidate(kv.Key, d, PracticePartner.Is(kv.Key)));
+        }
     }
 
     /// <summary>
@@ -333,6 +361,7 @@ internal sealed class RopeCoupleController
 
     internal void ClearLinks()
     {
+        RopeClipPrompt.Hide();
         RopeLinkState.Clear();
         TeamAnchorSession.Clear();
         TeamAnchorSession.DisarmRules();
@@ -343,5 +372,8 @@ internal sealed class RopeCoupleController
     }
 
     /// <summary>Logical links intentionally survive scene streaming and clear only on disconnect.</summary>
-    internal void Reset() { }
+    internal void Reset()
+    {
+        RopeClipPrompt.Hide();
+    }
 }

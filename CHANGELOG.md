@@ -12,6 +12,9 @@ All notable CairnMP changes are documented here. Releases follow
 ## [Unreleased]
 
 ### Added
+- Rope Team: Cairn's control tip for clipping in appears when a partner is close
+  enough to tie. A lobby still skips Cairn's own tutorials, and the tip shows
+  anyway. The keys stay L and a right-stick click.
 - Rope Team: resting at a bivouac waits until the other climber is at that same
   camp. A partner who has already gone in, or who has left, does not hold the
   door. Free Solo and Race are unchanged.

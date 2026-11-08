@@ -145,6 +145,15 @@ public partial class Mod
         {
             ModLog.SuppressedException("rope.staff-plant", exception);
         }
+
+        try
+        {
+            Internal.Game.Roping.RopeClipPrompt.ApplyLabel();
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.clip-prompt.label", exception);
+        }
     }
 
     public override void OnUpdate()

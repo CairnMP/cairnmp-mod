@@ -164,6 +164,10 @@
       <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.TGBTools.PhotoMode.Runtime.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Il2CppTheGameBakers.TGBTools.InputImage.Runtime">
+      <HintPath>$(Il2CppAssembliesDir)\Il2CppTheGameBakers.TGBTools.InputImage.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Il2CppObi">
       <HintPath>$(Il2CppAssembliesDir)\Il2CppObi.dll</HintPath>
       <Private>false</Private>
