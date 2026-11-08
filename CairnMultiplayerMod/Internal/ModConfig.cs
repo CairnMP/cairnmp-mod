@@ -22,6 +22,7 @@ internal static class ModConfig
     public static MelonPreferences_Entry<bool> NativeProfiling;
     public static MelonPreferences_Entry<int> JobWorkerCount;
     public static MelonPreferences_Entry<string> PerformanceScenario;
+    public static MelonPreferences_Entry<bool> PracticeClimber;
 
     public static void Register()
     {
@@ -47,5 +48,8 @@ internal static class ModConfig
         // alone, any other value is an experiment measured by the [GameTuning] frame report.
         JobWorkerCount = debug.CreateEntry("JobWorkerCount", 0);
         PerformanceScenario = debug.CreateEntry("PerformanceScenario", "unspecified - set route, save, run number and voice/rope state");
+        // F9 practice climber and H to fly him, for trying the Rope Team chain alone.
+        // A test tool, so it stays off unless a developer turns it on.
+        PracticeClimber = debug.CreateEntry("PracticeClimber", false);
     }
 }
