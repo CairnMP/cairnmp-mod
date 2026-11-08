@@ -9,6 +9,7 @@ using UnityEngine.InputSystem;
 namespace CairnMultiplayerMod.Internal.Game.Players;
 
 /// <summary>
+/// Off unless Debug.PracticeClimber is true in MelonPreferences.
 /// F9 spawns or removes the practice climber. H takes over his body and flies it
 /// with the mouse and keyboard. Gameplay input stays live, so the same keys can
 /// also move the real climber.
@@ -26,12 +27,15 @@ internal static class PracticePartnerController
     private static bool _piloting;
     private static HudAdapter _hud;
 
+    /// <summary>Debug.PracticeClimber. Off by default, so players never get F9 or H.</summary>
+    internal static bool Enabled => ModConfig.PracticeClimber?.Value == true;
+
     internal static void Bind(HudAdapter hud) => _hud = hud;
 
     internal static void Tick(NetworkManager network, RuntimeState state)
     {
         if (network == null || state == null) return;
-        if (!network.CanHostPracticePartner || SceneRoles.IsMainMenuArea(state.CurrentScene))
+        if (!Enabled || !network.CanHostPracticePartner || SceneRoles.IsMainMenuArea(state.CurrentScene))
         {
             if (_spawned) Despawn(network);
             else StopPiloting();
