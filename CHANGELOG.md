@@ -21,7 +21,8 @@ All notable CairnMP changes are documented here. Releases follow
 - Temporary: F9 spawns a practice climber beside the host. H takes over his
   body and flies it with the mouse and keyboard, so the piton chain can be
   tried alone. Tie him with the rope control. He takes a chain piton when he
-  is next to it. He is not sent to other players.
+  is next to it. He is not sent to other players. Off unless `Debug.PracticeClimber` is
+  set to true in MelonPreferences.
 - Temporary: while the rope is tied, a gold marker shows the piton protecting
   the leader and a red marker shows the follower's. The HUD says "Leader
   unprotected" when the leader has none.
