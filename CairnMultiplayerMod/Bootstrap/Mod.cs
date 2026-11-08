@@ -338,7 +338,7 @@ public partial class Mod : MelonMod
         Network.OnOwnPitonRecovered += id =>
         {
             RopeInterop.ForgetOwnPiton(id);
-            TeamAnchorSession.NoteRemoved(id);
+            TeamAnchorSession.NoteLocalRemoval(id);
         };
         Network.OnTeleport += pkt =>
         {

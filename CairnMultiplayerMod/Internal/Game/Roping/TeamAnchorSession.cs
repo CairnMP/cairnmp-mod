@@ -85,6 +85,14 @@ internal static class TeamAnchorSession
                 return;
             }
 
+            // The leader already left at the staff. The host echoes that unclip
+            // later, and a hanging reading on the echo must not take the chain down.
+            if (from == LeaderId && LeaderLeft)
+            {
+                TopAnchorSession.ConsumeHold();
+                return;
+            }
+
             if (from == LeaderId && !forceRelease && (TopAnchorSession.HoldRequested || TopAnchorSession.HasStick))
             {
                 HoldForFollower();
@@ -142,9 +150,26 @@ internal static class TeamAnchorSession
         LeaderLeft = true;
     }
 
-    internal static bool AllowsTake(uint pitonId)
+    /// <summary>
+    /// A piton may be picked up. The leader's chain is keyed by local announce ids and
+    /// everyone else's by host ids, so a shared number is on the chain only in that namespace.
+    /// A staff id is never gear.
+    /// </summary>
+    internal static bool AllowsTake(uint pitonId, bool ownLocalId)
         => !TopAnchorPolicy.IsStickId(pitonId)
-           && TeamAnchorChain.MayTake(IsLinked, IsLocalLeader, Chain.Contains(pitonId));
+           && TeamAnchorChain.MayTake(IsLinked, IsLocalLeader, IsChainKey(pitonId, ownLocalId));
+
+    /// <summary>
+    /// True when <paramref name="pitonId"/> is a key of this client's chain.
+    /// The leader's keys are local announce ids. Every other client's keys are host ids.
+    /// Both clients share a staff id.
+    /// </summary>
+    internal static bool IsChainKey(uint pitonId, bool ownLocalId)
+    {
+        if (!Chain.Contains(pitonId)) return false;
+        if (TopAnchorPolicy.IsStickId(pitonId)) return true;
+        return IsLocalLeader == ownLocalId;
+    }
 
     /// <summary>The piton the leader is on, and where it was placed.</summary>
     internal static bool TryGetLeaderAnchor(out uint id, out Vector3 position)
@@ -188,6 +213,17 @@ internal static class TeamAnchorSession
         Detached.Remove(id);
         Positions.Remove(id);
         Chain.Remove(id);
+    }
+
+    /// <summary>
+    /// One of our pitons left the lifeline. The id is the local announce id, and only the
+    /// leader's chain is stored under those ids. On the follower the same number can be a
+    /// host id already on the chain, so it must not be spliced out.
+    /// </summary>
+    internal static void NoteLocalRemoval(uint localId)
+    {
+        if (!IsLocalLeader) return;
+        NoteRemoved(localId);
     }
 
     /// <summary>

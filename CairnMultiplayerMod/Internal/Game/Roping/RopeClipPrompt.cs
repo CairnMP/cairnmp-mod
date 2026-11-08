@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game;
 using Il2Cpp;
@@ -10,23 +11,35 @@ using UnityEngine.InputSystem;
 namespace CairnMultiplayerMod.Internal.Game.Roping;
 
 /// <summary>
-/// Cairn's gameplay-prompt row for clipping in. The words are written onto the row because
-/// this action has no loc key of its own. The keycap still comes from the prompt HUD.
+/// Cairn's gameplay-prompt rows for our control tips. The words are written onto the row
+/// because these actions have no loc key of their own. The keycap still comes from the
+/// prompt HUD. A word such as Tap or Hold is written to the left of that keycap.
 /// </summary>
 internal static class RopeClipPrompt
 {
     internal const string Label = "Clip in";
+    internal const string CutLabel = "Cut rope";
+    internal const string RopeId = "rope";
 
     private const string GamepadBinding = "<Gamepad>/rightStickPress";
 
+    private sealed class Slot
+    {
+        internal string Text;
+        internal string Cue;
+        internal string Keyboard;
+        internal string Gamepad;
+        internal InputAction Action;
+        internal GameplayPromptHandle Handle;
+        internal GameplayPromptUI Ui;
+        internal bool Shown;
+        internal bool Wants;
+        internal string Announced;
+    }
+
+    private static readonly Dictionary<string, Slot> Slots = new(StringComparer.Ordinal);
     private static InputActionAsset _asset;
-    private static InputAction _action;
     private static GameplayPromptHud _hud;
-    private static GameplayPromptHandle _handle;
-    private static GameplayPromptUI _ui;
-    private static bool _shown;
-    private static bool _wantsVisible;
-    private static bool _announced;
     private static bool _refreshBroken;
     private static bool _revealing;
     private static bool _inRow;
@@ -34,21 +47,50 @@ internal static class RopeClipPrompt
     private static int _tutorialsFrame = -1;
     private static bool _tutorialsSkipped;
 
-    internal static void Tick(bool show)
+    internal static void Tick(bool show) => Tick(show, Label);
+
+    internal static void Tick(bool show, string label)
+        => Tick(RopeId, show, label, cue: null,
+            "<Keyboard>/" + RopeCoupleController.ToggleKeyName.ToLowerInvariant(),
+            GamepadBinding);
+
+    internal static void Tick(string id, bool show, string label, string cue, string keyboard, string gamepad)
     {
-        _wantsVisible = show;
-        if (show) Show();
-        else Hide();
+        if (string.IsNullOrEmpty(id)) return;
+        var slot = SlotFor(id);
+        if (!string.IsNullOrEmpty(label)) slot.Text = label;
+        slot.Cue = cue;
+        if (!string.IsNullOrEmpty(keyboard)) slot.Keyboard = keyboard;
+        slot.Gamepad = gamepad;
+        slot.Wants = show;
+        if (show) Show(slot);
+        else Hide(slot);
     }
 
-    internal static void Hide()
+    internal static void Hide() => Hide(RopeId);
+
+    internal static void Hide(string id)
     {
-        _wantsVisible = false;
-        if (!_shown && !_handle.registered && !_handle.Valid) return;
+        if (id == null || !Slots.TryGetValue(id, out var slot)) return;
+        Hide(slot);
+    }
+
+    internal static void HideAll()
+    {
+        if (Slots.Count == 0) return;
+        var ids = new string[Slots.Count];
+        Slots.Keys.CopyTo(ids, 0);
+        foreach (var id in ids) Hide(id);
+    }
+
+    private static void Hide(Slot slot)
+    {
+        slot.Wants = false;
+        if (!slot.Shown && !slot.Handle.registered && !slot.Handle.Valid) return;
         try
         {
-            if (_hud != null && (_handle.registered || _handle.Valid))
-                _hud.UnregisterPrompt(ref _handle);
+            if (_hud != null && (slot.Handle.registered || slot.Handle.Valid))
+                _hud.UnregisterPrompt(ref slot.Handle);
         }
         catch (Exception exception)
         {
@@ -56,15 +98,15 @@ internal static class RopeClipPrompt
             _hud = null;
         }
 
-        _shown = false;
-        _ui = null;
-        _handle = default;
-        DisableAction();
+        slot.Shown = false;
+        slot.Ui = null;
+        slot.Handle = default;
+        DisableAction(slot);
     }
 
-    private static void DisableAction()
+    private static void DisableAction(Slot slot)
     {
-        try { _action?.Disable(); }
+        try { slot.Action?.Disable(); }
         catch (Exception exception) { ModLog.SuppressedException("rope.clip-prompt.disable", exception); }
     }
 
@@ -96,12 +138,12 @@ internal static class RopeClipPrompt
     }
 
     /// <summary>
-    /// Lobby games leave the prompt canvas closed. Open it for this row, and leave pause,
-    /// cutscenes, and photo mode alone.
+    /// Lobby games leave the prompt canvas closed. Open it while any of our tips is up, and
+    /// leave pause, cutscenes, and photo mode alone.
     /// </summary>
     internal static bool AllowDespiteSkippedTutorials(GameplayPromptHud hud)
     {
-        if (_allowing || !_shown || !_wantsVisible || hud == null || !TutorialsSkipped()) return false;
+        if (_allowing || hud == null || !AnyWanted() || !TutorialsSkipped()) return false;
         _allowing = true;
         try
         {
@@ -153,31 +195,40 @@ internal static class RopeClipPrompt
     /// </summary>
     internal static void ApplyLabel()
     {
-        if (!_shown || _hud == null) return;
+        if (_hud == null || !AnyWanted()) return;
         try
         {
-            BindRow();
-            if (_ui != null) WriteLabel(_ui);
+            foreach (var slot in Slots.Values)
+            {
+                if (!slot.Shown) continue;
+                BindRow(slot);
+                if (slot.Ui == null) continue;
+                WriteLabel(slot.Ui, slot);
+                WriteCue(slot.Ui, slot);
+            }
+
             RevealIfAllowed();
             HideForeignRows();
         }
         catch (Exception exception)
         {
             ModLog.SuppressedException("rope.clip-prompt.label", exception);
-            _ui = null;
+            foreach (var slot in Slots.Values) slot.Ui = null;
         }
     }
 
     internal static void AfterRowLateUpdate(GameplayPromptUI row)
     {
-        if (_inRow || !_shown || row == null) return;
+        if (_inRow || row == null || !AnyWanted()) return;
         _inRow = true;
         try
         {
-            if (IsOurRow(row))
+            var slot = SlotForRow(row);
+            if (slot != null)
             {
-                _ui = row;
-                WriteLabel(row);
+                slot.Ui = row;
+                WriteLabel(row, slot);
+                WriteCue(row, slot);
                 return;
             }
 
@@ -196,78 +247,97 @@ internal static class RopeClipPrompt
         }
     }
 
-    private static void Show()
+    private static bool AnyWanted()
+    {
+        foreach (var slot in Slots.Values)
+            if (slot.Shown && slot.Wants) return true;
+        return false;
+    }
+
+    private static Slot SlotFor(string id)
+    {
+        if (!Slots.TryGetValue(id, out var slot))
+        {
+            slot = new Slot();
+            Slots[id] = slot;
+        }
+
+        return slot;
+    }
+
+    private static void Show(Slot slot)
     {
         if (_hud == null)
         {
-            _shown = false;
-            _handle = default;
-            _ui = null;
+            slot.Shown = false;
+            slot.Handle = default;
+            slot.Ui = null;
         }
 
-        if (_shown && _hud != null && (_handle.registered || _handle.Valid))
+        if (slot.Shown && _hud != null && (slot.Handle.registered || slot.Handle.Valid))
         {
+            NoteShown(slot);
             ApplyLabel();
             return;
         }
 
         if (!TryResolveHud()) return;
-        if (!EnsureAction()) return;
-        if (TryAdoptExisting())
+        if (!EnsureAction(slot)) return;
+        if (TryAdoptExisting(slot))
         {
-            NoteShown();
+            NoteShown(slot);
             ApplyLabel();
             return;
         }
 
         try
         {
-            _action.Enable();
+            slot.Action.Enable();
             var data = new GameplayPromptData
             {
                 // The row will not build a keycap without a loc key. The visible words are replaced.
                 locKey = LocKeyStringIdEnum.GAMEPLAY_PROMPT_CLIMB,
-                inputAction0 = _action,
+                inputAction0 = slot.Action,
                 canInteract = true,
             };
-            _handle = _hud.RegisterPrompt(data, false, 0f);
-            _ui = null;
-            _shown = _handle.registered || _handle.Valid;
-            if (!_shown)
+            slot.Handle = _hud.RegisterPrompt(data, false, 0f);
+            slot.Ui = null;
+            slot.Shown = slot.Handle.registered || slot.Handle.Valid;
+            if (!slot.Shown)
             {
-                DisableAction();
+                DisableAction(slot);
                 ModLog.SuppressedException("rope.clip-prompt.register",
-                    new InvalidOperationException("GameplayPromptHud declined the clip-in prompt."));
+                    new InvalidOperationException("GameplayPromptHud declined the control tip."));
                 return;
             }
 
-            NoteShown();
-            BindRow();
+            NoteShown(slot);
+            BindRow(slot);
             ApplyLabel();
         }
         catch (Exception exception)
         {
             ModLog.SuppressedException("rope.clip-prompt.register", exception);
-            _shown = false;
-            _ui = null;
-            _handle = default;
-            DisableAction();
+            slot.Shown = false;
+            slot.Ui = null;
+            slot.Handle = default;
+            DisableAction(slot);
         }
     }
 
-    private static void NoteShown()
+    private static void NoteShown(Slot slot)
     {
-        _shown = true;
-        if (_announced) return;
-        _announced = true;
-        ModLog.Info("[Rope] Clip-in prompt is showing.");
+        slot.Shown = true;
+        if (slot.Announced == slot.Text) return;
+        slot.Announced = slot.Text;
+        ModLog.Info("[Control] Tip is showing: " + slot.Text);
     }
 
-    private static void BindRow()
+    private static void BindRow(Slot slot)
     {
-        if (_ui != null || _hud == null) return;
-        _ui = FindUi(_hud.bigGameplayPromptSet) ?? FindUi(_hud.smallGameplayPromptSet);
-        if (_ui != null || _refreshBroken) return;
+        if (slot.Ui != null || _hud == null) return;
+        slot.Ui = FindUi(slot, _hud.bigGameplayPromptSet) ?? FindUi(slot, _hud.smallGameplayPromptSet);
+        if (slot.Ui != null || _refreshBroken) return;
         try
         {
             _hud.UpdateDisplayedPrompts();
@@ -279,25 +349,46 @@ internal static class RopeClipPrompt
             return;
         }
 
-        _ui = FindUi(_hud.bigGameplayPromptSet) ?? FindUi(_hud.smallGameplayPromptSet);
+        slot.Ui = FindUi(slot, _hud.bigGameplayPromptSet) ?? FindUi(slot, _hud.smallGameplayPromptSet);
     }
 
-    private static void WriteLabel(GameplayPromptUI row)
+    private static void WriteLabel(GameplayPromptUI row, Slot slot)
     {
         var text = row?.label?.text;
-        if (text == null || text.text == Label) return;
-        text.text = Label;
+        if (text == null || text.text == slot.Text) return;
+        text.text = slot.Text;
+        row.rebuidLayout = true;
+    }
+
+    /// <summary>
+    /// The prompt's hold word sits to the left of the keycap. Clip in leaves it blank.
+    /// </summary>
+    private static void WriteCue(GameplayPromptUI row, Slot slot)
+    {
+        var hold = row?.inputActionUI0?.holdText;
+        var tmp = hold?.text;
+        if (tmp == null) return;
+        var show = !string.IsNullOrEmpty(slot.Cue);
+        var target = tmp.gameObject;
+        if (target != null && target.activeSelf != show)
+            target.SetActive(show);
+        if (!show || tmp.text == slot.Cue) return;
+        tmp.text = slot.Cue;
         row.rebuidLayout = true;
     }
 
     private static void HideForeignRows()
     {
-        if (_ui == null || _hud == null || !AllowDespiteSkippedTutorials(_hud)) return;
+        if (_hud == null || !AllowDespiteSkippedTutorials(_hud)) return;
         HideForeign(_hud.bigGameplayPromptSet);
         HideForeign(_hud.smallGameplayPromptSet);
-        var ours = _ui.gameObject;
-        if (ours != null && !ours.activeSelf)
-            ours.SetActive(true);
+        foreach (var slot in Slots.Values)
+        {
+            if (!slot.Shown || slot.Ui == null) continue;
+            var ours = slot.Ui.gameObject;
+            if (ours != null && !ours.activeSelf)
+                ours.SetActive(true);
+        }
     }
 
     private static void HideForeign(GameplayPromptHud.GameplayPromptSet set)
@@ -307,7 +398,7 @@ internal static class RopeClipPrompt
         for (var i = 0; i < rows.Count; i++)
         {
             var row = rows[i];
-            if (row == null || IsOurRow(row)) continue;
+            if (row == null || SlotForRow(row) != null) continue;
             var go = row.gameObject;
             if (go != null && go.activeSelf)
                 go.SetActive(false);
@@ -317,16 +408,16 @@ internal static class RopeClipPrompt
     /// <summary>
     /// A prompt already filed under this action is reused. Registering again would stack rows.
     /// </summary>
-    private static bool TryAdoptExisting()
+    private static bool TryAdoptExisting(Slot slot)
     {
-        return TryAdopt(_hud.bigGameplayPromptSet) || TryAdopt(_hud.smallGameplayPromptSet);
+        return TryAdopt(slot, _hud.bigGameplayPromptSet) || TryAdopt(slot, _hud.smallGameplayPromptSet);
     }
 
-    private static bool TryAdopt(GameplayPromptHud.GameplayPromptSet set)
+    private static bool TryAdopt(Slot slot, GameplayPromptHud.GameplayPromptSet set)
     {
-        if (!TryFind(set, out var live, out var row)) return false;
-        _handle = live.handle;
-        _ui = row;
+        if (!TryFind(slot, set, out var live, out var row)) return false;
+        slot.Handle = live.handle;
+        slot.Ui = row;
         return true;
     }
 
@@ -345,51 +436,54 @@ internal static class RopeClipPrompt
         }
     }
 
-    private static bool EnsureAction()
+    private static bool EnsureAction(Slot slot)
     {
-        if (_action != null) return true;
+        if (slot.Action != null) return true;
+        if (string.IsNullOrEmpty(slot.Keyboard)) return false;
         try
         {
-            _asset = ScriptableObject.CreateInstance<InputActionAsset>();
-            _asset.name = "CairnMP clip prompt";
-            var map = _asset.AddActionMap("CairnMPClip");
-            _action = map.AddAction(
-                "ClipIn",
-                InputActionType.Button,
-                "<Keyboard>/" + RopeCoupleController.ToggleKeyName.ToLowerInvariant());
-            // The same click RightStickLinkPressed reads. View/Share still leaves the rope alone.
-            _action.AddBinding(GamepadBinding);
+            if (_asset == null)
+            {
+                _asset = ScriptableObject.CreateInstance<InputActionAsset>();
+                _asset.name = "CairnMP control tips";
+                _asset.AddActionMap("CairnMPTips");
+            }
+
+            var map = _asset.FindActionMap("CairnMPTips");
+            slot.Action = map.AddAction(slot.Text ?? "Tip", InputActionType.Button, slot.Keyboard);
+            // The same control the gameplay press reads. A chord such as View/Share is not a binding.
+            if (!string.IsNullOrEmpty(slot.Gamepad))
+                slot.Action.AddBinding(slot.Gamepad);
             return true;
         }
         catch (Exception exception)
         {
             ModLog.SuppressedException("rope.clip-prompt.action", exception);
-            if (_asset != null) UnityEngine.Object.Destroy(_asset);
-            _asset = null;
-            _action = null;
+            slot.Action = null;
             return false;
         }
     }
 
-    private static GameplayPromptUI FindUi(GameplayPromptHud.GameplayPromptSet set)
+    private static GameplayPromptUI FindUi(Slot slot, GameplayPromptHud.GameplayPromptSet set)
     {
-        return TryFind(set, out _, out var row) ? row : null;
+        return TryFind(slot, set, out _, out var row) ? row : null;
     }
 
-    private static bool TryFind(GameplayPromptHud.GameplayPromptSet set, out LiveGameplayPrompt live, out GameplayPromptUI row)
+    private static bool TryFind(Slot slot, GameplayPromptHud.GameplayPromptSet set,
+        out LiveGameplayPrompt live, out GameplayPromptUI row)
     {
         live = null;
         row = null;
-        if (set == null || _action == null) return false;
+        if (set == null || slot.Action == null) return false;
         var prompts = set.gameplayPrompts;
         var rows = set.promptUis;
         if (prompts == null || rows == null) return false;
 
         for (var i = 0; i < rows.Count; i++)
         {
-            if (!RowShowsAction(rows[i])) continue;
+            if (!RowShowsAction(rows[i], slot.Action)) continue;
             row = rows[i];
-            live = MatchingLive(prompts);
+            live = MatchingLive(prompts, slot.Action);
             return live != null;
         }
 
@@ -398,7 +492,7 @@ internal static class RopeClipPrompt
         {
             var candidate = prompts[i];
             var data = candidate?.data;
-            if (data == null || data.inputAction0 != _action || rows[i] == null) continue;
+            if (data == null || data.inputAction0 != slot.Action || rows[i] == null) continue;
             live = candidate;
             row = rows[i];
             return true;
@@ -407,33 +501,40 @@ internal static class RopeClipPrompt
         return false;
     }
 
-    private static LiveGameplayPrompt MatchingLive(Il2CppSystem.Collections.Generic.List<LiveGameplayPrompt> prompts)
+    private static LiveGameplayPrompt MatchingLive(
+        Il2CppSystem.Collections.Generic.List<LiveGameplayPrompt> prompts, InputAction action)
     {
-        if (prompts == null) return null;
+        if (prompts == null || action == null) return null;
         for (var i = 0; i < prompts.Count; i++)
         {
             var candidate = prompts[i];
             var data = candidate?.data;
-            if (data != null && data.inputAction0 == _action) return candidate;
+            if (data != null && data.inputAction0 == action) return candidate;
         }
 
         return null;
     }
 
-    private static bool IsOurRow(GameplayPromptUI row)
+    private static Slot SlotForRow(GameplayPromptUI row)
     {
-        if (row == null) return false;
-        if (RowShowsAction(row)) return true;
-        return _ui != null && row.Pointer == _ui.Pointer;
+        if (row == null) return null;
+        foreach (var slot in Slots.Values)
+        {
+            if (!slot.Shown) continue;
+            if (slot.Ui != null && row.Pointer == slot.Ui.Pointer) return slot;
+            if (RowShowsAction(row, slot.Action)) return slot;
+        }
+
+        return null;
     }
 
-    private static bool RowShowsAction(GameplayPromptUI row)
+    private static bool RowShowsAction(GameplayPromptUI row, InputAction action)
     {
-        if (row == null || _action == null) return false;
+        if (row == null || action == null) return false;
         try
         {
             InputImageStaticAction image = row.InputImage0;
-            return image != null && image.InputAction == _action;
+            return image != null && image.InputAction == action;
         }
         catch (Exception exception)
         {

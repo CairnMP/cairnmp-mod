@@ -174,6 +174,22 @@ public sealed class PartnerFallPenaltyTests
     }
 
     [Fact]
+    public void AnInAirHangBracesTheFollowerAndAHoldLetsThemGo()
+    {
+        Assert.Equal(PartnerPose.Hanging, PartnerFallPenalty.Classify(
+            false, false, false, "ClimbingV2PawnControllerModuleHangIdle", voidHang: true));
+        var air = Hold(localIsLeader: false, partner: PartnerPose.Hanging, wasLatched: false);
+        Assert.True(air.Brace);
+        Assert.True(air.Latched);
+
+        Assert.Equal(PartnerPose.Climbing, PartnerFallPenalty.Classify(
+            false, false, false, "ClimbingV2PawnControllerModuleHangIdle"));
+        var hold = Hold(localIsLeader: false, partner: PartnerPose.Climbing, wasLatched: air.Latched);
+        Assert.False(hold.Brace);
+        Assert.False(hold.Latched);
+    }
+
+    [Fact]
     public void OffBelayMakesTheFollowerBrace()
     {
         Assert.Equal(PartnerPose.Hanging, PartnerFallPenalty.Classify(false, false, true, "OffBelay"));

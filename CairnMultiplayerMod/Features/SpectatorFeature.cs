@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using CairnMultiplayerMod.Framework;
 using CairnMultiplayerMod.GameApi;
 
@@ -8,17 +7,15 @@ namespace CairnMultiplayerMod.Features;
 /// Where a climber goes when the mountain has the last word.
 ///
 /// In a mode with no way back, dying no longer ends the session: the body stays on the face
-/// and the player keeps watching the climb, either flying free or over a teammate's shoulder.
-/// The camera is the only thing taken over — nothing here touches the pawn, so a player
-/// brought back at a bivouac simply gets their view returned.
+/// and the player keeps watching from a free camera. The camera is the only thing taken
+/// over — nothing here touches the pawn, so a player brought back at a bivouac simply gets
+/// their view returned.
 /// </summary>
 internal sealed class SpectatorFeature : MultiplayerFeature
 {
-    private const GameKey ToggleViewKey = GameKey.F;
-    private const GameKey NextClimberKey = GameKey.C;
     private const float HintSeconds = 8f;
+    private const string CampHint = "Your partner can bring you back at a bivouac";
 
-    private readonly List<int> _targets = new();
     private bool _active;
     private string _lastHint;
     private float _nextHintAt;
@@ -32,16 +29,13 @@ internal sealed class SpectatorFeature : MultiplayerFeature
         feature.EveryFrame(Tick, FeaturePhase.Always);
         feature.OnSessionEnded(LeaveSpectating);
         feature.OnSceneReset(LeaveSpectating);
-        feature.OnPlayerLeft((playerId, _) =>
-        {
-            if (Game.Spectator.FollowedPlayerId == playerId) FollowNext();
-        });
     }
 
     private void Tick()
     {
         if (!ShouldSpectate())
         {
+            Game.Spectator.RememberViewpoint();
             if (_active) LeaveSpectating();
             return;
         }
@@ -50,13 +44,10 @@ internal sealed class SpectatorFeature : MultiplayerFeature
         {
             if (!Game.Spectator.Enter()) return;
             _active = true;
-            // Free flight first: the player has just died and wants to see where, not to be
-            // yanked onto somebody else's back.
             Game.Spectator.FreeLook();
-            ShowHint();
         }
 
-        if (!KeyboardCaptured) HandleInput();
+        Game.Spectator.FreeLook();
         Game.Spectator.Tick(acceptInput: !KeyboardCaptured);
         ShowHint();
     }
@@ -65,64 +56,21 @@ internal sealed class SpectatorFeature : MultiplayerFeature
         => Rules.SpectateAfterDeath && IsConnected && Game.Life.IsLocalPlayerDown
            && Game.Life.IsDeathScreenHeld;
 
-    private void HandleInput()
+    private void ShowHint()
     {
-        if (Game.Input.WasKeyPressed(ToggleViewKey))
+        if (!Rules.BivouacRevive)
         {
-            if (Game.Spectator.IsFollowing) Game.Spectator.FreeLook();
-            else FollowNext();
-        }
-        else if (Game.Input.WasKeyPressed(NextClimberKey))
-        {
-            FollowNext();
-        }
-    }
-
-    /// <summary>
-    /// Moves to the next climber with a visible body, wrapping around. Falls back to free
-    /// flight when nobody can be watched — everyone else may be down too.
-    /// </summary>
-    private void FollowNext()
-    {
-        _targets.Clear();
-        foreach (var playerId in Game.Players.RemotePlayersInGame) _targets.Add(playerId);
-        if (_targets.Count == 0)
-        {
-            Game.Spectator.FreeLook();
+            Game.Hud.HideMessage("hint");
+            _lastHint = null;
             return;
         }
 
-        var current = Game.Spectator.FollowedPlayerId;
-        var start = _targets.IndexOf(current) + 1;
-        for (var offset = 0; offset < _targets.Count; offset++)
-        {
-            var candidate = _targets[(start + offset) % _targets.Count];
-            if (candidate == current) continue;
-            if (Game.Spectator.Follow(candidate)) return;
-        }
-
-        // Only one candidate and it is the one we already watch: keep it rather than drop to
-        // free flight, otherwise pressing the key looks broken.
-        if (current >= 0 && Game.Spectator.Follow(current)) return;
-        Game.Spectator.FreeLook();
-    }
-
-    private void ShowHint()
-    {
-        var followed = Game.Spectator.FollowedPlayerId;
-        var hint = followed >= 0
-            ? $"Watching {GetPlayerName(followed)} — {ToggleViewKey}: free camera, {NextClimberKey}: next climber"
-            : $"Spectating — WASD/Space to fly, {ToggleViewKey}: follow a climber";
-        if (Rules.BivouacRevive)
-            hint += ". Your partner can bring you back at a bivouac";
-
-        // The HUD message expires on its own, so it is refreshed before it fades as well as
-        // whenever the view changes: a spectator keeps the controls in front of them.
+        // The HUD message expires on its own, so it is refreshed before it fades.
         var now = Game.Time.UnscaledTime;
-        if (hint == _lastHint && now < _nextHintAt) return;
-        _lastHint = hint;
+        if (CampHint == _lastHint && now < _nextHintAt) return;
+        _lastHint = CampHint;
         _nextHintAt = now + HintSeconds * 0.5f;
-        Game.Hud.ShowMessage("hint", hint, HintSeconds);
+        Game.Hud.ShowMessage("hint", CampHint, HintSeconds);
     }
 
     private void LeaveSpectating()

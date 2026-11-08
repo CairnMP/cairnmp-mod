@@ -244,6 +244,16 @@ public sealed class ArchitectureBoundaryTests
             "TeamAnchorSession.CopyPath",
             MethodBody(interop, "internal void DrawHarnessLine()"),
             StringComparison.Ordinal);
+        // A piton is the catch. The harness rope stops pulling and the tie stays.
+        Assert.Contains("HarnessRopeDuty.ForChain", interop, StringComparison.Ordinal);
+        var park = MethodBody(interop, "internal void ParkHarnessPull()");
+        Assert.Contains("ReleaseHarnessPins()", park, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReleaseAllAnchors()", park, StringComparison.Ordinal);
+        var pins = MethodBody(interop, "private void ReleaseHarnessPins()");
+        Assert.Contains("DetachAll()", pins, StringComparison.Ordinal);
+        Assert.Contains("_rope.enabled = false", pins, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReleaseAllAnchors()", pins, StringComparison.Ordinal);
+        Assert.Contains("FollowHarnesses(", MethodBody(interop, "private bool MaintainParkedLine()"), StringComparison.Ordinal);
         Assert.Contains("StartUnsecuredFall", pitons, StringComparison.Ordinal);
 
         var fall = File.ReadAllText(Path.Combine(
@@ -257,6 +267,25 @@ public sealed class ArchitectureBoundaryTests
         Assert.DoesNotContain("FallUnsecuredWithPartner", fall, StringComparison.Ordinal);
         Assert.Contains("ToFallingModuleUnsecure", fall, StringComparison.Ordinal);
         Assert.Contains("SetStaminaRatio(1f)", fall, StringComparison.Ordinal);
+        Assert.DoesNotContain("lockClimberTimer", fall, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsLocomotionBlocked", fall, StringComparison.Ordinal);
+        var bracePatch = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "BracePatch.cs"));
+        var registry = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "GamePatchRegistry.cs"));
+        Assert.Contains("MoveCapsule", bracePatch, StringComparison.Ordinal);
+        Assert.Contains("walkInputSqrDeadZone", bracePatch, StringComparison.Ordinal);
+        Assert.Contains("ShouldSolveBodyMove", bracePatch, StringComparison.Ordinal);
+        Assert.Contains("UpdateBodyPosition", bracePatch, StringComparison.Ordinal);
+        Assert.Contains("LedgeWalkingState", bracePatch, StringComparison.Ordinal);
+        Assert.Contains("ClimbingV2PawnControllerModuleHangIdle", bracePatch, StringComparison.Ordinal);
+        Assert.DoesNotContain("lockClimberTimer", bracePatch, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsLocomotionBlocked", bracePatch, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"\.securingRope\s*=(?!=)", bracePatch);
+        Assert.DoesNotContain("AddForce", bracePatch, StringComparison.Ordinal);
+        Assert.DoesNotContain(".velocity", bracePatch, StringComparison.Ordinal);
+        Assert.Contains("BracePatch.Install", registry, StringComparison.Ordinal);
+        Assert.Contains("BracePatch.Uninstall", registry, StringComparison.Ordinal);
         var unanchored = MethodBody(couple, "private void TickUnanchoredFall(");
         Assert.Contains("PawnStateType.Falling", unanchored, StringComparison.Ordinal);
         Assert.Contains("FallUnsecuredWithPartner", unanchored, StringComparison.Ordinal);
@@ -322,6 +351,7 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("__result = true", canGo, StringComparison.Ordinal);
         var remaining = MethodBody(patch, "private static void CapRemaining(");
         Assert.Contains("RopeLengthPolicy.ReportedRemaining", remaining, StringComparison.Ordinal);
+        Assert.DoesNotContain("left >= __result", remaining, StringComparison.Ordinal);
         Assert.Contains("PawnStateType.Falling", patch, StringComparison.Ordinal);
         Assert.Contains("PawnStateType.Dead", patch, StringComparison.Ordinal);
         Assert.DoesNotContain("ClampDist", patch, StringComparison.Ordinal);

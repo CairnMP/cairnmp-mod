@@ -134,6 +134,7 @@ public sealed class PracticePartnerTests
         Assert.Equal("H", PracticePartnerController.MoveKeyName);
         Assert.NotEqual(RopeCoupleController.ToggleKeyName, PracticePartnerController.SpawnKeyName);
         Assert.NotEqual(PitonRecoverySession.TakeKeyName, PracticePartnerController.MoveKeyName);
-        Assert.Equal("Tap D-pad up — Partner takes piton", PitonRecoverySession.PartnerTakeText);
+        Assert.Equal("Partner takes piton", PitonRecoverySession.PartnerTakeText);
+        Assert.Equal("Tap", PitonRecoverySession.TakeCue);
     }
 }

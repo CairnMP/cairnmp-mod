@@ -13,6 +13,13 @@ internal static class PitonRecoveryPolicy
     /// to this climber and not reported as a piton that vanished out of sight.</summary>
     internal const float ReachMeters = 0.75f;
 
+    /// <summary>
+    /// A climber on the wall or on the ground can take a piton the role allows.
+    /// A climber hanging on the rope cannot take the piton that is holding them.
+    /// </summary>
+    internal static bool RefusesHeldPiton(PartnerPose pose, bool heldByRope)
+        => pose == PartnerPose.Hanging && heldByRope;
+
     internal readonly struct Candidate
     {
         internal Candidate(Vector3 position, bool critical, bool bagCanTake)

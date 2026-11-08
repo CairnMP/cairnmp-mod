@@ -30,7 +30,8 @@ internal sealed class ReviveFeature : MultiplayerFeature
     /// brings them back tired.</summary>
     private const float BivouacHealthRatio = 0.5f;
 
-    private const GameKey BivouacRecallKey = GameKey.R;
+    internal const string RecallLabel = "Revive partner";
+    internal const string RecallCue = "Hold";
 
     /// <summary>A climber who has just stood up is not walking yet, and the game refuses to
     /// move anyone who is not. Keep trying for a few seconds, then let them walk down.</summary>
@@ -65,8 +66,6 @@ internal sealed class ReviveFeature : MultiplayerFeature
     private int _lastShownSecondsLeft = -1;
     private WorldPosition _pendingRecall;
     private float _pendingRecallUntil;
-    private bool _recallPromptShown;
-
     public override string Id => "revive";
 
     protected internal override void OnRegister(FeatureBuilder feature)
@@ -145,15 +144,18 @@ internal sealed class ReviveFeature : MultiplayerFeature
 
     private void Tick()
     {
+        var reviveHeld = Game.Input.WasPressed(GameInputAction.RevivePartner);
         TickPendingRecall();
         TickRescuesUnderway();
 
         if (!_isDown)
         {
             TickBackInTheClimb();
-            TickBivouacRecall();
+            TickBivouacRecall(reviveHeld);
             return;
         }
+
+        HideRecallPrompt();
 
         // Without a field rescue there is nothing to count down to: the climber watches — or
         // waits for a camp, in a mode that offers one — for as long as somebody is still
@@ -373,26 +375,16 @@ internal sealed class ReviveFeature : MultiplayerFeature
     /// Reaching it is the price, so it costs no item. The dead partner is not put inside
     /// the rest: they arrive in the volume, and the two enter together.
     /// </summary>
-    private void TickBivouacRecall()
+    private void TickBivouacRecall(bool reviveHeld)
     {
-        if (!CanCallFromHere())
+        if (!CanCallFromHere() || KeyboardCaptured)
         {
-            if (_recallPromptShown)
-            {
-                _recallPromptShown = false;
-                Game.Hud.HideMessage("recall");
-            }
+            HideRecallPrompt();
             return;
         }
 
-        if (!_recallPromptShown)
-        {
-            _recallPromptShown = true;
-            Game.Hud.ShowMessage("recall",
-                $"{BivouacRecallKey}: bring your partner back", 6f);
-        }
-
-        if (KeyboardCaptured || !Game.Input.WasKeyPressed(BivouacRecallKey)) return;
+        Game.Hud.ShowControlTip("recall", RecallLabel, RecallCue);
+        if (!reviveHeld) return;
         // The mountain marker, not the interior pose. A camper who never came through the
         // volume has nothing safe to send.
         if (!Game.State.TryGetRecallCamp(out var camp))
@@ -408,6 +400,8 @@ internal sealed class ReviveFeature : MultiplayerFeature
                         : $"You called {called} fallen climbers back to camp.", NoticeSeconds);
         LogInfo($"Called {called} downed player(s) back to the bivouac");
     }
+
+    private void HideRecallPrompt() => Game.Hud.HideControlTip("recall");
 
     /// <summary>Inside the rest, or standing in its volume on the mountain. Not elsewhere.</summary>
     private bool CanCallFromHere()
@@ -522,11 +516,7 @@ internal sealed class ReviveFeature : MultiplayerFeature
         _isOut = false;
         _sceneResetSinceOut = false;
         _pendingRecallUntil = 0f;
-        if (_recallPromptShown)
-        {
-            _recallPromptShown = false;
-            Game.Hud.HideMessage("recall");
-        }
+        HideRecallPrompt();
         ClearDownedState();
         if (wasDown) Game.Life.EndLocalPlayer();
     }

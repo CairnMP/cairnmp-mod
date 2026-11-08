@@ -33,11 +33,17 @@ internal sealed class PitonActions
     /// <summary>Pitons the host knows of that this Lifeline is still missing.</summary>
     internal readonly List<ServerPitonPlaced> Spawn = new();
 
-    /// <summary>Pitons to take off this Lifeline. Every pointer here is in it this frame.</summary>
+    /// <summary>Pitons to unclip from this Lifeline and leave in the rock. Every pointer here is in it this frame.</summary>
     internal readonly List<IntPtr> Detach = new();
 
+    /// <summary>
+    /// Pitons another climber took, or the host withdrew. Unclip them and destroy the
+    /// hardware. Do not put one in this bag. Every pointer here is in the Lifeline this frame.
+    /// </summary>
+    internal readonly List<IntPtr> Strip = new();
+
     internal bool IsEmpty => Announce.Count == 0 && Removed.Count == 0 && Recovered.Count == 0
-                             && Spawn.Count == 0 && Detach.Count == 0;
+                             && Spawn.Count == 0 && Detach.Count == 0 && Strip.Count == 0;
 
     internal void Clear()
     {
@@ -46,6 +52,7 @@ internal sealed class PitonActions
         Recovered.Clear();
         Spawn.Clear();
         Detach.Clear();
+        Strip.Clear();
     }
 }
 
@@ -103,6 +110,7 @@ internal sealed class PitonSync
     private readonly Dictionary<uint, Vector3> _ownPositions = new();
     private readonly HashSet<uint> _ownUnbound = new();
     private readonly HashSet<uint> _ownTakenByOthers = new();
+    private readonly HashSet<uint> _markedTaken = new();
     private readonly Dictionary<uint, Remote> _remote = new();
     private readonly Dictionary<IntPtr, uint> _remoteByPointer = new();
     private readonly HashSet<IntPtr> _foreign = new();
@@ -138,6 +146,7 @@ internal sealed class PitonSync
             _ownPositions.Remove(id);
         }
         _ownTakenByOthers.Clear();
+        _markedTaken.Clear();
 
         _drop.Clear();
         foreach (var pair in _remote)
@@ -171,6 +180,7 @@ internal sealed class PitonSync
     /// <summary>The host says this piton is gone.</summary>
     internal void Forget(uint pitonId)
     {
+        _markedTaken.Remove(pitonId);
         if (!_remote.TryGetValue(pitonId, out var remote)) return;
         switch (remote.State)
         {
@@ -199,6 +209,16 @@ internal sealed class PitonSync
         if (_ownPositions.ContainsKey(localId)) _ownTakenByOthers.Add(localId);
     }
 
+    /// <summary>
+    /// This climber just took someone else's piton off the wall. The next time that
+    /// replica is missing, tell the host, even when the pawn is far from the announced root.
+    /// </summary>
+    internal void MarkTaken(IntPtr pointer)
+    {
+        if (pointer != IntPtr.Zero && _remoteByPointer.TryGetValue(pointer, out var id))
+            _markedTaken.Add(id);
+    }
+
     internal PitonActions Reconcile(IReadOnlyList<PlacedPiton> placed, Vector3? localPosition, double now)
     {
         _actions.Clear();
@@ -212,7 +232,7 @@ internal sealed class PitonSync
         NoticeDisappearances(localPosition, attributable);
         RecogniseNewcomers(placed, now);
         QueueSpawns(now);
-        QueueDetaches();
+        QueueStrips();
         return _actions;
     }
 
@@ -240,11 +260,13 @@ internal sealed class PitonSync
 
             if (remote.State == RemoteState.Withdrawn)
             {
+                _markedTaken.Remove(id);
                 _remote.Remove(id);
             }
-            else if (attributable && localPosition.HasValue
-                     && Vector3.DistanceSquared(localPosition.Value, remote.Position)
-                        <= RecoverReachMeters * RecoverReachMeters)
+            else if (_markedTaken.Remove(id)
+                     || (attributable && localPosition.HasValue
+                         && Vector3.DistanceSquared(localPosition.Value, remote.Position)
+                            <= RecoverReachMeters * RecoverReachMeters))
             {
                 // Taken up by this climber: the piton is in their bag now, so it has to leave
                 // everyone else's wall — otherwise its owner can take it up a second time.
@@ -340,15 +362,15 @@ internal sealed class PitonSync
         }
     }
 
-    private void QueueDetaches()
+    private void QueueStrips()
     {
         foreach (var remote in _remote.Values)
             if (remote.State == RemoteState.Withdrawn && _current.Contains(remote.Pointer))
-                _actions.Detach.Add(remote.Pointer);
+                _actions.Strip.Add(remote.Pointer);
 
         foreach (var pair in _ownByPointer)
             if (_ownTakenByOthers.Contains(pair.Value) && _current.Contains(pair.Key))
-                _actions.Detach.Add(pair.Key);
+                _actions.Strip.Add(pair.Key);
     }
 
     /// <summary>The piton the native side just created for <paramref name="pitonId"/>, if it
@@ -384,10 +406,19 @@ internal sealed class PitonSync
     internal bool Tracks(IntPtr pointer)
         => _ownByPointer.ContainsKey(pointer) || _remoteByPointer.ContainsKey(pointer) || _foreign.Contains(pointer);
 
-    /// <summary>The local id of one of ours, or the host's id of someone else's.</summary>
-    internal bool TryGetId(IntPtr pointer, out uint id)
+    /// <summary>
+    /// The local announce id of one of ours, or the host id of someone else's.
+    /// <paramref name="ownLocalId"/> says which namespace <paramref name="id"/> is in.
+    /// </summary>
+    internal bool TryGetId(IntPtr pointer, out uint id, out bool ownLocalId)
     {
-        if (_ownByPointer.TryGetValue(pointer, out id)) return true;
+        if (_ownByPointer.TryGetValue(pointer, out id))
+        {
+            ownLocalId = true;
+            return true;
+        }
+
+        ownLocalId = false;
         if (_remoteByPointer.TryGetValue(pointer, out id)) return true;
         id = 0;
         return false;
@@ -439,6 +470,7 @@ internal sealed class PitonSync
     {
         _remote.Clear();
         _remoteByPointer.Clear();
+        _markedTaken.Clear();
         _foreign.Clear();
     }
 
@@ -448,6 +480,7 @@ internal sealed class PitonSync
         _ownPositions.Clear();
         _ownUnbound.Clear();
         _ownTakenByOthers.Clear();
+        _markedTaken.Clear();
         _remote.Clear();
         _remoteByPointer.Clear();
         _foreign.Clear();

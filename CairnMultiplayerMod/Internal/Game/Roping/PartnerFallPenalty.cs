@@ -2,7 +2,10 @@ using System;
 
 namespace CairnMultiplayerMod.Internal.Game.Roping;
 
-/// <summary>What the other climber is doing on the rope. Hanging is a fall or off belay.</summary>
+/// <summary>
+/// What the other climber is doing on the rope. Hanging is a fall, a dangle in the air,
+/// or off belay. Hanging on a hold is still climbing.
+/// </summary>
 internal enum PartnerPose : byte
 {
     OnGround = 0,
@@ -56,9 +59,10 @@ internal readonly struct PartnerUntie
 
 /// <summary>
 /// The rope-team answer when the other climber comes off the wall, dangles on the rope,
-/// or sits off belay. The follower braces while the leader is hanging, and lets go when
-/// the leader is standing or walking. The leader's grip empties while the follower hangs.
-/// An untie drops whoever is hanging.
+/// hangs in the air, or sits off belay. A hang on a hold does not count. The follower
+/// braces while the leader is hanging, and lets go when the leader is standing or
+/// walking. The leader's grip empties while the
+/// follower hangs. An untie drops whoever is hanging.
 /// Only the leader's cut fills their grip. An empty chain still uses Cairn's own
 /// unsecured fall, elsewhere.
 /// </summary>
@@ -67,12 +71,12 @@ internal static class PartnerFallPenalty
     /// <summary>A full grip is gone after this many seconds of holding the follower.</summary>
     internal const float FullGripSeconds = 5f;
 
-    internal static PartnerPose Classify(bool dead, bool falling, bool offBelay, string moduleName)
+    internal static PartnerPose Classify(bool dead, bool falling, bool offBelay, string moduleName, bool voidHang = false)
     {
         if (dead) return PartnerPose.Down;
         if (offBelay || IsOffBelayModule(moduleName)) return PartnerPose.Hanging;
         if (falling || IsFallModule(moduleName)) return PartnerPose.Hanging;
-        if (IsSuspendedOnRope(moduleName)) return PartnerPose.Hanging;
+        if (IsSuspendedOnRope(moduleName) || voidHang) return PartnerPose.Hanging;
         var module = TopAnchorPolicy.Classify(moduleName);
         if (module is TopAnchorModule.Wall or TopAnchorModule.Mantling or TopAnchorModule.GetUpFromClimb)
             return PartnerPose.Climbing;

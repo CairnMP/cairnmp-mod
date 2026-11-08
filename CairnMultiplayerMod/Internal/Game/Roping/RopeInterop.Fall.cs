@@ -4,6 +4,7 @@ using CairnMultiplayerMod.Internal.Game.Life;
 using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Networking;
 using Il2Cpp;
+using Il2CppInterop.Runtime;
 using Il2CppTheGameBakers.Cairn.Netplay;
 using UnityEngine;
 
@@ -14,20 +15,24 @@ internal static partial class RopeInterop
     internal const string BraceMessageId = "rope.brace";
     private const string BraceText = "Bracing";
     private const float BraceRefreshSeconds = 0.35f;
-    private const float LockSeconds = 0.25f;
     private const float StatusRepeatSeconds = 1f;
     private const float DrainStepCapSeconds = 0.25f;
 
     private static ushort _fallChannel;
     private static HudAdapter _fallHud;
     private static bool _bracing;
-    private static bool _walkBlocked;
     private static bool _statusSent;
+
+    /// <summary>The local follower is held still. Movement hooks read this.</summary>
+    internal static bool IsBracing => _bracing;
     private static PartnerPose _lastStatus;
     private static float _nextStatusAt;
     private static int _watchedPartner = int.MinValue;
     private static int _dropAfterFrame;
     private static int _refilledFrame = -1;
+
+    /// <summary>The local leader is spending grip because the follower hangs.</summary>
+    internal static bool GripDraining { get; private set; }
 
     internal static void BindFallChannel(ushort channel) => _fallChannel = channel;
 
@@ -77,6 +82,7 @@ internal static partial class RopeInterop
         var linked = TeamAnchorSession.IsLinked && !TeamAnchorSession.LeaderLeft;
         if (!linked)
         {
+            GripDraining = false;
             if (_watchedPartner != int.MinValue)
             {
                 _watchedPartner = int.MinValue;
@@ -109,6 +115,7 @@ internal static partial class RopeInterop
             PartnerFallSession.BraceLatched);
         PartnerFallSession.BraceLatched = hold.Latched;
         ApplyBrace(hold.Brace);
+        GripDraining = hold.Drain;
         if (hold.Drain) DrainGrip(Time.unscaledDeltaTime);
     }
 
@@ -117,6 +124,7 @@ internal static partial class RopeInterop
         _watchedPartner = int.MinValue;
         _statusSent = false;
         _dropAfterFrame = 0;
+        GripDraining = false;
         PartnerFallSession.Reset();
         ApplyBrace(false);
     }
@@ -244,53 +252,26 @@ internal static partial class RopeInterop
     {
         if (brace)
         {
-            try
-            {
-                var pawns = PawnManager.Instance;
-                if (pawns != null) pawns.lockClimberTimer = LockSeconds;
-                if (PawnCaptureInterop.IsLocalPlayerWalking())
-                {
-                    var walk = pawns?.WalkingPawnController;
-                    if (walk != null)
-                    {
-                        walk.IsLocomotionBlocked = true;
-                        _walkBlocked = true;
-                    }
-                }
-                else if (_walkBlocked)
-                {
-                    ReleaseWalk();
-                }
-            }
-            catch (Exception exception)
-            {
-                ModLog.SuppressedException("rope.fall-brace", exception);
-            }
-
+            if (!_bracing) ModLog.Info("[RopeTeam] Bracing.");
             _fallHud?.ShowMessage(BraceMessageId, BraceText, BraceRefreshSeconds);
             _bracing = true;
             return;
         }
 
-        if (!_bracing && !_walkBlocked) return;
-        ReleaseWalk();
+        if (!_bracing) return;
+        ModLog.Info("[RopeTeam] The brace let go.");
         _fallHud?.HideMessage(BraceMessageId);
         _bracing = false;
     }
 
-    private static void ReleaseWalk()
+    /// <summary>
+    /// Cairn's hang after a piton catch. CurrentModule is boxed as the base module,
+    /// so the hang-idle cast is what exposes the in-air mode.
+    /// </summary>
+    private static bool IsVoidHang(ClimbingV2PawnControllerModule module)
     {
-        if (!_walkBlocked) return;
-        _walkBlocked = false;
-        try
-        {
-            var walk = PawnManager.Instance?.WalkingPawnController;
-            if (walk != null) walk.IsLocomotionBlocked = false;
-        }
-        catch (Exception exception)
-        {
-            ModLog.SuppressedException("rope.fall-walk", exception);
-        }
+        var hang = module?.TryCast<ClimbingV2PawnControllerModuleHangIdle>();
+        return hang != null && hang.hangIdleMode == HangIdleMode.Void;
     }
 
     private readonly struct LocalPose
@@ -335,7 +316,8 @@ internal static partial class RopeInterop
             var falling = pawn.IsFalling || pawn.IsSecureFalling
                           || module is TopAnchorModule.Falling or TopAnchorModule.SecuredFalling
                           || PartnerFallPenalty.IsSuspendedOnRope(moduleName);
-            var status = PartnerFallPenalty.Classify(dead, falling, offBelay, moduleName);
+            var status = PartnerFallPenalty.Classify(
+                dead, falling, offBelay, moduleName, IsVoidHang(pawn.CurrentModule));
             return new LocalPose(status, falling, offBelay, dead || status == PartnerPose.Down);
         }
         catch (Exception exception)

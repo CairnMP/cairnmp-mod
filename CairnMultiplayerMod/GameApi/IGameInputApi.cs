@@ -6,6 +6,7 @@ internal enum GameInputAction
     PingController,
     Panic,
     PickupSharedItemController,
+    RevivePartner,
 }
 
 internal enum GameKey

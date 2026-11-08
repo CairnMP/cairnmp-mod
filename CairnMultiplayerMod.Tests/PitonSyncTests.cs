@@ -92,17 +92,31 @@ public sealed class PitonSyncTests
     }
 
     [Fact]
+    public void AMarkedTakeIsReportedEvenWhenThePawnIsFarFromTheAnnouncedRoot()
+    {
+        var sync = WithLiveRemote(out var t);
+        sync.MarkTaken(new IntPtr(70));
+
+        var actions = sync.Reconcile(Placed(), C + new Vector3(50, 0, 0), t + 0.1);
+
+        Assert.Equal(new[] { 7u }, actions.Recovered);
+        Assert.Equal(0, sync.RemoteCount);
+    }
+
+    [Fact]
     public void APitonVanishingFarFromUsIsNotOursToAnnounceNorToTouchAgain()
     {
         var sync = WithLiveRemote(out var t);
 
         var actions = sync.Reconcile(Placed(), C + new Vector3(50, 0, 0), t += 0.1);
         Assert.Empty(actions.Recovered);
+        Assert.Empty(actions.Strip);
 
         // Its owner withdraws it later: the stale pointer is never handed back.
         sync.Forget(7);
         actions = sync.Reconcile(Placed(), null, t + 0.1);
         Assert.Empty(actions.Detach);
+        Assert.Empty(actions.Strip);
         Assert.Empty(actions.Spawn);
     }
 
@@ -123,7 +137,8 @@ public sealed class PitonSyncTests
         sync.Forget(7);
 
         var actions = sync.Reconcile(Placed((70, C)), null, t += 0.1);
-        Assert.Equal(new[] { new IntPtr(70) }, actions.Detach);
+        Assert.Equal(new[] { new IntPtr(70) }, actions.Strip);
+        Assert.Empty(actions.Detach);
 
         actions = sync.Reconcile(Placed(), null, t + 0.1);
         Assert.True(actions.IsEmpty);
@@ -219,7 +234,8 @@ public sealed class PitonSyncTests
 
         sync.TakenByOther(id);
         var actions = sync.Reconcile(Placed((1, A)), null, t += 0.1);
-        Assert.Equal(new[] { new IntPtr(1) }, actions.Detach);
+        Assert.Equal(new[] { new IntPtr(1) }, actions.Strip);
+        Assert.Empty(actions.Detach);
         Assert.Empty(actions.Removed);
 
         Assert.True(sync.Reconcile(Placed(), null, t + 0.1).IsEmpty);
@@ -281,6 +297,20 @@ public sealed class PitonSyncTests
 
         sync.SpawnReplicas = true;
         Assert.Equal(7u, Assert.Single(sync.Reconcile(Placed(), null, now + 0.1).Spawn).PitonId);
+    }
+
+    [Fact]
+    public void AnOwnPitonAndAReplicaReportDifferentIdNamespaces()
+    {
+        var sync = WithLiveRemote(out var now);
+        var announced = sync.Reconcile(Placed((70, C), (2, A)), null, now + 0.1).Announce;
+
+        Assert.True(sync.TryGetId(new IntPtr(2), out var ownId, out var ownLocal));
+        Assert.Equal(Assert.Single(announced).LocalId, ownId);
+        Assert.True(ownLocal);
+        Assert.True(sync.TryGetId(new IntPtr(70), out var hostId, out var hostLocal));
+        Assert.Equal(7u, hostId);
+        Assert.False(hostLocal);
     }
 
     [Fact]

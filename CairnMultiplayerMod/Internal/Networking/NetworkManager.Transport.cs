@@ -490,10 +490,12 @@ internal sealed partial class NetworkManager
            && RopeRequests.WithinLinkRange(ax, ay, az, bx, by, bz);
 
     /// <summary>
-    /// The host's own pose is the last in-game position it broadcast. Everyone else is the
-    /// position already stored for that remote player.
+    /// The pose a tie-in is measured from. This climber's is the last in-game state they
+    /// sent. Everyone else's is the last in-game state already stored for them. The button
+    /// and the host's refusal both use this, so a live body the other side has not heard
+    /// yet cannot open a clip the host will drop.
     /// </summary>
-    private bool TryGetLinkPosition(int playerId, out float x, out float y, out float z)
+    internal bool TryGetLinkPosition(int playerId, out float x, out float y, out float z)
     {
         if (playerId == LocalPlayerId && _hasLocalLinkPose)
         {
@@ -533,6 +535,11 @@ internal sealed partial class NetworkManager
         if (_steamLobby != null && _steamLobby.IsHost)
         {
             var pkt = new ServerRopeClip { FromPlayerId = LocalPlayerId, TargetPlayerId = targetPlayerId, Clip = clip };
+            if (clip && !ClimbersAreWithinLinkRange(LocalPlayerId, targetPlayerId))
+            {
+                ModLog.Info($"[RopeCouple] Refused clip {LocalPlayerId} -> {targetPlayerId}: farther than {RopeRequests.LinkRangeMeters:F0}m");
+                return;
+            }
             if (!RopeRequests.IsAllowed(LocalPlayerId, targetPlayerId, clip, _ropeLinks(), IsAdmittedPlayer)) return;
             if (clip && !_ropeCreationBudget.Take(LocalPlayerId)) return;
             OnRopeClip?.Invoke(LocalPlayerId, targetPlayerId, clip);

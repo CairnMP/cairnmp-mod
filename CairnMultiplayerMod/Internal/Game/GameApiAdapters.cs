@@ -68,6 +68,9 @@ internal sealed class GameTimeAdapter : IGameTimeApi
 
 internal sealed class GameInputAdapter : IGameInputApi
 {
+    private float _revivePressedAt = -1f;
+    private bool _reviveFired;
+
     public bool IsKeyboardCaptured => InputCaptureState.IsKeyboardCaptured;
     public bool IsPauseMenuActive => MultiplayerPausePatch.IsPauseMenuActive;
 
@@ -81,8 +84,28 @@ internal sealed class GameInputAdapter : IGameInputApi
                                      || ModControllerInput.WasPressed(ControllerShortcut.Panic),
             GameInputAction.PickupSharedItemController =>
                 ModControllerInput.WasPressed(ControllerShortcut.PickupSharedItem),
+            GameInputAction.RevivePartner => ReviveHeld(),
             _ => false,
         };
+    }
+
+    private bool ReviveHeld()
+    {
+        if (IsKeyboardCaptured || IsPauseMenuActive)
+        {
+            _revivePressedAt = -1f;
+            _reviveFired = false;
+            return false;
+        }
+
+        var keyboard = Keyboard.current;
+        var pad = Gamepad.current;
+        var down = ReviveHold.IsDown(
+            keyboard != null && keyboard.rKey.isPressed,
+            pad != null && pad.buttonWest.isPressed,
+            pad != null && pad.selectButton.isPressed);
+        return ButtonHold.Advance(ref _revivePressedAt, ref _reviveFired, down,
+            Time.unscaledTime, ReviveHold.Seconds);
     }
 
     public bool WasKeyPressed(GameKey key)
@@ -119,6 +142,18 @@ internal sealed class HudAdapter : IGameHudApi
     public void HideMessage(string id)
     {
         if (!string.IsNullOrWhiteSpace(id)) _messages.Remove(id);
+    }
+
+    public void ShowControlTip(string id, string label, string cue)
+    {
+        if (id == "revive.recall")
+            Roping.RopeClipPrompt.Tick(id, true, label, cue, "<Keyboard>/r", "<Gamepad>/buttonWest");
+    }
+
+    public void HideControlTip(string id)
+    {
+        if (id == "revive.recall")
+            Roping.RopeClipPrompt.Hide(id);
     }
 
     internal void Tick()

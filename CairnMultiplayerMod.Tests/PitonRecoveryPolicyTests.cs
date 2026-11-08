@@ -12,7 +12,8 @@ public sealed class PitonRecoveryPolicyTests
     public void TakePitonUsesItsOwnKeyInsteadOfOffBelay()
     {
         Assert.Equal("P", PitonRecoverySession.TakeKeyName);
-        Assert.Equal("Tap D-pad up — Take piton", PitonRecoverySession.TakeText);
+        Assert.Equal("Take piton", PitonRecoverySession.TakeText);
+        Assert.Equal("Tap", PitonRecoverySession.TakeCue);
         Assert.NotEqual("E", PitonRecoverySession.TakeKeyName);
     }
 
@@ -66,6 +67,20 @@ public sealed class PitonRecoveryPolicyTests
 
         Assert.Equal(PitonRecoveryPolicy.Decision.Take, choice.Decision);
         Assert.Equal(0, choice.Index);
+    }
+
+    [Fact]
+    public void ClimbingOrStandingDoesNotRefuseAPitonTheRopeIsHolding()
+    {
+        Assert.False(PitonRecoveryPolicy.RefusesHeldPiton(PartnerPose.Climbing, heldByRope: true));
+        Assert.False(PitonRecoveryPolicy.RefusesHeldPiton(PartnerPose.OnGround, heldByRope: true));
+        Assert.False(PitonRecoveryPolicy.RefusesHeldPiton(PartnerPose.Hanging, heldByRope: false));
+    }
+
+    [Fact]
+    public void HangingRefusesThePitonTheRopeIsHolding()
+    {
+        Assert.True(PitonRecoveryPolicy.RefusesHeldPiton(PartnerPose.Hanging, heldByRope: true));
     }
 
     [Fact]

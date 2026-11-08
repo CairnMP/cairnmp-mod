@@ -75,6 +75,8 @@ internal sealed class UnavailableGameApi : IGameApi
     {
         public void ShowMessage(string id, string text, float durationSeconds) { }
         public void HideMessage(string id) { }
+        public void ShowControlTip(string id, string label, string cue) { }
+        public void HideControlTip(string id) { }
         public void ShowStandings(string title, System.Collections.Generic.IReadOnlyList<StandingRow> rows) { }
         public void HideStandings() { }
     }
@@ -115,12 +117,6 @@ internal sealed class UnavailableGameApi : IGameApi
         public bool HasHealingItem => false;
         public bool TryConsumeHealingItem(out string itemName)
         { itemName = null; return false; }
-        public IGameRegistration AddItemUsedListener(Action<int> onUsed)
-        {
-            if (onUsed == null) throw new ArgumentNullException(nameof(onUsed));
-            return new InactiveRegistration("inventory.item-used");
-        }
-        public bool ApplySharedConsumable(int definitionId) => false;
     }
 
     private sealed class UnavailableClockApi : IClockApi

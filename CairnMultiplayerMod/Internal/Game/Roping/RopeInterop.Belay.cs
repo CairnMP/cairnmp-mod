@@ -54,6 +54,14 @@ internal static partial class RopeInterop
                 _ropePartner = partnerId;
                 _ropeSession = new RopeBindingSession(_ropeBinding, Time.realtimeSinceStartupAsDouble);
             }
+            // A piton is the catch. Park before Tick so this frame's Maintain does not
+            // treat the detach as a failed attachment and untie the pair.
+            var duty = HarnessRopeDuty.ForChain(
+                tied: true,
+                _ropeBinding.HarnessPullParked,
+                TeamAnchorSession.Count,
+                _ropeBinding.CoilLength);
+            if (!duty.Simulate) _ropeBinding.ParkHarnessPull();
             if (_ropeSession.Tick(Time.realtimeSinceStartupAsDouble)) return true;
             var harnessLost = _ropeSession.HarnessLost;
             ReleaseAllAnchors();
@@ -100,6 +108,8 @@ internal static partial class RopeInterop
         if (_dropRopeAfterPhysics) return false;
         if (_ropeBinding?.Owns(rope) != true) return true;
         if (!IsNativeBelayEngaged) return true;
+        // The harness rope is parked. Skip this FixedUpdate without dropping the tie.
+        if (_ropeBinding.HarnessPullParked) return false;
         try
         {
             // SetLengthInstant rejects calls from Update. This prefix is inside the
@@ -238,6 +248,8 @@ internal static partial class RopeInterop
         internal Harness MeasuredLocal => _local;
         internal Harness MeasuredPartner => _partner;
         internal float CoilLength => _length;
+        internal bool HarnessPullParked => _pullParked;
+        private bool _pullParked;
 
         public bool IsReady
         {
@@ -362,7 +374,38 @@ internal static partial class RopeInterop
             DrawHarnessLine();
             ModLog.Info("[RopeTeam] Direct harness rope attached (no piton), max=" + _length
                 + ", initial=" + initialLength);
+            // Tick can attach on the same frame the chain already has a piton.
+            // Drop the pins again so that attach does not leave the rope pulling.
+            if (_pullParked) ReleaseHarnessPins();
             return true;
+        }
+
+        /// <summary>
+        /// A piton is on the chain. Detach the harness rope and leave it out of the
+        /// physics step. The line renderer and the coil length stay on this binding.
+        /// </summary>
+        internal void ParkHarnessPull()
+        {
+            if (_pullParked || _disposed) return;
+            _pullParked = true;
+            _pendingSnapLength = -1f;
+            ReleaseHarnessPins();
+            ModLog.Info("[RopeTeam] A piton is on the chain. The harness rope stops pulling.");
+        }
+
+        private void ReleaseHarnessPins()
+        {
+            try
+            {
+                if (_rope != null && _rope.IsInitialized) _rope.DetachAll();
+            }
+            catch (Exception ex)
+            {
+                ModLog.Warning("[RopeTeam] Could not detach the harness rope: " + ex.Message);
+            }
+
+            if (_rope != null) _rope.enabled = false;
+            if (_part != null && _part.gameObject != null) _part.gameObject.SetActive(false);
         }
 
         // The piton path does not enable a component on Harness itself. PawnSkinHandler
@@ -557,11 +600,24 @@ internal static partial class RopeInterop
 
         public bool Maintain()
         {
+            if (_pullParked) return MaintainParkedLine();
             SynchronizePartnerAttachment();
             if (!HasBothAttachments || !TryGetHarnessAttachPosition(_local, out var local)
                 || !TryGetHarnessAttachPosition(_partner, out var partner)) return false;
             // A long move snaps the particles onto the new segment. Dragging them
             // across the mountain is what the guard used to prevent by dropping the tie.
+            FollowHarnesses(local, partner);
+            return true;
+        }
+
+        /// <summary>
+        /// The rope is not pulling. A missing pin is expected. A harness that jumps
+        /// past the guard snaps the line. It does not end the tie.
+        /// </summary>
+        private bool MaintainParkedLine()
+        {
+            if (!TryGetHarnessAttachPosition(_local, out var local)
+                || !TryGetHarnessAttachPosition(_partner, out var partner)) return false;
             FollowHarnesses(local, partner);
             return true;
         }
@@ -577,7 +633,7 @@ internal static partial class RopeInterop
             {
                 try
                 {
-                    if (_rope != null && _rope.IsInitialized)
+                    if (_rope != null && _rope.IsInitialized && !_pullParked)
                     {
                         _rope.TeleportOnAttachPoints(RopeTeleportMode.PreTeleportOnLineAndFabrik, false, false);
                         LayParticlesOnSegment();

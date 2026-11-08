@@ -50,7 +50,7 @@ internal static class RopeClipPromptPatch
     {
         Harmony.UnpatchSelf();
         _installed = false;
-        RopeClipPrompt.Hide();
+        RopeClipPrompt.HideAll();
     }
 
     private static bool SkipTutorialHide(GameplayPromptHud __instance, ref bool __result)

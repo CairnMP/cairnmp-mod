@@ -54,13 +54,13 @@ internal sealed class RopeCoupleController
             return;
         }
 
-        TickClipPrompt();
         if (!InputCaptureState.IsKeyboardCaptured)
             HandleRopeClipInput();
         TeamAnchorSession.ReconcileLink();
         TickRopeTeam();
         TickUnanchoredFall();
         RopeInterop.TickPartnerFall(_network);
+        TickRopePrompt();
         if (!TeamAnchorSession.IsLinked) LeaderProtectionMarker.Hide();
     }
 
@@ -188,7 +188,8 @@ internal sealed class RopeCoupleController
     {
         var keyboard = Keyboard.current;
         var keyboardPressed = keyboard != null && keyboard[ToggleKey].wasPressedThisFrame;
-        if (!keyboardPressed && !RightStickLinkPressed())
+        if (!keyboardPressed && !RightStickLinkPressed()
+            && !ModControllerInput.WasPressed(ControllerShortcut.ToggleRope))
             return;
 
         // An existing rope must always be releasable, including at zero slack.
@@ -208,9 +209,13 @@ internal sealed class RopeCoupleController
             return;
         }
 
-        if (!LocalPlayerInterop.TryGetPose(out var localPos, out _))
+        if (!_network.TryGetLinkPosition(_network.LocalPlayerId, out var originX, out var originY, out var originZ))
+        {
+            ModLog.Info("[RopeCouple] Link pressed — this climber has no stored in-game pose yet.");
             return;
+        }
 
+        var localPos = new Vector3(originX, originY, originZ);
         FillLinkCandidates(localPos);
         int bestId = PracticePartner.ChooseLinkTarget(_linkCandidates, RopeRequests.LinkRangeMeters);
         float bestDist = float.MaxValue;
@@ -229,8 +234,13 @@ internal sealed class RopeCoupleController
             {
                 var rp = kv.Value;
                 if (rp == null) { sb.Append($" [{kv.Key}:null]"); continue; }
-                float d = Vector3.Distance(localPos, new Vector3(rp.X, rp.Y, rp.Z));
-                sb.Append($" [{kv.Key} state={rp.State} dist={d:F1}m hasFrame={rp.HasPlayerFrame}]");
+                if (!_network.TryGetLinkPosition(kv.Key, out var x, out var y, out var z))
+                {
+                    sb.Append($" [{kv.Key} state={rp.State} stored=no]");
+                    continue;
+                }
+                float d = Vector3.Distance(localPos, new Vector3(x, y, z));
+                sb.Append($" [{kv.Key} state={rp.State} dist={d:F1}m stored]");
             }
             ModLog.Info($"[RopeCouple] Link pressed — no eligible ghost within {RopeRequests.LinkRangeMeters:F0}m " +
                 $"(remote players: {total}):{(total == 0 ? " none" : sb.ToString())}");
@@ -253,27 +263,36 @@ internal sealed class RopeCoupleController
     }
 
     /// <summary>
-    /// The tip uses the same reach test as the key, so the row cannot offer a clip the press would refuse.
-    /// Lobby games skip tutorials, and the row still shows.
+    /// One row for both presses. Clip-in uses the same reach test as the key. Cut rope
+    /// follows the grip drain, which only the leader has while the follower hangs.
     /// </summary>
-    private void TickClipPrompt()
+    private void TickRopePrompt()
     {
+        var inputAvailable = !InputCaptureState.IsKeyboardCaptured;
+        if (RopeCutPromptPolicy.ShouldShow(RopeInterop.GripDraining, inputAvailable))
+        {
+            RopeClipPrompt.Tick(true, RopeClipPrompt.CutLabel);
+            return;
+        }
+
         var linked = RopeLinkState.PartnerOf(_network.LocalPlayerId) != -1;
         var pitchHeld = TeamAnchorSession.IsLinked
             && TeamAnchorSession.LeaderLeft
             && TeamAnchorSession.IsLocalFollower;
-        RopeClipPrompt.Tick(RopeClipPromptPolicy.ShouldShow(
-            linked,
-            !linked && HasClipTargetInRange(),
-            !InputCaptureState.IsKeyboardCaptured,
-            pitchHeld));
+        RopeClipPrompt.Tick(
+            RopeClipPromptPolicy.ShouldShow(
+                linked,
+                !linked && HasClipTargetInRange(),
+                inputAvailable,
+                pitchHeld),
+            RopeClipPrompt.Label);
     }
 
     private bool HasClipTargetInRange()
     {
-        if (!LocalPlayerInterop.TryGetPose(out var localPos, out _))
+        if (!_network.TryGetLinkPosition(_network.LocalPlayerId, out var x, out var y, out var z))
             return false;
-        FillLinkCandidates(localPos);
+        FillLinkCandidates(new Vector3(x, y, z));
         return PracticePartner.ChooseLinkTarget(_linkCandidates, RopeRequests.LinkRangeMeters) >= 0;
     }
 
@@ -282,9 +301,8 @@ internal sealed class RopeCoupleController
         _linkCandidates.Clear();
         foreach (var kv in _network.RemotePlayers)
         {
-            var rp = kv.Value;
-            if (rp == null || rp.State != PlayerState.InGame) continue;
-            var d = Vector3.Distance(localPos, new Vector3(rp.X, rp.Y, rp.Z));
+            if (!_network.TryGetLinkPosition(kv.Key, out var x, out var y, out var z)) continue;
+            var d = Vector3.Distance(localPos, new Vector3(x, y, z));
             _linkCandidates.Add(new PracticePartner.LinkCandidate(kv.Key, d, PracticePartner.Is(kv.Key)));
         }
     }
@@ -305,6 +323,10 @@ internal sealed class RopeCoupleController
         if (untie.HoldStaff && TeamAnchorSession.IsLocalLeader && TopAnchorSession.HasStick)
         {
             TopAnchorSession.RequestHold();
+            // A client does not apply its own unclip until the host echoes it.
+            // The link drops below, and the same frame reconciles. Commit the
+            // hold first so that reconcile leaves the chain for the follower.
+            TeamAnchorSession.HoldForFollower();
             RopeInterop.SendTopAnchorLeave(_network);
         }
 

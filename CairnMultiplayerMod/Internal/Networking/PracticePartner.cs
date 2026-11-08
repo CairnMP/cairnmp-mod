@@ -16,7 +16,7 @@ internal static class PracticePartner
 
     internal static bool Is(int playerId) => playerId == PlayerId;
 
-    /// <summary>Public player lists skip him, so rations, revive, trails, and voice leave him alone.</summary>
+    /// <summary>Public player lists skip him, so revive, trails, and voice leave him alone.</summary>
     internal static bool IsPublicRemote(int playerId) => !Is(playerId);
 
     internal readonly struct LinkCandidate

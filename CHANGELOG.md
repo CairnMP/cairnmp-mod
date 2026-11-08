@@ -12,6 +12,9 @@ All notable CairnMP changes are documented here. Releases follow
 ## [Unreleased]
 
 ### Added
+- Rope Team: while the follower hangs and the leader's grip is emptying, Cairn's
+  control tip says "Cut rope". The keys stay L and a right-stick click. Cutting
+  the rope drops the hanging climber and fills the leader's grip.
 - Rope Team: Cairn's control tip for clipping in appears when a partner is close
   enough to tie. A lobby still skips Cairn's own tutorials, and the tip shows
   anyway. The keys stay L and a right-stick click.
@@ -39,6 +42,13 @@ All notable CairnMP changes are documented here. Releases follow
   a fall still drops both climbers.
 
 ### Fixed
+- Rope Team: after a bivouac, Cairn's own rope no longer stops the leader while the
+  rope between the two climbers still has slack. That coil is the length limit for
+  both. The leader stays clipped to Climbot so a piton can attach.
+- Rope Team: a paid-out rope stops a further step. Cairn's remaining-length answer
+  is the metres left on the coil between the two climbers, and a place in the
+  world is no longer read as a direction. At 47 m of a 40 m coil the answer is 0.
+  A step back toward the other climber still works.
 - Rope Team: untying while dangling on the rope drops that climber. The fall is
   Cairn's own unsecured fall, with a real position. Switching straight to the falling
   module was an invalid fall and left the climber standing on the piton.
@@ -54,6 +64,10 @@ All notable CairnMP changes are documented here. Releases follow
   D-pad up still places one.
 
 ### Changed
+- Control tips for taking a piton and reviving a partner use Cairn's row, the same
+  one as clip in and cut rope. Take piton says Tap to the left of the button.
+  Revive partner says Hold, and the call goes out after R or Square is held.
+  After a death the camera stays free. A pad flies it with the sticks and triggers.
 - Rope Team: a dead climber stays in the session and watches. The partner brings
   them back from the approach to a bivouac, and that rest stays shut until they
   are back on their feet or they leave. There is no rescue on the face. A death
@@ -92,6 +106,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 ### Removed
 
+- Using an item no longer feeds the rest of the rope. Chalk, food, and drink stay with the climber who used them.
 - Rope shake. A partner coming off the wall no longer knocks loose holds off.
 - Dead weight. A downed climber on the rope no longer spends endurance.
 

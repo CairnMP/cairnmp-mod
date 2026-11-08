@@ -124,7 +124,7 @@ internal static partial class RopeInterop
         var lifeline = TryGetLifeline();
         if (lifeline == null || network == null)
         {
-            PitonRecoverySession.Hide();
+            PitonRecoverySession.HideTip();
             LeaderProtectionMarker.Hide();
             RopeLengthReadout.Hide();
             return;
@@ -153,13 +153,14 @@ internal static partial class RopeInterop
             var actions = _pitons.Reconcile(_placedPitons, localPosition, now);
             if (!actions.IsEmpty)
             {
+                foreach (var pointer in actions.Strip) StripWhenAllowed(pointer);
                 foreach (var pointer in actions.Detach) DetachWhenAllowed(pointer);
                 foreach (var placed in actions.Spawn) SpawnRemotePiton(lifeline, placed, now);
                 foreach (var (localId, pointer) in actions.Announce) AnnounceLocalPiton(network, localId, pointer);
                 foreach (var localId in actions.Removed)
                 {
                     network.SendPitonRemoved(localId);
-                    TeamAnchorSession.NoteRemoved(localId);
+                    TeamAnchorSession.NoteLocalRemoval(localId);
                 }
                 foreach (var pitonId in actions.Recovered)
                 {
@@ -196,16 +197,18 @@ internal static partial class RopeInterop
             || MultiplayerPausePatch.IsPauseMenuActive)
         {
             _dpadUpPressedAt = -1f;
-            PitonRecoverySession.Hide();
+            PitonRecoverySession.HideTip();
             return;
         }
 
         var dpadUpTapped = DpadUpTapped();
         if (!TryGetClimberPosition(out var origin))
         {
-            PitonRecoverySession.Hide();
+            PitonRecoverySession.HideTip();
             return;
         }
+
+        var pose = ReadLocal().Status;
 
         var havePartner = TryGetPracticeFollowerPosition(network, out var partnerOrigin);
         _recoveryTargets.Clear();
@@ -222,19 +225,24 @@ internal static partial class RopeInterop
                     var piton = placed[i]?.Piton;
                     if (piton == null || piton.Pointer == IntPtr.Zero || piton.ItemId.value == 0) continue;
                     if (IsOffBelay(lifeline, piton) || !TryGetPitonPosition(piton, out var position)) continue;
-                    bool critical;
-                    try
+                    var held = false;
+                    if (pose == PartnerPose.Hanging)
                     {
-                        critical = lifeline.IsPitonCriticalForLifeline(piton);
-                    }
-                    catch (Exception exception)
-                    {
-                        ModLog.SuppressedException("rope.piton-recovery-scan", exception);
-                        continue;
+                        try
+                        {
+                            held = lifeline.IsPitonCriticalForLifeline(piton);
+                        }
+                        catch (Exception exception)
+                        {
+                            ModLog.SuppressedException("rope.piton-recovery-scan", exception);
+                            continue;
+                        }
                     }
 
-                    var candidate = new PitonRecoveryPolicy.Candidate(position, critical, BagCanTake(piton));
-                    if (_pitons.TryGetId(piton.Pointer, out var tracked) && !TeamAnchorSession.AllowsTake(tracked))
+                    var candidate = new PitonRecoveryPolicy.Candidate(
+                        position, PitonRecoveryPolicy.RefusesHeldPiton(pose, held), BagCanTake(piton));
+                    if (_pitons.TryGetId(piton.Pointer, out var tracked, out var ownLocalId)
+                        && !TeamAnchorSession.AllowsTake(tracked, ownLocalId))
                     {
                         if (!havePartner) continue;
                         var distance = System.Numerics.Vector3.Distance(partnerOrigin, position);
@@ -266,17 +274,18 @@ internal static partial class RopeInterop
             switch (choice.Decision)
             {
                 case PitonRecoveryPolicy.Decision.Take:
-                    PitonRecoverySession.Show(partnerOffer
+                    PitonRecoverySession.ShowTip(partnerOffer
                         ? PitonRecoverySession.PartnerTakeText
                         : PitonRecoverySession.TakeText);
                     if (RecoveryPressed(dpadUpTapped))
                         TryTakePiton(lifeline, network, targets[choice.Index].Piton, partnerOffer);
                     break;
                 case PitonRecoveryPolicy.Decision.BagFull:
+                    RopeClipPrompt.Hide(PitonRecoverySession.TakeId);
                     PitonRecoverySession.Show(PitonRecoverySession.BagFullText);
                     break;
                 default:
-                    PitonRecoverySession.Hide();
+                    PitonRecoverySession.HideTip();
                     break;
             }
         }
@@ -348,18 +357,18 @@ internal static partial class RopeInterop
                 new[] { new PitonRecoveryPolicy.Candidate(pitonPosition, false, true) }, climber).Decision
             != PitonRecoveryPolicy.Decision.Take)
             return;
-        if (_pitons.TryGetId(piton.Pointer, out var tracked))
+        if (_pitons.TryGetId(piton.Pointer, out var tracked, out var ownLocalId))
         {
             if (forPracticeFollower)
             {
-                if (TeamAnchorSession.AllowsTake(tracked)) return;
+                if (TeamAnchorSession.AllowsTake(tracked, ownLocalId)) return;
                 var distance = System.Numerics.Vector3.Distance(climber, pitonPosition);
                 if (!PracticePitonTake.OffersChainPiton(
                         TeamAnchorSession.IsLinked, TeamAnchorSession.IsLocalLeader,
                         TeamAnchorSession.FollowerId, true, distance))
                     return;
             }
-            else if (!TeamAnchorSession.AllowsTake(tracked))
+            else if (!TeamAnchorSession.AllowsTake(tracked, ownLocalId))
             {
                 return;
             }
@@ -405,6 +414,8 @@ internal static partial class RopeInterop
             ModLog.Warning("[Piton] The piton stayed on the wall");
             return;
         }
+
+        _pitons.MarkTaken(pointer);
 
         if (manager != null && CountPitons(manager, manager.PitonInventoryData) <= playerBefore)
         {
@@ -891,6 +902,44 @@ internal static partial class RopeInterop
         // could leave a dangling entry in the native save/rope collection.
         if (TryDetachPitonViaLifeline(pointer)) _detachRetryAt.Remove(pointer);
         else _detachRetryAt[pointer] = now + DetachRetrySeconds;
+    }
+
+    /// <summary>
+    /// Another climber took this piton, or the host withdrew it. Unclip it, then destroy
+    /// the hardware. The piton is already in their bag, so this climber does not gain one.
+    /// </summary>
+    private static void StripWhenAllowed(IntPtr pointer)
+    {
+        var now = Time.unscaledTime;
+        if (_detachRetryAt.TryGetValue(pointer, out var retryAt) && now < retryAt) return;
+
+        var lifeline = TryGetLifeline();
+        if (lifeline == null)
+        {
+            _detachRetryAt[pointer] = now + DetachRetrySeconds;
+            return;
+        }
+
+        bool attached;
+        try
+        {
+            attached = lifeline.AttachedPitonsContains(new Il2Cpp.Piton(pointer));
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.strip-piton", exception);
+            _detachRetryAt[pointer] = now + DetachRetrySeconds;
+            return;
+        }
+
+        if (attached && !TryDetachPitonViaLifeline(pointer))
+        {
+            _detachRetryAt[pointer] = now + DetachRetrySeconds;
+            return;
+        }
+
+        _detachRetryAt.Remove(pointer);
+        DestroyReleasedPiton(new Il2Cpp.Piton(pointer));
     }
 
     // Native detach needs the Piton pointer; destroying only its GameObject leaves rope state dangling.

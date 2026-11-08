@@ -456,7 +456,7 @@ public sealed class GameplayRegressionTests
         // As in the game: a camper has no player location, only a camp.
         game.PlayersImpl.LocalLocationKnown = false;
 
-        game.InputImpl.Press(GameKey.R);
+        game.InputImpl.Press(GameInputAction.RevivePartner);
         host.Tick(FeaturePhase.Always);
 
         Assert.Contains("revive.recall.relayed", bridge.Events);
@@ -471,7 +471,7 @@ public sealed class GameplayRegressionTests
         game.StateImpl.InVolume = true;
         game.StateImpl.Camp = new WorldPosition(4, 5, 6);
 
-        game.InputImpl.Press(GameKey.R);
+        game.InputImpl.Press(GameInputAction.RevivePartner);
         host.Tick(FeaturePhase.Always);
 
         Assert.Contains("revive.recall.relayed", bridge.Events);
@@ -534,7 +534,7 @@ public sealed class GameplayRegressionTests
 
         host.Tick(FeaturePhase.Always);
 
-        Assert.False(game.HudImpl.Messages.ContainsKey("revive.recall"));
+        Assert.False(game.HudImpl.Tips.ContainsKey("revive.recall"));
         Assert.Equal("Guest is out of the climb.", game.HudImpl.Messages["revive.notice"]);
     }
 
@@ -693,28 +693,44 @@ public sealed class GameplayRegressionTests
 
         // Outside a camp there is nothing to offer, however many climbers are down.
         host.Tick(FeaturePhase.Always);
-        Assert.False(game.HudImpl.Messages.ContainsKey("revive.recall"));
+        Assert.False(game.HudImpl.Tips.ContainsKey("revive.recall"));
 
         // The approach, before the rest. The dead partner still holds the door.
         game.StateImpl.InVolume = true;
         game.StateImpl.Camp = new WorldPosition(4, 5, 6);
         host.Tick(FeaturePhase.Always);
-        Assert.Contains("revive.recall", game.HudImpl.Messages.Keys);
+        Assert.Equal(ReviveFeature.RecallLabel, game.HudImpl.Tips["revive.recall"].Label);
+        Assert.Equal(ReviveFeature.RecallCue, game.HudImpl.Tips["revive.recall"].Cue);
 
         game.StateImpl.InVolume = false;
         game.StateImpl.Camp = null;
         host.Tick(FeaturePhase.Always);
-        Assert.False(game.HudImpl.Messages.ContainsKey("revive.recall"));
+        Assert.False(game.HudImpl.Tips.ContainsKey("revive.recall"));
 
         game.StateImpl.InBivouac = true;
         game.StateImpl.Camp = new WorldPosition(10, 20, 30);
         host.Tick(FeaturePhase.Always);
-        Assert.Contains("revive.recall", game.HudImpl.Messages.Keys);
+        Assert.Equal(ReviveFeature.RecallLabel, game.HudImpl.Tips["revive.recall"].Label);
 
         // And it goes away again when everyone is back on their feet.
         runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(false)));
         host.Tick(FeaturePhase.Always);
-        Assert.False(game.HudImpl.Messages.ContainsKey("revive.recall"));
+        Assert.False(game.HudImpl.Tips.ContainsKey("revive.recall"));
+    }
+
+    [Fact]
+    public void ALivingClimberStoresTheViewpointBeforeDeath()
+    {
+        var (_, host, game) = Create(new SpectatorFeature(), MultiplayerMode.FreeSolo);
+        host.Tick(FeaturePhase.Always);
+        Assert.Equal(1, game.SpectatorImpl.ViewpointsRemembered);
+
+        game.LifeImpl.IsDown = true;
+        game.LifeImpl.DeathHeld = true;
+        host.Tick(FeaturePhase.Always);
+
+        Assert.Equal(1, game.SpectatorImpl.ViewpointsRemembered);
+        Assert.True(game.SpectatorImpl.IsActive);
     }
 
     [Fact]
@@ -727,25 +743,6 @@ public sealed class GameplayRegressionTests
         host.Tick(FeaturePhase.Always);
 
         Assert.True(game.SpectatorImpl.IsActive);
-        Assert.False(game.SpectatorImpl.IsFollowing);
-    }
-
-    [Fact]
-    public void ASpectatorCanLockOntoAClimberAndBackOff()
-    {
-        var (_, host, game) = Create(new SpectatorFeature(), MultiplayerMode.FreeSolo);
-        game.LifeImpl.IsDown = true;
-        game.LifeImpl.DeathHeld = true;
-        game.PlayersImpl.InGame = new[] { 2 };
-        game.SpectatorImpl.Watchable.Add(2);
-        host.Tick(FeaturePhase.Always);
-
-        game.InputImpl.Press(GameKey.F);
-        host.Tick(FeaturePhase.Always);
-        Assert.Equal(2, game.SpectatorImpl.FollowedPlayerId);
-
-        game.InputImpl.Press(GameKey.F);
-        host.Tick(FeaturePhase.Always);
         Assert.False(game.SpectatorImpl.IsFollowing);
     }
 
@@ -972,39 +969,6 @@ public sealed class GameplayRegressionTests
         host.Tick(FeaturePhase.Always);
 
         Assert.Single(game.WorldImpl.Pings);
-    }
-
-    [Fact]
-    public void ARationOpenedOnTheRopeFeedsThePartners()
-    {
-        var (runtime, _, game) = Create(new SharedRationsFeature());
-        game.PlayersImpl.Roped.Add(2);
-
-        runtime.ExecuteHostCommand(2, Command("rations.shared", new RationShared(104)));
-
-        Assert.Equal(new[] { 104 }, game.InventoryImpl.SharedApplied);
-    }
-
-    [Fact]
-    public void ARationIsNotSharedAcrossRopes()
-    {
-        var (runtime, _, game) = Create(new SharedRationsFeature());
-
-        runtime.ExecuteHostCommand(2, Command("rations.shared", new RationShared(104)));
-
-        Assert.Empty(game.InventoryImpl.SharedApplied);
-    }
-
-    [Fact]
-    public void RacersDoNotHandRivalsTheirWater()
-    {
-        var (_, _, game) = Create(new SharedRationsFeature(), MultiplayerMode.Race);
-        game.PlayersImpl.InGame = new[] { 2 };
-        game.PlayersImpl.Roped.Add(2);
-
-        game.InventoryImpl.ItemUsed(104);
-
-        Assert.Empty(game.InventoryImpl.SharedApplied);
     }
 
     [Fact]
@@ -1310,7 +1274,9 @@ public sealed class GameplayRegressionTests
         public bool IsActive { get; private set; }
         public bool IsFollowing => FollowedPlayerId >= 0;
         public int FollowedPlayerId { get; private set; } = -1;
+        internal int ViewpointsRemembered;
         internal readonly HashSet<int> Watchable = new();
+        public void RememberViewpoint() => ViewpointsRemembered++;
         public bool Enter() { IsActive = true; Entered++; return true; }
         public void Leave() { IsActive = false; FollowedPlayerId = -1; Left++; }
         public void FreeLook() => FollowedPlayerId = -1;
@@ -1379,6 +1345,9 @@ public sealed class GameplayRegressionTests
         internal readonly Dictionary<string, string> Messages = new();
         public void ShowMessage(string id, string text, float durationSeconds) => Messages[id] = text;
         public void HideMessage(string id) => Messages.Remove(id);
+        internal readonly Dictionary<string, (string Label, string Cue)> Tips = new();
+        public void ShowControlTip(string id, string label, string cue) => Tips[id] = (label, cue);
+        public void HideControlTip(string id) => Tips.Remove(id);
         internal string StandingsTitle;
         internal readonly List<StandingRow> Standings = new();
         public void ShowStandings(string title, IReadOnlyList<StandingRow> rows)
@@ -1592,13 +1561,6 @@ public sealed class GameplayRegressionTests
             { reason = "Invalid item."; return false; }
             Count += count; reason = ""; return true;
         }
-
-        internal Action<int> ItemUsed;
-        internal readonly List<int> SharedApplied = new();
-        public IGameRegistration AddItemUsedListener(Action<int> onUsed)
-        { ItemUsed = onUsed; return new Registration(); }
-        public bool ApplySharedConsumable(int definitionId)
-        { SharedApplied.Add(definitionId); return true; }
 
         internal int HealingItems = 1;
         public bool HasHealingItem => HealingItems > 0;

@@ -98,6 +98,12 @@ further step away is refused.
 | `View/Share` + D-pad `←` / `→` | Select a shared ground item |
 | Hold `View/Share` + `LB/L1` | Push to talk |
 | `View/Share` + right-stick click | Emergency input release |
+| Hold Square (`X` on an Xbox pad), or hold `R` | Revive partner at a camp |
+
+Hold Square or `R` for about half a second while you are at a camp and a partner is down.
+View/Share plus Square still gives an item. After a death the view flies free. On a pad the
+left stick moves, the right stick looks, the right trigger rises, the left trigger sinks,
+and holding the left stick goes faster. The mouse and WASD do the same.
 
 The multiplayer panel supports D-pad/stick navigation, confirm, and `B/○` to
 close. Text chat and manual lobby-code entry still require text input; public

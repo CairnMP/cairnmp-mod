@@ -71,16 +71,4 @@ internal interface IInventoryApi
     /// item would have healed is not applied here: the caller decides what it buys.
     /// </summary>
     bool TryConsumeHealingItem(out string itemName);
-
-    /// <summary>
-    /// Calls back whenever the local climber uses an item, with its definition id. Disposing
-    /// the registration stops the callbacks.
-    /// </summary>
-    IGameRegistration AddItemUsedListener(Action<int> onUsed);
-
-    /// <summary>
-    /// Applies a consumable's effects to the local climber without consuming anything from
-    /// their bag -- for a ration somebody else opened.
-    /// </summary>
-    bool ApplySharedConsumable(int definitionId);
 }

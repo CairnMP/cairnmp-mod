@@ -14,6 +14,8 @@ internal sealed class SpectatorAdapter : ISpectatorApi
     public bool IsFollowing => SpectatorCamera.IsFollowing;
     public int FollowedPlayerId => SpectatorCamera.IsFollowing ? _followedPlayerId : -1;
 
+    public void RememberViewpoint() => SpectatorCamera.RememberViewpoint();
+
     public bool Enter() => SpectatorCamera.Enter();
 
     public void Leave()

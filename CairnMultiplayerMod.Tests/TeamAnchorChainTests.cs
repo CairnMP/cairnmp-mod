@@ -232,6 +232,40 @@ public sealed class TeamAnchorChainTests
     }
 
     [Fact]
+    public void TheFollowerKeepsTheChainWhenAPersonalPitonSharesItsNumber()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(7, 4, 7, true);
+        TeamAnchorSession.NoteRemotePlacement(4, 1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteRemotePlacement(4, 2, new Vector3(0f, 2f, 0f));
+
+        TeamAnchorSession.NoteLocalRemoval(1);
+
+        Assert.Equal(2, TeamAnchorSession.Count);
+        Assert.True(TeamAnchorSession.AllowsTake(1, ownLocalId: true));
+        Assert.True(TeamAnchorSession.AllowsTake(1, ownLocalId: false));
+    }
+
+    [Fact]
+    public void TheLeaderCanTakeAHostPitonWhoseNumberMatchesTheChain()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+        TeamAnchorSession.NoteLocalLeaderPlacement(1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(2, new Vector3(0f, 2f, 0f));
+
+        Assert.False(TeamAnchorSession.AllowsTake(1, ownLocalId: true));
+        Assert.True(TeamAnchorSession.AllowsTake(1, ownLocalId: false));
+
+        TeamAnchorSession.NoteLocalRemoval(1);
+
+        Assert.Equal(1, TeamAnchorSession.Count);
+        Assert.False(TeamAnchorSession.IsChainKey(1, ownLocalId: true));
+    }
+
+    [Fact]
     public void TheFollowerDropsAHostIdFromTheChain()
     {
         Reset();

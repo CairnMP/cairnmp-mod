@@ -137,8 +137,8 @@ public sealed class TopAnchorTests
         TopAnchorSession.Remember(Stick, new Vector3(0f, 4f, 0f));
 
         Assert.Equal(1u, FollowerAnchor());
-        Assert.False(TeamAnchorSession.AllowsTake(Stick));
-        Assert.True(TeamAnchorSession.AllowsTake(1));
+        Assert.False(TeamAnchorSession.AllowsTake(Stick, ownLocalId: false));
+        Assert.True(TeamAnchorSession.AllowsTake(1, ownLocalId: false));
 
         TeamAnchorSession.NoteRemoved(1);
 
@@ -236,6 +236,83 @@ public sealed class TopAnchorTests
         Assert.Equal(2, TeamAnchorSession.Count);
         Assert.True(TopAnchorSession.HasStick);
         Assert.Equal(-1, RopeLinkState.PartnerOf(7));
+    }
+
+    [Fact]
+    public void TheLeaderLeavesBeforeTheUnclipEchoAndTheChainStays()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+        TeamAnchorSession.NoteLocalLeaderPlacement(1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(2, new Vector3(0f, 2f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(Stick, new Vector3(0f, 4f, 0f));
+        TopAnchorSession.Remember(Stick, new Vector3(0f, 4f, 0f));
+        TopAnchorSession.RequestHold();
+
+        // ReleaseClip drops the link before a client runs OnClip. The hold is
+        // committed first, and the same-frame reconcile must leave the chain.
+        TeamAnchorSession.HoldForFollower();
+        RopeLinkState.Apply(4, 7, false);
+        TeamAnchorSession.ReconcileLink();
+
+        Assert.True(TeamAnchorSession.LeaderLeft);
+        Assert.True(TeamAnchorSession.IsLinked);
+        Assert.Equal(3, TeamAnchorSession.Count);
+        Assert.Equal(1u, FollowerAnchor());
+        Assert.Equal(Stick, LeaderAnchor());
+        Assert.True(TopAnchorSession.HasStick);
+        var released = new List<TeamAnchorSession.ChainRelease>();
+        TeamAnchorSession.CopyReleased(released);
+        Assert.Empty(released);
+    }
+
+    [Fact]
+    public void ALaterLeaderUnclipDoesNotClearTheHeldChain()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+        TeamAnchorSession.NoteLocalLeaderPlacement(1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(Stick, new Vector3(0f, 4f, 0f));
+        TopAnchorSession.Remember(Stick, new Vector3(0f, 4f, 0f));
+        TopAnchorSession.RequestHold();
+        TeamAnchorSession.HoldForFollower();
+        RopeLinkState.Apply(4, 7, false);
+
+        PartnerFallSession.ForceRelease = true;
+        TeamAnchorSession.OnClip(4, 4, 7, false);
+
+        Assert.True(TeamAnchorSession.LeaderLeft);
+        Assert.True(TeamAnchorSession.IsLinked);
+        Assert.Equal(2, TeamAnchorSession.Count);
+        Assert.Equal(1u, FollowerAnchor());
+        Assert.Equal(Stick, LeaderAnchor());
+        Assert.True(TopAnchorSession.HasStick);
+        Assert.False(TopAnchorSession.HoldRequested);
+        Assert.False(PartnerFallSession.ForceRelease);
+    }
+
+    [Fact]
+    public void ADropStillClearsAfterTheLeaderHasLeft()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+        TeamAnchorSession.NoteLocalLeaderPlacement(1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(Stick, new Vector3(0f, 4f, 0f));
+        TopAnchorSession.Remember(Stick, new Vector3(0f, 4f, 0f));
+        TopAnchorSession.RequestHold();
+        TeamAnchorSession.HoldForFollower();
+        TopAnchorSession.RequestDrop();
+
+        RopeLinkState.Apply(4, 7, false);
+        TeamAnchorSession.OnClip(4, 4, 7, false);
+
+        Assert.False(TeamAnchorSession.IsLinked);
+        Assert.False(TeamAnchorSession.HasProtection);
+        Assert.False(TopAnchorSession.HasStick);
+        Assert.False(TeamAnchorSession.LeaderLeft);
     }
 
     [Fact]
@@ -367,5 +444,6 @@ public sealed class TopAnchorTests
         TeamAnchorSession.DisarmRules();
         TeamAnchorSession.DiscardRelease();
         TeamAnchorSession.Bind(() => true);
+        PartnerFallSession.Reset();
     }
 }
