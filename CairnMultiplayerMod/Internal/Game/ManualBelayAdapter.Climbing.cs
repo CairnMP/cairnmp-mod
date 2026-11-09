@@ -8,7 +8,6 @@ namespace CairnMultiplayerMod.Internal.Game;
 
 internal sealed partial class ManualBelayAdapter
 {
-    private uint _climbLimitQueries, _climbLimitBlocks;
     private bool _climbMovementBlocked;
     private double _nextClimbLimitLog;
 
@@ -31,8 +30,6 @@ internal sealed partial class ManualBelayAdapter
             if (!BelayClimbLimit.TryRestrict(__result, true, owner._ropeControl.Released,
                 new NumericsVector3(radial.x, radial.y, radial.z), new NumericsVector3(__0.x, __0.y, __0.z), out var allowed))
             { owner.EndLocalRope("The climbing rope-limit geometry is invalid."); return; }
-            if (owner._climbLimitQueries < uint.MaxValue) owner._climbLimitQueries++;
-            if (!allowed && owner._climbLimitBlocks < uint.MaxValue) owner._climbLimitBlocks++;
             if (owner._climbMovementBlocked != !allowed && Now >= owner._nextClimbLimitLog)
             {
                 owner._nextClimbLimitLog = Now + .5;

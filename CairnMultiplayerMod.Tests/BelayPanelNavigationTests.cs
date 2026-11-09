@@ -6,50 +6,6 @@ namespace CairnMultiplayerMod.Tests;
 
 public sealed class BelayPanelNavigationTests
 {
-    [Fact]
-    public void AReceivedSwapRequestNeedsReadinessAndAFreshConfirmation()
-    {
-        var navigation = new BelayPanelNavigation();
-        var waiting = new BelayPanelView { Phase = BelayPanelPhase.SwapRequest };
-        Assert.False(navigation.Observe(BelayPanelShortcut.Accept, true, true, waiting, out _, out _));
-        var ready = new BelayPanelView { Phase = BelayPanelPhase.SwapRequest, CanAccept = true };
-        Assert.False(navigation.Observe(BelayPanelShortcut.Accept, true, true, ready, out _, out _));
-        navigation.Observe(BelayPanelShortcut.Accept, false, true, ready, out _, out _);
-        Assert.True(navigation.Observe(BelayPanelShortcut.Accept, true, true, ready, out var action, out _));
-        Assert.Equal(BelayPanelAction.AcceptSwap, action);
-        Assert.True(navigation.Observe(BelayPanelShortcut.Decline, true, true, ready, out action, out _));
-        Assert.Equal(BelayPanelAction.CancelSwap, action);
-    }
-
-    [Fact]
-    public void PendingRecoveryCanBeEndedWithoutAcceptingOrSelectingAnotherPartner()
-    {
-        var navigation = new BelayPanelNavigation();
-        var recovery = new BelayPanelView { Phase = BelayPanelPhase.Recovering, CanAccept = true,
-            CanOffer = true, CanRequest = true, Partners = new[] { new BelayPartnerRow(9, "Other", 1) } };
-        foreach (var key in new[] { BelayPanelShortcut.Accept, BelayPanelShortcut.Offer, BelayPanelShortcut.Request,
-            BelayPanelShortcut.Next, BelayPanelShortcut.Previous })
-            Assert.False(navigation.Observe(key, true, true, recovery, out _, out _));
-        Assert.True(navigation.Observe(BelayPanelShortcut.Decline, true, true, recovery, out var action, out var target));
-        Assert.Equal(BelayPanelAction.Cancel, action);
-        Assert.Equal(-1, target);
-        Assert.False(navigation.Observe(BelayPanelShortcut.Decline, true, true, recovery, out _, out _));
-    }
-
-    [Fact]
-    public void SwapShortcutsAcceptOrCancelOnlyTheRoleProposal()
-    {
-        var navigation = new BelayPanelNavigation();
-        var invitation = new BelayPanelView { Phase = BelayPanelPhase.SwapInvitation, CanAccept = true };
-        Assert.True(navigation.Observe(BelayPanelShortcut.Accept, true, true, invitation, out var action, out _));
-        Assert.Equal(BelayPanelAction.AcceptSwap, action);
-        Assert.True(navigation.Observe(BelayPanelShortcut.Decline, true, true,
-            new() { Phase = BelayPanelPhase.SwapPreparing }, out action, out _));
-        Assert.Equal(BelayPanelAction.CancelSwap, action);
-        navigation.Observe(BelayPanelShortcut.Accept, false, true, invitation, out _, out _);
-        Assert.False(navigation.Observe(BelayPanelShortcut.Accept, true, true,
-            new() { Phase = BelayPanelPhase.SwapPreparing }, out _, out _));
-    }
     private static BelayPanelView Partners(params BelayPartnerRow[] rows)
         => new() { Phase = BelayPanelPhase.Partners, Partners = rows, CanOffer = true, CanRequest = true };
 

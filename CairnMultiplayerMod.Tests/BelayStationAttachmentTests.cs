@@ -7,6 +7,48 @@ namespace CairnMultiplayerMod.Tests;
 
 public sealed class BelayStationAttachmentTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PhysicalPinReadbackMustAgreeWithTheLogicalStationState(bool attached)
+    {
+        Assert.Equal(attached, BelayStationAttachment.PinsAgree(10, 20, new long[] { 100, 10, 10, 20, 20, 200 }, attached));
+        Assert.Equal(!attached, BelayStationAttachment.PinsAgree(10, 20, new long[] { 100, 20, 20, 200 }, attached));
+    }
+
+    [Fact]
+    public void OneStaleStationPinCannotPassAsFullyDetachedOrFullyAttached()
+    {
+        Assert.False(BelayStationAttachment.PinsAgree(10, 20, new long[] { 100, 10, 20, 20, 200 }, true));
+        Assert.False(BelayStationAttachment.PinsAgree(10, 20, new long[] { 100, 10, 20, 20, 200 }, false));
+        Assert.False(BelayStationAttachment.PinsAgree(10, 20, new long[] { 100, 10, 10, 20, 200 }, true));
+    }
+
+    [Fact]
+    public void NativeQuickdrawEndRequiresTwoActualPinOccurrences()
+    {
+        Assert.True(BelayStationAttachment.PinsAgree(10, 20, new long[] { 10, 10, 20, 20 }, true));
+        Assert.False(BelayStationAttachment.PinsAgree(10, 20, new long[] { 10, 20, 20 }, true));
+        Assert.False(BelayStationAttachment.PinsAgree(10, 20, new long[] { 10, 10, 20 }, true));
+        Assert.False(BelayStationAttachment.PinsAgree(10, 20, new long[] { 20 }, false));
+    }
+
+    [Fact]
+    public void OtherQuickdrawFieldsCannotSubstituteForTheNativeAttachmentEnd()
+    {
+        Assert.False(BelayStationAttachment.PinsAgree(10, 20, new long[] { 100, 11, 11, 21, 21, 200 }, true));
+        Assert.False(BelayStationAttachment.PinsAgree(10, 20, new long[] { 100, 10, 10, 21, 21, 200 }, true));
+    }
+
+    [Fact]
+    public void MissingAmbiguousAndUnboundedPinReadbackIsRejected()
+    {
+        Assert.False(BelayStationAttachment.PinsAgree(0, 20, new long[] { 20, 20 }, true));
+        Assert.False(BelayStationAttachment.PinsAgree(10, 10, new long[] { 10, 10, 10, 10 }, true));
+        Assert.False(BelayStationAttachment.PinsAgree(10, 20, null, true));
+        Assert.False(BelayStationAttachment.PinsAgree(10, 20, new long[129], true));
+    }
+
     [Fact]
     public void NewStationMustRetainTheOriginalRouteAndFiveObservedSecondsOfPhysicalPins()
     {
@@ -29,7 +71,7 @@ public sealed class BelayStationAttachmentTests
         var trial = New();
         trial.Observe(inserted ? After() : Before(), inserted ? new long[] { 10, 20 } : new long[] { 20 }, false, .1);
         trial.Observe(inserted ? After() : Before(), inserted ? new long[] { 10, 20 } : new long[] { 20 }, false, 3.01);
-        Assert.Equal(StationConnectionFailure.Timeout, trial.Failure);
+        Assert.Equal(BelayStationAttachmentFailure.Timeout, trial.Failure);
     }
 
     [Theory]
@@ -40,7 +82,7 @@ public sealed class BelayStationAttachmentTests
     {
         var trial = New();
         trial.Observe(After(), new[] { first, last }, true, .1);
-        Assert.Equal(StationConnectionFailure.RouteChanged, trial.Failure);
+        Assert.Equal(BelayStationAttachmentFailure.RouteChanged, trial.Failure);
     }
 
     [Theory]
@@ -51,7 +93,7 @@ public sealed class BelayStationAttachmentTests
         var trial = New();
         trial.Observe(new BelayTopologySnapshot(rope, last, new long[] { 30, 31, 32 }, new long[] { 900, 100, 200, 901 }, 30, 2),
             new long[] { 10, 20 }, true, .1);
-        Assert.Equal(StationConnectionFailure.RouteChanged, trial.Failure);
+        Assert.Equal(BelayStationAttachmentFailure.RouteChanged, trial.Failure);
     }
 
     [Fact]
@@ -61,7 +103,7 @@ public sealed class BelayStationAttachmentTests
         var corrupted = new BelayTopologySnapshot(1000, 20, new long[] { 30, 31, 32 }, new long[] { 999, 100, 200, 901 }, 30, 2);
         trial.Observe(corrupted, new long[] { 10, 20 }, true, .1);
         trial.Observe(corrupted, new long[] { 10, 20 }, true, 3.01);
-        Assert.Equal(StationConnectionFailure.Timeout, trial.Failure);
+        Assert.Equal(BelayStationAttachmentFailure.Timeout, trial.Failure);
     }
 
     [Fact]
@@ -94,13 +136,13 @@ public sealed class BelayStationAttachmentTests
     public void InvalidTimeCannotApproveNativeAttachment(double now)
     {
         var trial = New(); Observe(trial, now);
-        Assert.Equal(StationConnectionFailure.Context, trial.Failure);
+        Assert.Equal(BelayStationAttachmentFailure.Context, trial.Failure);
     }
 
     [Fact]
     public void LostContextCannotResumeAfterCancellation()
     {
-        var trial = New(); trial.Fail(StationConnectionFailure.Context);
+        var trial = New(); trial.Fail(BelayStationAttachmentFailure.Context);
         for (var i = 1; i < 15; i++) Observe(trial, i * .5);
         Assert.Equal(BelayStationAttachmentStage.Failed, trial.Stage);
     }
@@ -125,7 +167,7 @@ public sealed class BelayStationAttachmentTests
     [Theory]
     [InlineData(1)]
     [InlineData(3)]
-    public void AnchoredRolePreparationAcceptsAnUpperStationAfterAllOriginalProtections(int protections)
+    public void InitialAttachmentAcceptsAStationAfterAllOriginalProtections(int protections)
     {
         var (before, after, original, connected) = TerminalInsertion(protections);
         var trial = new BelayStationAttachment(before, original, 10, 100, 0);
@@ -140,7 +182,7 @@ public sealed class BelayStationAttachmentTests
         trial.Observe(after, connected, true, 11);
         Assert.Equal(BelayStationAttachmentStage.Ready, trial.Stage);
         trial.Observe(after, connected, false, 11.1);
-        Assert.Equal(StationConnectionFailure.RouteChanged, trial.Failure);
+        Assert.Equal(BelayStationAttachmentFailure.RouteChanged, trial.Failure);
     }
 
     [Fact]
@@ -158,7 +200,7 @@ public sealed class BelayStationAttachmentTests
         Assert.Equal(BelayStationAttachmentStage.Confirming, trial.Stage);
         trial.Observe(after, connected, true, 5.41);
         Assert.Equal(BelayStationAttachmentStage.Ready, trial.Stage);
-        Assert.Equal(StationConnectionFailure.None, trial.Failure);
+        Assert.Equal(BelayStationAttachmentFailure.None, trial.Failure);
     }
 
     [Theory]
@@ -176,7 +218,7 @@ public sealed class BelayStationAttachmentTests
         Assert.Equal(BelayStationAttachmentStage.Confirming, trial.Stage);
         trial.Observe(after, connected, true, 5.31);
         Assert.Equal(BelayStationAttachmentStage.Ready, trial.Stage);
-        Assert.Equal(StationConnectionFailure.None, trial.Failure);
+        Assert.Equal(BelayStationAttachmentFailure.None, trial.Failure);
     }
 
     [Theory]
@@ -202,7 +244,7 @@ public sealed class BelayStationAttachmentTests
         var trial = new BelayStationAttachment(before, original, 10, 100, 0);
         trial.Observe(corrupt, connected, true, .1);
         trial.Observe(corrupt, connected, true, 3.01);
-        Assert.Equal(StationConnectionFailure.Timeout, trial.Failure);
+        Assert.Equal(BelayStationAttachmentFailure.Timeout, trial.Failure);
     }
 
     [Theory]
@@ -214,7 +256,7 @@ public sealed class BelayStationAttachmentTests
         var trial = new BelayStationAttachment(before, new long[] { 20 }, 10, 100, 0, robotHolder);
         for (var i = 1; i <= 13; i++) trial.Observe(after, new long[] { 10, 20 }, true, i * .5);
         Assert.Equal(accepted ? BelayStationAttachmentStage.Ready : BelayStationAttachmentStage.Failed, trial.Stage);
-        Assert.Equal(accepted ? StationConnectionFailure.None : StationConnectionFailure.Timeout, trial.Failure);
+        Assert.Equal(accepted ? BelayStationAttachmentFailure.None : BelayStationAttachmentFailure.Timeout, trial.Failure);
     }
 
     [Theory]
@@ -238,7 +280,7 @@ public sealed class BelayStationAttachmentTests
         var trial = new BelayStationAttachment(before, new long[] { 20 }, 10, 100, 0, 900);
         trial.Observe(corrupt, new long[] { 10, 20 }, true, .1);
         trial.Observe(corrupt, new long[] { 10, 20 }, true, 3.01);
-        Assert.Equal(StationConnectionFailure.Timeout, trial.Failure);
+        Assert.Equal(BelayStationAttachmentFailure.Timeout, trial.Failure);
     }
 
     [Fact]
@@ -251,7 +293,7 @@ public sealed class BelayStationAttachmentTests
         var trial = new BelayStationAttachment(before, new long[] { 20 }, 10, 100, 0, 900);
         trial.Observe(after, new long[] { 10, 20 }, true, .1);
         trial.Observe(after, new long[] { 10, 20 }, true, 3.01);
-        Assert.Equal(StationConnectionFailure.Timeout, trial.Failure);
+        Assert.Equal(BelayStationAttachmentFailure.Timeout, trial.Failure);
     }
 
     [Fact]
@@ -271,7 +313,7 @@ public sealed class BelayStationAttachmentTests
         var trial = new BelayStationAttachment(before, original, 10, 100, 0, robotHolder);
         for (var i = 1; i <= 13; i++) trial.Observe(after, connected, true, i * .5);
         Assert.Equal(accepted ? BelayStationAttachmentStage.Ready : BelayStationAttachmentStage.Failed, trial.Stage);
-        Assert.Equal(accepted ? StationConnectionFailure.None : StationConnectionFailure.Timeout, trial.Failure);
+        Assert.Equal(accepted ? BelayStationAttachmentFailure.None : BelayStationAttachmentFailure.Timeout, trial.Failure);
     }
 
     [Fact]
@@ -284,7 +326,7 @@ public sealed class BelayStationAttachmentTests
         var trial = new BelayStationAttachment(before, new long[] { 20 }, 10, 100, 0, 900);
         trial.Observe(after, new long[] { 20, 10 }, true, .1);
         trial.Observe(after, new long[] { 20, 10 }, true, 3.01);
-        Assert.Equal(StationConnectionFailure.Timeout, trial.Failure);
+        Assert.Equal(BelayStationAttachmentFailure.Timeout, trial.Failure);
     }
 
     [Fact]
@@ -293,13 +335,13 @@ public sealed class BelayStationAttachmentTests
         var (before, after, original, connected) = TerminalInsertion(3);
         var wrongLast = new BelayStationAttachment(before, original, 10, 100, 0);
         wrongLast.Observe(new(after.Rope, before.LastPiton, after.Parts, after.Holders, 30, after.ProtectionCount), connected, true, .1);
-        Assert.Equal(StationConnectionFailure.RouteChanged, wrongLast.Failure);
+        Assert.Equal(BelayStationAttachmentFailure.RouteChanged, wrongLast.Failure);
         var reordered = new BelayStationAttachment(before, original, 10, 100, 0);
         reordered.Observe(after, new long[] { 20, 22, 21, 10 }, true, .1);
-        Assert.Equal(StationConnectionFailure.RouteChanged, reordered.Failure);
+        Assert.Equal(BelayStationAttachmentFailure.RouteChanged, reordered.Failure);
         var repeated = new BelayStationAttachment(before, original, 10, 100, 0);
         repeated.Observe(after, new long[] { 20, 10, 22, 10 }, true, .1);
-        Assert.Equal(StationConnectionFailure.RouteChanged, repeated.Failure);
+        Assert.Equal(BelayStationAttachmentFailure.RouteChanged, repeated.Failure);
     }
 
     [Theory]
@@ -324,7 +366,7 @@ public sealed class BelayStationAttachmentTests
         Assert.Equal(BelayStationAttachmentStage.Ready, trial.Stage);
         var moved = new BelayTopologySnapshot(1000, 20, new long[] { 30, 31, 33 }, After().Holders, 30, 2);
         trial.Observe(moved, new long[] { 10, 20 }, true, 6.6);
-        Assert.Equal(StationConnectionFailure.RouteChanged, trial.Failure);
+        Assert.Equal(BelayStationAttachmentFailure.RouteChanged, trial.Failure);
     }
 
     private static (BelayTopologySnapshot Before, BelayTopologySnapshot After, long[] Original, long[] Connected)

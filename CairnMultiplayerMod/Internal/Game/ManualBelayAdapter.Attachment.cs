@@ -54,7 +54,7 @@ internal sealed partial class ManualBelayAdapter
         var lifeline = LocalLifeline();
         if (!CanAttachStation(lifeline, station, out reason) || !TryStartSnapshot(lifeline, out var before, out reason)) return false;
         var backup = PersonalAnchor(lifeline);
-        var placed = ConnectionPlaced(lifeline);
+        var placed = ReadPlacedPitons(lifeline);
         reason = "The station and backup must already exist in the same synchronized native piton collection.";
         if (placed == null || !placed.Contains(Id(station)) || !placed.Contains(Id(backup))) return false;
         var state = new StationAttachment
@@ -88,13 +88,12 @@ internal sealed partial class ManualBelayAdapter
         }
         reason = "Wait for all original protection pins to load before connecting the station.";
         if (colliders.Contains(0) || !AttachmentPinsReady(state, false)) return false;
-        RememberRecoveryStation(reference, state.Anchor, session);
         // The accepted pair retains its personal backup and every original pin.
-        // Native insertion may put S before or after those protections, in both
-        // initial connections and role exchanges; confirm the actual native path.
-        state.Observer = new BelayStationAttachment(before, ConnectionOrder(lifeline), Id(station), state.Quickdraw.Pointer.ToInt64(), Now, robotHolder);
+        // Native insertion may put S before or after those protections;
+        // confirm the actual native path.
+        state.Observer = new BelayStationAttachment(before, ReadProtectionOrder(lifeline), Id(station), state.Quickdraw.Pointer.ToInt64(), Now, robotHolder);
         _lease = new BelayInputLease(session, Now);
-        _localRopeNotice = null;
+        _controlNotice = null;
         _attachment = state;
         try
         {
@@ -119,8 +118,7 @@ internal sealed partial class ManualBelayAdapter
         try
         {
             if (!Enabled || _lease.IsExpired(Now) || RopeInterop.IsNativeBelayEngaged
-                || (_stationLifeline != null && !_rolePreparing)
-                || (_rolePreparing && (_stationSession != _roleOldSession || !StationValid))
+                || _stationLifeline != null
                 || !TryGetActiveContext(out _))
             { CancelStationAttachment("The station context or fresh partner-input lease ended."); return; }
             var lifeline = state.Lifeline;
@@ -135,7 +133,7 @@ internal sealed partial class ManualBelayAdapter
                 || Id(station) != Id(state.Piton) || Id(station.Quickdraw) != Id(state.Quickdraw)
                 || !state.Anchor.Matches(Id(lifeline), state.Before.Rope, Id(station), station.pitonHp, ToNumerics(station.transform.position)))
             { CancelStationAttachment("The exact synchronized partner station was lost or replaced."); return; }
-            var placed = ConnectionPlaced(lifeline);
+            var placed = ReadPlacedPitons(lifeline);
             if (placed == null || !state.Placed.SetEquals(placed))
             { CancelStationAttachment("The native piton collection changed during station attachment."); return; }
             foreach (var protection in state.Protections)
@@ -146,26 +144,25 @@ internal sealed partial class ManualBelayAdapter
                 { CancelStationAttachment("An original protection was lost or replaced during station attachment."); return; }
             var pins = AttachmentPinsReady(state, true);
             TrySnapshot(lifeline, out var snapshot, out _);
-            state.Observer.Observe(snapshot, ConnectionOrder(lifeline), pins, Now);
+            state.Observer.Observe(snapshot, ReadProtectionOrder(lifeline), pins, Now);
             if (Now >= state.NextLog)
             {
                 state.NextLog = Now + .5;
                 ModLog.Info("[BelayAttachment] Sample; stage=" + state.Observer.Stage + ", pins=" + pins
                     + ", parts=" + snapshot?.Parts.Length + ", protections=" + snapshot?.ProtectionCount
                     + ", last=" + snapshot?.LastPiton + ", holders=" + (snapshot == null ? "unavailable" : string.Join(",", snapshot.Holders))
-                    + ", order=" + string.Join(",", ConnectionOrder(lifeline))
+                    + ", order=" + string.Join(",", ReadProtectionOrder(lifeline))
                     + ", originalBackup=True, collectionUnchanged=True");
             }
             if (state.Observer.Stage == BelayStationAttachmentStage.Failed)
             { CancelStationAttachment("The station route did not confirm: " + state.Observer.Failure); return; }
             if (state.Observer.Stage != BelayStationAttachmentStage.Ready) return;
-            if (_rolePreparing) { _roleConnectionReady = true; return; }
             CompleteStationAttachment(state, _lease);
         }
         catch (Exception ex)
         {
-            _localRopeNotice = "Station attachment failed: " + ex.Message;
-            ModLog.Warning("[BelayAttachment] " + _localRopeNotice);
+            _controlNotice = "Station attachment failed: " + ex.Message;
+            ModLog.Warning("[BelayAttachment] " + _controlNotice);
             CancelStationAttachment(ex.Message);
             if (_control != null) ClearControl("Station attachment control failed: " + ex.Message);
             else { _lease = null; ClearPartnerStation(); }
@@ -176,7 +173,7 @@ internal sealed partial class ManualBelayAdapter
     {
         _attachment = null;
         if (!BindPartnerStation(lease.Session, state.Station, state.Piton, out var reason))
-        { _lease = null; _localRopeNotice = reason; ModLog.Warning("[BelayAttachment] Control refused after connection: " + reason); return false; }
+        { _lease = null; _controlNotice = reason; ModLog.Warning("[BelayAttachment] Control refused after connection: " + reason); return false; }
         _lease = lease; _lease.CancelMotion(); ApplyBrake(_lease.Braked);
         ModLog.Info("[BelayAttachment] Confirmed; five observed seconds, original protection retained; fresh input required for rope motion.");
         return true;
@@ -199,7 +196,7 @@ internal sealed partial class ManualBelayAdapter
         }
         var station = Id(state.Quickdraw.GetAttachEnd());
         var backup = Id(state.Backup.Quickdraw.GetAttachEnd());
-        if (!BelayStationConnectionTrial.PinsAgree(station, backup, pins, stationAttached)) return false;
+        if (!BelayStationAttachment.PinsAgree(station, backup, pins, stationAttached)) return false;
         foreach (var protection in state.Protections)
         {
             var count = 0;
@@ -237,10 +234,33 @@ internal sealed partial class ManualBelayAdapter
     private void CancelStationAttachment(string reason)
     {
         if (_attachment == null) return;
-        if (_rolePreparing) _roleFailure = reason;
         ModLog.Info("[BelayAttachment] Stopped; no additional native requests or automatic rollback: " + reason);
         _attachment = null;
         _lease?.CancelMotion(); _lease = null;
-        _localRopeNotice = reason;
+        _controlNotice = reason;
     }
+    private static long[] ReadProtectionOrder(Lifeline lifeline)
+    {
+        var result = new List<long>();
+        var holders = lifeline.securingRope.ropeHolders;
+        if (holders == null || holders.Count > 66) return Array.Empty<long>();
+        for (var i = 0; i < holders.Count; i++)
+        {
+            var piton = holders[i]?.TryCast<LogicalQuickdraw>()?.Piton;
+            if (piton != null) result.Add(Id(piton));
+        }
+        return result.ToArray();
+    }
+
+    private static HashSet<long> ReadPlacedPitons(Lifeline lifeline)
+    {
+        var placed = lifeline.PlacedPitons;
+        if (placed == null || placed.Count > 128) return null;
+        var result = new HashSet<long>();
+        for (var i = 0; i < placed.Count; i++)
+            if (placed[i]?.Piton == null || !result.Add(Id(placed[i].Piton))) return null;
+        return result;
+    }
+
+
 }

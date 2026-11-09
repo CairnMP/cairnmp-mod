@@ -19,8 +19,8 @@ internal sealed partial class ManualBelayAdapter
 
     private void RememberLocalRoute()
     {
-        if (_localStation == null || !LocalStationStatus.HasValue) return;
-        _localRouteFixedLength = LocalStationStatus.Value.FixedLength;
+        if (_localStation == null || !_stationRoute.HasValue) return;
+        _localRouteFixedLength = _stationRoute.Value.FixedLength;
         _boundStationProtections = _measuredStationProtections;
         _boundProtectionPins = ReadProtectionPins();
     }
@@ -127,16 +127,14 @@ internal sealed partial class ManualBelayAdapter
         { EndLocalRope("The new protection distance is invalid."); return false; }
         var fixedBefore = _localRouteFixedLength;
         var releasedBefore = _ropeControl.Released;
-        var fixedAfter = LocalStationStatus.Value.FixedLength;
+        var fixedAfter = _stationRoute.Value.FixedLength;
         if (!_ropeControl.TryRebindRoute(fixedBefore, fixedAfter, available, distance))
         { EndLocalRope("The paid-out rope cannot cover the new protection with the current brake/capacity. Release and feed before clipping farther."); return false; }
         BindTopology(snapshot);
         _localObiRope = Id(_rope.ropeParts[_rope.ropeParts.Count - 1].obiRope);
-        _measuredRopeCapacity = snapshot.Available;
-        _restLength = float.NaN; _particleLength = 0;
+        _restLength = float.NaN;
         _localRoutePending = false;
         _lastValidTopology = Now;
-        _nextRopeSample = Now;
         if (_localRouteRebinds < uint.MaxValue) _localRouteRebinds++;
         RememberLocalRoute();
         ModLog.Info("[BelayRope] Route rebound; revision=" + _topology.Revision + ", maintenance=" + restoring
@@ -172,13 +170,6 @@ internal sealed partial class ManualBelayAdapter
         return true;
     }
 
-    private void RenewLocalIntent()
-    {
-        if (!_localExercise || _control == null || _stopping || Now < _nextLocalIntent) return;
-        _nextLocalIntent = Now + .5;
-        if (_localSequence == uint.MaxValue) { Stop(_lease.Session, "The local brake-command sequence was exhausted."); return; }
-        SetBrake(_lease.Session, ++_localSequence, _control.Braked);
-    }
 
     private void ObserveLocalRouteChange(BelayTopologySnapshot snapshot)
     {

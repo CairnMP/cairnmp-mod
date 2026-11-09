@@ -35,7 +35,7 @@ internal sealed partial class ManualBelayAdapter
         points = null;
         try
         {
-            if (_lease?.Session != session || _control == null || _stopping || _localExercise || !_partnerStation.HasValue
+            if (_lease?.Session != session || _control == null || _stopping || !_partnerStation.HasValue
                 || _localRoutePending || _rebinding || !ContextValid || !MappingMatches())
                 return NoRopeVisual("Waiting for active control and a stable native protection route.");
             if (!TryReadPartnerRoute(out _, out var routeReason)) return NoRopeVisual(routeReason);

@@ -12,52 +12,18 @@ All notable CairnMP changes are documented here. Releases follow
 ## Unreleased
 
 ### Added
-- Experimental anchored role exchange in the active Belay Team panel: the current
-  climber proposes a new personal-anchor station, the belayer accepts, and both
-  endpoints prepare before the host replaces the control session with reversed
-  roles and a closed brake. Cancellation keeps the original roles; native
-  two-client exchange is still pending validation.
-- Visual-only replication of the climber's native rope shape to the active
-  belayer, preserving protection junctions within a bounded sampling budget.
-  Stale/session-ended drawings are cleared independently of physical control.
-- Initial partner-station attachment: invitations identify the exact synchronized
-  piton by its placer and source id. A climber with a separate personal backup
-  requests one native quickdraw insertion, retains the original route and waits
-  for five observed seconds of loaded pin/route confirmation before rope control.
-  Position-only reload identities are refused. Native two-client validation is
-  pending; this does not add protected role transfer.
-- Dedicated **Belay Team** mode: an anchored player requests brake/release on a
-  consenting climber's existing protection route. Host-accepted intent and
-  climber-applied suspension telemetry are separate; expired input cannot reopen
-  payout. Native two-client and shared station-routing validation remain pending.
-- Partner-belay panel on L, with requests from either role, explicit acceptance,
-  decline/cancel, brake and end actions. Multiple native protection segments can
-  rebind while unloaded after a settling interval. Added a solo route exercise and
-  a geometric planner for the intended shared station/protection/climber path;
-  neither establishes native shared routing or two-client physics validation.
-- Belay Team isolates partner belay from the existing direct harness tether.
-  Empty partner lists do not query native anchor readiness. The partner panel
-  uses explicit GUI rectangles and records opening/drawing stages while its
-  native crash investigation and validation continue.
+
+- Experimental Belay Team: an anchored partner feeds, takes in and brakes the
+  climber's native protection rope, with explicit consent, synchronized stations,
+  native backup confirmation, protection updates and a remote rope drawing.
 
 ### Changed
-- The experimental build now includes upstream 2.4.3's Story-launch preset fix,
-  menu-label and harness-rope initialization/rendering fixes. Belay Team retains its independent
-  station-rope controller and protocol 26; public protocol-16 builds cannot join.
-- Pause, cutscene and focus loss explicitly end partner belay. Automatic pair
-  suspension/resume remains future work. The two-minute diagnostic limit now
-  applies only to solo exercises; partner control still requires a fresh lease.
-- Development protocol is now **26**. Belay commands/events add an explicit role
-  transaction id; requests are 118 bytes and events 126 bytes. Piton snapshots
-  retain the placer's source id and belay messages carry that piton's owner/source
-  identity and the climber's rope capacity. Every peer needs
-  the same experimental build; public 2.4.1/2.4.2/2.4.3 protocol-16 builds and earlier development
-  pilots cannot join.
 
-### Fixed
-- An unloaded native recovery of pitons before the active belay station can retain
-  control when the full protected holder/segment/pin suffix remains unchanged.
-  Downstream or loaded topology changes still refuse rebinding.
+- Preserve each piton's placer-local source ID separately from the host-assigned
+  ID. Owner/source references reject ambiguous or position-only reload matches.
+- Protocol 18 adds the anchored Belay Team core to protocol 17's exact piton
+  references. Every lobby member must update together. Role exchange, automatic
+  resume, dialogue queuing and shared fall damage are separate extensions.
 
 ## Releases
 

@@ -16,7 +16,6 @@ internal sealed class FrameRateMonitor
     private const int Capacity = 2048;
 
     private readonly double[] _frameMs = new double[Capacity];
-    private readonly double[] _sortedFrameMs = new double[Capacity];
     private int _count;
     private bool _wrapped;
 
@@ -24,9 +23,9 @@ internal sealed class FrameRateMonitor
 
     internal void Add(double deltaSeconds)
     {
-        // Keep long gaps visible: a loading interval or stall must not silently
-        // disappear from the same report used to judge frame pacing.
-        if (!double.IsFinite(deltaSeconds) || deltaSeconds <= 0) return;
+        // A zero or negative delta is not a frame, and a huge one is a load screen rather than
+        // a stutter worth reporting.
+        if (!double.IsFinite(deltaSeconds) || deltaSeconds <= 0 || deltaSeconds > 5) return;
 
         _frameMs[_count % Capacity] = deltaSeconds * 1000;
         _count++;
@@ -68,12 +67,13 @@ internal sealed class FrameRateMonitor
             var n = SampleCount;
             if (n == 0) return 0;
 
-            Array.Copy(_frameMs, _sortedFrameMs, n);
-            Array.Sort(_sortedFrameMs, 0, n);
+            var sorted = new double[n];
+            Array.Copy(_frameMs, sorted, n);
+            Array.Sort(sorted);
 
             var slowest = Math.Max(1, n / 100);
             var total = 0d;
-            for (var i = n - slowest; i < n; i++) total += _sortedFrameMs[i];
+            for (var i = n - slowest; i < n; i++) total += sorted[i];
 
             var meanMs = total / slowest;
             return meanMs <= 0 ? 0 : 1000 / meanMs;

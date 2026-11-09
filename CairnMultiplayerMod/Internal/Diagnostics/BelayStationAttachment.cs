@@ -1,8 +1,13 @@
 using System;
 using System.Collections.Generic;
-using CairnMultiplayerMod.GameApi;
 
 namespace CairnMultiplayerMod.Internal.Diagnostics;
+
+internal enum BelayStationAttachmentFailure
+{
+    None, Setup, Context, BackupLost, StationLost, RouteChanged, Timeout, NativeRejected,
+    StationRequired, BackupRequired, RouteNotReady, NativePartsNotReady, NativePinsMismatch
+}
 
 internal enum BelayStationAttachmentStage { Connecting, Confirming, Ready, Failed }
 
@@ -21,7 +26,7 @@ internal sealed class BelayStationAttachment
     private double _last, _candidateSince, _confirmedSince;
     private BelayTopologySnapshot _candidate;
     internal BelayStationAttachmentStage Stage { get; private set; }
-    internal StationConnectionFailure Failure { get; private set; }
+    internal BelayStationAttachmentFailure Failure { get; private set; }
 
     internal BelayStationAttachment(BelayTopologySnapshot before, IReadOnlyList<long> order,
         long station, long stationHolder, double now, long robotHolder = 0)
@@ -51,20 +56,20 @@ internal sealed class BelayStationAttachment
     internal void Observe(BelayTopologySnapshot snapshot, IReadOnlyList<long> order, bool pinsReady, double now)
     {
         if (Stage == BelayStationAttachmentStage.Failed) return;
-        if (!double.IsFinite(now) || now < _last) { Fail(StationConnectionFailure.Context); return; }
+        if (!double.IsFinite(now) || now < _last) { Fail(BelayStationAttachmentFailure.Context); return; }
         var gap = now - _last; _last = now;
         if (Stage == BelayStationAttachmentStage.Ready)
         {
             if (!pinsReady || snapshot?.IsValid != true || !_candidate.Matches(snapshot)
-                || !KnownOrder(order, out _)) Fail(StationConnectionFailure.RouteChanged);
+                || !KnownOrder(order, out _)) Fail(BelayStationAttachmentFailure.RouteChanged);
             return;
         }
         if (now - _started > MaximumSeconds || (Stage == BelayStationAttachmentStage.Connecting && now - _started > TransitionSeconds))
-        { Fail(StationConnectionFailure.Timeout); return; }
+        { Fail(BelayStationAttachmentFailure.Timeout); return; }
         if (snapshot?.IsValid != true) { ResetConfirmation(); return; }
         if (snapshot.Rope != _before.Rope || !KnownOrder(order, out var terminal)
             || snapshot.LastPiton != (terminal ? _station : _before.LastPiton))
-        { Fail(StationConnectionFailure.RouteChanged); return; }
+        { Fail(BelayStationAttachmentFailure.RouteChanged); return; }
         var connected = order.Count == _order.Length + 1 && snapshot.ProtectionCount == _before.ProtectionCount + 1
             && snapshot.Parts.Length == _before.Parts.Length + 1 && OriginalHoldersRetained(snapshot.Holders)
             && (!terminal || TerminalRouteMatches(snapshot)) && pinsReady;
@@ -77,7 +82,7 @@ internal sealed class BelayStationAttachment
         if (now - _confirmedSince >= ConfirmationSeconds) Stage = BelayStationAttachmentStage.Ready;
     }
 
-    internal void Fail(StationConnectionFailure failure)
+    internal void Fail(BelayStationAttachmentFailure failure)
     {
         if (Stage == BelayStationAttachmentStage.Failed) return;
         Failure = failure; Stage = BelayStationAttachmentStage.Failed; _candidate = null;
@@ -129,5 +134,20 @@ internal sealed class BelayStationAttachment
         }
         while (old < _before.Holders.Length && _before.Holders[old] == _robotHolder) old++;
         return stationOccurrences == 1 && robotOccurrences == _robotOccurrences && old == _before.Holders.Length;
+    }
+    internal static bool PinsAgree(long stationCollider, long backupCollider,
+        IReadOnlyList<long> colliders, bool stationAttached)
+    {
+        if (stationCollider == 0 || backupCollider == 0 || stationCollider == backupCollider
+            || colliders == null || colliders.Count > 128) return false;
+        var stationPins = 0; var backupPins = 0;
+        foreach (var collider in colliders)
+        {
+            if (collider == stationCollider) stationPins++;
+            if (collider == backupCollider) backupPins++;
+        }
+        // Adjacent native rope parts both pin to a quickdraw's GetAttachEnd().
+        // One occurrence is an incomplete split, not a confirmed connection.
+        return backupPins >= 2 && (stationAttached ? stationPins >= 2 : stationPins == 0);
     }
 }

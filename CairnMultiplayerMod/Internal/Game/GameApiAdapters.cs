@@ -273,7 +273,7 @@ internal sealed class PlayersAdapter : IPlayersApi
             if (_state.LocalPlayerState != PlayerState.InGame
                 || !LocalPlayerInterop.TryGetPose(out var position, out _)) return false;
             location = new PlayerLocation(position.x, position.y, position.z,
-                NetworkSceneInterop.Resolve(_state),
+                SceneRoles.ResolveNetworkScene(_state.CurrentScene, _state.LastGameplayScene),
                 _state.LocalPlayerState);
             return true;
         }

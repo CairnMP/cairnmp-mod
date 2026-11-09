@@ -10,36 +10,20 @@ internal sealed partial class ManualBelayAdapter
 {
     private BelayRopeControl _ropeControl;
     private long _localObiRope;
-    private float _restLength, _particleLength;
-    private double _nextRopeSample;
-    private string _localRopeNotice;
+    private float _restLength;
+    private string _controlNotice;
     private ObiRopeLengthController _localLengthController;
-    private float _lastLocalRopeGoal = float.NaN, _measuredRopeCapacity;
-    private uint _ropeRefreshCount;
-    private static bool LocalExerciseEnabled => ModConfig.BelayRouteExperiment?.Value == true
-        || ModConfig.BelayRopeExperiment?.Value == true;
+    private float _lastLocalRopeGoal = float.NaN;
+    public string ControlNotice => _controlNotice;
 
-    public string LocalExerciseNotice => _localRopeNotice;
-    public LocalBelayRopeStatus? LocalRopeStatus => _ropeControl == null || _localRoutePending ? null
-        : new(_ropeControl.Capacity, _ropeControl.Released, _ropeControl.Distance,
-            _ropeControl.Slack, _ropeControl.Reserve, _restLength, _particleLength,
-            _ropeControl.Motion, _ropeControl.Braked,
-            float.IsFinite(_restLength) && Math.Abs(_restLength - _ropeControl.Released) <= .05f);
-
-    public void SetLocalRopeMotion(int motion)
-    {
-        if (_ropeControl == null || !IsLocalExercise || _stopping || _localRoutePending) return;
-        if (!_ropeControl.TrySetMotion(motion)) return;
-    }
-
-    private bool TryPrepareLocalRope(Lifeline lifeline, BelayTopologySnapshot route, bool local,
+    private bool TryPrepareRope(Lifeline lifeline, BelayTopologySnapshot route,
         out BelayRopeControl control, out string reason)
     {
         control = null;
-        reason = "";
-        if (local ? ModConfig.BelayRopeExperiment?.Value != true : !_partnerStation.HasValue) return true;
+        reason = "An agreed partner station is required before acquiring rope control.";
+        if (!_partnerStation.HasValue) return false;
         if (!TryMeasureLocalStation(lifeline, route.Available, out var available, out reason)) return false;
-        reason = "Start the rope-budget exercise while stable on the wall, before a fall.";
+        reason = "Start belay while stable on the wall, before a fall.";
         if (lifeline.pawn.IsFalling || lifeline.SwingHasPivotAndExtremity()) return false;
         if (!TryReadRopeDistance(lifeline, out var distance)) { reason = "The piton-to-harness distance is not ready."; return false; }
         var parts = lifeline.securingRope.ropeParts;
@@ -60,13 +44,37 @@ internal sealed partial class ManualBelayAdapter
     private bool ObserveLocalRopeCapacity(float available)
     {
         if (_ropeControl == null) return true;
-        _measuredRopeCapacity = available;
         if (!TryMeasureLocalStation(_lifeline, available, out available, out var reason))
         { EndLocalRope(reason); return false; }
         if (_ropeControl.TryObserveCapacity(available))
-        { if (!_localRoutePending) RememberLocalRoute(); return true; }
+        {
+            if (!_localRoutePending)
+            {
+                RememberLocalRoute();
+                RefreshRopeReadback();
+            }
+            return true;
+        }
         EndLocalRope("The available rope no longer covers the paid-out segment. Check protection before restarting.");
         return false;
+    }
+
+    private void RefreshRopeReadback()
+    {
+        if (_ropeControl == null || _stopping || _localRoutePending || _rebinding) return;
+        _restLength = float.NaN;
+        if (!RopeIdentityValid()) return;
+        var snapshot = _topology?.Current;
+        var parts = _rope.ropeParts;
+        if (snapshot == null || parts == null || parts.Count < 2 || parts.Count > 64
+            || parts.Count != snapshot.Parts.Length) return;
+        var final = parts[parts.Count - 1];
+        var native = final?.obiRope;
+        if (Id(final) != snapshot.Parts[snapshot.Parts.Length - 1]
+            || native == null || Id(native) != _localObiRope || !native.isLoaded) return;
+        // Confirmation must not depend on a length setter running while the
+        // climber is personally anchored. Read only the current owned segment.
+        _restLength = native.restLength;
     }
 
     private bool StepLocalRope(float elapsed, bool suspended, float swingReal = 0)
@@ -95,7 +103,7 @@ internal sealed partial class ManualBelayAdapter
 
     private void RefreshRemoteRopeMotion()
     {
-        if (_ropeControl == null || _localExercise || !_partnerStation.HasValue) return;
+        if (_ropeControl == null || !_partnerStation.HasValue) return;
         var motion = _lease.MotionAt(Now);
         if (_localRoutePending || (_ropeControl.Braked && motion > 0)) motion = 0;
         _ropeControl.TrySetMotion(motion);
@@ -176,7 +184,6 @@ internal sealed partial class ManualBelayAdapter
             owner._localLengthController = __instance;
             owner._lastLocalRopeGoal = owner._ropeControl.Released;
             __instance.ropeLength = owner._lastLocalRopeGoal;
-            if (owner._ropeRefreshCount < uint.MaxValue) owner._ropeRefreshCount++;
         }
         catch (Exception ex) { owner.Fail(ex); }
     }
@@ -205,45 +212,15 @@ internal sealed partial class ManualBelayAdapter
             if (float.IsFinite(current) && current > 0 && current <= 200) controller.ropeLength = current;
         }
         catch (Exception ex) { ModLog.Warning("[BelayRope] Could not release native length goal: " + ex.Message); }
-        finally { _localLengthController = null; _lastLocalRopeGoal = float.NaN; _ropeRefreshCount = 0; }
+        finally { _localLengthController = null; _lastLocalRopeGoal = float.NaN; }
     }
 
-    private void SampleLocalRope()
-    {
-        if (_localRoutePending || Now < _nextRopeSample) return;
-        _nextRopeSample = Now + .5;
-        var part = _rope.ropeParts[_rope.ropeParts.Count - 1];
-        _restLength = part.obiRope.restLength;
-        _particleLength = _rope.GetLength(true, true);
-        var stretchScale = part.obiRope.stretchingScale;
-        var compression = part.obiRope.maxCompression;
-        var body = _lifeline.harness.GetAttachPosition();
-        var anchor = _lifeline.GetSecuringPitonPosition(true);
-        ModLog.Info("[BelayRope] Sample; brake=" + _ropeControl.Braked + ", motion=" + _ropeControl.Motion
-            + ", catchPending=" + _ropeControl.CaptureBrakeDistance
-            + ", released=" + _ropeControl.Released + ", geometry=" + _ropeControl.Distance
-            + ", slack=" + _ropeControl.Slack + ", reserve=" + _ropeControl.Reserve
-            + ", rest=" + _restLength + ", particles=" + _particleLength
-            + ", stretchScale=" + stretchScale + ", maxCompression=" + compression
-            + ", capacity=" + _ropeControl.Capacity + ", measuredCapacity=" + _measuredRopeCapacity + ", refreshes=" + _ropeRefreshCount
-            + ", rebinds=" + _localRouteRebinds + ", topologyRevision=" + _topology.Revision
-            + ", climbQueries=" + _climbLimitQueries + ", climbBlocks=" + _climbLimitBlocks + ", climbBlocked=" + _climbMovementBlocked
-            + ", limit=" + _actual + ", swingReal=" + _real + ", suspended=" + (_pivot != 0)
-            + ", x=" + body.x + ", y=" + body.y + ", z=" + body.z
-            + ", anchorX=" + anchor.x + ", anchorY=" + anchor.y + ", anchorZ=" + anchor.z);
-        if (LocalStationStatus.HasValue)
-        {
-            var station = LocalStationStatus.Value;
-            ModLog.Info("[BelayStation] Sample; valid=" + station.Valid + ", fixed=" + station.FixedLength
-                + ", finalCapacity=" + station.AvailableToClimber + ", protections=" + station.IntermediateProtections);
-        }
-    }
 
     private void EndLocalRope(string reason)
     {
         if (_control == null || _lease == null) return;
         LogRouteContext(reason);
-        _localRopeNotice = reason;
+        _controlNotice = reason;
         ModLog.Info("[BelayRope] Ended; " + reason);
         Stop(_lease.Session, reason);
     }

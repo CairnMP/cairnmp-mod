@@ -19,13 +19,6 @@ internal static class ModConfig
 
     public static MelonPreferences_Entry<bool> VerboseLogging;
     public static MelonPreferences_Entry<bool> PerformanceDiagnostics;
-    public static MelonPreferences_Entry<string> PerformanceHudLanguage;
-    public static MelonPreferences_Entry<bool> BelayRouteExperiment;
-    public static MelonPreferences_Entry<bool> BelayRopeExperiment;
-    public static MelonPreferences_Entry<bool> BelaySharedDamageExperiment;
-    public static MelonPreferences_Entry<bool> BelayStationConnectionExperiment;
-    public static MelonPreferences_Entry<bool> BelayAppendGuide;
-    public static MelonPreferences_Entry<string> BelayAppendGuideLanguage;
     public static MelonPreferences_Entry<bool> NativeProfiling;
     public static MelonPreferences_Entry<int> JobWorkerCount;
     public static MelonPreferences_Entry<string> PerformanceScenario;
@@ -46,14 +39,6 @@ internal static class ModConfig
         var debug = MelonPreferences.CreateCategory(CategoryDebug);
         VerboseLogging = debug.CreateEntry("VerboseLogging", false);
         PerformanceDiagnostics = debug.CreateEntry("PerformanceDiagnostics", false);
-        PerformanceHudLanguage = debug.CreateEntry("PerformanceHudLanguage", "en");
-        // Independent solo route exercise; partner belay is selected through the lobby mode.
-        BelayRouteExperiment = debug.CreateEntry("BelayRouteExperiment", false);
-        BelayRopeExperiment = debug.CreateEntry("BelayRopeExperiment", false);
-        BelaySharedDamageExperiment = debug.CreateEntry("BelaySharedDamageExperiment", false);
-        BelayStationConnectionExperiment = debug.CreateEntry("BelayStationConnectionExperiment", false);
-        BelayAppendGuide = debug.CreateEntry("BelayAppendGuide", false);
-        BelayAppendGuideLanguage = debug.CreateEntry("BelayAppendGuideLanguage", "en");
         // Times the native methods flagged by the reverse-engineering audit. Adds Harmony
         // hooks to per-frame game code, so it stays off unless someone is measuring.
         NativeProfiling = debug.CreateEntry("NativeProfiling", false);

@@ -322,7 +322,7 @@ public sealed partial class ManualBelayFeatureTests
         world.Time += 3.1f;
         world.Tick();
         Assert.False(world.Nodes[2].Game.BelayImpl.Active);
-        Assert.Equal(ManualBelayPhase.Interrupted, world.Messages.Last().Phase);
+        Assert.Equal(ManualBelayPhase.Ended, world.Messages.Last().Phase);
         Assert.False(world.Execute(1, new() { Operation = ManualBelayOperation.Intent, Session = id, Sequence = 999 }).Committed);
     }
 
@@ -475,7 +475,7 @@ public sealed partial class ManualBelayFeatureTests
         Assert.Equal(7u, decoded.AppliedSequence);
         Assert.Equal(1.5f, decoded.Limit);
         Assert.Equal(1.4f, decoded.RealDistance);
-        Assert.Equal(134, Bytes(request).Length);
+        Assert.Equal(102, Bytes(request).Length);
         Assert.Equal(40, decoded.RopeCapacity);
         Assert.Equal(request.Station, decoded.Station);
         Assert.Equal(-1, decoded.Motion);
@@ -493,7 +493,7 @@ public sealed partial class ManualBelayFeatureTests
         Assert.Equal(2, eventCopy.Climber);
         Assert.Equal(7u, eventCopy.AppliedSequence);
         Assert.True(eventCopy.Braked);
-        Assert.Equal(142, Bytes(message).Length);
+        Assert.Equal(110, Bytes(message).Length);
         Assert.Equal(40, eventCopy.RopeCapacity);
         Assert.Equal(message.Station, eventCopy.Station);
         Assert.Equal(-1, eventCopy.Motion);
@@ -776,14 +776,10 @@ public sealed partial class ManualBelayFeatureTests
         internal readonly Dictionary<int, Node> Nodes = new();
         internal readonly Dictionary<int, PlayerLocation> Locations = new();
         internal readonly List<ServerExtensionEvent> Events = new();
-        internal readonly List<ClientExtensionCommand> SentBelayCommands = new();
         internal IEnumerable<ManualBelayMessage> Messages => Events.Where(e => e.EventId == "manual-belay.changed").Select(Decode);
         internal readonly List<string> Failures = new();
         internal bool DeferCommands;
         internal int DroppedEventRecipient = -1;
-        internal int DeferredEventRecipient = -1;
-        internal ManualBelayPhase DeferredPhase;
-        internal readonly Queue<(int Recipient, ServerExtensionEvent Packet)> DeferredEvents = new();
         internal readonly Queue<(int Sender, ClientExtensionCommand Packet)> Pending = new();
         internal World(int participants = 3)
         {
@@ -808,10 +804,6 @@ public sealed partial class ManualBelayFeatureTests
         internal void FlushCommands()
         {
             while (Pending.TryDequeue(out var item)) Deliver(item.Sender, item.Packet);
-        }
-        internal void FlushEvents()
-        {
-            while (DeferredEvents.TryDequeue(out var item)) Nodes[item.Recipient].Runtime.ApplyEvent(item.Packet);
         }
         public void Dispose() { foreach (var node in Nodes.Values) node.Host.Dispose(); }
     }
@@ -840,7 +832,6 @@ public sealed partial class ManualBelayFeatureTests
         public bool IsExtensionEnabled(string extensionId, int playerId) => _world.Nodes.ContainsKey(playerId);
         public void SendCommand(ClientExtensionCommand command)
         {
-            if (command.CommandId == "manual-belay.request") _world.SentBelayCommands.Add(command);
             if (_world.DeferCommands) _world.Pending.Enqueue((LocalPlayerId, command));
             else _world.Deliver(LocalPlayerId, command);
         }
@@ -851,9 +842,7 @@ public sealed partial class ManualBelayFeatureTests
             foreach (var (id, node) in _world.Nodes)
             {
                 if (id == 1 || id == _world.DroppedEventRecipient) continue;
-                if (id == _world.DeferredEventRecipient && message.EventId == "manual-belay.changed"
-                    && Decode(message).Phase == _world.DeferredPhase) _world.DeferredEvents.Enqueue((id, message));
-                else node.Runtime.ApplyEvent(message);
+                node.Runtime.ApplyEvent(message);
             }
         }
         public void BroadcastState(ServerExtensionState state, string extensionId) { }
@@ -915,55 +904,6 @@ public sealed partial class ManualBelayFeatureTests
     }
     private sealed class Belay : IManualBelayApi
     {
-        public bool SharedDamageEnabled { get; set; }
-        internal bool RecoveryAlive = true, ResumeStationReady = true, ResumeClimberReady = true;
-        internal Guid RetainedPatchSession;
-        internal readonly List<string> RecoveryPatchCalls = new();
-        public void RetainRecoveryPatches(Guid session)
-        { RetainedPatchSession = session; RecoveryPatchCalls.Add("retain:" + session); }
-        public void ReleaseRecoveryPatches()
-        { RetainedPatchSession = Guid.Empty; RecoveryPatchCalls.Add("release"); }
-        public bool RecoveryCharacterAlive => RecoveryAlive;
-        public bool TryResumeStation(BelaySharedStation station, out string reason)
-        {
-            reason = "The same personally anchored station is not ready.";
-            if (!RecoveryAlive || !ResumeStationReady || !Anchored || !SharedStationReady || !KnownStation || StationReference != station) return false;
-            StationRecorded = true; return true;
-        }
-        public bool CanResumeClimber(BelaySharedStation station, out string reason)
-        {
-            reason = "The existing station-to-climber route is not ready.";
-            return RecoveryAlive && ResumeClimberReady && !Active && CanBegin && ProtectionReady
-                && KnownStation && SharedStationReady && BoundStation == station;
-        }
-        public bool BeginResumedClimber(Guid session, BelaySharedStation station, out string reason)
-        {
-            if (!CanResumeClimber(station, out reason) || !BeginClimber(session, out reason)) return false;
-            BoundStation = station; Sequence = 0; LastBrake = true; Rope.SetBrake(true); Rope.TrySetMotion(0);
-            _inputLease = new BelayInputLease(session, Clock(), true);
-            return true;
-        }
-        internal PartnerFallObservation? PartnerFall;
-        internal readonly List<PartnerDamageRequest> DamageRequests = new();
-        internal int NativeDamageCalls;
-        internal float Hp = 100, MaxHp = 100, DamageScale = 1;
-        internal bool DamageCompletes = true, DamageThrows, InvalidDamageReadback;
-        internal Action<PartnerDamageRequest> DuringDamage;
-        public PartnerFallObservation? PollPartnerFall(Guid session)
-            => PartnerFall?.Session == session ? PartnerFall : null;
-        public PartnerDamageResult ApplyPartnerDamage(PartnerDamageRequest request)
-        {
-            DamageRequests.Add(request);
-            if (PartnerFall?.Session == request.Session && PartnerFall?.Fall == request.Fall) PartnerFall = null;
-            DuringDamage?.Invoke(request);
-            if (DamageThrows) throw new InvalidOperationException("Native test failure.");
-            var before = Hp;
-            if (DamageCompletes && request.Fraction > 0)
-            { NativeDamageCalls++; Hp = Math.Max(0, Hp - request.Fraction * MaxHp * DamageScale); }
-            return new(request.Fraction > 0, DamageCompletes, request.Fraction,
-                InvalidDamageReadback ? float.NaN : (before - Hp) / MaxHp, before,
-                InvalidDamageReadback ? float.NaN : Hp, "Native test result.");
-        }
         internal WorldPosition[] Visual;
         internal int VisualCalls;
         public void ShowRopeVisual(Guid session, int climber, uint revision, WorldPosition[] points)
@@ -985,49 +925,6 @@ public sealed partial class ManualBelayFeatureTests
         internal int KnownStationChecks;
         internal WorldPosition StationPosition;
         internal BelaySharedStation BoundStation;
-        internal bool RolePreparationReady = true, RolePreparationFailed, RoleCommitFailed;
-        internal int RolePrepareCalls, RoleCommitCalls, RoleStationPrepareCalls;
-        private BelaySharedStation _roleCandidate;
-        private Guid _roleSession;
-        public bool CanPrepareRoleStation(Guid session, out string reason)
-        { reason = "Remain anchored"; return Active && Anchored && _session == session; }
-        public bool PrepareRoleStation(Guid session, out BelaySharedStation station, out string reason)
-        {
-            RoleStationPrepareCalls++;
-            station = default;
-            if (!CanPrepareRoleStation(session, out reason)) return false;
-            _roleSession = session;
-            station = _roleCandidate = new(Guid.NewGuid(), StationPosition, StationOwner, 7);
-            return true;
-        }
-        public bool RoleStationValid(Guid session, BelaySharedStation station)
-            => Active && Anchored && _roleSession == session && station == _roleCandidate;
-        public bool CanReceiveRoleSwap(Guid session, BelaySharedStation station, out string reason)
-        { reason = "Keep original station"; return StationValid && ProtectedSession == session && station.IsValid && SharedStationReady; }
-        public BelayRolePreparation PrepareRoleClimber(Guid session, Guid next, BelaySharedStation station, out string reason)
-        {
-            RolePrepareCalls++;
-            if (!CanReceiveRoleSwap(session, station, out reason) || RolePreparationFailed) return BelayRolePreparation.Failed;
-            return RolePreparationReady ? BelayRolePreparation.Ready : BelayRolePreparation.Preparing;
-        }
-        public bool CommitRoleSwap(Guid session, Guid next, BelaySharedStation station, bool becomeBelayer, out string reason)
-        {
-            RoleCommitCalls++; reason = "Native role commit refused";
-            if (RoleCommitFailed || !Anchored) return false;
-            if (becomeBelayer)
-            {
-                if (!RoleStationValid(session, station)) return false;
-                Stop(session); StationRecorded = true; StationId = station.Id; StationPosition = station.Position;
-                ProtectedSession = next; return true;
-            }
-            if (!CanReceiveRoleSwap(session, station, out reason) || !RolePreparationReady) return false;
-            EndStation(); BoundStation = station;
-            if (!BeginClimber(next, out reason)) return false;
-            Sequence = 0; LastBrake = true; Rope.SetBrake(true);
-            _inputLease = new BelayInputLease(next, Clock(), true);
-            return true;
-        }
-        public void CancelRoleSwap() { _roleCandidate = default; _roleSession = Guid.Empty; }
         internal Func<double> Clock = () => 0;
         internal BelayRopeControl Rope;
         internal bool CanApplyInput = true, SuppressRopeReadback;
@@ -1050,7 +947,8 @@ public sealed partial class ManualBelayFeatureTests
         { StationDefineCalls++; reason = "Need station"; if (Anchored && !StationRecorded) StationId = Guid.NewGuid(); return StationRecorded = Anchored; }
         public bool TryGetStation(out BelaySharedStation station) { station = StationReference; return StationValid; }
         public bool ProtectStation(Guid session) { ProtectedSession = session; return StationValid; }
-        public void EndStation() { StationRecorded = false; ProtectedSession = Guid.Empty; }
+        internal int StationEndCalls;
+        public void EndStation() { StationEndCalls++; StationRecorded = false; ProtectedSession = Guid.Empty; }
         public bool BeginClimber(Guid id, out string reason)
         {
             BeginCalls++; reason = "No native rope"; _session = id;

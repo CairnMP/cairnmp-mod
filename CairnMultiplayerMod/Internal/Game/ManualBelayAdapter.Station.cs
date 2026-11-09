@@ -15,52 +15,16 @@ internal sealed partial class ManualBelayAdapter
     private uint _localStationId;
     private double _nextStationProtectionLog;
     private BelayProtectionPoint[] _measuredStationProtections;
-    public LocalBelayStationStatus? LocalStationStatus { get; private set; }
+    private readonly record struct StationRouteStatus(bool Valid, float FixedLength,
+        float AvailableToClimber, int IntermediateProtections);
+    private StationRouteStatus? _stationRoute;
 
-    public bool ToggleLocalStation(out string reason)
-    {
-        reason = "Enable the local rope-budget exercise first.";
-        if (ModConfig.BelayRopeExperiment?.Value != true) return false;
-        reason = "End the current rope exercise before changing its station.";
-        if (_control != null || _attachment != null || _stationLifeline != null || ConnectionActive) return false;
-        ClearStationConnection();
-        if (_localStation != null)
-        {
-            ClearLocalStation();
-            reason = "Local station cleared. The ordinary rope-budget exercise is available.";
-            ModLog.Info("[BelayStation] Cleared by local input.");
-            return true;
-        }
-        if (!TryGetActiveContext(out reason)) return false;
-        reason = "Disconnect the cooperative harness rope before recording a station.";
-        if (Roping.RopeInterop.IsNativeBelayEngaged) return false;
-        var lifeline = LocalLifeline();
-        var piton = PersonalAnchor(lifeline);
-        reason = "Anchor yourself on a healthy piton before recording the station.";
-        if (piton == null || piton.pitonHp <= 0 || lifeline.harness == null || lifeline.pawn == null
-            || lifeline.pawn.IsFalling || lifeline.SwingHasPivotAndExtremity()
-            || Vector3.Distance(lifeline.harness.GetAttachPosition(), piton.transform.position) > 1.5f) return false;
-        var rope = lifeline.securingRope;
-        reason = "Wait for the native protection rope to initialize.";
-        if (rope == null || !rope.IsInitialized) return false;
-        var position = piton.transform.position;
-        _localStation = new BelayStationAnchor(Id(lifeline), Id(rope), Id(piton), ToNumerics(position));
-        _localStationPiton = piton;
-        _localStationId = unchecked((uint)piton.GetInstanceID());
-        if (!TryMeasureLocalStation(lifeline, rope.GetRemainingSlackMeters(false), out _, out reason))
-        { ClearLocalStation(); return false; }
-        reason = "Station recorded on a real piton. Release your personal anchor, keep this piton connected, then Ctrl+F11 starts the local rehearsal.";
-        ModLog.Info("[BelayStation] Captured; fixed=" + LocalStationStatus.Value.FixedLength
-            + ", finalCapacity=" + LocalStationStatus.Value.AvailableToClimber
-            + ", protections=" + LocalStationStatus.Value.IntermediateProtections);
-        return true;
-    }
 
     private bool LocalStationMatches(Lifeline lifeline, out string reason)
     {
         reason = "";
         if (_localStation == null) return true;
-        reason = "The recorded station was lost, moved, broken or replaced. End the exercise and record a new station.";
+        reason = "The recorded station was lost, moved, broken or replaced. End belay and define a new station.";
         return lifeline != null && lifeline.securingRope != null && _localStationPiton != null
             && _localStation.Matches(Id(lifeline), Id(lifeline.securingRope), Id(_localStationPiton),
                 _localStationPiton.pitonHp, ToNumerics(_localStationPiton.transform.position));
@@ -69,8 +33,6 @@ internal sealed partial class ManualBelayAdapter
     private bool ProtectsNativeStation(Lifeline lifeline, Piton piton)
     {
         if (lifeline == null || piton == null) return false;
-        if (_roleAnchor != null && Id(lifeline) == Id(_roleLifeline) && Id(piton) == Id(_rolePiton)
-            && RoleStationValid(_roleOldSession, _roleStation)) return true;
         if (_stationSession != Guid.Empty && Id(lifeline) == Id(_stationLifeline)
             && Id(piton) == _stationPiton) return StationValid;
         return _control != null && !_stopping && _partnerStation.HasValue
@@ -129,9 +91,7 @@ internal sealed partial class ManualBelayAdapter
         if (!BelayRoutePlanner.TryPlanFromStation(_localStationId, protections,
             ToNumerics(lifeline.harness.GetAttachPosition()), rope.MaxLengthMeters, out var plan)
             || !BelayRoutePlanner.TryLimitFinalCapacity(plan, nativeAvailable, out available)) return FailLocalStation(reason);
-        LocalStationStatus = new LocalBelayStationStatus(true, plan.FixedLength, available,
-            plan.ProtectionCount, _partnerStation.HasValue ? "Partner station piton on the existing native rope."
-                : "Real station piton on the existing native rope; local input stands in for the absent belayer.");
+        _stationRoute = new StationRouteStatus(true, plan.FixedLength, available, plan.ProtectionCount);
         _measuredStationProtections = protections.ToArray();
         reason = "";
         return true;
@@ -139,7 +99,7 @@ internal sealed partial class ManualBelayAdapter
 
     private bool FailLocalStation(string reason)
     {
-        LocalStationStatus = new LocalBelayStationStatus(false, 0, 0, 0, reason);
+        _stationRoute = new StationRouteStatus(false, 0, 0, 0);
         return false;
     }
 
@@ -147,7 +107,7 @@ internal sealed partial class ManualBelayAdapter
     {
         _localStation = null; _localStationPiton = null; _localStationId = 0;
         _measuredStationProtections = null;
-        LocalStationStatus = null;
+        _stationRoute = null;
     }
 
     private static NumericsVector3 ToNumerics(Vector3 point) => new(point.x, point.y, point.z);

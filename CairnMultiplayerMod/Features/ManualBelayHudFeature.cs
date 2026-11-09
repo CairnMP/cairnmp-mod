@@ -4,10 +4,9 @@ internal sealed partial class ManualBelayFeature
 {
     private bool _roleHudReady;
 
-    private void RefreshRoleHud(bool committedSwap = false)
+    private void RefreshRoleHud()
     {
         if (_active == null) { ClearRoleHud(); return; }
-        if (committedSwap) _roleHudReady = true;
         if (!_roleHudReady)
         {
             if (_active.Climber == LocalPlayerId)

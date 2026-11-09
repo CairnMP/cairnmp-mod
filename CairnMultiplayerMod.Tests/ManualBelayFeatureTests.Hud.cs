@@ -54,51 +54,6 @@ public sealed partial class ManualBelayFeatureTests
         AssertRole(world, 2, "ESCALADOR / CLIMBER", "P1");
     }
 
-    [Fact]
-    public void ACancelledProposalOrPreparationNeverAnnouncesTheProposedRoles()
-    {
-        using var world = World.Started();
-        Advance(world, .6f);
-        world.Nodes[1].Game.BelayImpl.RolePreparationReady = false;
-        ProposeSwap(world);
-        AssertRole(world, 1, "SEGURADOR / BELAYER", "P2");
-        AssertRole(world, 2, "ESCALADOR / CLIMBER", "P1");
-        world.Nodes[1].Game.PanelImpl.Act(BelayPanelAction.AcceptSwap);
-        Advance(world, .6f);
-        Assert.DoesNotContain(world.Messages, m => m.Phase == ManualBelayPhase.SwapCommitted);
-        AssertRole(world, 1, "SEGURADOR / BELAYER", "P2");
-        AssertRole(world, 2, "ESCALADOR / CLIMBER", "P1");
-        world.Nodes[1].Game.PanelImpl.Act(BelayPanelAction.CancelSwap);
-        Advance(world, .6f);
-        AssertRole(world, 1, "SEGURADOR / BELAYER", "P2");
-        AssertRole(world, 2, "ESCALADOR / CLIMBER", "P1");
-        Assert.True(world.Nodes[2].Game.BelayImpl.Active);
-    }
-
-    [Fact]
-    public void HostCommitUpdatesBothRoleRowsBeforeAnotherFrameOrTelemetryArrives()
-    {
-        using var world = World.Started();
-        Advance(world, .6f);
-        world.Nodes[1].Game.BelayImpl.RolePreparationReady = false;
-        var offered = ProposeSwap(world);
-        world.Nodes[1].Game.PanelImpl.Act(BelayPanelAction.AcceptSwap);
-        world.Tick(); // Current climber ready; future climber still preparing.
-        Assert.DoesNotContain(world.Messages, m => m.Phase == ManualBelayPhase.SwapCommitted);
-        world.Nodes[1].Game.BelayImpl.RolePreparationReady = true;
-        var result = world.Execute(1, new ManualBelayCommand
-        {
-            Operation = ManualBelayOperation.ReadySwap,
-            Session = offered.Session, Swap = offered.Swap, Station = offered.Station
-        });
-        Assert.True(result.Committed);
-        Assert.Equal(offered.Swap, world.Last(ManualBelayPhase.SwapCommitted).Swap);
-        AssertRole(world, 1, "ESCALADOR / CLIMBER", "P2");
-        AssertRole(world, 2, "SEGURADOR / BELAYER", "P1");
-        Assert.True(world.Nodes[1].Game.BelayImpl.Active);
-        Assert.False(world.Nodes[2].Game.BelayImpl.Active);
-    }
-
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
