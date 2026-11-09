@@ -138,8 +138,8 @@ Choose **Belay Team** when creating a lobby to enable partner belay. Rope team
 keeps its original direct harness tether; Belay Team rejects that tether in input,
 host validation, received packets and late-join snapshots. Every peer
 must use the same experimental build (protocol **28**, incompatible with the
-public 2.4.1/2.4.2/2.4.3 protocol-16 builds and earlier pilots). This branch
-includes upstream 2.4.3, including its Story-launch preset correction, main-menu
+public 2.4.1/2.4.2/2.4.3/2.4.4 protocol-16 builds and earlier pilots). This branch
+includes upstream 2.4.4, including its Story-launch preset correction, main-menu
 label and harness-rope fixes. The upstream
 physics/render callbacks remain scoped to the dedicated harness rope, while
 Belay Team uses its own protection-rope controller. A missing station attachment can
