@@ -9,6 +9,15 @@ All notable CairnMP changes are documented here. Releases follow
 > even when the wire-protocol number is unchanged. Read the compatibility note
 > for the release you install.
 
+## Unreleased
+
+### Changed
+
+- Preserve each piton's placer-local source ID separately from the host-assigned
+  ID. Owner/source references reject ambiguous or position-only reload matches.
+- Protocol 17 adds `SourcePitonId` to piton snapshots; every lobby member must
+  update together. No climbing mode or save-conversion behavior is added.
+
 ## Releases
 
 | Version | Date | Channel | Highlights |
