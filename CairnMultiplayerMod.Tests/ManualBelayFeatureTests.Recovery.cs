@@ -61,6 +61,30 @@ public sealed partial class ManualBelayFeatureTests
     }
 
     [Fact]
+    public void PatchRetentionIsExplicitlyBoundToRecoveryAndReleasedAfterResumeOrEnd()
+    {
+        using var world = ConfirmedRecoveryPair();
+        var original = world.Last(ManualBelayPhase.Started);
+        InterruptRecoveryPair(world);
+        foreach (var node in world.Nodes.Values.Take(2))
+            Assert.Equal(original.Session, node.Game.BelayImpl.RetainedPatchSession);
+        world.Nodes[2].Game.Keys.Focused = true;
+        PumpRecovery(world);
+        foreach (var node in world.Nodes.Values.Take(2))
+            Assert.Equal(Guid.Empty, node.Game.BelayImpl.RetainedPatchSession);
+        var next = world.Last(ManualBelayPhase.Resumed);
+        InterruptRecoveryPair(world);
+        Assert.Equal(next.Session, world.Nodes[2].Game.BelayImpl.RetainedPatchSession);
+        world.Nodes[1].Game.ChatImpl.Run("stop");
+        PumpRecovery(world);
+        foreach (var node in world.Nodes.Values.Take(2))
+        {
+            Assert.Equal(Guid.Empty, node.Game.BelayImpl.RetainedPatchSession);
+            Assert.Equal("release", node.Game.BelayImpl.RecoveryPatchCalls.Last());
+        }
+    }
+
+    [Fact]
     public void FirstAttachmentWithoutConfirmedControlDoesNotRetainConsent()
     {
         using var world = new World();

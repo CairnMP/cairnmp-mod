@@ -917,6 +917,12 @@ public sealed partial class ManualBelayFeatureTests
     {
         public bool SharedDamageEnabled { get; set; }
         internal bool RecoveryAlive = true, ResumeStationReady = true, ResumeClimberReady = true;
+        internal Guid RetainedPatchSession;
+        internal readonly List<string> RecoveryPatchCalls = new();
+        public void RetainRecoveryPatches(Guid session)
+        { RetainedPatchSession = session; RecoveryPatchCalls.Add("retain:" + session); }
+        public void ReleaseRecoveryPatches()
+        { RetainedPatchSession = Guid.Empty; RecoveryPatchCalls.Add("release"); }
         public bool RecoveryCharacterAlive => RecoveryAlive;
         public bool TryResumeStation(BelaySharedStation station, out string reason)
         {
@@ -980,13 +986,14 @@ public sealed partial class ManualBelayFeatureTests
         internal WorldPosition StationPosition;
         internal BelaySharedStation BoundStation;
         internal bool RolePreparationReady = true, RolePreparationFailed, RoleCommitFailed;
-        internal int RolePrepareCalls, RoleCommitCalls;
+        internal int RolePrepareCalls, RoleCommitCalls, RoleStationPrepareCalls;
         private BelaySharedStation _roleCandidate;
         private Guid _roleSession;
         public bool CanPrepareRoleStation(Guid session, out string reason)
         { reason = "Remain anchored"; return Active && Anchored && _session == session; }
         public bool PrepareRoleStation(Guid session, out BelaySharedStation station, out string reason)
         {
+            RoleStationPrepareCalls++;
             station = default;
             if (!CanPrepareRoleStation(session, out reason)) return false;
             _roleSession = session;

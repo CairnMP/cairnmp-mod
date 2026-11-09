@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game.Roping;
@@ -13,6 +14,22 @@ internal sealed partial class ManualBelayAdapter
     private BelaySharedStation _recoveryStation;
     private BelayStationAnchor _recoveryStationAnchor;
     private Guid _recoverySession;
+    private long _nextRecoveryPreflightLog;
+
+    public void RetainRecoveryPatches(Guid session)
+    {
+        if ((!_installed && !_sharedDamageInstalled) || !Enabled || !RecoveryCharacterAlive)
+        { ReleaseRecoveryPatches(); return; }
+        _patchRetention.TryRetain(session, _patchScene, Now);
+    }
+
+    public void ReleaseRecoveryPatches() => _patchRetention.Release();
+
+    private bool KeepRecoveryPatches()
+    {
+        if (!Enabled || !RecoveryCharacterAlive) { ReleaseRecoveryPatches(); return false; }
+        return _patchRetention.KeepInstalled(_patchScene, Now);
+    }
 
     public bool RecoveryCharacterAlive
     {
@@ -85,19 +102,19 @@ internal sealed partial class ManualBelayAdapter
 
     public bool CanResumeClimber(BelaySharedStation station, out string reason)
     {
+        var started = Stopwatch.GetTimestamp();
+        var ready = false;
         reason = "Wait for the previous native rope control to finish releasing.";
         try
         {
             if (_stopping || _rolePreparing || _roleAnchor != null || !RecoveryCharacterAlive) return false;
-            if (!CanClimb(out reason)
-                || !TryResolveSharedStation(station, out var piton, out var attached, out reason)) return false;
+            if (!TryClimberStartSnapshot(out var lifeline, out var snapshot, out reason)
+                || !TryResolveSharedStation(station, lifeline, snapshot, out var piton, out var attached, out reason)) return false;
             reason = "The original station must already be connected to the protection rope before resuming.";
             if (!attached) return false; // Recovery never queues another native station insertion.
-            var lifeline = LocalLifeline();
             reason = "The original rope or station identity changed. Start a new invitation.";
             if (!RecoveryStationMatches(station, lifeline, piton)) return false;
-            if (!CanUseAttachedStation(lifeline, piton, out reason)
-                || !TryStartSnapshot(lifeline, out var snapshot, out reason)) return false;
+            if (!CanUseAttachedStation(lifeline, piton, snapshot, out reason)) return false;
             var final = lifeline.securingRope.ropeParts[snapshot.Parts.Length - 1];
             var controller = final?.obiRopeLengthController;
             reason = "Wait for the current final rope controller and physics to load.";
@@ -110,6 +127,7 @@ internal sealed partial class ManualBelayAdapter
             if (!float.IsFinite(rest) || rest <= 0 || rest > snapshot.Available
                 || physicalLength > lifeline.securingRope.MaxLengthMeters) return false;
             reason = "";
+            ready = true;
             return true;
         }
         catch (Exception exception)
@@ -117,6 +135,15 @@ internal sealed partial class ManualBelayAdapter
             ModLog.SuppressedException("belay.recovery-climber", exception);
             reason = "The native protection route is not ready to resume.";
             return false;
+        }
+        finally
+        {
+            var ended = Stopwatch.GetTimestamp();
+            if ((ended - started) * 1000d / Stopwatch.Frequency >= 10 && ended >= _nextRecoveryPreflightLog)
+            {
+                _nextRecoveryPreflightLog = ended + Stopwatch.Frequency * 5;
+                ModLog.Info("[BelayRecovery] Native climber preflight; ready=" + ready + ", elapsedMs=" + PatchElapsed(started));
+            }
         }
     }
 

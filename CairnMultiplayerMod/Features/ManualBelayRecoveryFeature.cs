@@ -17,7 +17,7 @@ internal sealed partial class ManualBelayFeature
         internal ManualBelayMessage Pair;
         internal Guid Nonce;
         internal string Scene;
-        internal float Until, StartedAt, NextCheck, NextHud;
+        internal float Until, StartedAt, NextCheck, NextHud, NextPatchRetention;
         internal float BelayerReadyAt = float.NegativeInfinity, ClimberReadyAt = float.NegativeInfinity;
         internal float BelayerCheckAt = float.NegativeInfinity, ClimberCheckAt = float.NegativeInfinity;
         internal float LocalReadyAt = float.NegativeInfinity;
@@ -50,6 +50,7 @@ internal sealed partial class ManualBelayFeature
 
     private void ResetRecoveryLifecycle()
     {
+        Game.Belay.ReleaseRecoveryPatches();
         _recovery = _hostRecovery = null;
         _confirmedSession = Guid.Empty; _confirmedScene = null; _inputReleaseRequired = false;
         _retiredBelaySessions.Clear(); _retiredBelayOrder.Clear();
@@ -59,6 +60,7 @@ internal sealed partial class ManualBelayFeature
 
     private void ClearRecovery(bool revoke)
     {
+        Game.Belay.ReleaseRecoveryPatches();
         if (_recovery != null)
         {
             if (revoke) RememberRecoveryId(_revokedRecoveryOrigins, _revokedRecoveryOrder, _recovery.Pair.Session);
@@ -74,6 +76,7 @@ internal sealed partial class ManualBelayFeature
         { RequestStop(reason); return; }
         var pair = _active;
         var scene = _confirmedScene;
+        Game.Belay.RetainRecoveryPatches(pair.Session);
         ClearLocal(preserveRecovery: true);
         _recovery = new RecoveryState { Pair = pair, Scene = scene, Until = Game.Time.UnscaledTime + RecoveryLifetime };
         RefreshRecoveryHud();
@@ -221,6 +224,7 @@ internal sealed partial class ManualBelayFeature
             var until = _recovery?.Until ?? Game.Time.UnscaledTime + RecoveryLifetime;
             var scene = _recovery?.Scene ?? _confirmedScene;
             if (string.IsNullOrEmpty(scene)) return true;
+            Game.Belay.RetainRecoveryPatches(pair.Session);
             ClearLocal(preserveRecovery: true);
             _recovery = new RecoveryState { Pair = message, Nonce = message.Recovery, Scene = scene, Until = until };
             RefreshRecoveryHud(); RefreshPanel();
@@ -242,6 +246,7 @@ internal sealed partial class ManualBelayFeature
         var reason = "Fresh native recovery readiness was lost before the host commit.";
         if (!hadFreshReady || !RecoveryContextReady() || !RecoveryLocationsMatch(recovery))
         { RequestStop(reason); return true; }
+        Game.Belay.ReleaseRecoveryPatches();
         var ready = message.Belayer == LocalPlayerId
             ? Game.Belay.TryResumeStation(message.Station, out reason) && Game.Belay.ProtectStation(message.Session)
             : Game.Belay.BeginResumedClimber(message.Session, message.Station, out reason);
@@ -275,6 +280,11 @@ internal sealed partial class ManualBelayFeature
         if (recovery == null) return false;
         if (!IsBelayMode || !IsConnected || !Game.Belay.RecoveryCharacterAlive || now >= recovery.Until)
         { RequestStop("Recovery ended for death, session change or timeout."); return true; }
+        if (now >= recovery.NextPatchRetention)
+        {
+            recovery.NextPatchRetention = now + .5f;
+            Game.Belay.RetainRecoveryPatches(recovery.Pair.Session);
+        }
         if (RecoveryContextReady() && recovery.Pair.Climber == LocalPlayerId)
         {
             var capacity = Game.Belay.RopeCapacity;

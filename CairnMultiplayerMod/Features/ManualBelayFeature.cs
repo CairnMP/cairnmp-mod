@@ -203,7 +203,9 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
                 else if (!KeyboardCaptured) { RefreshPanel(); Game.BelayPanel.Show(); }
                 return;
             case BelayPanelAction.Request: HandleChat("request " + target); break;
-            case BelayPanelAction.ProposeSwap: ProposeRoleSwap(); break;
+            case BelayPanelAction.ProposeSwap:
+                if (_active?.Belayer == LocalPlayerId) RequestRoleSwap(); else ProposeRoleSwap();
+                break;
             case BelayPanelAction.AcceptSwap: AcceptRoleSwap(); break;
             case BelayPanelAction.CancelSwap: CancelRoleSwapRequest("The local player cancelled the role exchange."); break;
             case BelayPanelAction.DefineStation:
@@ -245,13 +247,18 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
             var updating = _telemetry?.Rebinding == true;
             var state = updating ? (_telemetry.TopologyRevision == 0 ? "Connecting partner station" : "Updating protection route")
                 : _active.Braked ? "Brake requested" : "Rope free";
+            var canSwap = CanInitiateRoleSwap(out var swapReason);
             Game.BelayPanel.SetView(new BelayPanelView { Phase = BelayPanelPhase.Active,
                 PartnerName = GetPlayerName(partner), LocalBelayer = _active.Belayer == LocalPlayerId,
                 StationDefined = Game.Belay.HasStation,
-                CanSwap = !_roleOfferPending && _active.Climber == LocalPlayerId && Game.Belay.CanPrepareRoleStation(_active.Session, out _),
+                CanSwap = canSwap,
                 Braked = _desiredBrake, Description = $"{state}; {MotionLabel(_active.Motion)} requested. Pitons: {_telemetry?.ProtectionCount ?? 0}.\n"
                     + RopeReadback() + (_active.Belayer == LocalPlayerId ? "\nClose L; hold Up/Down: feed/take in."
-                        : "\nPersonally anchor at the next station, then K proposes a role exchange.") });
+                        : "\nKeep your personal anchor attached while exchanging roles.")
+                    + "\n" + (canSwap
+                        ? _active.Belayer == LocalPlayerId ? "K requests an exchange; your climber must prepare the next station."
+                            : "K proposes your current anchor as the next station."
+                        : "Role exchange: " + RoleSwapReason(swapReason)) });
             return;
         }
         if (_offer != null)
@@ -792,8 +799,8 @@ internal sealed partial class ManualBelayFeature : MultiplayerFeature
         Game.Hud.ShowMessage("notice", message, 5);
     }
 }
-internal enum ManualBelayOperation : byte { Offer, Accept, Intent, Report, Stop, Request, ProposeSwap, AcceptSwap, CancelSwap, ReadySwap, Interrupt, ResumeReady }
-internal enum ManualBelayPhase : byte { Offered, Started, Intent, Telemetry, Ended, SwapOffered, SwapPreparing, SwapCancelled, SwapCommitted, Interrupted, Resumed }
+internal enum ManualBelayOperation : byte { Offer, Accept, Intent, Report, Stop, Request, ProposeSwap, AcceptSwap, CancelSwap, ReadySwap, Interrupt, ResumeReady, RequestSwap }
+internal enum ManualBelayPhase : byte { Offered, Started, Intent, Telemetry, Ended, SwapOffered, SwapPreparing, SwapCancelled, SwapCommitted, Interrupted, Resumed, SwapRequested }
 
 /// <summary>Fixed-size requests. Actor identity always comes from the transport.</summary>
 internal sealed class ManualBelayCommand : IPacket

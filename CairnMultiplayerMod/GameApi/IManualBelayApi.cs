@@ -31,6 +31,8 @@ internal interface IManualBelayApi
     bool IsStationKnown(BelaySharedStation station) => false;
     bool CanClimb(BelaySharedStation station, out string reason) { reason = "Shared station unavailable."; return false; }
     bool RecoveryCharacterAlive => false;
+    void RetainRecoveryPatches(Guid session) { }
+    void ReleaseRecoveryPatches() { }
     bool TryResumeStation(BelaySharedStation station, out string reason) { reason = "Station recovery unavailable."; return false; }
     bool CanResumeClimber(BelaySharedStation station, out string reason) { reason = "Climber recovery unavailable."; return false; }
     bool BeginResumedClimber(Guid newSession, BelaySharedStation station, out string reason)

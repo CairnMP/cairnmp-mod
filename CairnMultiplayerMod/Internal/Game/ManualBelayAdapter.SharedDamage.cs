@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using HarmonyLib;
@@ -50,23 +51,26 @@ internal sealed partial class ManualBelayAdapter
     {
         try
         {
-            if (_sharedDamageUnpatchPending && !_applyingPartnerDamage && _sharedDamageCallbackDepth == 0)
-            {
-                _sharedDamageHarmony.UnpatchSelf();
-                _sharedDamageInstalled = _sharedDamageUnpatchPending = false;
-            }
             var session = _lease?.Session ?? Guid.Empty;
-            if (!IsPartnerClimber(session)) { ResetPartnerFallCapture(); return; }
+            var active = IsPartnerClimber(session);
+            if (_sharedDamageUnpatchPending && !active && !_applyingPartnerDamage && _sharedDamageCallbackDepth == 0
+                && !KeepRecoveryPatches())
+            {
+                UninstallSharedDamage();
+            }
+            if (!active) { ResetPartnerFallCapture(); return; }
             if (_sharedDamageSession != session)
             {
                 ResetPartnerFallCapture();
                 _sharedDamageSession = session;
                 _partnerFallTrial = new(guided: false);
+                if (_sharedDamageInstalled) ModLog.Info("[BelayPatches] Native fall observer reused; previous capture state cleared.");
             }
             if (!_sharedDamageInstalled)
             {
                 if (Now < _nextSharedDamageInstall) return;
                 _nextSharedDamageInstall = Now + 5;
+                var started = Stopwatch.GetTimestamp();
                 try
                 {
                     _sharedDamageHarmony.Patch(AccessTools.Method(typeof(SurvivalManager), nameof(SurvivalManager.InflictDamage)),
@@ -74,8 +78,9 @@ internal sealed partial class ManualBelayAdapter
                         postfix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(AfterPartnerNativeDamage)));
                     _sharedDamageInstalled = true;
                     ModLog.Info("[BelayDamage] Partner native fall observer installed; damage requires host approval.");
+                    ModLog.Info("[BelayPatches] Native fall observer installed; elapsedMs=" + PatchElapsed(started));
                 }
-                catch { _sharedDamageHarmony.UnpatchSelf(); throw; }
+                catch { UninstallSharedDamage(); throw; }
             }
             _sharedDamageUnpatchPending = false;
             _sharedDamageOwner = this;
@@ -329,8 +334,15 @@ internal sealed partial class ManualBelayAdapter
         ResetPartnerFallCapture();
         if (_sharedDamageInstalled && !_applyingPartnerDamage && _sharedDamageCallbackDepth == 0)
         {
-            _sharedDamageHarmony.UnpatchSelf();
-            _sharedDamageInstalled = _sharedDamageUnpatchPending = false;
+            UninstallSharedDamage();
         }
+    }
+
+    private void UninstallSharedDamage()
+    {
+        var started = Stopwatch.GetTimestamp();
+        _sharedDamageHarmony.UnpatchSelf();
+        _sharedDamageInstalled = _sharedDamageUnpatchPending = false;
+        ModLog.Info("[BelayPatches] Native fall observer removed; elapsedMs=" + PatchElapsed(started));
     }
 }

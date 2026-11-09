@@ -31,7 +31,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **28**; lobby admission may also require the exact mod version.
+> protocol is **29**; lobby admission may also require the exact mod version.
 
 ## Features
 
@@ -137,7 +137,7 @@ instead of being destroyed or duplicated.
 Choose **Belay Team** when creating a lobby to enable partner belay. Rope team
 keeps its original direct harness tether; Belay Team rejects that tether in input,
 host validation, received packets and late-join snapshots. Every peer
-must use the same experimental build (protocol **28**, incompatible with the
+must use the same experimental build (protocol **29**, incompatible with the
 public 2.4.1/2.4.2/2.4.3/2.4.4 protocol-16 builds and earlier pilots). This branch
 includes upstream 2.4.4, including its Story-launch preset correction, main-menu
 label and harness-rope fixes. The upstream
@@ -238,9 +238,13 @@ a frozen body coordinate, so ordinary anchored body motion stays inside the
 native tether area. Piton failure, lost anchoring, departure and disconnect still
 end control. This new input guard requires native validation.
 
-The current climber can personally anchor at a separate healthy upper piton,
-then choose **Define station / swap roles (K)** in L. The current belayer accepts
-with **Enter**, or either participant cancels the proposal with **Backspace**.
+Either player can initiate an exchange from **L > K**. The current climber
+proposes their own healthy personal anchor as the new station. When the current
+belayer initiates, this first sends a request: the climber presses **Enter** when
+anchored and ready to propose their station, then the belayer confirms that actual
+station and their future rope capacity with **Enter**. The panel shows the local
+readiness reason while confirmation is unavailable. Either participant can keep
+the current roles by cancelling with **Backspace**.
 The original pair stays active during preparation. Both personal anchors must
 remain attached and both endpoints must confirm readiness before the host commits
 a new control session with reversed roles and a closed brake. The future climber's
@@ -323,8 +327,16 @@ an event arriving late cannot undo it. Death, leaving the room, scene reset,
 mode exit or a changed capacity/identity also requires a new invitation.
 An initial attachment that never confirmed control is not automatically retried.
 A proposed role exchange keeps the last committed roles; an unsuccessful native
-role commit ends the pair instead of guessing the roles. Protocol **28** adds a
-recovery nonce and is incompatible with the previous protocol-27 packet layout.
+role commit ends the pair instead of guessing the roles. Protocol **29** adds a
+belayer-initiated exchange request; it retains the protocol-28 recovery nonce and
+requires all participants to update together.
+
+During an authorized recovery, inert native belay patches may remain installed
+for up to two minutes, with a short renewable lease. Physical control and damage
+state are still cleared immediately. Explicit End, scene reset, shutdown or lease
+expiry releases the retained patches outside native callbacks. This avoids
+reinstalling them on every recovery; it does not establish a measured FPS gain.
+Patch installation/removal timings are logged for the next native comparison.
 The two-minute diagnostic limit applies to solo exercises; active partner
 sessions still require fresh input permission.
 Native two-client braking, station

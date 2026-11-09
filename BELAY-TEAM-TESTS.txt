@@ -1,8 +1,15 @@
 BELAY TEAM - COOPERATIVE ACCEPTANCE PLAN
 
-Status: experimental source, protocol 27. Full native two-client acceptance is pending.
+Status: experimental source, protocol 29. Full native two-client acceptance is pending.
 Both participants must install the exact same build. Automated participants and
 the accepted offline local-station reconnection do not establish multiplayer success.
+
+The matched R42 round confirmed visible rope on both PCs, one anchored exchange,
+four native recovery acquisitions, and shared-damage applications in both role
+assignments. Recovery stutter was reported. R43 adds a belayer-initiated role
+request, explicit readiness reasons and reduced recovery setup churn; these new
+changes have automated coverage, with native confirmation and timings pending.
+Historical observations below describe their named builds, not the R43 outcome.
 
 R35 native pilot: matched builds committed three consecutive anchored exchanges
 in both directions, with the same person hosting; the final pair remained active
@@ -37,7 +44,7 @@ Setup shared by connection cases
      or measured distance. Live ghost movement alone does not prove eligibility.
      Proximity uses fresh replicated body positions on both sides, not actor bases.
      Belay Team compares the game's native world identity, not the last streamed
-     zone callback. Both builds must use protocol 27; different worlds still refuse.
+     zone callback. Both builds must use protocol 29; different worlds still refuse.
      R21 carries the climber's capacity in the invitation/acceptance contract;
      R22 adds a role-transaction identity to the fixed-size request/event contracts;
      earlier experimental protocols cannot join this version.
@@ -164,9 +171,20 @@ Anchored role exchange - candidate, native acceptance pending
       upper belayer takes in slack with Down, and personally anchors again.
       Expected: slack is collected without hauling; brake and climbing limit work.
       Repeat the role exchange back, then repeat in the other host arrangement.
-  T04 Pause/focus/disconnect during a proposal or preparation: L01/L02 still end
-      the interaction rather than resume automatically. Check both personal
-      anchors, input restoration and fresh-consent requirements afterward.
+  T04 Pause/focus/disconnect during a proposal or preparation: the proposal is
+      discarded. Follow L01/L02 for the previously confirmed pair. No proposed
+      station or pending role consent may survive recovery into a new session.
+  T05 With the pair active, the current BELAYER opens L and presses K to request
+      an exchange. No native station is prepared by that request alone. The
+      climber anchors at the intended healthy station and presses Enter to
+      propose it. The belayer then confirms that actual station with Enter.
+      Expected: old roles remain until both native routes are ready; the new
+      session starts BRAKED, with both personal anchors still attached. Repeat
+      with host and guest as the requesting belayer. If blocked, record the
+      readiness reason shown in L; do not force a loaded handoff.
+  T06 Cancel or let the initial request expire. Expected: current roles/control
+      remain, no station is prepared automatically and a late request cannot
+      reopen the cancelled exchange. A fresh K request remains possible.
 
 Falls - only after C/R/T cases pass
   F01 Short fall with BRAKED already set: native catch with coherent slack and no
@@ -209,15 +227,24 @@ Shared fall damage - included in this candidate, native acceptance pending
       identity. Each catch has a distinct identity; old approvals cannot affect
       the new pair. A pending decision briefly blocks a new exchange.
   D05 While personally anchored, use L > End belay and reconnect. No old damage
-      decision may apply to the new session. Pause, focus loss, cutscene and
-      disconnect still end the pair as in L01/L02; returning does not resume it.
+      decision may apply to the new session. Pause, focus loss and cutscene follow
+      bounded recovery in L01; disconnect and explicit End require a new invitation.
 
 Interruption and persistence - start anchored, without a fall
   L01 Pause menu, Alt+Tab/focus loss and an available natural cutscene, each for
-      belayer and climber and during preparation. Expected: session ends, motion
-      stops, an already queued native operation may finish. Returning does not
-      automatically restart; revalidate anchors and send a fresh invitation.
+      belayer and climber and during preparation. After confirmed control, expect
+      WAITING TO RESUME / PARTNER BRAKE OFF, cleared old inputs and no automatic
+      station insertion. Within 120s both peers freshly validate the same station,
+      world, capacity and existing route. Only then may the host commit a new
+      BRAKED session with zero motion. Release control keys before using them.
+      Check End while waiting cancels permanently, and held keys do not release
+      the brake on resume. Initial unconfirmed attachment, death, disconnect,
+      scene/mode change or expired recovery requires a new invitation.
       If no natural cutscene is available, mark that part NOT RUN.
+      For R43, record stutter and both logs. BelayPatches reuse should avoid a
+      detour rebuild during an authorized short recovery; explicit End/reset or
+      an expired patch lease must still remove inactive patches. Timings and
+      frame captures are needed before claiming a performance improvement.
   L02 Disconnect each participant through the normal UI while the climber remains
       anchored at P. Expected: no new commands, no stale control after rejoining.
       Check personal protection before continuing. Do not use firewall changes.
@@ -239,8 +266,8 @@ Later scenarios / not implemented acceptance
       transfer within the existing pair; record a refused route as a failed case.
   N02 Loaded or seamless role transfer is not implemented. T01-T04 test an
       explicitly consented, stationary exchange with both personal anchors held.
-  N03 Preserve pair and resume after cutscene/pause: BLOCKED; first pilot ends the
-      interaction by design. A future resume must revalidate route/anchors and input.
+  N03 Bounded consent-preserving recovery is implemented; validate it using L01.
+      Unconditional or seamless continuation without revalidation is not supported.
   N04 A forced belayer ragdoll is not implemented. Shared damage is included and
       tested by D01-D05 above; both native health protections and piton failure
       handling remain in effect.

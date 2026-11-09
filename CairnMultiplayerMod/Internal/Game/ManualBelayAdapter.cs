@@ -1,4 +1,6 @@
 using System;
+using System.Diagnostics;
+using System.Globalization;
 using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game.Players;
@@ -23,6 +25,8 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     private readonly Func<int> _localPlayerId;
     private readonly Func<BelaySharedStation, bool> _stationKnown;
     private readonly HarmonyLib.Harmony _harmony = new("CairnMultiplayerMod.ManualBelay");
+    private readonly BelayPatchRetention _patchRetention = new();
+    private uint _patchScene;
     private bool _installed, _stopping, _holdApplied;
     private Lifeline _lifeline, _stationLifeline;
     private LogicalRope _rope;
@@ -179,7 +183,11 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
     }
 
     public bool CanClimb(out string reason)
+        => TryClimberStartSnapshot(out _, out _, out reason);
+
+    private bool TryClimberStartSnapshot(out Lifeline lifeline, out BelayTopologySnapshot snapshot, out string reason)
     {
+        lifeline = null; snapshot = null;
         reason = "Enable the belay experiment first.";
         if (!(Enabled || LocalExerciseEnabled)) return false;
         if (!TryGetActiveContext(out reason)) return false;
@@ -189,8 +197,8 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         if (HasStation) return false;
         reason = "Disconnect the existing cooperative rope first.";
         if (RopeInterop.IsNativeBelayEngaged) return false;
-        var lifeline = LocalLifeline();
-        return TryStartSnapshot(lifeline, out _, out reason);
+        lifeline = LocalLifeline();
+        return TryStartSnapshot(lifeline, out snapshot, out reason);
     }
 
     public bool StationValid
@@ -228,7 +236,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         RememberRecoveryStation(_definedStation, _stationAnchor, _stationSession);
         if (HasStation) ModLog.Info("[BelayStation] Removed; personal native anchoring unchanged; reason="
             + (_stationInvalidReason ?? "Session or station ended explicitly.") + ", session=" + _stationSession);
-        if (_stationSession != Guid.Empty && _installed && _control == null) _unpatchPending = true;
+        if (_stationSession != Guid.Empty && _installed && _control == null) RequestPatchRemoval();
         _stationSession = Guid.Empty;
         if (ReferenceEquals(_stationOwner, this)) _stationOwner = null;
         _stationLifeline = null; _stationPiton = 0; _stationAnchor = null;
@@ -243,6 +251,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         _unpatchPending = false;
         _stationSession = session; _stationOwner = this;
         if (!RefreshStationClimbInput()) return false;
+        _patchRetention.BeginSession(session, _patchScene, Now);
         ModLog.Info("[BelayStation] Personal anchor input locked; use L > End belay to leave; session=" + session);
         return true;
     }
@@ -323,6 +332,8 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
             _localPreviewStation = firstPiton != null ? firstPiton.transform.position : lifeline.harness.GetAttachPosition();
         }
         _nextTopologyPoll = _lastValidTopology = Now;
+        _patchRetention.BeginSession(session, _patchScene, Now);
+        _unpatchPending = false;
         _owner = this;
         if (localExercise && _localStation != null)
             ModLog.Info("[BelayStation] Rehearsal started on the captured native route; no partner endpoint attached.");
@@ -528,10 +539,9 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         TickStationAttachment();
         if (HasStation && !StationValid) EndStation();
         RefreshStationClimbInput();
-        if (_unpatchPending && _control == null)
+        if (_unpatchPending && _control == null && _stationSession == Guid.Empty && !KeepRecoveryPatches())
         {
-            _harmony.UnpatchSelf();
-            _installed = _unpatchPending = false;
+            Uninstall();
         }
         if (_control == null) return;
         try
@@ -648,7 +658,12 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
 
     private void Install()
     {
-        if (_installed) return;
+        if (_installed)
+        {
+            ModLog.Info("[BelayPatches] Native control reused; no detour rebuild.");
+            return;
+        }
+        var started = Stopwatch.GetTimestamp();
         try
         {
             _harmony.Patch(AccessTools.Method(typeof(Lifeline), nameof(Lifeline.SwingSetEffectDistance)),
@@ -683,8 +698,29 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
                 postfix: new HarmonyMethod(typeof(ManualBelayAdapter), nameof(AfterStationCriticality)));
             InstallStationClimbGuard();
             _installed = true;
+            ModLog.Info("[BelayPatches] Native control installed; targets=16, elapsedMs=" + PatchElapsed(started));
         }
-        catch { _harmony.UnpatchSelf(); throw; }
+        catch { Uninstall(); throw; }
+    }
+
+    private static string PatchElapsed(long started)
+        => ElapsedMilliseconds(started).ToString("F2", CultureInfo.InvariantCulture);
+
+    private static double ElapsedMilliseconds(long started)
+        => (Stopwatch.GetTimestamp() - started) * 1000d / Stopwatch.Frequency;
+
+    private void Uninstall()
+    {
+        var started = Stopwatch.GetTimestamp();
+        _harmony.UnpatchSelf();
+        _installed = _unpatchPending = false;
+        ModLog.Info("[BelayPatches] Native control removed; elapsedMs=" + PatchElapsed(started));
+    }
+
+    private void RequestPatchRemoval()
+    {
+        _unpatchPending = true;
+        _patchRetention.RequestRelease(Now);
     }
 
     private static void AfterPitonDecision(Piton __instance, bool __result)
@@ -780,12 +816,14 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         _stopping = _holdApplied = false;
         ClearPartnerStation();
         // Unpatch outside a native callback; Tick continues even outside multiplayer.
-        if (_installed) _unpatchPending = true;
+        if (_installed) RequestPatchRemoval();
     }
 
     private bool _unpatchPending;
     public void ResetScene()
     {
+        ReleaseRecoveryPatches();
+        _patchScene++;
         ResetPartnerFallCapture();
         ResetPartnerRoute();
         ClearRopeVisual();
@@ -802,7 +840,7 @@ internal sealed partial class ManualBelayAdapter : IManualBelayApi
         ResetScene();
         ReleaseStationClimbInput(force: true);
         ShutdownSharedDamage();
-        if (_installed) _harmony.UnpatchSelf();
+        if (_installed) Uninstall();
         _installed = _unpatchPending = false;
     }
 }
