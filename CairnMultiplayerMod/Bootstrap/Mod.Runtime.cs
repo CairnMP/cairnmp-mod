@@ -5,6 +5,7 @@ using CairnMultiplayerMod.Framework;
 using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game;
+using CairnMultiplayerMod.Internal.Game.MainMenu;
 using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Game.Roping;
 using CairnMultiplayerMod.Internal.Game.World;
@@ -145,9 +146,14 @@ public partial class Mod
         try
         {
             TickPerformance();
+            using var performance = Measure(PerformanceArea.ModUpdate);
+            if (_game?.Belay.NeedsTick == true)
+            {
+                using var ropes = Measure(PerformanceArea.Ropes);
+                _game.Belay.Tick();
+            }
             NativePerformanceProbe.Tick();
             GameTuning.Tick();
-            using var performance = Measure(PerformanceArea.ModUpdate);
             TickMod();
         }
         catch (Exception exception)
@@ -457,6 +463,7 @@ public partial class Mod
         _runtimeStopped = true;
 
         SafeStop("performance diagnostics", StopPerformance);
+        SafeStop("manual belay", () => _game?.Belay.Shutdown());
         SafeStop("input", InputInterop.ForceClearBlock);
         SafeStop("panel", () =>
         {

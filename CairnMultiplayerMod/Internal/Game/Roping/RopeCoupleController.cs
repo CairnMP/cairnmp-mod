@@ -39,6 +39,17 @@ internal sealed class RopeCoupleController
         if (_network == null)
             return;
 
+        if (_state.ModeRules.UsesPartnerBelay)
+        {
+            if (!_ropeHardTornDown)
+            {
+                TearDownAllLocalRopeLinks("Belay Team uses the protection-rope brake");
+                _ropeHardTornDown = true;
+            }
+            if (RopeInterop.HasRopeTeamAnchors) RopeInterop.ReleaseAllAnchors();
+            return;
+        }
+
         // Teardown must remain reachable outside InGame.
         if (!TickRopeSafety()) return;
 
