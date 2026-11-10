@@ -14,12 +14,13 @@ using CairnMultiplayerMod.Internal.Game.Roping;
 using CairnMultiplayerMod.Internal.Game.World;
 using CairnMultiplayerMod.Internal.Game.Voice;
 using CairnMultiplayerMod.Internal.Networking;
+using CairnMultiplayerMod.Internal.Networking.Authoritative;
 using CairnMultiplayerMod.Internal.UI;
 using MelonLoader;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-[assembly: MelonInfo(typeof(CairnMultiplayerMod.Bootstrap.Mod), "Cairn Multiplayer Mod", "2.4.4", "CairnModTeam")]
+[assembly: MelonInfo(typeof(CairnMultiplayerMod.Bootstrap.Mod), "Cairn Multiplayer Mod", "2.5.0", "CairnModTeam")]
 [assembly: MelonGame("TheGameBakers", "Cairn")]
 
 namespace CairnMultiplayerMod.Bootstrap;
@@ -46,6 +47,13 @@ public partial class Mod : MelonMod
     private bool _runtimeStopped;
     private bool _quitIssued;
     private bool _multiplayerModeActive;
+
+    // Set by scripts/start-local-client.ps1 and scripts/start-second-client.ps1.
+    private readonly bool _keepSimulatingWhenUnfocused =
+        string.Equals(
+            Environment.GetEnvironmentVariable("CAIRNMP_RUN_IN_BACKGROUND"),
+            "1",
+            StringComparison.Ordinal);
 
     private DateTime? _connectingStart;
     private string _connectingVerb = "Creating lobby";
@@ -105,6 +113,8 @@ public partial class Mod : MelonMod
             LoggerInstance.Msg($"  Cairn Multiplayer Mod v{Protocol.GameVersion} loaded!");
             LoggerInstance.Msg("  Diagnostics stay local unless you share them.");
             LoggerInstance.Msg("===========================================");
+            if (_keepSimulatingWhenUnfocused)
+                ModLog.Info("[CairnMP] This window keeps simulating when it is in the background.");
         }
         catch (Exception exception)
         {
@@ -123,6 +133,12 @@ public partial class Mod : MelonMod
         try
         {
             Features.RegisterAll(FeatureRegistry.CreateAll(), new Version(Protocol.GameVersion));
+            RopeInterop.BindPitonPoolChannel(
+                Features.RegisterStream("rope.piton-pool", RopeInterop.AcceptPitonPool));
+            RopeInterop.BindTopAnchorChannel(
+                Features.RegisterStream("rope.top-anchor", RopeInterop.AcceptTopAnchor));
+            RopeInterop.BindFallChannel(
+                Features.RegisterStream("rope.fall-state", RopeInterop.AcceptFallState));
         }
         catch (Exception ex)
         {
@@ -166,6 +182,33 @@ public partial class Mod : MelonMod
             new WorldAdapter(), _voice, new LifeAdapter(), new SpectatorAdapter());
 
         Rope = new RopeCoupleController(Network, _runtimeState);
+        PitonRecoverySession.Bind(
+            () => Network?.IsHandshakeComplete == true
+                  && _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam
+                  && TeamAnchorSession.RulesArmed,
+            _hud);
+        TeamAnchorSession.Bind(
+            () => Network?.IsHandshakeComplete == true
+                  && _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam);
+        // The mode defaults to Rope Team for solo too. The lobby, the handshake, or the
+        // story-save handoff is what makes this a Rope Team session. After a disconnect
+        // the save run stays marked until the main menu, so a wall quick save cannot land.
+        BivouacSaveSession.Bind(
+            () => _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam
+                  && (Network?.IsHandshakeComplete == true
+                      || Lobby.IsInLobby
+                      || StoryLaunchSetupPatch.MultiplayerStoryPending),
+            () => SceneRoles.IsMainMenu(_runtimeState.CurrentScene)
+                  && Network?.IsHandshakeComplete != true
+                  && !Lobby.IsInLobby
+                  && !StoryLaunchSetupPatch.MultiplayerStoryPending);
+        BivouacEntryGatePatch.Bind(
+            _hud,
+            () => Network,
+            () => SceneRoles.ResolveNetworkScene(_runtimeState.CurrentScene, _runtimeState.LastGameplayScene));
+        RopeLengthReadout.Bind(_hud);
+        RopeInterop.BindFallHud(_hud);
+        PracticePartnerController.Bind(_hud);
         Player = new PlayerStateBroadcaster(
             Network, _runtimeState, Rope.Reset, () => Bivouac?.BlocksGameplaySync() == true,
             isSpeaking: playerId => _voice?.IsSpeaking(playerId) == true);
@@ -207,10 +250,11 @@ public partial class Mod : MelonMod
             StartGame.Cancel();
             _runtimeState.ModeRules = MultiplayerModes.RopeTeam;
             RopeInterop.ClearRemotePitons();
+            // Untie while this climber's id and the partner's body are still here.
+            Rope.ClearLinks();
             Network.Disconnect();
             WeatherInterop.ResetRemoteState();
             RemotePlayerManager.ClearAll();
-            Rope.ClearLinks();
             Bivouac.ForceResume();
             _panel.SetStatus("Disconnected", false);
         };
@@ -255,6 +299,7 @@ public partial class Mod : MelonMod
         {
             SetMultiplayerModeActive(false);
             StartGame.Cancel();
+            PitonRecoverySession.Hide();
             RopeInterop.ClearRemotePitons();
             WeatherInterop.ResetRemoteState();
             Rope.ClearLinks();
@@ -269,16 +314,48 @@ public partial class Mod : MelonMod
         Network.OnPlayerLeft += id =>
         {
             _panel.SetStatus($"Player {id} left", Network.IsConnected);
+            // The body is the other end of the rope. Untie before it is destroyed.
+            Rope.PartnerLeft(id);
             RemotePlayerManager.OnPlayerLeft(id);
             RopeLinkState.RemovePlayer(id);
         };
-        Network.OnRopeClip += RopeLinkState.Apply;
+        Network.OnRopeClip += (from, target, clip) =>
+        {
+            if (!clip)
+                RopeInterop.PrepareUntie(from, target, TeamAnchorSession.IsLocalLeader, from == Network.LocalPlayerId);
+            var samePair = TeamAnchorSession.ResumesHeldPair(from, target);
+            var movePitons = PitonReturn.ReturnsOnRopeUp(
+                samePair, TeamAnchorSession.LeaderLeft, TopAnchorSession.HasStick);
+            RopeLinkState.Apply(from, target, clip);
+            TeamAnchorSession.OnClip(Network.LocalPlayerId, from, target, clip);
+            if (clip && movePitons && TeamAnchorSession.IsLinked)
+            {
+                RopeInterop.BeginPitonPool(Network);
+                if (!samePair && !BivouacSyncGate.AtCamp)
+                    RopeInterop.ReplayPitonsOnLink(Network);
+            }
+        };
 
         // Recorded whatever the local player is doing; the Lifeline catches up on the next
         // frame of play. Dropping them during a load or a camp lost those pitons for good.
-        Network.OnPitonPlaced += RopeInterop.KnowRemotePiton;
-        Network.OnPitonRemoved += pkt => RopeInterop.ForgetRemotePiton(pkt.PitonId);
-        Network.OnOwnPitonRecovered += RopeInterop.ForgetOwnPiton;
+        Network.OnPitonPlaced += placed =>
+        {
+            if (!PitonAuthority.IsOtherClimbersPiton(placed.FromPlayerId, Network.LocalPlayerId))
+                return;
+            RopeInterop.KnowRemotePiton(placed);
+            TeamAnchorSession.NoteRemotePlacement(placed.FromPlayerId, placed.PitonId,
+                new System.Numerics.Vector3(placed.PosX, placed.PosY, placed.PosZ));
+        };
+        Network.OnPitonRemoved += pkt =>
+        {
+            RopeInterop.ForgetRemotePiton(pkt.PitonId);
+            TeamAnchorSession.NoteAuthoritativeRemoval(pkt.PitonId);
+        };
+        Network.OnOwnPitonRecovered += id =>
+        {
+            RopeInterop.ForgetOwnPiton(id);
+            TeamAnchorSession.NoteLocalRemoval(id);
+        };
         Network.OnTeleport += pkt =>
         {
             // The player may have entered a bivouac between the host check and delivery.

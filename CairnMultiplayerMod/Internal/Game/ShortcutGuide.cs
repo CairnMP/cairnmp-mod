@@ -28,13 +28,16 @@ internal static class ShortcutGuide
             ControllerShortcut.PushToTalk, ControllerShortcut.Panic,
         };
 
+        var revive = "Hold X/Square: Revive partner";
         var radial = new List<string> { $"Hold {modifier}, aim with the", "right stick, release to choose" };
         radial.AddRange(ControllerShortcutBindings.RadialItems.Select(ControllerShortcutBindings.DescriptionFor));
+        radial.Add(revive);
 
         var combos = new List<string> { $"Hold {modifier} and press" };
         combos.AddRange(ControllerShortcutBindings.RadialItems.Select(Combo));
         combos.Add($"Either style, with {modifier}:");
         combos.AddRange(alwaysOn.Select(Combo));
+        combos.Add(revive);
 
         var keyboard = new[]
         {
@@ -48,9 +51,7 @@ internal static class ShortcutGuide
             "Left click: Ping (eagle view)",
             "T: Climb trails",
             "B: Trail mark",
-            "R: Bivouac recall",
-            "F: Spectator view",
-            "C: Next climber",
+            "Hold R: Revive partner",
             $"{talkKey}: Push to talk",
             "Enter: Chat",
             "F10: Release input",

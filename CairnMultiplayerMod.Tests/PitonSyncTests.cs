@@ -92,17 +92,178 @@ public sealed class PitonSyncTests
     }
 
     [Fact]
+    public void AMarkedTakeIsReportedEvenWhenThePawnIsFarFromTheAnnouncedRoot()
+    {
+        var sync = WithLiveRemote(out var t);
+        sync.MarkTaken(new IntPtr(70));
+
+        var actions = sync.Reconcile(Placed(), C + new Vector3(50, 0, 0), t + 0.1);
+
+        Assert.Equal(new[] { 7u }, actions.Recovered);
+        Assert.Equal(0, sync.RemoteCount);
+    }
+
+    [Fact]
+    public void AnUnclippedReplicaStaysWhenItLeavesThePlacedList()
+    {
+        var sync = WithLiveRemote(out var t);
+        sync.KeepUnclipped(new IntPtr(70));
+
+        // Standing on it, or far below it, must not be reported as a take.
+        var near = sync.Reconcile(Placed(), C, t + 0.1);
+        Assert.Empty(near.Recovered);
+        Assert.True(sync.TryGetRemotePointer(7, out var pointer));
+        Assert.Equal(new IntPtr(70), pointer);
+
+        var far = sync.Reconcile(Placed(), C + new Vector3(50, 0, 0), t + 0.2);
+        Assert.Empty(far.Recovered);
+        Assert.True(sync.TryGetRemotePointer(7, out pointer));
+        Assert.Equal(new IntPtr(70), pointer);
+
+        var held = new List<IntPtr>();
+        sync.CopyUnclipped(held);
+        Assert.Equal(new[] { new IntPtr(70) }, held);
+    }
+
+    [Fact]
+    public void TakingAnUnclippedReplicaStillTellsTheHost()
+    {
+        var sync = WithLiveRemote(out var t);
+        sync.KeepUnclipped(new IntPtr(70));
+        sync.MarkTaken(new IntPtr(70));
+
+        var actions = sync.Reconcile(Placed(), C + new Vector3(50, 0, 0), t + 0.1);
+
+        Assert.Equal(new[] { 7u }, actions.Recovered);
+        Assert.False(sync.TryGetRemotePointer(7, out _));
+        var held = new List<IntPtr>();
+        sync.CopyUnclipped(held);
+        Assert.Empty(held);
+    }
+
+    [Fact]
+    public void AnUnclippedPitonOfOursStaysWhenItLeavesThePlacedList()
+    {
+        var sync = Started(out var t);
+        var announced = sync.Reconcile(Placed((1, A)), null, t += Settled).Announce[0];
+        sync.KeepUnclipped(announced.Pointer);
+
+        var actions = sync.Reconcile(Placed(), null, t + 0.1);
+
+        Assert.Empty(actions.Removed);
+        Assert.Empty(actions.Strip);
+        Assert.True(sync.TryGetOwnPointer(announced.LocalId, out var pointer));
+        Assert.Equal(announced.Pointer, pointer);
+        var held = new List<IntPtr>();
+        sync.CopyUnclipped(held);
+        Assert.Equal(new[] { announced.Pointer }, held);
+    }
+
+    [Fact]
+    public void TakingAnUnclippedPitonOfOursWithdrawsItOnce()
+    {
+        var sync = Started(out var t);
+        var announced = sync.Reconcile(Placed((1, A)), null, t += Settled).Announce[0];
+        sync.KeepUnclipped(announced.Pointer);
+        Assert.Empty(sync.Reconcile(Placed(), null, t += 0.1).Removed);
+
+        sync.MarkTaken(announced.Pointer);
+        var actions = sync.Reconcile(Placed(), null, t + 0.1);
+
+        Assert.Equal(new[] { announced.LocalId }, actions.Removed);
+        Assert.Empty(actions.Strip);
+        var held = new List<IntPtr>();
+        sync.CopyUnclipped(held);
+        Assert.Empty(held);
+        Assert.True(sync.Reconcile(Placed(), null, t + 0.2).IsEmpty);
+    }
+
+    [Fact]
+    public void AnotherClimberTakingOurUnclippedPitonDeletesItOnce()
+    {
+        var sync = Started(out var t);
+        var announced = sync.Reconcile(Placed((1, A)), null, t += Settled).Announce[0];
+        sync.KeepUnclipped(announced.Pointer);
+        sync.Reconcile(Placed(), null, t += 0.1);
+
+        sync.TakenByOther(announced.LocalId);
+        var actions = sync.Reconcile(Placed(), null, t + 0.1);
+
+        Assert.Equal(new[] { announced.Pointer }, actions.Strip);
+        Assert.Empty(actions.Removed);
+        Assert.False(sync.TryGetOwnPointer(announced.LocalId, out _));
+        var held = new List<IntPtr>();
+        sync.CopyUnclipped(held);
+        Assert.Empty(held);
+        Assert.True(sync.Reconcile(Placed(), null, t + 0.2).IsEmpty);
+    }
+
+    [Fact]
+    public void AWithdrawnUnclippedReplicaIsDeletedOnce()
+    {
+        var sync = WithLiveRemote(out var t);
+        sync.KeepUnclipped(new IntPtr(70));
+        Assert.Empty(sync.Reconcile(Placed(), C + new Vector3(50, 0, 0), t += 0.1).Recovered);
+
+        sync.Forget(7);
+        var actions = sync.Reconcile(Placed(), C + new Vector3(50, 0, 0), t + 0.1);
+
+        Assert.Empty(actions.Recovered);
+        Assert.Equal(new[] { new IntPtr(70) }, actions.Strip);
+        Assert.False(sync.TryGetRemotePointer(7, out _));
+        var held = new List<IntPtr>();
+        sync.CopyUnclipped(held);
+        Assert.Empty(held);
+        Assert.True(sync.Reconcile(Placed(), null, t + 0.2).IsEmpty);
+    }
+
+    [Fact]
+    public void AnUnclippedPitonOfOursThatReturnsToTheListCanLeaveForGood()
+    {
+        var sync = Started(out var t);
+        var announced = sync.Reconcile(Placed((1, A)), null, t += Settled).Announce[0];
+        sync.KeepUnclipped(announced.Pointer);
+        Assert.Empty(sync.Reconcile(Placed(), null, t += 0.1).Removed);
+
+        Assert.True(sync.Reconcile(Placed((1, A)), null, t += 0.1).IsEmpty);
+        var actions = sync.Reconcile(Placed(), null, t + 0.1);
+
+        Assert.Equal(new[] { announced.LocalId }, actions.Removed);
+        var held = new List<IntPtr>();
+        sync.CopyUnclipped(held);
+        Assert.Empty(held);
+    }
+
+    [Fact]
+    public void AnUnclippedReplicaThatReturnsToTheListCanLeaveForGood()
+    {
+        var sync = WithLiveRemote(out var t);
+        sync.KeepUnclipped(new IntPtr(70));
+        // Near the piton. Without the keep this would be reported as a take.
+        Assert.Empty(sync.Reconcile(Placed(), C, t += 0.1).Recovered);
+
+        // Back on the list: the keep ends. A later disappearance far away is abandoned.
+        Assert.True(sync.Reconcile(Placed((70, C)), C + new Vector3(50, 0, 0), t += 0.1).IsEmpty);
+        var actions = sync.Reconcile(Placed(), C + new Vector3(50, 0, 0), t + 0.1);
+
+        Assert.Empty(actions.Recovered);
+        Assert.False(sync.TryGetRemotePointer(7, out _));
+    }
+
+    [Fact]
     public void APitonVanishingFarFromUsIsNotOursToAnnounceNorToTouchAgain()
     {
         var sync = WithLiveRemote(out var t);
 
         var actions = sync.Reconcile(Placed(), C + new Vector3(50, 0, 0), t += 0.1);
         Assert.Empty(actions.Recovered);
+        Assert.Empty(actions.Strip);
 
         // Its owner withdraws it later: the stale pointer is never handed back.
         sync.Forget(7);
         actions = sync.Reconcile(Placed(), null, t + 0.1);
         Assert.Empty(actions.Detach);
+        Assert.Empty(actions.Strip);
         Assert.Empty(actions.Spawn);
     }
 
@@ -123,7 +284,8 @@ public sealed class PitonSyncTests
         sync.Forget(7);
 
         var actions = sync.Reconcile(Placed((70, C)), null, t += 0.1);
-        Assert.Equal(new[] { new IntPtr(70) }, actions.Detach);
+        Assert.Equal(new[] { new IntPtr(70) }, actions.Strip);
+        Assert.Empty(actions.Detach);
 
         actions = sync.Reconcile(Placed(), null, t + 0.1);
         Assert.True(actions.IsEmpty);
@@ -219,7 +381,8 @@ public sealed class PitonSyncTests
 
         sync.TakenByOther(id);
         var actions = sync.Reconcile(Placed((1, A)), null, t += 0.1);
-        Assert.Equal(new[] { new IntPtr(1) }, actions.Detach);
+        Assert.Equal(new[] { new IntPtr(1) }, actions.Strip);
+        Assert.Empty(actions.Detach);
         Assert.Empty(actions.Removed);
 
         Assert.True(sync.Reconcile(Placed(), null, t + 0.1).IsEmpty);
@@ -238,6 +401,27 @@ public sealed class PitonSyncTests
     }
 
     [Fact]
+    public void DroppingReplicasKeepsOurOwnPiton()
+    {
+        var sync = WithLiveRemote(out var now);
+        var own = Assert.Single(sync.Reconcile(Placed((70, C), (1, A)), null, now += 0.1).Announce).LocalId;
+        sync.Ignore(new IntPtr(80));
+
+        var leaving = new List<IntPtr>();
+        sync.CopyLeaving(leaving);
+
+        Assert.Contains(new IntPtr(70), leaving);
+        Assert.Contains(new IntPtr(80), leaving);
+        Assert.DoesNotContain(new IntPtr(1), leaving);
+
+        sync.ForgetReplicas();
+
+        Assert.True(sync.TryGetOwnPointer(own, out var pointer));
+        Assert.Equal(new IntPtr(1), pointer);
+        Assert.False(sync.TryGetRemotePointer(7, out _));
+    }
+
+    [Fact]
     public void ANewSessionNeverReusesOneOfOurIds()
     {
         var sync = Started(out var t);
@@ -248,6 +432,47 @@ public sealed class PitonSyncTests
         var after = sync.Reconcile(Placed((1, A)), null, t + Settled).Announce[0].LocalId;
 
         Assert.NotEqual(before, after);
+    }
+
+    [Fact]
+    public void AReplicaStaysPendingUntilSpawningIsAllowed()
+    {
+        var sync = Started(out var now);
+        sync.SpawnReplicas = false;
+        sync.Know(Piton(7, C));
+        Assert.Empty(sync.Reconcile(Placed(), null, now += Settled).Spawn);
+
+        sync.SpawnReplicas = true;
+        Assert.Equal(7u, Assert.Single(sync.Reconcile(Placed(), null, now + 0.1).Spawn).PitonId);
+    }
+
+    [Fact]
+    public void AnOwnPitonAndAReplicaReportDifferentIdNamespaces()
+    {
+        var sync = WithLiveRemote(out var now);
+        var announced = sync.Reconcile(Placed((70, C), (2, A)), null, now + 0.1).Announce;
+
+        Assert.True(sync.TryGetId(new IntPtr(2), out var ownId, out var ownLocal));
+        Assert.Equal(Assert.Single(announced).LocalId, ownId);
+        Assert.True(ownLocal);
+        Assert.True(sync.TryGetId(new IntPtr(70), out var hostId, out var hostLocal));
+        Assert.Equal(7u, hostId);
+        Assert.False(hostLocal);
+    }
+
+    [Fact]
+    public void AForgottenReplicaSpawnsAgainWhenSpawningIsAllowed()
+    {
+        var sync = Started(out var now);
+        sync.Know(Piton(7, C));
+        sync.Reconcile(Placed(), null, now += Settled);
+        sync.ForgetReplicas();
+        sync.SpawnReplicas = false;
+        sync.Know(Piton(7, C));
+        Assert.Empty(sync.Reconcile(Placed(), null, now + 0.1).Spawn);
+
+        sync.SpawnReplicas = true;
+        Assert.Equal(7u, Assert.Single(sync.Reconcile(Placed(), null, now + 0.2).Spawn).PitonId);
     }
 
     private static PitonSync Started(out double now)

@@ -42,6 +42,7 @@ public sealed class DirectRopeTests
         Assert.Equal(1, native.Attachments);
         native.Alive = false;
         Assert.False(session.Tick(.06));
+        Assert.True(session.HarnessLost);
         session.Dispose();
         Assert.Equal(1, native.Disposals);
         Assert.Equal(RopeBindingState.Released, session.State);
@@ -56,6 +57,7 @@ public sealed class DirectRopeTests
         using var session = new RopeBindingSession(native, 0);
         if (throws) Assert.Throws<InvalidOperationException>(() => session.Tick(0));
         else Assert.False(session.Tick(0));
+        Assert.False(session.HarnessLost);
         Assert.Equal(1, native.Disposals);
         Assert.False(session.Tick(1));
         Assert.Equal(1, native.Attachments);

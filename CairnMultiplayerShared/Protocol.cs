@@ -6,7 +6,7 @@ namespace CairnMultiplayer.Shared;
 /// </summary>
 public static class Protocol
 {
-    public const int Version = 16;
+    public const int Version = 17;
     public const string ConnectionKey = "cairnmp";
     public const int DefaultPort = 14000;
 
@@ -14,7 +14,7 @@ public static class Protocol
     /// CairnMP client version sent to the API when creating a lobby.
     /// Matches the deployed launcher/mod version.
     /// </summary>
-    public const string GameVersion = "2.4.4";
+    public const string GameVersion = "2.5.0";
 
     public const float PlayerStateUpdateIntervalSeconds = 1f / 30f;
 

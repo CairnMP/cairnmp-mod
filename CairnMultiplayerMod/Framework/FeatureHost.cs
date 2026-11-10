@@ -46,6 +46,13 @@ internal sealed class FeatureHost : IDisposable
     internal void DispatchStream(int fromPlayerId, ushort channel, byte[] payload)
         => _streams.Dispatch(fromPlayerId, channel, payload);
 
+    /// <summary>
+    /// A stream that is not owned by a feature. Registration fails if the name hashes to a
+    /// channel a feature already uses.
+    /// </summary>
+    internal ushort RegisterStream(string channelName, Action<int, byte[]> handler)
+        => _streams.Register(channelName, handler);
+
     private sealed class Registered
     {
         public MultiplayerFeature Feature;

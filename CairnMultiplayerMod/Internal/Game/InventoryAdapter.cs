@@ -490,39 +490,6 @@ internal sealed class InventoryAdapter : IInventoryApi
         return stats.TryGetValue(SurvivalStat.Hp, out var added) && added > 0f;
     }
 
-    public IGameRegistration AddItemUsedListener(Action<int> onUsed)
-    {
-        if (onUsed == null) throw new ArgumentNullException(nameof(onUsed));
-        _itemUsed?.Dispose();
-        ConsumableInterop.Listen(onUsed);
-        _itemUsed = new ItemUsedRegistration(this);
-        return _itemUsed;
-    }
-
-    public bool ApplySharedConsumable(int definitionId)
-        => ConsumableInterop.ApplySharedEffects(definitionId);
-
-    private ItemUsedRegistration _itemUsed;
-
-    private sealed class ItemUsedRegistration : IGameRegistration
-    {
-        private InventoryAdapter _owner;
-        internal ItemUsedRegistration(InventoryAdapter owner) => _owner = owner;
-
-        public string Id => "inventory.item-used";
-        public bool IsActive => _owner != null;
-
-        public void Dispose()
-        {
-            var owner = _owner;
-            if (owner == null) return;
-            _owner = null;
-            if (!ReferenceEquals(owner._itemUsed, this)) return;
-            owner._itemUsed = null;
-            ConsumableInterop.StopListening();
-        }
-    }
-
     private static InventoryStorageRequest NewRequest(int definitionId, int count)
         => new((InventoryItemStringId)definitionId, count,
             contentItemId: default, warmForSeconds: 0, lootTarget: LootTarget.Aava,

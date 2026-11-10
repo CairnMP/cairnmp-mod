@@ -1,0 +1,502 @@
+using System.Collections.Generic;
+using System.Numerics;
+using CairnMultiplayerMod.Internal.Game.Roping;
+using CairnMultiplayerMod.Internal.Networking;
+using Xunit;
+
+namespace CairnMultiplayerMod.Tests;
+
+[Collection("RopeTeamSession")]
+public sealed class TeamAnchorChainTests
+{
+    [Fact]
+    public void TheFirstPitonAnchorsBothClimbers()
+    {
+        var chain = new TeamAnchorChain();
+
+        Assert.True(chain.Place(1));
+
+        Assert.Equal(1u, chain.LeaderAnchor);
+        Assert.Equal(1u, chain.FollowerAnchor);
+        Assert.Equal(0u, chain.ParentOf(1));
+    }
+
+    [Fact]
+    public void ALaterPitonAnchorsOnlyTheLeaderAndParentsToThePreviousOne()
+    {
+        var chain = new TeamAnchorChain();
+        chain.Place(1);
+        chain.Place(2);
+        chain.Place(3);
+
+        Assert.Equal(3u, chain.LeaderAnchor);
+        Assert.Equal(1u, chain.FollowerAnchor);
+        Assert.Equal(2u, chain.ParentOf(3));
+        Assert.Equal(1u, chain.ParentOf(2));
+    }
+
+    [Fact]
+    public void PlacingTheSamePitonAgainChangesNothing()
+    {
+        var chain = new TeamAnchorChain();
+        chain.Place(1);
+        chain.Place(2);
+
+        Assert.False(chain.Place(2));
+        Assert.Equal(2, chain.Count);
+        Assert.Equal(2u, chain.LeaderAnchor);
+    }
+
+    [Fact]
+    public void RemovingTheFollowersAnchorMovesTheFollowerToItsChild()
+    {
+        var chain = new TeamAnchorChain();
+        chain.Place(1);
+        chain.Place(2);
+        chain.Place(3);
+
+        Assert.True(chain.Remove(1));
+
+        Assert.Equal(2u, chain.FollowerAnchor);
+        Assert.Equal(3u, chain.LeaderAnchor);
+        Assert.Equal(0u, chain.ParentOf(2));
+    }
+
+    [Fact]
+    public void RemovingAMiddlePitonOnlySplicesTheChain()
+    {
+        var chain = new TeamAnchorChain();
+        chain.Place(1);
+        chain.Place(2);
+        chain.Place(3);
+
+        Assert.True(chain.Remove(2));
+
+        Assert.Equal(1u, chain.FollowerAnchor);
+        Assert.Equal(3u, chain.LeaderAnchor);
+        Assert.Equal(1u, chain.ParentOf(3));
+        Assert.False(chain.Contains(2));
+    }
+
+    [Fact]
+    public void RemovingTheLeadersNewestPitonMovesTheLeaderToItsParent()
+    {
+        var chain = new TeamAnchorChain();
+        chain.Place(1);
+        chain.Place(2);
+        chain.Place(3);
+
+        Assert.True(chain.Remove(3));
+
+        Assert.Equal(1u, chain.FollowerAnchor);
+        Assert.Equal(2u, chain.LeaderAnchor);
+        Assert.Equal(1u, chain.ParentOf(2));
+        Assert.True(chain.IsNewerThanFollowerAnchor(2));
+    }
+
+    [Fact]
+    public void RemovingTheLastPitonClearsBothAnchors()
+    {
+        var chain = new TeamAnchorChain();
+        chain.Place(1);
+        chain.Place(2);
+        chain.Remove(1);
+
+        Assert.Equal(2u, chain.LeaderAnchor);
+        Assert.Equal(2u, chain.FollowerAnchor);
+        Assert.True(chain.Remove(2));
+        Assert.Equal(0, chain.Count);
+        Assert.Equal(0u, chain.LeaderAnchor);
+        Assert.Equal(0u, chain.FollowerAnchor);
+    }
+
+    [Fact]
+    public void AMissingPitonIsLeftAlone()
+    {
+        var chain = new TeamAnchorChain();
+        chain.Place(1);
+
+        Assert.False(chain.Remove(9));
+        Assert.Equal(1u, chain.LeaderAnchor);
+    }
+
+    [Fact]
+    public void TheFollowerCannotPlaceAndTheLeaderCannotTakeAChainPiton()
+    {
+        Assert.True(TeamAnchorChain.MayPlace(ropeTeam: true, rulesArmed: false, leaderStillOnRope: false));
+        Assert.True(TeamAnchorChain.MayPlace(ropeTeam: true, rulesArmed: false, leaderStillOnRope: true));
+        Assert.False(TeamAnchorChain.MayPlace(ropeTeam: true, rulesArmed: true, leaderStillOnRope: false));
+        Assert.True(TeamAnchorChain.MayPlace(ropeTeam: true, rulesArmed: true, leaderStillOnRope: true));
+        Assert.True(TeamAnchorChain.MayPlace(ropeTeam: false, rulesArmed: true, leaderStillOnRope: false));
+        Assert.True(TeamAnchorChain.MayPlace(ropeTeam: false, rulesArmed: false, leaderStillOnRope: false));
+
+        Assert.False(TeamAnchorChain.MayTake(linked: true, isLeader: true, onChain: true));
+        Assert.True(TeamAnchorChain.MayTake(linked: true, isLeader: true, onChain: false));
+        Assert.True(TeamAnchorChain.MayTake(linked: true, isLeader: false, onChain: true));
+
+        Assert.True(TeamAnchorChain.KeepsClimbotCoil(isLocalLeader: true, leaderLeft: false));
+        Assert.False(TeamAnchorChain.KeepsClimbotCoil(isLocalLeader: true, leaderLeft: true));
+        Assert.False(TeamAnchorChain.KeepsClimbotCoil(isLocalLeader: false, leaderLeft: false));
+        Assert.False(TeamAnchorChain.KeepsClimbotCoil(isLocalLeader: false, leaderLeft: true));
+
+        Assert.True(TeamAnchorChain.FollowerKeepsSecuringClip(isLocalFollower: true, hasProtection: true));
+        Assert.False(TeamAnchorChain.FollowerKeepsSecuringClip(isLocalFollower: true, hasProtection: false));
+        Assert.False(TeamAnchorChain.FollowerKeepsSecuringClip(isLocalFollower: false, hasProtection: true));
+        Assert.False(TeamAnchorChain.FollowerKeepsSecuringClip(isLocalFollower: false, hasProtection: false));
+        Assert.False(TeamAnchorChain.FollowerUnclipsNewerPitons(sharedRope: true));
+        Assert.True(TeamAnchorChain.FollowerUnclipsNewerPitons(sharedRope: false));
+    }
+
+    [Fact]
+    public void TheClimberWhoClipsLeadsUntilTheRopeIsUntied()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+
+        Assert.True(TeamAnchorSession.IsLocalLeader);
+        Assert.Equal(4, TeamAnchorSession.LeaderId);
+        TeamAnchorSession.NoteLocalLeaderPlacement(3, new Vector3(1f, 2f, 3f));
+        Assert.True(TeamAnchorSession.HasProtection);
+        Assert.Equal(1, TeamAnchorSession.Count);
+
+        RopeLinkState.Apply(4, 7, false);
+        TeamAnchorSession.OnClip(4, 4, 7, false);
+        Assert.False(TeamAnchorSession.IsLinked);
+        Assert.False(TeamAnchorSession.HasProtection);
+    }
+
+    [Fact]
+    public void TheFollowerRecordsTheLeadersPitonsAndIgnoresTheirOwn()
+    {
+        Reset();
+        TeamAnchorSession.Bind(() => true);
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(7, 4, 7, true);
+
+        TeamAnchorSession.NoteRemotePlacement(4, 9, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteRemotePlacement(7, 10, new Vector3(0f, 2f, 0f));
+
+        Assert.Equal(1, TeamAnchorSession.Count);
+        Assert.True(TeamAnchorSession.IsLocalFollower);
+        Assert.False(TeamAnchorSession.AllowsPlacement);
+    }
+
+    [Fact]
+    public void TheLeaderIgnoresTheHostIdForAPitonTheyAlreadyPlaced()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+
+        TeamAnchorSession.NoteRemotePlacement(4, 99, new Vector3(1f, 0f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(1, new Vector3(1f, 0f, 0f));
+
+        Assert.Equal(1, TeamAnchorSession.Count);
+    }
+
+    [Fact]
+    public void TheFollowerUnclipsPitonsNewerThanTheirAnchorAndClipsOneBack()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(7, 4, 7, true);
+        TeamAnchorSession.NoteRemotePlacement(4, 1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteRemotePlacement(4, 2, new Vector3(0f, 2f, 0f));
+        TeamAnchorSession.NoteRemotePlacement(4, 3, new Vector3(0f, 3f, 0f));
+
+        var detach = new List<uint>();
+        var reattach = new List<uint>();
+        TeamAnchorSession.CopyRopeEdits(detach, reattach);
+
+        Assert.Equal(new uint[] { 2, 3 }, detach);
+        Assert.Equal(new uint[] { 1 }, reattach);
+
+        TeamAnchorSession.MarkAttached(1);
+        TeamAnchorSession.CopyRopeEdits(detach, reattach);
+        Assert.Empty(reattach);
+        Assert.Equal(new uint[] { 2, 3 }, detach);
+
+        TeamAnchorSession.MarkDetached(2);
+        TeamAnchorSession.MarkDetached(3);
+        TeamAnchorSession.NoteRemoved(1);
+        TeamAnchorSession.CopyRopeEdits(detach, reattach);
+
+        Assert.Empty(detach);
+        Assert.Equal(new uint[] { 2 }, reattach);
+    }
+
+    [Fact]
+    public void TheLeaderIgnoresAHostIdThatCollidesWithALocalPiton()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+        TeamAnchorSession.NoteLocalLeaderPlacement(1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(2, new Vector3(0f, 2f, 0f));
+
+        TeamAnchorSession.NoteAuthoritativeRemoval(2);
+
+        Assert.Equal(2, TeamAnchorSession.Count);
+        TeamAnchorSession.NoteRemoved(2);
+        Assert.Equal(1, TeamAnchorSession.Count);
+        TeamAnchorSession.NoteRemoved(1);
+        Assert.Equal(0, TeamAnchorSession.Count);
+    }
+
+    [Fact]
+    public void TheFollowerKeepsTheChainWhenAPersonalPitonSharesItsNumber()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(7, 4, 7, true);
+        TeamAnchorSession.NoteRemotePlacement(4, 1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteRemotePlacement(4, 2, new Vector3(0f, 2f, 0f));
+
+        TeamAnchorSession.NoteLocalRemoval(1);
+
+        Assert.Equal(2, TeamAnchorSession.Count);
+        Assert.True(TeamAnchorSession.AllowsTake(1, ownLocalId: true));
+        Assert.True(TeamAnchorSession.AllowsTake(1, ownLocalId: false));
+    }
+
+    [Fact]
+    public void TheLeaderCanTakeAHostPitonWhoseNumberMatchesTheChain()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+        TeamAnchorSession.NoteLocalLeaderPlacement(1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(2, new Vector3(0f, 2f, 0f));
+
+        Assert.False(TeamAnchorSession.AllowsTake(1, ownLocalId: true));
+        Assert.True(TeamAnchorSession.AllowsTake(1, ownLocalId: false));
+
+        TeamAnchorSession.NoteLocalRemoval(1);
+
+        Assert.Equal(1, TeamAnchorSession.Count);
+        Assert.False(TeamAnchorSession.IsChainKey(1, ownLocalId: true));
+    }
+
+    [Fact]
+    public void TheFollowerDropsAHostIdFromTheChain()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(7, 4, 7, true);
+        TeamAnchorSession.NoteRemotePlacement(4, 5, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteRemotePlacement(4, 6, new Vector3(0f, 2f, 0f));
+
+        TeamAnchorSession.NoteAuthoritativeRemoval(5);
+
+        Assert.Equal(1, TeamAnchorSession.Count);
+    }
+
+    [Fact]
+    public void ChainIdsFollowThePitonsFromOldest()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+        TeamAnchorSession.NoteLocalLeaderPlacement(1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(2, new Vector3(0f, 2f, 0f));
+
+        var ids = new List<uint>();
+        var path = new List<Vector3>();
+        Assert.True(TeamAnchorSession.CopyPath(path));
+        TeamAnchorSession.CopyIds(ids);
+
+        Assert.Equal(new uint[] { 1, 2 }, ids);
+        Assert.Equal(ids.Count, path.Count);
+    }
+
+    [Fact]
+    public void UntieQueuesEveryChainPitonSoNothingOnItCanCatch()
+    {
+        Reset();
+        TeamAnchorSession.Bind(() => true);
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+        TeamAnchorSession.NoteLocalLeaderPlacement(1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(2, new Vector3(0f, 2f, 0f));
+
+        RopeLinkState.Apply(4, 7, false);
+        TeamAnchorSession.OnClip(4, 4, 7, false);
+
+        var released = new List<TeamAnchorSession.ChainRelease>();
+        TeamAnchorSession.CopyReleased(released);
+        Assert.Equal(2, released.Count);
+        Assert.Equal(1u, released[0].Id);
+        Assert.True(released[0].LocalId);
+        Assert.Equal(2u, released[1].Id);
+        Assert.True(released[1].LocalId);
+        Assert.False(TeamAnchorSession.HasProtection);
+        Assert.False(TeamAnchorSession.AllowsPlacement);
+
+        TeamAnchorSession.MarkReleased(released[0]);
+        TeamAnchorSession.CopyReleased(released);
+        var left = Assert.Single(released);
+        Assert.Equal(2u, left.Id);
+    }
+
+    [Fact]
+    public void UntieOnTheFollowerQueuesTheHostIds()
+    {
+        Reset();
+        TeamAnchorSession.Bind(() => true);
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(7, 4, 7, true);
+        TeamAnchorSession.NoteRemotePlacement(4, 5, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteRemotePlacement(4, 6, new Vector3(0f, 2f, 0f));
+
+        RopeLinkState.Apply(4, 7, false);
+        TeamAnchorSession.OnClip(7, 4, 7, false);
+
+        var released = new List<TeamAnchorSession.ChainRelease>();
+        TeamAnchorSession.CopyReleased(released);
+        Assert.Equal(new uint[] { 5, 6 }, new[] { released[0].Id, released[1].Id });
+        Assert.False(released[0].LocalId);
+        Assert.False(released[1].LocalId);
+    }
+
+    [Fact]
+    public void AHeldDeathUnclipsLikePressingTheRope()
+    {
+        Reset();
+        TeamAnchorSession.Bind(() => true);
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+        TeamAnchorSession.NoteLocalLeaderPlacement(1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(2, new Vector3(0f, 2f, 0f));
+
+        // No planted staff, so the death takes the voluntary unclip: the chain comes off
+        // the rope and placement stays armed until camp.
+        RopeLinkState.Apply(4, 7, false);
+        TeamAnchorSession.OnClip(4, 4, 7, false);
+
+        var released = new List<TeamAnchorSession.ChainRelease>();
+        TeamAnchorSession.CopyReleased(released);
+        Assert.Equal(2, released.Count);
+        Assert.False(TeamAnchorSession.IsLinked);
+        Assert.False(TeamAnchorSession.HasProtection);
+        Assert.False(TeamAnchorSession.LeaderLeft);
+        Assert.True(TeamAnchorSession.RulesArmed);
+        Assert.False(TeamAnchorSession.AllowsPlacement);
+    }
+
+    [Fact]
+    public void ANewTieArmsTheRulesAndAWallUntieLeavesThemArmed()
+    {
+        Reset();
+        TeamAnchorSession.Bind(() => true);
+        Assert.False(TeamAnchorSession.RulesArmed);
+        Assert.True(TeamAnchorSession.AllowsPlacement);
+
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+        Assert.True(TeamAnchorSession.RulesArmed);
+        Assert.True(TeamAnchorSession.AllowsPlacement);
+
+        RopeLinkState.Apply(4, 7, false);
+        TeamAnchorSession.OnClip(4, 4, 7, false);
+        Assert.False(TeamAnchorSession.IsLinked);
+        Assert.True(TeamAnchorSession.RulesArmed);
+        Assert.False(TeamAnchorSession.AllowsPlacement);
+
+        TeamAnchorSession.Clear();
+        Assert.True(TeamAnchorSession.RulesArmed);
+
+        TeamAnchorSession.DisarmRules();
+        Assert.False(TeamAnchorSession.RulesArmed);
+        Assert.True(TeamAnchorSession.AllowsPlacement);
+    }
+
+    [Fact]
+    public void SwitchingWithThePracticeClimberTradesTheJobAndKeepsThePitonNumbers()
+    {
+        Reset();
+        TeamAnchorSession.Bind(() => true);
+        RopeLinkState.Apply(4, PracticePartner.PlayerId, true);
+        TeamAnchorSession.OnClip(4, 4, PracticePartner.PlayerId, true);
+        TeamAnchorSession.NoteLocalLeaderPlacement(1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(2, new Vector3(0f, 2f, 0f));
+
+        Assert.True(TeamAnchorSession.ExchangePracticeRoles(PracticePartner.PlayerId));
+        Assert.False(TeamAnchorSession.IsLocalLeader);
+        Assert.True(TeamAnchorSession.IsLocalFollower);
+        Assert.Equal(PracticePartner.PlayerId, TeamAnchorSession.LeaderId);
+        Assert.Equal(4, TeamAnchorSession.FollowerId);
+        Assert.False(TeamAnchorSession.AllowsPlacement);
+        Assert.True(TeamAnchorSession.IsChainKey(1, ownLocalId: true));
+        Assert.True(TeamAnchorSession.AllowsTake(1, ownLocalId: true));
+        Assert.True(TeamAnchorChain.FollowerKeepsSecuringClip(
+            TeamAnchorSession.IsLocalFollower, TeamAnchorSession.HasProtection));
+
+        Assert.True(TeamAnchorSession.SharesOneRope);
+        var detach = new List<uint>();
+        var reattach = new List<uint>();
+        TeamAnchorSession.CopyRopeEdits(detach, reattach);
+        Assert.Empty(detach);
+        Assert.Empty(reattach);
+
+        TeamAnchorSession.NoteLocalRemoval(2);
+        Assert.Equal(1, TeamAnchorSession.Count);
+        TeamAnchorSession.NoteAuthoritativeRemoval(1);
+        Assert.True(TeamAnchorSession.IsChainKey(1, ownLocalId: true));
+
+        Assert.True(TeamAnchorSession.ExchangePracticeRoles(PracticePartner.PlayerId));
+        Assert.True(TeamAnchorSession.IsLocalLeader);
+        Assert.Equal(4, TeamAnchorSession.LeaderId);
+        Assert.Equal(PracticePartner.PlayerId, TeamAnchorSession.FollowerId);
+        Assert.True(TeamAnchorSession.AllowsPlacement);
+        Assert.False(TeamAnchorSession.AllowsTake(1, ownLocalId: true));
+    }
+
+    [Fact]
+    public void SwitchingPlacesLeavesAStaffHoldingThePitch()
+    {
+        Reset();
+        TeamAnchorSession.Bind(() => true);
+        RopeLinkState.Apply(4, PracticePartner.PlayerId, true);
+        TeamAnchorSession.OnClip(4, 4, PracticePartner.PlayerId, true);
+        TeamAnchorSession.NoteLocalLeaderPlacement(1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(TopAnchorPolicy.FirstId, new Vector3(0f, 4f, 0f));
+        TopAnchorSession.Remember(TopAnchorPolicy.FirstId, new Vector3(0f, 4f, 0f));
+        TopAnchorSession.RequestHold();
+
+        RopeLinkState.Apply(4, PracticePartner.PlayerId, false);
+        TeamAnchorSession.OnClip(4, 4, PracticePartner.PlayerId, false);
+
+        Assert.False(TeamAnchorSession.IsLinked);
+        Assert.False(TeamAnchorSession.ExchangePracticeRoles(PracticePartner.PlayerId));
+        Assert.True(TopAnchorSession.HasStick);
+        Assert.Equal(2, TeamAnchorSession.Count);
+        Assert.False(TeamAnchorSession.AllowsPlacement);
+        Assert.True(TeamAnchorSession.Protects(1));
+        var released = new List<TeamAnchorSession.ChainRelease>();
+        TeamAnchorSession.CopyReleased(released);
+        Assert.Empty(released);
+    }
+
+    [Fact]
+    public void ARealPairDoesNotTradeJobs()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+
+        Assert.False(TeamAnchorSession.ExchangePracticeRoles(PracticePartner.PlayerId));
+        Assert.Equal(4, TeamAnchorSession.LeaderId);
+        Assert.Equal(7, TeamAnchorSession.FollowerId);
+        Assert.True(TeamAnchorSession.IsLocalLeader);
+    }
+
+    private static void Reset()
+    {
+        RopeLinkState.Clear();
+        TeamAnchorSession.Clear();
+        TeamAnchorSession.DisarmRules();
+        TeamAnchorSession.DiscardRelease();
+        TeamAnchorSession.Bind(() => false);
+    }
+}

@@ -13,6 +13,7 @@ internal sealed class LifeAdapter : ILifeApi
     private RevivePromptRegistration _prompt;
 
     public bool IsLocalPlayerDown => LifeInterop.IsLocalPlayerDead();
+    public bool IsDeathScreenHeld => DeathScreenPatch.IsHoldingDeath;
 
     public IGameRegistration HoldBackDeathScreen(Func<bool> keepHolding, Action onWentDown)
     {
@@ -33,9 +34,6 @@ internal sealed class LifeAdapter : ILifeApi
     public bool ReviveLocalPlayer(float healthRatio) => LifeInterop.Revive(healthRatio);
 
     public void ExhaustLocalPlayer(float amount) => LifeInterop.Exhaust(amount);
-
-    public float FallenPartnerStaminaCost(float fallback)
-        => LifeInterop.StaminaCostPerFallenPartner(fallback);
 
     public IGameRegistration AddRevivePrompt(Func<int, bool> canRevive, Action<int> onRevive)
     {

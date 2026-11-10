@@ -549,7 +549,7 @@ namespace CairnMultiplayerMod.Internal.Networking
                 LobbyVisibility.Private => ELobbyType.k_ELobbyTypePrivate,
                 _ => ELobbyType.k_ELobbyTypeFriendsOnly,
             };
-            var maxPlayers = Math.Max(2, Math.Min(cfg.MaxPlayers, 16));
+            var maxPlayers = MultiplayerModes.ClampLobbySize(cfg.Mode, cfg.MaxPlayers);
 
             try
             {

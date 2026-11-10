@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.GameApi;
+using CairnMultiplayerMod.Internal.Game.Bivouac;
 using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Game.World;
 using CairnMultiplayerMod.Internal.Networking;
@@ -31,6 +32,31 @@ internal sealed class GameStateAdapter : IGameStateApi
         position = new WorldPosition(camp.x, camp.y, camp.z);
         return true;
     }
+
+    public bool IsInCampVolume
+        => LocalPlayerInterop.TryGetPose(out var pose, out _) && BivouacVolume.TryApproach(pose, out _);
+
+    public bool TryGetRecallCamp(out WorldPosition position)
+    {
+        position = default;
+        if (LocalPlayerInterop.TryGetPose(out var pose, out _) && BivouacVolume.TryApproach(pose, out var marker))
+        {
+            BivouacVolume.Remember(marker);
+            position = new WorldPosition(marker.x, marker.y, marker.z);
+            return true;
+        }
+
+        if (IsLocalPlayerInBivouac && BivouacVolume.TryRemembered(out var remembered))
+        {
+            position = new WorldPosition(remembered.x, remembered.y, remembered.z);
+            return true;
+        }
+
+        return false;
+    }
+
+    public bool SameCampVolume(WorldPosition camp, WorldPosition pose)
+        => BivouacVolume.Same(new Vector3(camp.X, camp.Y, camp.Z), new Vector3(pose.X, pose.Y, pose.Z));
 }
 
 internal sealed class GameTimeAdapter : IGameTimeApi
@@ -42,6 +68,9 @@ internal sealed class GameTimeAdapter : IGameTimeApi
 
 internal sealed class GameInputAdapter : IGameInputApi
 {
+    private float _revivePressedAt = -1f;
+    private bool _reviveFired;
+
     public bool IsKeyboardCaptured => InputCaptureState.IsKeyboardCaptured;
     public bool IsPauseMenuActive => MultiplayerPausePatch.IsPauseMenuActive;
 
@@ -55,8 +84,28 @@ internal sealed class GameInputAdapter : IGameInputApi
                                      || ModControllerInput.WasPressed(ControllerShortcut.Panic),
             GameInputAction.PickupSharedItemController =>
                 ModControllerInput.WasPressed(ControllerShortcut.PickupSharedItem),
+            GameInputAction.RevivePartner => ReviveHeld(),
             _ => false,
         };
+    }
+
+    private bool ReviveHeld()
+    {
+        if (IsKeyboardCaptured || IsPauseMenuActive)
+        {
+            _revivePressedAt = -1f;
+            _reviveFired = false;
+            return false;
+        }
+
+        var keyboard = Keyboard.current;
+        var pad = Gamepad.current;
+        var down = ReviveHold.IsDown(
+            keyboard != null && keyboard.rKey.isPressed,
+            pad != null && pad.buttonWest.isPressed,
+            pad != null && pad.selectButton.isPressed);
+        return ButtonHold.Advance(ref _revivePressedAt, ref _reviveFired, down,
+            Time.unscaledTime, ReviveHold.Seconds);
     }
 
     public bool WasKeyPressed(GameKey key)
@@ -93,6 +142,20 @@ internal sealed class HudAdapter : IGameHudApi
     public void HideMessage(string id)
     {
         if (!string.IsNullOrWhiteSpace(id)) _messages.Remove(id);
+    }
+
+    public void ShowControlTip(string id, string label, string cue)
+    {
+        if (id == "revive.recall")
+            Roping.RopeClipPrompt.Tick(id, true, label, cue, "<Keyboard>/r", "<Gamepad>/buttonWest");
+        else if (id == "revive.reach")
+            Roping.RopeClipPrompt.TickSkull(id, true, label);
+    }
+
+    public void HideControlTip(string id)
+    {
+        if (id == "revive.recall" || id == "revive.reach")
+            Roping.RopeClipPrompt.Hide(id);
     }
 
     internal void Tick()
@@ -214,12 +277,13 @@ internal sealed class PlayersAdapter : IPlayersApi
 
     public IReadOnlyList<int> RemoteSleepParticipants => CollectInGameOrBivouac(_sleepParticipants);
 
-    public IReadOnlyList<int> RemotePlayersInGameOrBivouac => CollectInGameOrBivouac(_inGameOrBivouacPlayers);
+    public IReadOnlyList<int> RemotePlayersInGameOrBivouac => CollectStillInTheClimb(_inGameOrBivouacPlayers);
 
     public bool IsRemotePlayerInBivouac(int playerId)
     {
         var network = _network();
-        return network != null && network.RemotePlayers.TryGetValue(playerId, out var player)
+        return network != null && PracticePartner.IsPublicRemote(playerId)
+            && network.RemotePlayers.TryGetValue(playerId, out var player)
             && player?.State == PlayerState.Bivouac;
     }
 
@@ -229,7 +293,28 @@ internal sealed class PlayersAdapter : IPlayersApi
         var network = _network();
         if (network != null)
             foreach (var pair in network.RemotePlayers)
-                if (pair.Value?.State is PlayerState.InGame or PlayerState.Bivouac)
+                if (PracticePartner.IsPublicRemote(pair.Key)
+                    && pair.Value?.State is PlayerState.InGame or PlayerState.Bivouac)
+                    players.Add(pair.Key);
+        return players;
+    }
+
+    /// <summary>
+    /// Wall, camp, and the gap between scenes. A loading report is a zone load or a story
+    /// scene, and that climber is still in the run. The main menu stays out.
+    /// </summary>
+    internal static bool IsStillInTheClimb(PlayerState state)
+        => state is PlayerState.InGame or PlayerState.Bivouac or PlayerState.Loading;
+
+    private IReadOnlyList<int> CollectStillInTheClimb(List<int> players)
+    {
+        players.Clear();
+        var network = _network();
+        if (network != null)
+            foreach (var pair in network.RemotePlayers)
+                if (PracticePartner.IsPublicRemote(pair.Key)
+                    && pair.Value != null
+                    && IsStillInTheClimb(pair.Value.State))
                     players.Add(pair.Key);
         return players;
     }
@@ -249,8 +334,6 @@ internal sealed class PlayersAdapter : IPlayersApi
         return network != null && Roping.RopeLinkState.IsLinked(network.LocalPlayerId, playerId);
     }
 
-    public bool ShakeLocalClimberGrip() => Roping.RopeShakeInterop.ShakeLocalClimber();
-
     public bool TryGetLocation(int playerId, out PlayerLocation location)
     {
         location = default;
@@ -266,7 +349,8 @@ internal sealed class PlayersAdapter : IPlayersApi
             return true;
         }
 
-        if (!network.RemotePlayers.TryGetValue(playerId, out var player) || player == null
+        if (!PracticePartner.IsPublicRemote(playerId)
+            || !network.RemotePlayers.TryGetValue(playerId, out var player) || player == null
             || player.State != PlayerState.InGame || player.LastUpdateTime <= 0
             || DateTime.UtcNow.Ticks / (double)TimeSpan.TicksPerSecond - player.LastUpdateTime
                 > MaxLocationAgeSeconds) return false;
@@ -285,7 +369,8 @@ internal sealed class PlayersAdapter : IPlayersApi
 
             foreach (var pair in network.RemotePlayers)
             {
-                if (pair.Value?.State == PlayerState.InGame) players.Add(pair.Key);
+                if (PracticePartner.IsPublicRemote(pair.Key) && pair.Value?.State == PlayerState.InGame)
+                    players.Add(pair.Key);
             }
             return players;
         }

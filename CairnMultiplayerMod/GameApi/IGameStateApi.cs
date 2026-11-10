@@ -21,4 +21,19 @@ internal interface IGameStateApi
 
     /// <summary>True once the game considers the climb finished at the top.</summary>
     bool HasReachedSummit { get; }
+
+    /// <summary>
+    /// True while the local climber is standing in a bivouac's volume on the mountain.
+    /// The interior of the rest is <see cref="IsLocalPlayerInBivouac"/>, not this.
+    /// </summary>
+    bool IsInCampVolume { get; }
+
+    /// <summary>
+    /// The camp on the mountain a partner can be brought back to. Inside the rest this is
+    /// the camp they entered, not the interior pose. False when that camp is not known.
+    /// </summary>
+    bool TryGetRecallCamp(out WorldPosition position);
+
+    /// <summary>True when <paramref name="pose"/> is in the same camp volume as <paramref name="camp"/>.</summary>
+    bool SameCampVolume(WorldPosition camp, WorldPosition pose);
 }

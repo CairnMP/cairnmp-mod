@@ -381,6 +381,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         var nameCell = SketchUiKit.RowStrip(body.transform, "Lobby name", 58f, 420f);
         SketchUiKit.Label(nameCell, "Value", _autoLobbyName, 16f, SketchUiKit.TextCream, TextAlignmentOptions.Right);
 
+        _slots = MultiplayerModes.ClampLobbySize(SelectedMode.Mode, _slots, MaxSlots);
         var slotsCell = SketchUiKit.RowStrip(body.transform, "Slots", -6f);
         _slotsLabel = SketchUiKit.Stepper(slotsCell, _slots.ToString(),
             (UnityAction)(() => AdjustSlots(-1)), (UnityAction)(() => AdjustSlots(+1)));
@@ -682,7 +683,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         {
             PlayerName = GetLocalPlayerName(),
             LobbyName = !string.IsNullOrEmpty(_autoLobbyName) ? _autoLobbyName : $"{GetLocalPlayerName()}'s climb",
-            MaxPlayers = _slots,
+            MaxPlayers = MultiplayerModes.ClampLobbySize(SelectedMode.Mode, _slots, MaxSlots),
             Visibility = VisValues[_visIndex],
             Mode = SelectedMode.Mode,
             World = SelectedWorld,
@@ -710,7 +711,8 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     private void AdjustSlots(int d)
     {
         if (_isConnecting || _isConnected) return;
-        _slots = Mathf.Clamp(_slots + d, MinSlots, MaxSlots);
+        var ceiling = SelectedMode.Mode == MultiplayerMode.RopeTeam ? MinSlots : MaxSlots;
+        _slots = Mathf.Clamp(_slots + d, MinSlots, ceiling);
         if (_slotsLabel != null) _slotsLabel.text = _slots.ToString();
     }
 

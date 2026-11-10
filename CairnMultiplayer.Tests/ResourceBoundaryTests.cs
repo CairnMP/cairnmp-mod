@@ -33,6 +33,16 @@ public sealed class ResourceBoundaryTests
     }
 
     [Fact]
+    public void RopeLinkRequiresClimbersWithinOneMeter()
+    {
+        Assert.Equal(1f, RopeRequests.LinkRangeMeters);
+        Assert.True(RopeRequests.WithinLinkRange(0f, 0f, 0f, 0f, 0f, 0f));
+        Assert.True(RopeRequests.WithinLinkRange(0f, 0f, 0f, 1f, 0f, 0f));
+        Assert.False(RopeRequests.WithinLinkRange(0f, 0f, 0f, 1.01f, 0f, 0f));
+        Assert.False(RopeRequests.WithinLinkRange(float.NaN, 0f, 0f, 0f, 0f, 0f));
+    }
+
+    [Fact]
     public void ArchiveCopyStopsAtSnapshotLengthEvenIfSourceHasMoreBytes()
     {
         using var source = new MemoryStream(new byte[100000]);

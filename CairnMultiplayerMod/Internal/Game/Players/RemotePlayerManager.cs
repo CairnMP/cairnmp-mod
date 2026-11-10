@@ -247,6 +247,60 @@ internal static class RemotePlayerManager
         }
     }
 
+    /// <summary>
+    /// A point on this ghost for a mark above the climber. The floating name when it
+    /// sits near the body, otherwise the body root. A ghost parked under the world
+    /// is not a point.
+    /// </summary>
+    internal static bool TryGetRoleAnchor(int playerId, out Vector3 position, out Vector3 up, out bool atName)
+    {
+        position = default;
+        up = Vector3.up;
+        atName = false;
+        if (!_ghosts.TryGetValue(playerId, out var entry)) return false;
+        if (!entry.IsRealModel || entry.Root == null) return false;
+        try
+        {
+            var root = entry.Root.transform;
+            if (root == null) return false;
+            var rootPos = root.position;
+            if (!IsClimbablePoint(rootPos)) return false;
+            var bodyUp = root.up;
+            if (bodyUp.sqrMagnitude > 1e-4f) up = bodyUp.normalized;
+
+            var mesh = entry.NrpComponent != null ? entry.NrpComponent.nameMesh : null;
+            if (mesh != null)
+            {
+                var named = mesh.transform.position;
+                if (IsClimbablePoint(named) && (named - rootPos).sqrMagnitude <= 9f)
+                {
+                    position = named;
+                    atName = true;
+                    return true;
+                }
+            }
+
+            position = rootPos;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("remote-player.role-anchor", exception);
+            return false;
+        }
+    }
+
+    /// <summary>A body on the mountain. The ghost hold at (0, -10000, 0) is not.</summary>
+    internal static bool IsClimbablePoint(Vector3 position)
+    {
+        if (float.IsNaN(position.x) || float.IsInfinity(position.x)
+            || float.IsNaN(position.y) || float.IsInfinity(position.y)
+            || float.IsNaN(position.z) || float.IsInfinity(position.z))
+            return false;
+        var parked = position - HiddenSpawnPosition;
+        return parked.sqrMagnitude > 1f;
+    }
+
     internal static bool TryGetGhostHarness(int playerId, out Il2Cpp.Harness harness)
     {
         harness = null;
@@ -340,20 +394,24 @@ internal static class RemotePlayerManager
 
                     // Enable the climbot's native interpolation once it exists (created on
                     // the first frame) — otherwise it snaps while the player is smoothed.
-                    if (!entry.ClimbotLerpApplied)
+                    try
                     {
-                        try
+                        var climbot = entry.NrpComponent.Climbot;
+                        if (climbot != null && !PracticePartner.Is(rp.Id))
                         {
-                            var climbot = entry.NrpComponent.Climbot;
-                            if (climbot != null)
-                            {
-                                climbot.lerp = true;
-                                if (climbot.lerpSpeed <= 0f) climbot.lerpSpeed = 12f;
-                                entry.ClimbotLerpApplied = true;
-                            }
+                            if (TeamAnchorSession.RulesArmed)
+                                ClimbotRopePatch.HideRemote(climbot);
+                            else
+                                ClimbotRopePatch.ShowRemote(climbot);
                         }
-                        catch (Exception exception) { ModLog.SuppressedException("remote-player.apply-runtime-lerp", exception); }
+                        if (!entry.ClimbotLerpApplied && climbot != null)
+                        {
+                            climbot.lerp = true;
+                            if (climbot.lerpSpeed <= 0f) climbot.lerpSpeed = 12f;
+                            entry.ClimbotLerpApplied = true;
+                        }
                     }
+                    catch (Exception exception) { ModLog.SuppressedException("remote-player.apply-runtime-lerp", exception); }
                 }
 
                 if (poseApplied) continue;
@@ -666,7 +724,9 @@ internal static class RemotePlayerManager
                 if (go != null)
                 {
                     go.SetActive(true);
-                    ActivateNativeRemoteVisuals(go);
+                    // His climbot has no frame. Activating it runs an update that calls into
+                    // il2cpp and kills the runtime. The body itself is the Visual child.
+                    ActivateNativeRemoteVisuals(go, includeClimbot: id != PracticePartner.PlayerId);
 
                     // Network-rate frame writes need native interpolation to avoid visible snapping.
                     if (nrpComp != null)
@@ -757,11 +817,12 @@ internal static class RemotePlayerManager
         }
     }
 
-    private static void ActivateNativeRemoteVisuals(GameObject root)
+    private static void ActivateNativeRemoteVisuals(GameObject root, bool includeClimbot)
     {
         if (root == null) return;
         SetChildActive(root, "Visual");
-        SetChildActive(root, "NetplayClimbot");
+        if (includeClimbot)
+            SetChildActive(root, "NetplayClimbot");
     }
 
     private static void SetChildActive(GameObject root, string childName)

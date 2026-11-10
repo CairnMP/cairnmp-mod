@@ -10,9 +10,11 @@ internal interface IPlayersApi
     IReadOnlyList<int> RemoteSleepParticipants { get; }
 
     /// <summary>
-    /// Remote climbers still in the run: on the wall, or camped in a bivouac. A camper is
-    /// missing from <see cref="RemotePlayersInGame"/> — gameplay sync stands down at camp —
-    /// yet they are exactly the teammate who can call the fallen back.
+    /// Remote climbers still in the run: on the wall, camped in a bivouac, or between
+    /// scenes. A zone load and a story scene both report as loading, and that climber can
+    /// still reach a bivouac. A camper is missing from <see cref="RemotePlayersInGame"/> —
+    /// gameplay sync stands down at camp — yet they are exactly the teammate who can call
+    /// the fallen back. A climber back at the main menu is absent from this list.
     /// </summary>
     IReadOnlyList<int> RemotePlayersInGameOrBivouac { get; }
 
@@ -35,12 +37,6 @@ internal interface IPlayersApi
 
     /// <summary>True when that player and the local climber share a rope.</summary>
     bool IsRopedToLocalPlayer(int playerId);
-
-    /// <summary>
-    /// Shakes the local climber's holds loose, the way the game does when a roped partner
-    /// falls. A firm hold resists it. Returns whether anything actually let go.
-    /// </summary>
-    bool ShakeLocalClimberGrip();
 }
 
 internal readonly struct PlayerLocation

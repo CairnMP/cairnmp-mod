@@ -54,7 +54,11 @@ internal sealed class VoiceAdapter : IVoiceApi, IDisposable
     internal long CapturedSamples => _microphone?.CapturedSamples ?? 0;
     internal long RenderedSamples => _output?.RenderedSamples ?? 0;
     internal string ActiveMicrophoneId => _microphone?.DeviceId;
-    internal IEnumerable<(int Id, string Name)> RemotePlayers => _network()?.RemotePlayers.Select(p => (p.Key, p.Value.Name)) ?? Enumerable.Empty<(int, string)>();
+    internal IEnumerable<(int Id, string Name)> RemotePlayers
+        => _network()?.RemotePlayers
+               .Where(p => PracticePartner.IsPublicRemote(p.Key))
+               .Select(p => (p.Key, p.Value.Name))
+           ?? Enumerable.Empty<(int, string)>();
     internal bool IsMuted(int playerId) => _mutedPlayers.Contains(playerId);
     internal void SetMuted(int playerId, bool muted)
     {

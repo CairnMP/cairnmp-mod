@@ -27,13 +27,7 @@ internal sealed partial class NetworkManager
             _remotePlayers[packet.PlayerId] = player;
         }
 
-        player.X = packet.X;
-        player.Y = packet.Y;
-        player.Z = packet.Z;
-        player.YawDeg = packet.YawDeg;
-        player.SceneName = packet.SceneName;
-        player.State = packet.State;
-        player.LastUpdateTime = NowSeconds();
+        ApplyRemotePresence(packet.PlayerId, packet.X, packet.Y, packet.Z, packet.YawDeg, packet.SceneName, packet.State);
     }
 
     private void HandleBoneState(BinaryReader reader)
@@ -92,12 +86,8 @@ internal sealed partial class NetworkManager
         player.State = player.HasPlayerFrame ? PlayerState.InGame : player.State;
         if (!player.HasPlayerFrame) return;
 
-        player.X = frame.Positions[0];
-        player.Y = frame.Positions[1];
-        player.Z = frame.Positions[2];
-        var now = NowSeconds();
-        player.LastUpdateTime = now;
-        player.LastPlayerFrameTime = now;
+        NoteRemoteFrameRoot(player, frame.Positions[0], frame.Positions[1], frame.Positions[2]);
+        player.LastPlayerFrameTime = player.LastUpdateTime;
         LogRemotePlayerFrameAccepted(playerId, player.Name, frame);
     }
 

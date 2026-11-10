@@ -6,6 +6,19 @@ namespace CairnMultiplayerMod.Internal.Networking.Authoritative;
 
 internal static class RopeRequests
 {
+    /// <summary>L ties the rope only when the two climbers are at most this far apart.</summary>
+    internal const float LinkRangeMeters = 1f;
+
+    internal static bool WithinLinkRange(float ax, float ay, float az, float bx, float by, float bz)
+    {
+        var dx = ax - bx;
+        var dy = ay - by;
+        var dz = az - bz;
+        var distanceSquared = dx * dx + dy * dy + dz * dz;
+        return float.IsFinite(distanceSquared)
+            && distanceSquared <= LinkRangeMeters * LinkRangeMeters;
+    }
+
     internal static bool IsAllowed(int source, int target, bool clip,
         IEnumerable<(int a, int b)> links, Func<int, bool> isAdmitted)
     {
