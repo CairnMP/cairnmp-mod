@@ -100,7 +100,6 @@ internal sealed class PitonSync
     private readonly Dictionary<uint, Remote> _remote = new();
     private readonly Dictionary<IntPtr, uint> _remoteByPointer = new();
     private readonly HashSet<IntPtr> _foreign = new();
-    private readonly HashSet<IntPtr> _uncertainReferences = new();
     private readonly PitonActions _actions = new();
     private readonly HashSet<IntPtr> _current = new();
     private readonly List<IntPtr> _gone = new();
@@ -123,7 +122,6 @@ internal sealed class PitonSync
 
         var reload = _lifeline != IntPtr.Zero || _ownPositions.Count > 0;
         _lifeline = lifeline;
-        _uncertainReferences.Clear();
 
         foreach (var id in _ownByPointer.Values) _ownUnbound.Add(id);
         _ownByPointer.Clear();
@@ -155,10 +153,8 @@ internal sealed class PitonSync
     /// <summary>The host says this piton exists. Nothing native happens until a reconcile.</summary>
     internal void Know(ServerPitonPlaced placed)
     {
-        if (placed.PitonId == 0 || placed.SourcePitonId == 0 || placed.FromPlayerId < 0) return;
         if (_remote.TryGetValue(placed.PitonId, out var known))
         {
-            if (known.Placed.FromPlayerId != placed.FromPlayerId || known.Placed.SourcePitonId != placed.SourcePitonId) return;
             known.Placed = placed;
             return;
         }
@@ -259,7 +255,6 @@ internal sealed class PitonSync
         }
 
         _foreign.RemoveWhere(pointer => !_current.Contains(pointer));
-        _uncertainReferences.RemoveWhere(pointer => !_current.Contains(pointer));
     }
 
     private void RecogniseNewcomers(IReadOnlyList<PlacedPiton> placed, double now)
@@ -307,7 +302,6 @@ internal sealed class PitonSync
             if (!SamePlace(_ownPositions[id], piton.Position)) continue;
             _ownUnbound.Remove(id);
             _ownByPointer[piton.Pointer] = id;
-            _uncertainReferences.Add(piton.Pointer);
             return true;
         }
         return false;
@@ -323,7 +317,6 @@ internal sealed class PitonSync
             remote.Pointer = piton.Pointer;
             if (remote.State != RemoteState.Withdrawn) remote.State = RemoteState.Live;
             _remoteByPointer[piton.Pointer] = pair.Key;
-            _uncertainReferences.Add(piton.Pointer);
             return true;
         }
         return false;
@@ -360,7 +353,6 @@ internal sealed class PitonSync
         remote.Pointer = pointer;
         if (remote.State == RemoteState.Spawning) remote.State = RemoteState.Live;
         _remoteByPointer[pointer] = pitonId;
-        _uncertainReferences.Remove(pointer);
     }
 
     /// <summary>The native side made the piton but also something else it cannot place.</summary>
@@ -389,40 +381,6 @@ internal sealed class PitonSync
     /// <summary>Pointers of other climbers' pitons on this Lifeline, for leaving a session.</summary>
     internal IEnumerable<IntPtr> RemotePointers => _remoteByPointer.Keys;
 
-    internal bool TryGetReference(IntPtr pointer, int localPlayer, double now, out int owner, out uint sourceId)
-    {
-        owner = -1; sourceId = 0;
-        if (!ReferencesReady(now) || !_current.Contains(pointer) || _uncertainReferences.Contains(pointer)) return false;
-        if (_ownByPointer.TryGetValue(pointer, out sourceId) && !_ownTakenByOthers.Contains(sourceId))
-        { owner = localPlayer; return localPlayer >= 0; }
-        if (!_remoteByPointer.TryGetValue(pointer, out var authoritativeId) || !_remote.TryGetValue(authoritativeId, out var remote)
-            || remote.State != RemoteState.Live) return false;
-        owner = remote.Placed.FromPlayerId; sourceId = remote.Placed.SourcePitonId;
-        return owner >= 0 && sourceId != 0 && TryResolveReference(owner, sourceId, localPlayer, now, out var resolved) && resolved == pointer;
-    }
-
-    internal bool TryResolveReference(int owner, uint sourceId, int localPlayer, double now, out IntPtr pointer)
-    {
-        pointer = IntPtr.Zero;
-        if (owner < 0 || sourceId == 0 || !ReferencesReady(now)) return false;
-        if (owner == localPlayer)
-        {
-            if (_ownTakenByOthers.Contains(sourceId)) return false;
-            foreach (var pair in _ownByPointer)
-                if (pair.Value == sourceId && _current.Contains(pair.Key) && !_uncertainReferences.Contains(pair.Key))
-                { if (pointer != IntPtr.Zero) return false; pointer = pair.Key; }
-        }
-        else
-            foreach (var remote in _remote.Values)
-                if (remote.Placed.FromPlayerId == owner && remote.Placed.SourcePitonId == sourceId && remote.State == RemoteState.Live
-                    && _current.Contains(remote.Pointer) && !_uncertainReferences.Contains(remote.Pointer))
-                { if (pointer != IntPtr.Zero) { pointer = IntPtr.Zero; return false; } pointer = remote.Pointer; }
-        return pointer != IntPtr.Zero;
-    }
-
-    private bool ReferencesReady(double now) => _lifeline != IntPtr.Zero && !_settling && double.IsFinite(now)
-        && now >= _lastReconcileAt && now - _lastReconcileAt <= AttributableGapSeconds;
-
     internal void ForgetSession()
     {
         _ownByPointer.Clear();
@@ -432,7 +390,6 @@ internal sealed class PitonSync
         _remote.Clear();
         _remoteByPointer.Clear();
         _foreign.Clear();
-        _uncertainReferences.Clear();
         _lifeline = IntPtr.Zero;
         _settling = false;
         _afterReload = false;

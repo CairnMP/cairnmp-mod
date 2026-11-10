@@ -7,7 +7,6 @@ internal interface IGameStateApi
 {
     PlayerState LocalPlayerState { get; }
     bool IsLocalPlayerInGame { get; }
-    bool IsLocalPlayerInCutscene => false;
 
     /// <summary>True while the local climber is in a bivouac (or entering one). A camp is
     /// where a session can afford to be generous with the rules.</summary>

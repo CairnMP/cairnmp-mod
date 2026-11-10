@@ -16,9 +16,6 @@ public enum MultiplayerMode : byte
 
     /// <summary>A timed ascent, scored stage by stage.</summary>
     Race = 2,
-
-    /// <summary>An anchored partner controls the climber's protection-rope brake.</summary>
-    BelayTeam = 3,
 }
 
 /// <summary>
@@ -78,12 +75,6 @@ public readonly struct MultiplayerModeRules
 
     /// <summary>A player with no way back watches the climb instead of ending their session.</summary>
     public bool SpectateAfterDeath { get; }
-
-    /// <summary>The consenting partner controls the climber's protection rope.</summary>
-    public bool UsesPartnerBelay => Mode == MultiplayerMode.BelayTeam;
-
-    /// <summary>Partner belay and the direct harness tether are separate rope systems.</summary>
-    public bool AllowsDirectRope => !UsesPartnerBelay;
 }
 
 /// <summary>The modes CairnMP ships, and the only place their rules are written down.</summary>
@@ -119,17 +110,7 @@ public static class MultiplayerModes
         bivouacRevive: false,
         spectateAfterDeath: true);
 
-    public static readonly MultiplayerModeRules BelayTeam = new(
-        MultiplayerMode.BelayTeam,
-        "Belay Team",
-        "Anchor at a piton and control your partner's protection-rope brake.",
-        GameDifficulty.Alpinist,
-        ClimbConstraints.None,
-        teammateRevive: true,
-        bivouacRevive: true,
-        spectateAfterDeath: false);
-
-    private static readonly MultiplayerModeRules[] All = { RopeTeam, BelayTeam, FreeSolo, Race };
+    private static readonly MultiplayerModeRules[] All = { RopeTeam, FreeSolo, Race };
 
     public static IReadOnlyList<MultiplayerModeRules> Available => All;
 

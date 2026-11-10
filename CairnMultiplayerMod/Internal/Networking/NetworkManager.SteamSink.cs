@@ -24,12 +24,6 @@ internal sealed partial class NetworkManager
         clock: null,
         onLocalPitonRecovered: localId => OnOwnPitonRecovered?.Invoke(localId));
 
-    internal bool IsKnownPiton(int owner, uint sourceId, float x, float y, float z)
-        => _steamLobby?.IsHost == true && Pitons.TryGetPiton(owner, sourceId, out var placed)
-            && float.IsFinite(x) && float.IsFinite(y) && float.IsFinite(z)
-            && (placed.PosX - x) * (placed.PosX - x) + (placed.PosY - y) * (placed.PosY - y)
-                + (placed.PosZ - z) * (placed.PosZ - z) <= .05f * .05f;
-
     private sealed class SteamAuthoritativeSink : IAuthoritativeSink
     {
         private readonly NetworkManager _t;

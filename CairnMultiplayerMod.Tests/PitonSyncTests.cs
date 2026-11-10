@@ -277,5 +277,5 @@ public sealed class PitonSyncTests
     }
 
     private static ServerPitonPlaced Piton(uint id, Vector3 at)
-        => new() { FromPlayerId = 2, PitonId = id, SourcePitonId = id, PosX = at.X, PosY = at.Y, PosZ = at.Z, RotW = 1, Quality = 1, PitonHp = 100, ItemId = 5 };
+        => new() { FromPlayerId = 2, PitonId = id, PosX = at.X, PosY = at.Y, PosZ = at.Z, RotW = 1, Quality = 1, PitonHp = 100, ItemId = 5 };
 }

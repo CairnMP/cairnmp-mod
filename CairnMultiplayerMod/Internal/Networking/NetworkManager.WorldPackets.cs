@@ -10,7 +10,7 @@ internal sealed partial class NetworkManager
     {
         var packet = new ServerPitonPlaced();
         packet.Deserialize(reader);
-        if (packet.SourcePitonId == 0 || packet.PitonId == 0 || packet.FromPlayerId < 0 || !PacketValidation.IsValidPitonPayload(
+        if (!PacketValidation.IsValidPitonPayload(
                 packet.PosX, packet.PosY, packet.PosZ,
                 packet.RotX, packet.RotY, packet.RotZ, packet.RotW,
                 packet.Quality, packet.PitonHp, packet.ItemId))
@@ -57,7 +57,6 @@ internal sealed partial class NetworkManager
     {
         var packet = new ServerRopeClip();
         packet.Deserialize(reader);
-        if (!IsRopeClipAllowedByMode(packet.Clip)) return;
         OnRopeClip?.Invoke(packet.FromPlayerId, packet.TargetPlayerId, packet.Clip);
     }
 }

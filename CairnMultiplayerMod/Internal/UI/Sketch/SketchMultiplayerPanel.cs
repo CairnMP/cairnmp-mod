@@ -316,41 +316,40 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     private void BuildModeSelect(GameObject body)
     {
         var top = 168f;
-        var compact = ModeValues.Count > 3;
         for (var index = 0; index < ModeValues.Count; index++)
-            BuildModeCard(body, top - index * (compact ? 112f : 146f), index, compact);
+            BuildModeCard(body, top - index * 146f, index);
 
         BuildStatus(body.transform);
     }
 
-    private void BuildModeCard(GameObject body, float y, int index, bool compact)
+    private void BuildModeCard(GameObject body, float y, int index)
     {
         var rules = ModeValues[index];
         var selected = index == _modeIndex;
 
         var card = SketchUiKit.Make("Mode_" + rules.Mode, body.transform);
-        SketchUiKit.Box(card, new Vector2(0f, y), new Vector2(660f, compact ? 100f : 130f));
+        SketchUiKit.Box(card, new Vector2(0f, y), new Vector2(660f, 130f));
         SketchUiKit.Sliced(card, GameUiAssetLibrary.RowBg,
             selected ? SketchUiKit.RowTint : new Color(0.04f, 0.06f, 0.12f, 0.3f), raycast: true);
 
         if (selected)
         {
             var edge = SketchUiKit.Make("Selected", card.transform);
-            SketchUiKit.Box(edge, new Vector2(-328f, 0f), new Vector2(4f, compact ? 88f : 118f));
+            SketchUiKit.Box(edge, new Vector2(-328f, 0f), new Vector2(4f, 118f));
             SketchUiKit.FillColor(edge, SketchUiKit.Accent);
         }
 
-        var nameLabel = SketchUiKit.LabelBox(card.transform, "Name", new Vector2(-4f, compact ? 28f : 40f), new Vector2(600f, 34f),
+        var nameLabel = SketchUiKit.LabelBox(card.transform, "Name", new Vector2(-4f, 40f), new Vector2(600f, 34f),
             rules.Name.ToUpperInvariant(), 24f,
             selected ? SketchUiKit.TextCream : SketchUiKit.TextDim, TextAlignmentOptions.Left, logo: true);
-        SketchUiKit.LabelBox(card.transform, "Difficulty", new Vector2(220f, compact ? 28f : 40f), new Vector2(180f, 26f),
+        SketchUiKit.LabelBox(card.transform, "Difficulty", new Vector2(220f, 40f), new Vector2(180f, 26f),
             DifficultyLabel(rules.Difficulty), 15f, SketchUiKit.Accent, TextAlignmentOptions.Right);
 
-        var summary = SketchUiKit.LabelBox(card.transform, "Summary", new Vector2(-4f, compact ? -2f : 2f), new Vector2(600f, compact ? 34f : 44f),
+        var summary = SketchUiKit.LabelBox(card.transform, "Summary", new Vector2(-4f, 2f), new Vector2(600f, 44f),
             rules.Summary, 15f, SketchUiKit.TextDim, TextAlignmentOptions.Left);
         summary.enableWordWrapping = true;
 
-        SketchUiKit.LabelBox(card.transform, "Rules", new Vector2(-4f, compact ? -34f : -40f), new Vector2(600f, 24f),
+        SketchUiKit.LabelBox(card.transform, "Rules", new Vector2(-4f, -40f), new Vector2(600f, 24f),
             RulesLine(rules), 13f, SketchUiKit.Accent, TextAlignmentOptions.Left);
 
         var captured = index;

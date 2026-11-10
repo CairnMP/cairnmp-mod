@@ -7,48 +7,6 @@ namespace CairnMultiplayerShared.Tests;
 public class GameModeTests
 {
     [Fact]
-    public void BelayTeamHasItsOwnStableWireValueAndKeepsNativeProtectionAvailable()
-    {
-        Assert.Equal(0, (byte)MultiplayerMode.RopeTeam);
-        Assert.Equal(1, (byte)MultiplayerMode.FreeSolo);
-        Assert.Equal(2, (byte)MultiplayerMode.Race);
-        Assert.Equal(3, (byte)MultiplayerMode.BelayTeam);
-        var rules = MultiplayerModes.Parse(3);
-        Assert.Equal(MultiplayerMode.BelayTeam, rules.Mode);
-        Assert.Equal("Belay Team", rules.Name);
-        Assert.Equal(GameDifficulty.Alpinist, rules.Difficulty);
-        Assert.False(rules.ExtraConstraints.HasFlag(ClimbConstraints.NoClimbot));
-        Assert.True(rules.UsesPartnerBelay);
-        Assert.False(rules.AllowsDirectRope);
-        Assert.Contains(MultiplayerModes.Available, mode => mode.Mode == MultiplayerMode.BelayTeam);
-    }
-
-    [Theory]
-    [InlineData(MultiplayerMode.RopeTeam)]
-    [InlineData(MultiplayerMode.FreeSolo)]
-    [InlineData(MultiplayerMode.Race)]
-    public void ExistingModesKeepTheirDirectRopePolicyAndDoNotEnablePartnerBelay(MultiplayerMode mode)
-    {
-        var rules = MultiplayerModes.RulesFor(mode);
-        Assert.False(rules.UsesPartnerBelay);
-        Assert.True(rules.AllowsDirectRope);
-    }
-
-    [Fact]
-    public void BelayTeamSurvivesAStartPacketRoundTrip()
-    {
-        var sent = new ServerStartGame { Mode = (byte)MultiplayerMode.BelayTeam,
-            Difficulty = (int)GameDifficulty.Alpinist, ExtraConstraints = (int)ClimbConstraints.None };
-        using var stream = new MemoryStream();
-        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true)) sent.Serialize(writer);
-        stream.Position = 0;
-        var received = new ServerStartGame();
-        using var reader = new BinaryReader(stream);
-        received.Deserialize(reader);
-        Assert.Equal(MultiplayerMode.BelayTeam, MultiplayerModes.Parse(received.Mode).Mode);
-    }
-
-    [Fact]
     public void StartGameCarriesTheLobbyMode()
     {
         var sent = new ServerStartGame
