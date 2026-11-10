@@ -17,6 +17,13 @@ All notable CairnMP changes are documented here. Releases follow
   climber's native protection rope, with explicit consent, synchronized stations,
   native backup confirmation, protection updates and a remote rope drawing.
 
+### Fixed
+
+- Belay Team creates exact remote station replicas independently of Rope Team's
+  tie rules, allowing invitations to be accepted. Station references refresh
+  before network callbacks and belay validation, preventing a long frame from
+  expiring a healthy station against the previous frame's sample.
+
 ### Changed
 
 - Preserve each piton's placer-local source ID separately from the host-assigned

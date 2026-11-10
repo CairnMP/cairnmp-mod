@@ -92,10 +92,13 @@ internal sealed class PitonSync
     internal const int MaxRemotePitons = 1024;
 
     /// <summary>
-    /// Known replicas stay pending until this is on. The session turns it on once a tie
-    /// has been made since camp, so partner pitons are not created before that.
+    /// Rope Team enables replicas after tying in. Belay needs exact native station
+    /// replicas before an invitation can be accepted, independently of that tie.
     /// </summary>
     internal bool SpawnReplicas { get; set; } = true;
+
+    internal void SetReplicaContext(MultiplayerMode mode, bool ropeTeamRulesArmed)
+        => SpawnReplicas = mode == MultiplayerMode.BelayTeam || ropeTeamRulesArmed;
 
     private enum RemoteState { Pending, Spawning, Live, Abandoned, Withdrawn }
 

@@ -178,11 +178,6 @@ public partial class Mod
             NativePerformanceProbe.Tick();
             GameTuning.Tick();
             using var performance = Measure(PerformanceArea.ModUpdate);
-            if (_game?.Belay.NeedsTick == true)
-            {
-                using var ropes = Measure(PerformanceArea.Ropes);
-                _game.Belay.Tick();
-            }
             TickMod();
         }
         catch (Exception exception)
@@ -262,7 +257,26 @@ public partial class Mod
 
         Bivouac.Update();
 
+        // Refresh native pitons before incoming belay callbacks and station validation.
+        // The broadcaster keeps loading/bivouac guards and skips the later Belay sync.
+        try
+        {
+            using var ropes = Measure(PerformanceArea.Ropes);
+            Player.TickBelayPitonSync();
+        }
+        catch (Exception ex)
+        {
+            LoggerInstance.Error(ex.ToString());
+            CrashHandler.RecordRecoverableExceptionOnce(ex, "Mod.TickBelayPitonSync");
+        }
+
         using (Measure(PerformanceArea.Network)) Network.Update();
+
+        if (_game?.Belay.NeedsTick == true)
+        {
+            using var ropes = Measure(PerformanceArea.Ropes);
+            _game.Belay.Tick();
+        }
 
         // Features that must keep running whatever the state (input, HUD upkeep) — placed
         // before the bivouac early-return, like the other always-on ticks below.

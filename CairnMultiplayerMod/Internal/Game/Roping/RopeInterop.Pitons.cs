@@ -160,7 +160,7 @@ internal static partial class RopeInterop
     /// One pass per frame of play: read what the Lifeline holds, let PitonSync decide, carry
     /// out the native part and tell the host the rest.
     /// </summary>
-    internal static void SyncPitons(NetworkManager network)
+    internal static void SyncPitons(NetworkManager network, MultiplayerMode mode)
     {
         var lifeline = TryGetLifeline();
         if (lifeline == null || network == null)
@@ -188,7 +188,7 @@ internal static partial class RopeInterop
             if (Players.LocalPlayerInterop.TryGetPose(out var pose, out _))
                 localPosition = new System.Numerics.Vector3(pose.x, pose.y, pose.z);
 
-            _pitons.SpawnReplicas = TeamAnchorSession.RulesArmed;
+            _pitons.SetReplicaContext(mode, TeamAnchorSession.RulesArmed);
             var actions = _pitons.Reconcile(_placedPitons, localPosition, now);
             if (!actions.IsEmpty)
             {
