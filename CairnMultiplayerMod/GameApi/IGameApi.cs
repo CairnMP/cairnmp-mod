@@ -20,6 +20,4 @@ internal interface IGameApi
     IVoiceApi Voice => UnavailableVoiceApi.Instance;
     ILifeApi Life => UnavailableLifeApi.Instance;
     ISpectatorApi Spectator => UnavailableSpectatorApi.Instance;
-    IManualBelayApi Belay => UnavailableManualBelayApi.Instance;
-    IBelayPanelApi BelayPanel => UnavailableBelayPanelApi.Instance;
 }

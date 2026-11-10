@@ -110,7 +110,7 @@ internal sealed class ChatController
         }
         else if (e.type == EventType.KeyDown
                  && (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter)
-                 && !InputCaptureState.IsBelayPanelCaptured && _canChat())
+                 && _canChat())
         {
             Open();
             e.Use();

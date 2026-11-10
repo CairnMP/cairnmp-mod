@@ -103,8 +103,6 @@ internal sealed class FeatureBuilder
             Voice = inner.Voice;
             Life = new FeatureLifeApi(inner.Life, own);
             Spectator = inner.Spectator;
-            Belay = inner.Belay;
-            BelayPanel = new FeatureBelayPanelApi(inner.BelayPanel, own);
         }
 
         public IMainMenuApi MainMenu { get; }
@@ -121,22 +119,6 @@ internal sealed class FeatureBuilder
         public IVoiceApi Voice { get; }
         public ILifeApi Life { get; }
         public ISpectatorApi Spectator { get; }
-        public IManualBelayApi Belay { get; }
-        public IBelayPanelApi BelayPanel { get; }
-    }
-
-    private sealed class FeatureBelayPanelApi : IBelayPanelApi
-    {
-        private readonly IBelayPanelApi _inner;
-        private readonly Func<IGameRegistration, IGameRegistration> _own;
-        internal FeatureBelayPanelApi(IBelayPanelApi inner, Func<IGameRegistration, IGameRegistration> own)
-        { _inner = inner; _own = own; }
-        public bool IsOpen => _inner.IsOpen;
-        public IGameRegistration Register(Action<BelayPanelAction, int> onAction) => _own(_inner.Register(onAction));
-        public void Show() => _inner.Show();
-        public void Close() => _inner.Close();
-        public void SetView(BelayPanelView view) => _inner.SetView(view);
-        public void Draw() => _inner.Draw();
     }
 
     private sealed class FeatureMainMenuApi : IMainMenuApi

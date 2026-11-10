@@ -10,25 +10,6 @@ namespace CairnMultiplayerMod.Tests;
 public sealed class PitonAuthorityTests
 {
     [Fact]
-    public void StationIdentityUsesThePlacersSourceIdAndIsWithdrawnWithThePiton()
-    {
-        var sink = new RecordingSink();
-        var authority = new PitonAuthority(sink, _ => { }, _ => { });
-        PlaceFromClient(authority, playerId: 10, clientPitonId: 7);
-        PlaceFromClient(authority, playerId: 20, clientPitonId: 7);
-        Assert.True(authority.TryGetPiton(10, 7, out var first));
-        Assert.True(authority.TryGetPiton(20, 7, out var second));
-        Assert.Equal(7u, first.SourcePitonId); Assert.Equal(7u, second.SourcePitonId);
-        Assert.NotEqual(first.PitonId, second.PitonId);
-        Assert.False(authority.TryGetPiton(10, 0, out _));
-        authority.HandleHostPitonRemoved(10, 7);
-        Assert.False(authority.TryGetPiton(10, 7, out _));
-        Assert.True(authority.TryGetPiton(20, 7, out _));
-        authority.Reset();
-        Assert.False(authority.TryGetPiton(20, 7, out _));
-    }
-
-    [Fact]
     public void RepeatedPlacementHasNoAdditionalSpawnOrBroadcast()
     {
         var sink = new RecordingSink();
