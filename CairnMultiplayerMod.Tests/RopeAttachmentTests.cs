@@ -16,6 +16,14 @@ public sealed class RopeAttachmentTests
         => Assert.False(RopeAttachmentPolicy.CanReach(length, distance));
 
     [Fact]
+    public void AHarnessJumpPastFiveMetersSnapsAndDoesNotUseTheBoundary()
+    {
+        Assert.False(RopeAttachmentPolicy.NeedsSnap(5f));
+        Assert.True(RopeAttachmentPolicy.NeedsSnap(5.01f));
+        Assert.False(RopeAttachmentPolicy.NeedsSnap(float.NaN));
+    }
+
+    [Fact]
     public void NearbyPartnerWithInitializedRopeCanAttach()
         => Assert.True(RopeAttachmentPolicy.CanReach(30, 1.9f));
 

@@ -29,11 +29,11 @@ internal static unsafe class TeleportInterop
     private static int _lastSceneManagerSearchFrame;
 
     /// <summary>
-    /// Whether the local pawn can be moved right now. Cairn only tolerates a hard transform
-    /// write while the pawn is in a plain grounded walk: climbing keeps live references to
-    /// holds and rope constraints, and falling/dead run their own recovery. Moving the pawn
-    /// out from under either leaves the native controller pointing at geometry that is no
-    /// longer there.
+    /// Whether the local pawn can be moved right now. The move goes through the walking
+    /// capsule, and Cairn only tolerates that while the pawn is in a plain grounded walk:
+    /// climbing keeps live references to holds and rope constraints, and falling or dead
+    /// run their own recovery. Moving the pawn out from under either leaves the native
+    /// controller pointing at geometry that is no longer there.
     /// </summary>
     public static bool CanTeleportLocalPlayer(out string reason)
     {
@@ -77,12 +77,58 @@ internal static unsafe class TeleportInterop
         if (TryTeleportAcrossZones(position, yawDeg))
             return true;
 
-        var t = go.transform;
-        t.position = position;
-        var euler = t.eulerAngles;
-        t.eulerAngles = new Vector3(euler.x, yawDeg, euler.z);
-        ModLog.Debug($"[Teleport] Teleported local MC to ({position.x:F1}, {position.y:F1}, {position.z:F1}) yaw={yawDeg:F0}");
-        return true;
+        if (PlaceWalkingBody(go, position, yawDeg)) return true;
+
+        refusedReason = "the walk did not take the move";
+        return false;
+    }
+
+    /// <summary>
+    /// Moves the walking body and its capsule together. Writing the transform alone leaves
+    /// the capsule where the climber was standing, so the walk animation plays and the
+    /// body never steps. The transform write is only the fallback when the walker is gone.
+    /// </summary>
+    private static bool PlaceWalkingBody(GameObject body, Vector3 position, float yawDeg)
+    {
+        var walker = TryGetWalkingController();
+        if (walker == null)
+        {
+            ModLog.Debug("[Teleport] Capsule teleport unavailable. Wrote the transform.");
+            WriteTransform(body, position, yawDeg);
+            return true;
+        }
+
+        try
+        {
+            var forward = Quaternion.Euler(0f, yawDeg, 0f) * Vector3.forward;
+            walker.SetSecureTeleportInfo(position, forward);
+            walker.TryTeleportAndMoveCapsuleFromSecurePosition();
+            ModLog.Debug($"[Teleport] Teleported local MC to ({position.x:F1}, {position.y:F1}, {position.z:F1}) yaw={yawDeg:F0}");
+            return true;
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("teleport.capsule", exception);
+            return false;
+        }
+    }
+
+    private static WalkingPawnController TryGetWalkingController()
+    {
+        try { return PawnManager.Instance?.WalkingPawnController; }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("teleport.resolve-walker", exception);
+            return null;
+        }
+    }
+
+    private static void WriteTransform(GameObject body, Vector3 position, float yawDeg)
+    {
+        var transform = body.transform;
+        transform.position = position;
+        var euler = transform.eulerAngles;
+        transform.eulerAngles = new Vector3(euler.x, yawDeg, euler.z);
     }
 
     private static StreamingManager TryGetStreamingManager()
@@ -208,9 +254,7 @@ internal static unsafe class TeleportInterop
 
             if (dist > TeleportStableDistance)
             {
-                t.position = _teleportTarget;
-                var e = t.eulerAngles;
-                t.eulerAngles = new Vector3(e.x, _teleportYaw, e.z);
+                PlaceWalkingBody(go, _teleportTarget, _teleportYaw);
                 _teleportStableSince = -1f;
                 return;
             }

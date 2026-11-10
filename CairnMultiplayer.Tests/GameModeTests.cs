@@ -38,6 +38,15 @@ public class GameModeTests
     }
 
     [Fact]
+    public void RopeTeamHoldsTwoClimbersAndOtherModesKeepTheirCeiling()
+    {
+        Assert.Equal(2, MultiplayerModes.ClampLobbySize(MultiplayerMode.RopeTeam, 8));
+        Assert.Equal(2, MultiplayerModes.ClampLobbySize(MultiplayerMode.RopeTeam, 1));
+        Assert.Equal(8, MultiplayerModes.ClampLobbySize(MultiplayerMode.Race, 8));
+        Assert.Equal(4, MultiplayerModes.ClampLobbySize(MultiplayerMode.FreeSolo, 4, 8));
+    }
+
+    [Fact]
     public void EveryModeNamesADifficultyTheGameKnows()
     {
         foreach (var rules in MultiplayerModes.Available)
@@ -85,12 +94,15 @@ public class GameModeTests
     }
 
     [Fact]
-    public void RopeTeamPromisesBothWaysHome()
+    public void RopeTeamWatchesAndComesBackOnlyAtCamp()
     {
-        var promises = MultiplayerModeText.Promises(MultiplayerModes.RopeTeam);
+        var rules = MultiplayerModes.RopeTeam;
 
-        Assert.Contains("Rescue on the face", promises);
-        Assert.Contains("Brought back at camp", promises);
+        Assert.False(rules.TeammateRevive);
+        Assert.True(rules.BivouacRevive);
+        Assert.True(rules.SpectateAfterDeath);
+        Assert.Equal(new[] { "Brought back at camp", "Watch after death" },
+            MultiplayerModeText.Promises(rules));
     }
 
     [Fact]

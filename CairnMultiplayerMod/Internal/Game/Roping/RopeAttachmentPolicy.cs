@@ -9,6 +9,13 @@ internal static class RopeAttachmentPolicy
     // below the rope's physical maximum as well.
     private const float InitialSlackMeters = .75f;
 
+    /// <summary>Past this, the harness jumped. The rope snaps. The tie stays.</summary>
+    internal const float TeleportGuardMeters = 5f;
+
+    /// <summary>A harness moved far enough that dragging the rope across the mountain would be wrong.</summary>
+    internal static bool NeedsSnap(float movedMeters)
+        => float.IsFinite(movedMeters) && movedMeters > TeleportGuardMeters;
+
     internal static bool CanReach(float maxLength, float distance)
         => float.IsFinite(maxLength) && float.IsFinite(distance)
            && maxLength > 0 && distance >= 0 && distance < maxLength;

@@ -32,7 +32,6 @@ public sealed class ControllerShortcutTests
     }
 
     [Theory]
-    [InlineData((int)ControllerShortcut.ToggleRope, (int)ControllerButton.North)]
     [InlineData((int)ControllerShortcut.PickupSharedItem, (int)ControllerButton.South)]
     [InlineData((int)ControllerShortcut.GiveSelectedItem, (int)ControllerButton.West)]
     [InlineData((int)ControllerShortcut.DropSelectedItem, (int)ControllerButton.East)]

@@ -176,7 +176,7 @@ internal sealed class CommandRouter
 
         foreach (var p in _network.RemotePlayers.Values)
         {
-            if (p?.Name == null) continue;
+            if (p?.Name == null || !PracticePartner.IsPublicRemote(p.Id)) continue;
             if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)) { exact = p; break; }
             if (p.Name.StartsWith(name, StringComparison.OrdinalIgnoreCase)) { prefix = p; prefixCount++; }
         }

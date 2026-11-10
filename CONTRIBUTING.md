@@ -14,6 +14,7 @@ French**.
 - [Report a bug](#report-a-bug)
 - [Suggest an improvement](#suggest-an-improvement)
 - [Set up development](#set-up-development)
+- [Two clients on one PC](#two-clients-on-one-pc)
 - [Run the checks](#run-the-checks)
 - [Prepare a pull request](#prepare-a-pull-request)
 - [Keep changes reviewable](#keep-changes-reviewable)
@@ -89,7 +90,43 @@ A normal build never deploys, so a solution build leaves whatever the game's
 that the last thing you ran was the **CairnMP** configuration.
 
 Set the `CAIRN_DIR_2` environment variable to a second game folder to have the
-same build deploy there too, which is how two-client sessions are tested.
+same build deploy there too. [Two clients on one PC](#two-clients-on-one-pc)
+is how that folder is created and signed in.
+
+## Two clients on one PC
+
+CairnMP treats each climber as one Steam account. Two windows on one account
+are the same person and cannot join each other. Steam Families will not run
+two copies of Cairn at the same time on one purchase, so the second account
+needs its own copy of the game.
+
+1. Create a local Windows user named `cairnmp2` with a password and no
+   Microsoft account (Settings, Accounts, Other users). The second Steam login
+   and the second story save live in that profile.
+2. Buy Cairn on a second Steam account.
+3. Quit Cairn, then run `pwsh ./scripts/clone-cairn.ps1`. It copies the game
+   you already have (about 12 GB) to `C:\Users\Public\CairnMP\instance2` and
+   sets `CAIRN_DIR_2`. Open a new terminal before the next deploy so the
+   deploy sees that variable. Client 1 stays in its current folder.
+4. Open your normal Steam and sign into the main account.
+5. Run `pwsh ./scripts/start-second-client.ps1`. The first run asks for the
+   `cairnmp2` password and saves it for later runs. Sign the new Steam window
+   into the second account. When that window is signed in, press Enter. The
+   script starts the cloned game. Do not press Play in that Steam window.
+   Closing the game leaves that Steam window up. The next run reuses one
+   second Steam, and closes a pile of them, or helpers whose Steam has already
+   exited, before it opens another. The normal Steam window is left alone.
+6. Run `pwsh ./scripts/start-local-client.ps1` for client 1.
+
+Host in one window and join from the other. The lobby should show two Steam
+names. Click between the windows to move each climber. Both scripts tell the
+mod to keep simulating while a window is in the background, and each game
+writes its Unity log under its own `Logs\Player.log`. Mute voice. Two games
+in one room feed each other's microphones.
+
+This second Steam launch is a community workaround. If a Steam update breaks
+it, sign into `cairnmp2` with Fast User Switching and run the game from that
+desktop. That path shows one desktop at a time.
 
 ## Run the checks
 

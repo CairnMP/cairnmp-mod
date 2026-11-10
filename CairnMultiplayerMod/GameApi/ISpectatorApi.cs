@@ -15,7 +15,13 @@ internal interface ISpectatorApi
     /// <summary>The climber being followed, or -1 while flying free.</summary>
     int FollowedPlayerId { get; }
 
-    /// <summary>Takes over the camera from where the game was looking. Safe to call twice.</summary>
+    /// <summary>
+    /// Stores the camera pose while the climber is still alive. The seat opens from this
+    /// pose: the camera that is live at the moment of death may already be under the mountain.
+    /// </summary>
+    void RememberViewpoint();
+
+    /// <summary>Takes over the camera from the remembered pose. Safe to call twice.</summary>
     bool Enter();
 
     void Leave();
@@ -40,6 +46,7 @@ internal sealed class UnavailableSpectatorApi : ISpectatorApi
     public bool IsActive => false;
     public bool IsFollowing => false;
     public int FollowedPlayerId => -1;
+    public void RememberViewpoint() { }
     public bool Enter() => false;
     public void Leave() { }
     public void FreeLook() { }

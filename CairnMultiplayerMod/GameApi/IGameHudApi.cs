@@ -32,6 +32,14 @@ internal interface IGameHudApi
     void HideMessage(string id);
 
     /// <summary>
+    /// Cairn's control-tip row. <paramref name="cue"/> sits to the left of the button picture.
+    /// An empty cue leaves that side blank. The row stays until <see cref="HideControlTip"/>.
+    /// </summary>
+    void ShowControlTip(string id, string label, string cue);
+
+    void HideControlTip(string id);
+
+    /// <summary>
     /// Shows a standings table until it is hidden. Unlike a message it does not expire: it is
     /// the state of the run, not a notification, and the caller decides when it stops being true.
     /// </summary>

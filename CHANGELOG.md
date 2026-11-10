@@ -9,6 +9,155 @@ All notable CairnMP changes are documented here. Releases follow
 > even when the wire-protocol number is unchanged. Read the compatibility note
 > for the release you install.
 
+## [Unreleased]
+
+### Fixed
+- Rope Team: opening the save menu no longer crashes. The tent-only line is
+  drawn while the main menu is loaded, including after a background scene
+  becomes the current scene. Patching the slot setup faulted that screen.
+- Rope Team: "Cut rope" shows again in the last second of the leader's critical
+  grip. It had stopped appearing for that whole hang.
+
+### Added
+- Rope Team: a save the climb would refuse shows "Only saves in tent allowed"
+  on its card in the save selection menu. An empty slot stays blank. Solo,
+  Free Solo, and Race do not show it.
+- Rope Team: when a partner dies, the prompt row shows Cairn's death skull
+  and the words "Reach a bivouac". It stays until the survivor reaches that
+  camp, where "Revive partner" takes over. The short corner line for that
+  walk is gone.
+- Rope Team: a small cairn sits above the leader, and one flat stone above the
+  follower. They are the rope's brown, and they hide with the player names.
+- Rope Team: when a story scene moves the leader, or would have ended the tie, a
+  staff is left where she was. It sticks out of the rock and holds the rope for
+  the follower until that follower starts the same scene. A scene that leaves
+  her where she stands does not plant one. Standing beside it does not pull it.
+- Rope Team: while the follower hangs, the control tip says "Cut rope" in the
+  last second before Cairn drops the leader. The keys stay L and a right-stick
+  click. Cutting the rope drops the hanging climber and fills the leader's grip.
+- Rope Team: Cairn's control tip for clipping in appears when a partner is close
+  enough to tie. A lobby still skips Cairn's own tutorials, and the tip shows
+  anyway. The keys stay L and a right-stick click.
+- Rope Team: resting at a bivouac waits until the other climber is at that same
+  camp. A partner who has already gone in, or who has left, does not hold the
+  door. Free Solo and Race are unchanged.
+- Rope Team: the rope between the two climbers stops at the coil. Cairn's own
+  rope check refuses a step that would stretch it. The rope does not catch a
+  fall, and pitons stay on each climber's own rope.
+- Temporary: F9 spawns a practice climber beside the host. H switches places
+  with him, so the same pitch can be climbed as the leader and as the follower.
+  The body you leave stays where it is. Leaving the wall stands you on the
+  other body's ground. A wall spot with nothing under it hovers, so the switch
+  does not drop the grip. Tie him with the rope control. He takes a chain piton
+  when he is next to it. He is not sent to other players. Off unless
+  `Debug.PracticeClimber` is set to true in MelonPreferences.
+- Rope Team: when the rope between the two climbers is almost out, Cairn's own
+  rope warning shows the metres left. It stays hidden while that rope still has
+  slack. Pushing on after it is used up shakes the rope picture.
+- Rope Team: when the other climber falls, dangles on the rope, or sits off belay,
+  the follower braces in place until the leader is climbing again, and the leader's
+  grip is empty after 3 seconds. Untying drops whoever is hanging. A rappel, an
+  abseil, and a rope hang count. Hanging on a hold does not. The leader's untie,
+  while the follower is hanging, fills the leader's grip. With no piton on the rope,
+  a fall still drops both climbers.
+
+### Fixed
+- Rope Team: tying on calls a climb bot that is still out back home, so the
+  leader can place pitons without untying first.
+- Rope Team: the pair shares one rack of six pitons. The leader places them.
+  The follower brings back the ones they took off the rock, and those rejoin
+  the rack at the next rope-up. Pitons left in the rock stay there. A full rack
+  does not throw away what the follower is still holding. A take still pockets
+  the one piton in reach.
+- Rope Team practice: switching back onto a climb returns to the holds that
+  body left with. A fresh climb at the same point was dropping into a walk
+  and then a fall.
+- Rope Team practice: switching places no longer tells Cairn the rope is maxed
+  out. The length check waits until both bodies have moved.
+- Rope Team: topping out beside a planted staff no longer offers to take it.
+  The staff still catches the follower once the pitons below it are gone, and
+  it still comes out when the follower is standing.
+- Rope Team: the follower stays clipped to the rope, including after switching
+  into that body, so a piton on it catches a fall. The rope between the two
+  climbers still does not catch a fall. A planted staff is clipped on, so it
+  can catch the follower once the pitons below it are gone.
+- Rope Team practice: switching into the follower leaves every piton on the
+  rope. The ones above the anchor can be taken. A real follower still has the
+  pitons above their anchor unclipped on their own copy of the rope.
+- Rope Team: after a bivouac, Cairn's own rope no longer stops the leader while the
+  rope between the two climbers still has slack. That coil is the length limit for
+  both. The leader stays clipped to Climbot so a piton can attach.
+- Rope Team: a paid-out rope stops a further step. Cairn's remaining-length answer
+  is the metres left on the coil between the two climbers, and a place in the
+  world is no longer read as a direction. At 47 m of a 40 m coil the answer is 0.
+  A step back toward the other climber still works.
+- Rope Team: a paid-out rope stops a walk. Cairn only places its stop wall when a
+  piton gives it a rope direction, so a paid-out walk with no piton kept going. For
+  that one walk check, a paid-out team rope supplies the direction and is treated as
+  held. A step back still works. A pair stacked one above the other has no flat
+  direction, so that walk is unchanged. Falls still see real pitons only.
+- Rope Team: untying while dangling on the rope drops that climber. The fall is
+  Cairn's own unsecured fall, with a real position. Switching straight to the falling
+  module was an invalid fall and left the climber standing on the piton.
+- Rope Team: a save made in a bivouac can be loaded. Cairn writes that file on
+  the way out, after the bivouac flag is already clear. That write is the
+  bivouac save: its last-bivouac age is still the exit itself.
+- Rope Team: quitting from the pause menu away from a bivouac no longer waits
+  on a save. The wall save is still refused, and the quit continues.
+- Rope Team: after the leader unclips at a planted staff, the coil comes off
+  their harness. They can walk the ledge. The follower keeps the rope to the staff.
+- Rope Team: taking a nearby piton is P on the keyboard. E remains off-belay.
+- Rope Team: on a controller, a tap of D-pad up takes a nearby piton. Holding
+  D-pad up still places one.
+
+### Changed
+- The lobby protocol is 17. A player on an older build cannot join.
+- Control tips for taking a piton and reviving a partner use Cairn's row, the same
+  one as clip in and cut rope. Take piton says Tap to the left of the button.
+  Revive partner says Hold, and the call goes out after R or Square is held.
+  After a death the camera stays free. A pad flies it with the sticks and triggers.
+- Rope Team: a dead climber stays in the session and watches. The partner brings
+  them back from the approach to a bivouac, and that rest stays shut until they
+  are back on their feet or they leave. There is no rescue on the face. A death
+  while tied unties the rope. If both die, the game over menu plays as usual.
+- Rope Team: the climbot rope, leader-only placement, Climbot collection, and the
+  other climber's pitons start when the pair links, and they start again on the
+  link after a bivouac. A wall untie leaves them in place. Until the first link,
+  and after camp, the climber is on Cairn's own rope.
+- Rope Team saves and loads only at a bivouac. Entering camp ends the tie, drops
+  the staff and the other climber's pitons, and hands the rope back to Cairn.
+  The save Cairn writes then loads in a solo game, and a solo bivouac save loads
+  in Rope Team. A save from the wall does not.
+- Rope Team: press the right stick to tie or untie the rope. L still does it
+  on a keyboard.
+- Rope Team: L ties the rope only when the two climbers are within 1 m.
+- Rope Team: tying the rope pools the carried pitons into the leader's bag, up
+  to that bag's limit. Pitons the leader gains are new. The follower's piton
+  bag is emptied.
+- The rope drawn between a climber and Climbot stays off. Climbot does not
+  belay a climber who is not the tied leader. While that leader is tied, the
+  securing rope is clipped to the harness so a piton can attach. The rope
+  between two climbers is unchanged.
+- Rope Team: Climbot no longer collects pitons off the wall. A climber standing
+  next to a placed piton takes it with P, or a tap of D-pad up. The prompt shows
+  that tap. The piton they are hanging on stays put. Repairing pitons with
+  Climbot in the bivouac is unchanged.
+- Rope Team holds two climbers. Only the leader places pitons, and a climber
+  who is not tied cannot place one. The leader's own placement is not refused
+  by Cairn's rope-head check. The partner takes them. The first piton
+  protects both. Each later piton protects the leader, and the partner stays on
+  the earlier one. Taking a piton splices it out of that chain. Untying takes
+  every piton off that rope. They stay in the rock and can be picked up, and
+  they no longer catch a fall. With no piton left on the rope, a fall drops
+  both climbers through Cairn's own unsecured fall. The rope line runs from
+  harness to harness through the carabiner on each quickdraw.
+
+### Removed
+
+- Using an item no longer feeds the rest of the rope. Chalk, food, and drink stay with the climber who used them.
+- Rope shake. A partner coming off the wall no longer knocks loose holds off.
+- Dead weight. A downed climber on the rope no longer spends endurance.
+
 ## Releases
 
 | Version | Date | Channel | Highlights |

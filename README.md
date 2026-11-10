@@ -31,13 +31,13 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **16**; lobby admission may also require the exact mod version.
+> protocol is **17**; lobby admission may also require the exact mod version.
 
 ## Features
 
 | Area | Included functionality |
 | --- | --- |
-| Climbing | A cooperative rope between partners; your own pitons protect your falls |
+| Climbing | Two climbers on one rope. Only the leader places pitons. Untying takes those pitons off the rope; they stay in the rock. With none left on the rope, a fall drops both |
 | Players | Position, animation, cosmetics, lamps, hand and finger poses |
 | World | Weather, time of day, pitons, shared ground items, and world pings |
 | Communication | In-game chat, completion, host commands, and experimental proximity voice |
@@ -75,13 +75,35 @@ A few actions stay as button combinations in either style because they are held 
 repeated, or because they only apply in the backpack.
 Hold `View/Share` first, then press the button; the menu steps aside.
 
+Press the right stick to attach or detach the cooperative rope. `L` does the same
+on a keyboard.
+
+Temporary test tools, taken out after the rope-team trial. The practice climber is
+off unless `PracticeClimber = true` is set under `[Debug]` in
+`UserData/MelonPreferences.cfg`. Then `F9` spawns or removes
+a practice climber beside the host. `H` switches places with him. You climb
+from his spot with the normal controls, and the body you leave stays there.
+Switching back puts you on the same holds. Leaving the wall stands you where
+he stood. A spot in the air hovers instead of dropping you.
+`H` again puts you back. Switching places leaves every piton on the rope, so
+the follower can take the ones above the anchor. A planted staff is not one
+of them. A piton on the rope catches a fall.
+
 | Controller shortcut | Action |
 | --- | --- |
-| `View/Share` + `X/Square` | Give the selected backpack item |
-| `View/Share` + `B/Circle` | Drop the selected backpack item |
+| `View/Share` + `Menu/Options` | Open or close the multiplayer panel |
+| `View/Share` + `A/✕` | Pick up a shared ground item |
+| `View/Share` + `X/□` | Give the selected backpack item |
+| `View/Share` + `B/○` | Drop the selected backpack item |
 | `View/Share` + D-pad `←` / `→` | Select a shared ground item |
 | Hold `View/Share` + `LB/L1` | Push to talk |
 | `View/Share` + right-stick click | Emergency input release |
+| Hold Square (`X` on an Xbox pad), or hold `R` | Revive partner at a camp |
+
+Hold Square or `R` for about half a second while you are at a camp and a partner is down.
+View/Share plus Square still gives an item. After a death the view flies free. On a pad the
+left stick moves, the right stick looks, the right trigger rises, the left trigger sinks,
+and holding the left stick goes faster. The mouse and WASD do the same.
 
 The multiplayer panel supports D-pad/stick navigation, confirm, and `B/○` to
 close. Text chat and manual lobby-code entry still require text input; public
