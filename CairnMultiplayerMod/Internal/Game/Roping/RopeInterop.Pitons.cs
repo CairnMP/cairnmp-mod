@@ -115,6 +115,27 @@ internal static partial class RopeInterop
     /// <summary>Another climber took up one of our pitons.</summary>
     internal static void ForgetOwnPiton(uint localId) => _pitons.TakenByOther(localId);
 
+    internal static bool TryGetPitonReference(Il2Cpp.Lifeline lifeline, Il2Cpp.Piton piton, int localPlayer,
+        out int owner, out uint sourceId)
+    {
+        owner = -1; sourceId = 0;
+        return lifeline != null && lifeline == _lifelineCached && piton != null
+            && lifeline.PlacedPitons != null && lifeline.PlacedPitons.Count <= 128
+            && TryCollectPitonPointers(lifeline, _pitonPointers) && _pitonPointers.Contains(piton.Pointer)
+            && _pitons.TryGetReference(piton.Pointer, localPlayer, Time.unscaledTime, out owner, out sourceId);
+    }
+
+    internal static bool TryResolvePitonReference(Il2Cpp.Lifeline lifeline, int owner, uint sourceId, int localPlayer,
+        out Il2Cpp.Piton piton)
+    {
+        piton = null;
+        if (lifeline == null || lifeline != _lifelineCached || lifeline.PlacedPitons == null || lifeline.PlacedPitons.Count > 128
+            || !_pitons.TryResolveReference(owner, sourceId, localPlayer, Time.unscaledTime, out var pointer)
+            || !TryCollectPitonPointers(lifeline, _pitonPointers) || !_pitonPointers.Contains(pointer)) return false;
+        piton = new Il2Cpp.Piton(pointer);
+        return true;
+    }
+
     public static Il2Cpp.Lifeline TryGetLifeline()
     {
         if (_lifelineCached != null) return _lifelineCached;

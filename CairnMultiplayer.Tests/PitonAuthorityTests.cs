@@ -10,6 +10,38 @@ namespace CairnMultiplayerMod.Tests;
 public sealed class PitonAuthorityTests
 {
     [Fact]
+    public void ZeroSourceIdsCannotProduceAnUnresolvableSnapshot()
+    {
+        var sink = new RecordingSink();
+        var spawns = 0;
+        var authority = new PitonAuthority(sink, _ => spawns++, _ => { });
+        PlaceFromClient(authority, playerId: 10, clientPitonId: 0);
+        authority.HandleHostPitonPlaced(1, new ClientPitonPlaced {
+            PitonId = 0, RotW = 1, Quality = 1, PitonHp = 100, ItemId = 5 });
+        authority.SendSnapshotTo(20);
+        Assert.Equal(0, spawns); Assert.Empty(sink.Broadcasts); Assert.Empty(sink.Sends);
+    }
+
+    [Fact]
+    public void StationIdentityUsesThePlacersSourceIdAndIsWithdrawnWithThePiton()
+    {
+        var sink = new RecordingSink();
+        var authority = new PitonAuthority(sink, _ => { }, _ => { });
+        PlaceFromClient(authority, playerId: 10, clientPitonId: 7);
+        PlaceFromClient(authority, playerId: 20, clientPitonId: 7);
+        Assert.True(authority.TryGetPiton(10, 7, out var first));
+        Assert.True(authority.TryGetPiton(20, 7, out var second));
+        Assert.Equal(7u, first.SourcePitonId); Assert.Equal(7u, second.SourcePitonId);
+        Assert.NotEqual(first.PitonId, second.PitonId);
+        Assert.False(authority.TryGetPiton(10, 0, out _));
+        authority.HandleHostPitonRemoved(10, 7);
+        Assert.False(authority.TryGetPiton(10, 7, out _));
+        Assert.True(authority.TryGetPiton(20, 7, out _));
+        authority.Reset();
+        Assert.False(authority.TryGetPiton(20, 7, out _));
+    }
+
+    [Fact]
     public void RepeatedPlacementHasNoAdditionalSpawnOrBroadcast()
     {
         var sink = new RecordingSink();
