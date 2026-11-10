@@ -23,6 +23,13 @@ internal interface IPlayersApi
 
     bool TryGetLocation(int playerId, out PlayerLocation location);
 
+    bool TryGetInteractionLocation(int playerId, out PlayerLocation location, out string reason)
+    {
+        var ready = TryGetLocation(playerId, out location);
+        reason = ready ? "" : "The synchronized player position is not ready.";
+        return ready;
+    }
+
     bool TryCaptureHandPose(out byte[] packed);
     bool TryCaptureAppearance(out int packed);
     bool TryCaptureCosmetics(out byte flags);

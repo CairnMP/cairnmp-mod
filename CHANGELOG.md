@@ -9,15 +9,23 @@ All notable CairnMP changes are documented here. Releases follow
 > even when the wire-protocol number is unchanged. Read the compatibility note
 > for the release you install.
 
+## Unreleased
+
+### Added
+
+- Experimental Belay Team: an anchored partner feeds, takes in and brakes the
+  climber's native protection rope, with explicit consent, synchronized stations,
+  native backup confirmation, protection updates and a remote rope drawing.
+
+### Changed
+
+- Preserve each piton's placer-local source ID separately from the host-assigned
+  ID. Owner/source references reject ambiguous or position-only reload matches.
+- Protocol 19 adds the anchored Belay Team core to protocol 18's exact piton
+  references. Every lobby member must update together. Role exchange, automatic
+  resume, dialogue queuing and shared fall damage are separate extensions.
+
 ## Releases
-
-### Unreleased
-
-- Piton snapshots retain the placer's original ID alongside the host-assigned ID.
-  Exact native-reference lookups use the owner and original ID, reject ambiguous
-  or stale mappings, and do not trust position-only save/reload matches.
-- Protocol **18** adds four bytes to `ServerPitonPlaced`; every peer must update.
-  Rope Team's chain IDs, unclipping, piton pool and saved-piton handling are unchanged.
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |

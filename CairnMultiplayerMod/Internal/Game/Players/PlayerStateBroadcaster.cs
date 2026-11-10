@@ -256,7 +256,7 @@ internal sealed class PlayerStateBroadcaster
     private static int FrameVectorCount(float[] values) => values == null ? 0 : values.Length / 3;
 
     private string CurrentNetworkSceneName()
-        => SceneRoles.ResolveNetworkScene(_state.CurrentScene, _state.LastGameplayScene);
+        => NetworkSceneInterop.Resolve(_state);
 
     internal void ResetSyncState()
     {
