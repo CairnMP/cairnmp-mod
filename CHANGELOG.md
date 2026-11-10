@@ -9,7 +9,56 @@ All notable CairnMP changes are documented here. Releases follow
 > even when the wire-protocol number is unchanged. Read the compatibility note
 > for the release you install.
 
-## [Unreleased]
+## Releases
+
+| Version | Date | Channel | Highlights |
+| --- | --- | --- | --- |
+| [2.5.0](#250--2026-11-10-beta) | 2026-11-10 | Beta | Rope Team piton chain and a controller radial menu |
+| [2.4.4](#244--2026-11-07-stable) | 2026-11-07 | Stable | The 2.4.2 and 2.4.3 fixes on the stable channel |
+| [2.4.3](#243--2026-11-05-beta) | 2026-11-05 | Beta | New Story saves keep their difficulty instead of turning into Summit |
+| [2.4.2](#242--2026-11-04-beta) | 2026-11-04 | Beta | Main menu label and partner rope line fixes |
+| [2.4.1](#241--2026-10-30-stable) | 2026-10-30 | Stable | First stable build for Cairn 1.1.593 |
+| [2.4.0](#240--2026-10-30-beta) | 2026-10-30 | Beta | Lobbies that climb the Deep Water DLC worlds |
+| [2.3.2](#232--2026-10-29-beta) | 2026-10-29 | Beta | Cairn 1.1.593 support and a rope that no longer reads 0 m |
+| [2.3.1](#231--2026-10-15-beta) | 2026-10-15 | Beta | Game modes, races and rescues that keep their word |
+| [2.3.0](#230--2026-09-18-beta) | 2026-09-18 | Beta | Game modes, downed climbers and a rebuilt panel |
+| [2.2.17](#2217--2026-09-18-stable) | 2026-09-18 | Stable | Streaming crash mitigation and realistic voice occlusion |
+| [2.2.16](#2216--2026-09-17-stable) | 2026-09-17 | Stable | Controller support and conflict-free player ropes |
+| [2.2.15](#2215--2026-09-17-beta) | 2026-09-17 | Beta | Stable harness ropes and cross-platform spatial voice |
+| [2.2.14](#2214--2026-09-16-beta) | 2026-09-16 | Beta | Free Roam button initialization fix |
+| [2.2.13](#2213--2026-09-16-beta) | 2026-09-16 | Beta | Free Roam multiplayer launch fix |
+| [2.2.12](#2212--2026-09-16-beta) | 2026-09-16 | Beta | RE-verified native integration |
+| [2.2.11](#2211--2026-09-16-beta) | 2026-09-16 | Beta | Native cooperative-rope lifecycle fixes |
+| [2.2.10](#2210--2026-09-15-beta) | 2026-09-15 | Beta | Profiler-guided performance and rope fixes |
+| [2.2.9](#229--2026-09-13-beta) | 2026-09-13 | Beta | Smooth voice distance and direct harness ropes |
+| [2.2.8](#228--2026-09-13-beta) | 2026-09-13 | Beta | Louder, clearer proximity voice |
+| [2.2.7](#227--2026-09-13-beta) | 2026-09-13 | Beta | Steam lobby-result retrieval regression |
+| [2.2.6](#226--2026-09-13-beta) | 2026-09-13 | Beta | Lobby browser, voice and rope fixes |
+| [2.2.5](#225--2026-09-12-beta) | 2026-09-12 | Beta | Website lobby joins |
+| [2.2.4](#224--2026-09-12-beta) | 2026-09-12 | Beta | Vanilla Story-mode isolation |
+| [2.2.3](#223--2026-09-11-beta) | 2026-09-11 | Beta | Pause-menu audio fix |
+| [2.2.2](#222--2026-09-11-beta) | 2026-09-11 | Beta | Proximity voice settings |
+| [2.2.1](#221--2026-09-08-beta) | 2026-09-08 | Beta | Remote pose reliability |
+| [2.2.0](#220--2026-09-07-beta) | 2026-09-07 | Beta | Item sharing and chat completion |
+| [2.1.0](#210--2026-09-06-beta) | 2026-09-06 | Beta | Voice chat and feature framework |
+| [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
+| [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
+| [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+
+---
+
+## [2.5.0] — 2026-11-10 (beta)
+
+> A Rope Team rebuild and a controller radial menu. The lobby protocol goes from 16
+> to **17**: every lobby member must run 2.5.0, and a 2.4.x player cannot join.
+
+### Highlights
+
+- Rope Team: a shared piton chain, bivouac-only saves, a partner-fall penalty, and a
+  rope that stops at its coil. (#47, @fakedude2)
+- A radial menu for the multiplayer actions on a controller, and a loot bag for
+  dropped items that every player can open. (#38, @Tippy-Tipster)
+
 
 ### Fixed
 - Rope Team: opening the save menu no longer crashes. The tent-only line is
@@ -18,7 +67,7 @@ All notable CairnMP changes are documented here. Releases follow
 - Rope Team: "Cut rope" shows again in the last second of the leader's critical
   grip. It had stopped appearing for that whole hang.
 
-### Added
+### Added (Rope Team, #47 by @fakedude2)
 - Rope Team: a save the climb would refuse shows "Only saves in tent allowed"
   on its card in the save selection menu. An empty slot stays blank. Solo,
   Free Solo, and Race do not show it.
@@ -158,40 +207,24 @@ All notable CairnMP changes are documented here. Releases follow
 - Rope shake. A partner coming off the wall no longer knocks loose holds off.
 - Dead weight. A downed climber on the rope no longer spends endurance.
 
-## Releases
+### Added (radial menu and loot bag, #38 by @Tippy-Tipster)
 
-| Version | Date | Channel | Highlights |
-| --- | --- | --- | --- |
-| [2.4.4](#244--2026-11-07-stable) | 2026-11-07 | Stable | The 2.4.2 and 2.4.3 fixes on the stable channel |
-| [2.4.3](#243--2026-11-05-beta) | 2026-11-05 | Beta | New Story saves keep their difficulty instead of turning into Summit |
-| [2.4.2](#242--2026-11-04-beta) | 2026-11-04 | Beta | Main menu label and partner rope line fixes |
-| [2.4.1](#241--2026-10-30-stable) | 2026-10-30 | Stable | First stable build for Cairn 1.1.593 |
-| [2.4.0](#240--2026-10-30-beta) | 2026-10-30 | Beta | Lobbies that climb the Deep Water DLC worlds |
-| [2.3.2](#232--2026-10-29-beta) | 2026-10-29 | Beta | Cairn 1.1.593 support and a rope that no longer reads 0 m |
-| [2.3.1](#231--2026-10-15-beta) | 2026-10-15 | Beta | Game modes, races and rescues that keep their word |
-| [2.3.0](#230--2026-09-18-beta) | 2026-09-18 | Beta | Game modes, downed climbers and a rebuilt panel |
-| [2.2.17](#2217--2026-09-18-stable) | 2026-09-18 | Stable | Streaming crash mitigation and realistic voice occlusion |
-| [2.2.16](#2216--2026-09-17-stable) | 2026-09-17 | Stable | Controller support and conflict-free player ropes |
-| [2.2.15](#2215--2026-09-17-beta) | 2026-09-17 | Beta | Stable harness ropes and cross-platform spatial voice |
-| [2.2.14](#2214--2026-09-16-beta) | 2026-09-16 | Beta | Free Roam button initialization fix |
-| [2.2.13](#2213--2026-09-16-beta) | 2026-09-16 | Beta | Free Roam multiplayer launch fix |
-| [2.2.12](#2212--2026-09-16-beta) | 2026-09-16 | Beta | RE-verified native integration |
-| [2.2.11](#2211--2026-09-16-beta) | 2026-09-16 | Beta | Native cooperative-rope lifecycle fixes |
-| [2.2.10](#2210--2026-09-15-beta) | 2026-09-15 | Beta | Profiler-guided performance and rope fixes |
-| [2.2.9](#229--2026-09-13-beta) | 2026-09-13 | Beta | Smooth voice distance and direct harness ropes |
-| [2.2.8](#228--2026-09-13-beta) | 2026-09-13 | Beta | Louder, clearer proximity voice |
-| [2.2.7](#227--2026-09-13-beta) | 2026-09-13 | Beta | Steam lobby-result retrieval regression |
-| [2.2.6](#226--2026-09-13-beta) | 2026-09-13 | Beta | Lobby browser, voice and rope fixes |
-| [2.2.5](#225--2026-09-12-beta) | 2026-09-12 | Beta | Website lobby joins |
-| [2.2.4](#224--2026-09-12-beta) | 2026-09-12 | Beta | Vanilla Story-mode isolation |
-| [2.2.3](#223--2026-09-11-beta) | 2026-09-11 | Beta | Pause-menu audio fix |
-| [2.2.2](#222--2026-09-11-beta) | 2026-09-11 | Beta | Proximity voice settings |
-| [2.2.1](#221--2026-09-08-beta) | 2026-09-08 | Beta | Remote pose reliability |
-| [2.2.0](#220--2026-09-07-beta) | 2026-09-07 | Beta | Item sharing and chat completion |
-| [2.1.0](#210--2026-09-06-beta) | 2026-09-06 | Beta | Voice chat and feature framework |
-| [1.1.0](#110--2026-08-02) | 2026-08-02 | Stable | Managed extension API and diagnostics |
-| [1.0.0](#100--2026-07-11) | 2026-07-11 | Stable | First stable release |
-| [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
+- Hold View/Share to open a radial menu: multiplayer panel, rope, ping, names and
+  pickup. Aim with the right stick, release to choose. A **Shortcut style** setting
+  on the CairnMP settings page switches back to button combos and lists the keys.
+- Items dropped on the ground gather into a real loot bag that every player can
+  open and take from. The host still owns the items.
+- Ground-item prompts follow the last-used device (controller or keyboard).
+- Clients can pick up from 4.5 m, so they can take from the bag.
+
+### Fixed (#38 by @Tippy-Tipster)
+
+- Holding View/Share no longer locks game input until you alt-tab.
+
+### Thanks
+
+- @fakedude2 for the Rope Team chain (#47).
+- @Tippy-Tipster for the radial menu and loot bag (#38).
 
 ---
 
