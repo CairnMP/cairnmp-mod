@@ -48,7 +48,7 @@ internal static class ModConfig
         // alone, any other value is an experiment measured by the [GameTuning] frame report.
         JobWorkerCount = debug.CreateEntry("JobWorkerCount", 0);
         PerformanceScenario = debug.CreateEntry("PerformanceScenario", "unspecified - set route, save, run number and voice/rope state");
-        // F9 practice climber and H to fly him, for trying the Rope Team chain alone.
+        // F9 practice climber and H to switch places with him, for trying both rope jobs alone.
         // A test tool, so it stays off unless a developer turns it on.
         PracticeClimber = debug.CreateEntry("PracticeClimber", false);
     }

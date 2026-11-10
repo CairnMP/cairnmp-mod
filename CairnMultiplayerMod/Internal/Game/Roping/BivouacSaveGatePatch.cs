@@ -12,12 +12,13 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 
 /// <summary>
 /// Rope Team does not start a vanilla save unless the climber is at a bivouac and
-/// the rest has finished, and does not load a file from the wall. Cairn writes
-/// the bivouac save on the way out, once the flag is already clear.
-/// lastBivouacAge on that file is still the exit. A refused write that carries a
-/// callback still reports failure, because the pause-menu quit waits on that
-/// callback. Cairn's own write and read run when the answer is yes. A new game
-/// does not come through the load callback.
+/// the rest has finished, and does not load a file from the wall. A quick save
+/// and a death segment are refused for the whole run, including at camp and
+/// after a disconnect. Cairn writes the bivouac autosave on the way out, once
+/// the flag is already clear. lastBivouacAge on that file is still the exit.
+/// A refused write that carries a callback still reports failure, because the
+/// pause-menu quit waits on that callback. Cairn's own autosave and read run
+/// when the answer is yes. A new game does not come through the load callback.
 /// </summary>
 internal static class BivouacSaveGatePatch
 {
@@ -36,11 +37,13 @@ internal static class BivouacSaveGatePatch
             Patch(CanSave(), nameof(BlockCanSave));
             Patch(CanSave(ReasonRef()), nameof(BlockCanSaveReason));
             Patch(CanAutoSave(), nameof(BlockCanSave));
-            Patch(AutoSave(), nameof(BlockWrite));
+            Patch(AutoSave(), nameof(BlockAutoSave));
             Patch(QuickSave(), nameof(BlockQuickSave));
             Patch(Save(typeof(Disk.IOOperationCallback)), nameof(BlockSave));
             Patch(Save(Type.EmptyTypes), nameof(BlockWrite));
             Patch(SaveAndClose(), nameof(BlockSave));
+            Patch(DeathSegment(), nameof(BlockDeathSegment));
+            Patch(DiskDeathSegment(), nameof(BlockDiskDeathSegment));
             Patch(PawnCanSave(), nameof(BlockCanSave));
             Patch(LoadCallback(), nameof(BeforeLoad));
             _installed = true;
@@ -84,8 +87,42 @@ internal static class BivouacSaveGatePatch
     }
 
     // QuickSave names the callback "then". Save and SaveAndClose name it "thenMT".
+    // The death segment names it "thenMT" on the manager and "mtCallback" on Disk.
     // Harmony only supplies a prefix argument when the name matches.
-    private static bool BlockQuickSave(Disk.IOOperationCallback then) => FinishWithoutWriting(then);
+    private static bool BlockAutoSave(bool quick)
+    {
+        if (BivouacSaveSession.MayWriteAutosave(quick)) return true;
+        LogBlocked();
+        return false;
+    }
+
+    private static bool BlockQuickSave(Disk.IOOperationCallback then)
+    {
+        if (BivouacSaveSession.MayWriteQuick()) return true;
+        LogBlocked();
+        if (then != null) then.Invoke(false);
+        return false;
+    }
+
+    private static bool BlockDeathSegment(Il2CppSystem.Action<bool> thenMT)
+    {
+        if (BivouacSaveSession.MayWriteDeath()) return true;
+        LogBlocked();
+        if (thenMT != null) thenMT.Invoke(false);
+        return false;
+    }
+
+    /// <summary>
+    /// Disk's callback has no success flag. Invoking it lets the waiter finish.
+    /// The manager's own callback is the one that reports failure.
+    /// </summary>
+    private static bool BlockDiskDeathSegment(Il2CppSystem.Action mtCallback)
+    {
+        if (BivouacSaveSession.MayWriteDeath()) return true;
+        LogBlocked();
+        if (mtCallback != null) mtCallback.Invoke();
+        return false;
+    }
 
     private static bool BlockSave(Disk.IOOperationCallback thenMT) => FinishWithoutWriting(thenMT);
 
@@ -116,8 +153,9 @@ internal static class BivouacSaveGatePatch
     }
 
     /// <summary>
-    /// Solo and the other modes load any file. Rope Team loads a readable file whose
-    /// flag is set, or whose lastBivouacAge is still the exit that wrote it.
+    /// Solo and the other modes load any file. Rope Team loads a readable autosave whose
+    /// flag is set, or whose lastBivouacAge is still the exit that wrote it. A quick save
+    /// is refused.
     /// </summary>
     private static bool MayLoad(object closure)
     {
@@ -126,7 +164,7 @@ internal static class BivouacSaveGatePatch
             return BivouacSaveSession.MayLoad(fileIsInBivouac: false, float.PositiveInfinity);
 
         var camp = copy.world.bivouac;
-        return BivouacSaveSession.MayLoad(camp.isInBivouac, camp.lastBivouacAge);
+        return BivouacSaveSession.MayLoad(camp.isInBivouac, camp.lastBivouacAge, copy.isQuickSave);
     }
 
     private static void LogBlocked()
@@ -160,6 +198,18 @@ internal static class BivouacSaveGatePatch
 
     private static MethodInfo AutoSave()
         => AccessTools.Method(typeof(SavegameManager), nameof(SavegameManager.AutoSave), new[] { typeof(bool) });
+
+    private static MethodInfo DeathSegment()
+        => AccessTools.Method(
+            typeof(SavegameManager),
+            nameof(SavegameManager.IncrementDeathSegmentOnSave),
+            new[] { typeof(PathSaveIcon), typeof(PathRecorder), typeof(Il2CppSystem.Action<bool>) });
+
+    private static MethodInfo DiskDeathSegment()
+        => AccessTools.Method(
+            typeof(Disk),
+            nameof(Disk.IncrementDeathSegmentOnSave),
+            new[] { typeof(SavegamePackage), typeof(string), typeof(PathRecorder), typeof(Il2CppSystem.Action) });
 
     private static MethodInfo QuickSave()
         => AccessTools.Method(

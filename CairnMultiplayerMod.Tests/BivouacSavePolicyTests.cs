@@ -53,6 +53,66 @@ public sealed class BivouacSavePolicyTests
             ropeTeamSession: false, fileIsInBivouac: false, lastBivouacAge));
     }
 
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void ARopeTeamRunRefusesQuickSavesAndDeathSegments(bool ropeTeam, bool allowed)
+    {
+        Assert.Equal(allowed, BivouacSavePolicy.MayWriteQuick(ropeTeam));
+        Assert.Equal(allowed, BivouacSavePolicy.MayWriteDeath(ropeTeam));
+    }
+
+    [Fact]
+    public void AQuickAutosaveIsRefusedAtCampAndTheLeaveCampAutosaveIsNot()
+    {
+        Assert.False(BivouacSavePolicy.MayWriteAutosave(
+            ropeTeamSession: true, atCamp: true, restComplete: true, quick: true));
+        Assert.True(BivouacSavePolicy.MayWriteAutosave(
+            ropeTeamSession: true, atCamp: true, restComplete: true, quick: false));
+        Assert.True(BivouacSavePolicy.MayWriteAutosave(
+            ropeTeamSession: false, atCamp: false, restComplete: false, quick: true));
+    }
+
+    [Theory]
+    [InlineData(false, true, 30f, false, false, false)]
+    [InlineData(true, false, 30f, false, false, false)]
+    [InlineData(true, true, 0.024f, false, false, false)]
+    [InlineData(true, true, 0f, true, false, false)]
+    [InlineData(true, true, 30f, false, false, true)]
+    [InlineData(true, true, 30f, false, true, true)]
+    [InlineData(true, true, 300f, true, false, false)]
+    public void TheSaveMenuNamesAFileTheRunWouldRefuse(
+        bool ropeTeamSaveSelect, bool hasSave, float lastBivouacAge,
+        bool fileIsInBivouac, bool isQuickSave, bool shows)
+    {
+        Assert.Equal(shows, BivouacSavePolicy.ShowsTentOnlyNotice(
+            ropeTeamSaveSelect, hasSave, lastBivouacAge, isQuickSave, fileIsInBivouac));
+        Assert.Equal("Only saves in tent allowed", BivouacSavePolicy.TentOnlyNotice);
+    }
+
+    [Fact]
+    public void ARopeTeamRunRefusesAQuickSaveFile()
+    {
+        Assert.False(BivouacSavePolicy.MayLoad(
+            ropeTeamSession: true, fileIsInBivouac: true, lastBivouacAge: 0f, isQuickSave: true));
+        Assert.False(BivouacSavePolicy.MayLoad(
+            ropeTeamSession: true, fileIsInBivouac: false, lastBivouacAge: 0.024f, isQuickSave: true));
+        Assert.True(BivouacSavePolicy.MayLoad(
+            ropeTeamSession: false, fileIsInBivouac: false, lastBivouacAge: 30f, isQuickSave: true));
+    }
+
+    [Theory]
+    [InlineData(true, true, false, true)]
+    [InlineData(true, false, false, true)]
+    [InlineData(true, false, true, false)]
+    [InlineData(false, false, true, false)]
+    [InlineData(false, true, false, true)]
+    public void TheRunStaysMarkedAfterDisconnectUntilTheMenu(
+        bool marked, bool liveSession, bool backAtMenu, bool stays)
+    {
+        Assert.Equal(stays, BivouacSavePolicy.RunRemainsMarked(marked, liveSession, backAtMenu));
+    }
+
     [Fact]
     public void TheBivouacSceneIsCampAndAStuckFlagIsNot()
     {

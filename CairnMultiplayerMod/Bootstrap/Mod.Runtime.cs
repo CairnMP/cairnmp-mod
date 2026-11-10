@@ -66,6 +66,7 @@ public partial class Mod
         if (strandedConnection)
         {
             LoggerInstance.Msg("[State] Returned to MainMenu — auto-disconnecting");
+            Rope.ClearLinks();
             Network.Disconnect();
             _panel.SetStatus("Disconnected (returned to menu)", false);
         }
@@ -76,8 +77,8 @@ public partial class Mod
             return;
         }
 
-        RemotePlayerManager.ClearAll();
         Rope.ClearLinks();
+        RemotePlayerManager.ClearAll();
     }
 
     public override void OnSceneWasUnloaded(int buildIndex, string sceneName)
@@ -136,6 +137,12 @@ public partial class Mod
 
     public override void OnLateUpdate()
     {
+        // A second copy on this PC is only useful if the climber you are not
+        // controlling stays active. Re-apply every frame in case the game clears
+        // the flag when the window loses focus.
+        if (_keepSimulatingWhenUnfocused)
+            Application.runInBackground = true;
+
         if (CrashHandler.IsFatal) return;
         try
         {
@@ -234,6 +241,11 @@ public partial class Mod
             using var performance = Measure(PerformanceArea.Ui);
             _mainMenu.Tick();
         }
+
+        // Background scenes load on top of MainMenu and become CurrentScene. The save
+        // cards are still up then, so the tent line follows the loaded menu scene.
+        if (_loadedScenes.Contains(SceneRoles.MainMenuScene))
+            BivouacSaveSlotNotice.Refresh();
 
         using (Measure(PerformanceArea.Network))
         {

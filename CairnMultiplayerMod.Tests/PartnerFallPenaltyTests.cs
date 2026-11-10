@@ -31,7 +31,7 @@ public sealed class PartnerFallPenaltyTests
         Assert.False(PartnerFallPenalty.IsUnsecuredFallModule(
             "ClimbingV2PawnControllerModuleRappelAscendRopeHangIdle"));
         Assert.Equal(PartnerPose.Down, PartnerFallPenalty.Classify(true, true, true, "Falling"));
-        Assert.Equal(5f, PartnerFallPenalty.FullGripSeconds);
+        Assert.Equal(3f, PartnerFallPenalty.FullGripSeconds);
     }
 
     [Fact]

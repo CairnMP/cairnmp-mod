@@ -34,6 +34,14 @@ internal static partial class RopeInterop
     /// <summary>The local leader is spending grip because the follower hangs.</summary>
     internal static bool GripDraining { get; private set; }
 
+    /// <summary>Cairn's critical-grip clock is running while that spend is on.</summary>
+    internal static bool GripCritical { get; private set; }
+
+    /// <summary>
+    /// Seconds until Cairn drops this leader. Large when the critical-grip clock is not running.
+    /// </summary>
+    internal static float GripSecondsLeft { get; private set; } = float.PositiveInfinity;
+
     internal static void BindFallChannel(ushort channel) => _fallChannel = channel;
 
     internal static void BindFallHud(HudAdapter hud) => _fallHud = hud;
@@ -58,6 +66,22 @@ internal static partial class RopeInterop
             return new PartnerUntie(false, false, true);
 
         var local = ReadLocal();
+        if (TeamAnchorSession.StaffUntieKeepsFollower(TopAnchorSession.HasStick, from))
+        {
+            // The chain stays. A hanging follower is not dropped with the partnership.
+            // A leader who unclips while they themselves are hanging still falls.
+            PartnerFallSession.ForceRelease = false;
+            var dropLeader = localIsLeader && localUntied && local.Hanging;
+            if (dropLeader)
+            {
+                if (PartnerFallPenalty.IsSuspendedOnRope(CurrentModuleName()))
+                    DropHanging();
+                ArmDrop();
+            }
+
+            return new PartnerUntie(dropLeader, refillGrip: false, holdStaff: true);
+        }
+
         var result = PartnerFallPenalty.Untie(
             localIsLeader, localUntied, local.Hanging, PartnerFallSession.Partner == PartnerPose.Hanging);
         PartnerFallSession.ForceRelease = result.ForceRelease;
@@ -83,6 +107,7 @@ internal static partial class RopeInterop
         if (!linked)
         {
             GripDraining = false;
+            ClearCriticalGrip();
             if (_watchedPartner != int.MinValue)
             {
                 _watchedPartner = int.MinValue;
@@ -116,7 +141,10 @@ internal static partial class RopeInterop
         PartnerFallSession.BraceLatched = hold.Latched;
         ApplyBrace(hold.Brace);
         GripDraining = hold.Drain;
-        if (hold.Drain) DrainGrip(Time.unscaledDeltaTime);
+        ClearCriticalGrip();
+        if (!hold.Drain) return;
+        DrainGrip(Time.unscaledDeltaTime);
+        ReadCriticalGrip();
     }
 
     internal static void ResetPartnerFall()
@@ -125,8 +153,43 @@ internal static partial class RopeInterop
         _statusSent = false;
         _dropAfterFrame = 0;
         GripDraining = false;
+        ClearCriticalGrip();
         PartnerFallSession.Reset();
         ApplyBrace(false);
+    }
+
+    /// <summary>This climber is dangling, falling, or off belay. A hold on the wall is not.</summary>
+    internal static bool LocalClimberIsHanging() => ReadLocal().Hanging;
+
+    /// <summary>
+    /// The partner is gone. Let go of the brace and the grip drain. A drop that was
+    /// just armed still happens on a later frame, after the shared pitons leave the rope.
+    /// </summary>
+    internal static void StopHoldingPartner()
+    {
+        GripDraining = false;
+        ClearCriticalGrip();
+        _watchedPartner = int.MinValue;
+        _statusSent = false;
+        PartnerFallSession.ForgetPartner();
+        ApplyBrace(false);
+    }
+
+    /// <summary>
+    /// The tie has already ended. Take the shared pitons off the rope and finish a
+    /// hang that was armed while the rope was still up. The ordinary play tick does
+    /// this only while the session is connected.
+    /// </summary>
+    internal static void FinishLeavingUntie()
+    {
+        if (!PartnerFallSession.DropPending && !TeamAnchorSession.HasPendingRelease)
+            return;
+        var lifeline = TryGetLifeline();
+        if (lifeline != null)
+            ReleaseUnhookedPitons(lifeline);
+        TryDrop();
+        if (!TeamAnchorSession.IsLinked)
+            StopHoldingPartner();
     }
 
     private static int PartnerId()
@@ -149,8 +212,10 @@ internal static partial class RopeInterop
 
     private static void ArmDrop()
     {
-        if (PartnerFallSession.DropPending) return;
-        PartnerFallSession.ArmDrop();
+        // The leave path may already have armed this, before the link was removed.
+        // Still record the frame, or the drop could run in the same breath as the untie.
+        if (!PartnerFallSession.DropPending)
+            PartnerFallSession.ArmDrop();
         _dropAfterFrame = Time.frameCount;
     }
 
@@ -232,6 +297,36 @@ internal static partial class RopeInterop
         catch (Exception exception)
         {
             ModLog.SuppressedException("rope.fall-refill", exception);
+        }
+    }
+
+    private static void ClearCriticalGrip()
+    {
+        GripCritical = false;
+        GripSecondsLeft = float.PositiveInfinity;
+    }
+
+    /// <summary>
+    /// Cairn's critical-grip clock counts up to the length of the window. The time left is
+    /// that length minus the clock. A good hold runs the clock back, and this clears.
+    /// The exhausted flag stays out of this. It turns on as the leader falls, after the
+    /// drain has already stopped, so the tip would never get all of its conditions at once.
+    /// </summary>
+    private static void ReadCriticalGrip()
+    {
+        try
+        {
+            var pawn = ResolveLocalClimbController();
+            if (pawn == null || !pawn.IsInCriticalStaminaState()) return;
+            var length = pawn.CriticalStaminaStateDuration;
+            var elapsed = pawn.criticalStaminaTimer;
+            if (!float.IsFinite(length) || !float.IsFinite(elapsed)) return;
+            GripCritical = true;
+            GripSecondsLeft = length - elapsed;
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.fall-critical", exception);
         }
     }
 

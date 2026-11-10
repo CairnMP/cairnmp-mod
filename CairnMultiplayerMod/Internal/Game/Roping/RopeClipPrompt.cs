@@ -5,8 +5,10 @@ using CairnMultiplayerMod.Internal.Game;
 using Il2Cpp;
 using Il2CppTGBTools.InputImage;
 using Il2CppTheGameBakers.Cairn;
+using Il2CppTheGameBakers.Cairn.UI;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 namespace CairnMultiplayerMod.Internal.Game.Roping;
 
@@ -14,6 +16,8 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 /// Cairn's gameplay-prompt rows for our control tips. The words are written onto the row
 /// because these actions have no loc key of their own. The keycap still comes from the
 /// prompt HUD. A word such as Tap or Hold is written to the left of that keycap.
+/// The partner-down row borrows a binding only so the strip will build, then puts
+/// Cairn's death skull in that key's place.
 /// </summary>
 internal static class RopeClipPrompt
 {
@@ -23,12 +27,18 @@ internal static class RopeClipPrompt
 
     private const string GamepadBinding = "<Gamepad>/rightStickPress";
 
+    /// <summary>A key the climber does not use. The row needs a binding, then the skull replaces it.</summary>
+    private const string SkullBinding = "<Keyboard>/f13";
+
     private sealed class Slot
     {
         internal string Text;
         internal string Cue;
         internal string Keyboard;
         internal string Gamepad;
+        internal bool UseSkull;
+        internal InputImage KeyDriver;
+        internal bool KeyHidden;
         internal InputAction Action;
         internal GameplayPromptHandle Handle;
         internal GameplayPromptUI Ui;
@@ -36,6 +46,9 @@ internal static class RopeClipPrompt
         internal bool Wants;
         internal string Announced;
     }
+
+    private static Sprite _skull;
+    private static bool _skullMissLogged;
 
     private static readonly Dictionary<string, Slot> Slots = new(StringComparer.Ordinal);
     private static InputActionAsset _asset;
@@ -55,11 +68,18 @@ internal static class RopeClipPrompt
             GamepadBinding);
 
     internal static void Tick(string id, bool show, string label, string cue, string keyboard, string gamepad)
+        => Tick(id, show, label, cue, keyboard, gamepad, skull: false);
+
+    internal static void TickSkull(string id, bool show, string label)
+        => Tick(id, show, label, cue: null, SkullBinding, gamepad: null, skull: true);
+
+    private static void Tick(string id, bool show, string label, string cue, string keyboard, string gamepad, bool skull)
     {
         if (string.IsNullOrEmpty(id)) return;
         var slot = SlotFor(id);
         if (!string.IsNullOrEmpty(label)) slot.Text = label;
         slot.Cue = cue;
+        slot.UseSkull = skull;
         if (!string.IsNullOrEmpty(keyboard)) slot.Keyboard = keyboard;
         slot.Gamepad = gamepad;
         slot.Wants = show;
@@ -86,6 +106,7 @@ internal static class RopeClipPrompt
     private static void Hide(Slot slot)
     {
         slot.Wants = false;
+        RestoreKey(slot);
         if (!slot.Shown && !slot.Handle.registered && !slot.Handle.Valid) return;
         try
         {
@@ -205,6 +226,7 @@ internal static class RopeClipPrompt
                 if (slot.Ui == null) continue;
                 WriteLabel(slot.Ui, slot);
                 WriteCue(slot.Ui, slot);
+                WriteMark(slot.Ui, slot);
             }
 
             RevealIfAllowed();
@@ -229,6 +251,7 @@ internal static class RopeClipPrompt
                 slot.Ui = row;
                 WriteLabel(row, slot);
                 WriteCue(row, slot);
+                WriteMark(row, slot);
                 return;
             }
 
@@ -375,6 +398,144 @@ internal static class RopeClipPrompt
         if (!show || tmp.text == slot.Cue) return;
         tmp.text = slot.Cue;
         row.rebuidLayout = true;
+    }
+
+    /// <summary>
+    /// The borrowed key is not the instruction. The life-bar skull sits in its place.
+    /// Without that picture the key stays hidden, and the words remain.
+    /// </summary>
+    private static void WriteMark(GameplayPromptUI row, Slot slot)
+    {
+        if (!slot.UseSkull) return;
+        try
+        {
+            var driver = row?.inputActionUI0?.inputImage;
+            var image = driver?.Image;
+            if (driver == null || image == null) return;
+            slot.KeyDriver = driver;
+
+            var skull = FindDeathSkull();
+            var picture = image.gameObject;
+            if (skull == null)
+            {
+                if (picture != null && picture.activeSelf)
+                    picture.SetActive(false);
+                slot.KeyHidden = true;
+                return;
+            }
+
+            if (picture != null && !picture.activeSelf)
+                picture.SetActive(true);
+            slot.KeyHidden = false;
+            if (image.sprite != skull)
+            {
+                image.sprite = skull;
+                row.rebuidLayout = true;
+            }
+
+            if (driver.enabled)
+                driver.enabled = false;
+            if (image.sprite != skull)
+                image.sprite = skull;
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("control.death-skull", exception);
+        }
+    }
+
+    private static void RestoreKey(Slot slot)
+    {
+        var driver = slot.KeyDriver;
+        slot.KeyDriver = null;
+        if (driver == null) return;
+        try
+        {
+            if (!driver.enabled)
+                driver.enabled = true;
+            var picture = driver.Image?.gameObject;
+            if (slot.KeyHidden && picture != null && !picture.activeSelf)
+                picture.SetActive(true);
+            driver.Refresh();
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("control.death-skull", exception);
+        }
+
+        slot.KeyHidden = false;
+    }
+
+    /// <summary>
+    /// The heart is what the bar shows while this climber is alive. The skull is the
+    /// other pictogram on that bar, including the one held for the critical swap.
+    /// </summary>
+    private static Sprite FindDeathSkull()
+    {
+        if (_skull != null) return _skull;
+        try
+        {
+            var found = Resources.FindObjectsOfTypeAll<GameHud>();
+            if (found == null) return null;
+            var sawBar = false;
+            for (var i = 0; i < found.Length; i++)
+            {
+                var hud = found[i];
+                if (hud == null || hud.gameObject == null || !hud.gameObject.scene.IsValid()) continue;
+                var bar = hud.statusUI != null ? hud.statusUI.hpBarUI : null;
+                if (bar == null) continue;
+                sawBar = true;
+                var skull = SkullOn(bar);
+                if (skull == null) continue;
+                _skull = skull;
+                return _skull;
+            }
+
+            if (sawBar && !_skullMissLogged)
+            {
+                _skullMissLogged = true;
+                ModLog.Info("[Control] The death skull was not on the health bar.");
+            }
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("control.death-skull", exception);
+        }
+
+        return null;
+    }
+
+    private static Sprite SkullOn(HpBarUI bar)
+    {
+        var shown = SkullSprite(bar.healthIcon);
+        if (shown != null) return shown;
+        var images = bar.GetComponentsInChildren<Image>(true);
+        if (images != null)
+        {
+            for (var i = 0; i < images.Length; i++)
+            {
+                var sprite = SkullSprite(images[i]);
+                if (sprite != null) return sprite;
+            }
+        }
+
+        var swaps = bar.criticalSpriteSwaps;
+        if (swaps == null) return null;
+        for (var i = 0; i < swaps.Length; i++)
+        {
+            var swap = swaps[i];
+            if (swap == null) continue;
+            if (DeathSkullNames.IsSkull(swap.criticalSprite?.name)) return swap.criticalSprite;
+            if (DeathSkullNames.IsSkull(swap.normalSprite?.name)) return swap.normalSprite;
+        }
+
+        return null;
+    }
+
+    private static Sprite SkullSprite(Image image)
+    {
+        var sprite = image?.sprite;
+        return DeathSkullNames.IsSkull(sprite?.name) ? sprite : null;
     }
 
     private static void HideForeignRows()

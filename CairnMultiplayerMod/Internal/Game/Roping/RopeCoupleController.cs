@@ -41,16 +41,23 @@ internal sealed class RopeCoupleController
     {
         if (_network == null)
         {
-            LeaderProtectionMarker.Hide();
             RopeClipPrompt.Hide();
+            RopeRoleMarks.Hide();
             return;
         }
+
+        // A story scene is advertised as loading, and this still has to see her leave the spot.
+        RopeInterop.TickCutsceneStaff(_network, _state.LocalPlayerState == PlayerState.InGame, Time.unscaledTime);
 
         // Teardown must remain reachable outside InGame.
         if (!TickRopeSafety() || _state.LocalPlayerState != PlayerState.InGame)
         {
-            if (!TeamAnchorSession.IsLinked) LeaderProtectionMarker.Hide();
+            // A disconnect ends the tie and then leaves the world running. The hang
+            // still has to finish after the pitons are off the rope.
+            if (_state.LocalPlayerState == PlayerState.InGame && !TeamAnchorSession.IsLinked)
+                RopeInterop.FinishLeavingUntie();
             RopeClipPrompt.Hide();
+            RopeRoleMarks.Hide();
             return;
         }
 
@@ -61,7 +68,11 @@ internal sealed class RopeCoupleController
         TickUnanchoredFall();
         RopeInterop.TickPartnerFall(_network);
         TickRopePrompt();
-        if (!TeamAnchorSession.IsLinked) LeaderProtectionMarker.Hide();
+        RopeRoleMarks.Present(
+            _network.LocalPlayerId,
+            TeamAnchorSession.LeaderId,
+            TeamAnchorSession.FollowerId,
+            RemotePlayerManager.ShowNames);
     }
 
     /// <summary>
@@ -109,13 +120,13 @@ internal sealed class RopeCoupleController
         switch (action)
         {
             case RopeSafetyAction.TearDown:
-                if (RopeInterop.HasRopeTeamAnchors)
-                    RopeInterop.ReleaseAllAnchors();
+                // Untie first. Releasing the rope before that leaves a hang with nothing to leave.
                 _ropeHardTornDown = true;
                 TearDownAllLocalRopeLinks(!connected ? "disconnected"
                     : dead ? "local player died"
                     : gameOver ? "game over"
-                    : "returned to main menu");
+                    : "returned to main menu",
+                    notify: connected);
                 return false;
 
             case RopeSafetyAction.UnclipOnce:
@@ -154,34 +165,78 @@ internal sealed class RopeCoupleController
         ModLog.Info($"[RopeCouple] Unclipped {partners.Count} link(s): a climber died");
     }
 
-    private void TearDownAllLocalRopeLinks(string reason)
+    /// <summary>
+    /// The other climber left. Untie before their body is destroyed, or the rope goes
+    /// with it and a hang has nothing to leave. Someone who was not the partner is ignored.
+    /// </summary>
+    internal void PartnerLeft(int playerId)
     {
-        int self = _network.LocalPlayerId;
+        var self = SelfId();
+        var untied = RopeDisconnect.Untie(
+            self,
+            playerId,
+            RopeInterop.LocalClimberIsHanging(),
+            () => RopeInterop.PrepareUntie(playerId, self, TeamAnchorSession.IsLocalLeader, localUntied: false));
+        if (!untied) return;
+        ReleaseRopeAfterUntie();
+        RopeInterop.StopHoldingPartner();
+        ModLog.Info($"[RopeCouple] Untied from player {playerId}: they left");
+    }
 
+    private void TearDownAllLocalRopeLinks(string reason, bool notify)
+    {
+        var self = SelfId();
+        var partners = PartnerIds(self);
+        var canNotify = notify && _network.IsConnected && _network.IsHandshakeComplete;
+        RopeDisconnect.EndSession(
+            self,
+            partners,
+            RopeInterop.LocalClimberIsHanging(),
+            partner =>
+            {
+                // This climber did not press the cut, so a hang is dropped and the grip is not refilled.
+                RopeInterop.PrepareUntie(partner, self, TeamAnchorSession.IsLocalLeader, localUntied: false);
+                if (!canNotify) return;
+                TopAnchorSession.RequestDrop();
+                RopeInterop.SendTopAnchorDrop(_network);
+                _network.SendRopeClip(partner, false);
+            },
+            ReleaseRopeAfterUntie);
+        RopeInterop.StopHoldingPartner();
+        if (partners.Count == 0) return;
+        ModLog.Info($"[RopeCouple] Auto-unclipped {partners.Count} link(s): {reason}");
+    }
+
+    /// <summary>Who this client is. After the socket resets, the tie still remembers.</summary>
+    private int SelfId()
+    {
+        var self = _network.LocalPlayerId;
+        return self > 0 ? self : TeamAnchorSession.LocalPlayerId;
+    }
+
+    private static List<int> PartnerIds(int self)
+    {
         var partners = new List<int>();
+        if (self <= 0) return partners;
         foreach (var (a, b) in RopeLinkState.Links())
         {
             if (a == self) partners.Add(b);
             else if (b == self) partners.Add(a);
         }
-        if (partners.Count == 0)
-            return;
 
-        bool canNotify = _network.IsConnected && _network.IsHandshakeComplete;
-        if (canNotify)
-        {
-            TopAnchorSession.RequestDrop();
-            RopeInterop.SendTopAnchorDrop(_network);
-        }
+        if (!TeamAnchorSession.IsLinked) return partners;
+        var leader = TeamAnchorSession.LeaderId;
+        var follower = TeamAnchorSession.FollowerId;
+        var other = leader == self ? follower : follower == self ? leader : -1;
+        if (other > 0 && other != self && !partners.Contains(other))
+            partners.Add(other);
+        return partners;
+    }
 
-        foreach (var partner in partners)
-        {
-            if (canNotify)
-                _network.SendRopeClip(partner, false);
-            RopeLinkState.Apply(self, partner, false);
-        }
-
-        ModLog.Info($"[RopeCouple] Auto-unclipped {partners.Count} link(s): {reason}");
+    private static void ReleaseRopeAfterUntie()
+    {
+        if (RopeInterop.HasRopeTeamAnchors)
+            RopeInterop.ReleaseAllAnchors();
     }
 
     private void HandleRopeClipInput()
@@ -203,7 +258,7 @@ internal sealed class RopeCoupleController
             return;
         }
 
-        if (TeamAnchorSession.IsLinked && TeamAnchorSession.LeaderLeft && TeamAnchorSession.IsLocalFollower)
+        if (TeamAnchorSession.StaffHoldsPitch && TeamAnchorSession.IsLocalFollower)
         {
             ModLog.Info("[RopeCouple] Link pressed — the staff is holding the pitch.");
             return;
@@ -264,21 +319,23 @@ internal sealed class RopeCoupleController
 
     /// <summary>
     /// One row for both presses. Clip-in uses the same reach test as the key. Cut rope
-    /// follows the grip drain, which only the leader has while the follower hangs.
+    /// waits until about a second is left on the critical-grip clock.
     /// </summary>
     private void TickRopePrompt()
     {
         var inputAvailable = !InputCaptureState.IsKeyboardCaptured;
-        if (RopeCutPromptPolicy.ShouldShow(RopeInterop.GripDraining, inputAvailable))
+        if (RopeCutPromptPolicy.ShouldShow(
+                RopeInterop.GripDraining,
+                RopeInterop.GripCritical,
+                RopeInterop.GripSecondsLeft,
+                inputAvailable))
         {
             RopeClipPrompt.Tick(true, RopeClipPrompt.CutLabel);
             return;
         }
 
         var linked = RopeLinkState.PartnerOf(_network.LocalPlayerId) != -1;
-        var pitchHeld = TeamAnchorSession.IsLinked
-            && TeamAnchorSession.LeaderLeft
-            && TeamAnchorSession.IsLocalFollower;
+        var pitchHeld = TeamAnchorSession.StaffHoldsPitch && TeamAnchorSession.IsLocalFollower;
         RopeClipPrompt.Tick(
             RopeClipPromptPolicy.ShouldShow(
                 linked,
@@ -323,10 +380,9 @@ internal sealed class RopeCoupleController
         if (untie.HoldStaff && TeamAnchorSession.IsLocalLeader && TopAnchorSession.HasStick)
         {
             TopAnchorSession.RequestHold();
-            // A client does not apply its own unclip until the host echoes it.
-            // The link drops below, and the same frame reconciles. Commit the
-            // hold first so that reconcile leaves the chain for the follower.
-            TeamAnchorSession.HoldForFollower();
+            // The partnership ends before the link drops, so the same frame cannot
+            // release the chain. The pitons stay clipped for the follower.
+            TeamAnchorSession.EndPartnership();
             RopeInterop.SendTopAnchorLeave(_network);
         }
 
@@ -339,6 +395,14 @@ internal sealed class RopeCoupleController
     {
         int self = _network.LocalPlayerId;
         int partner = RopeLinkState.PartnerOf(self);
+
+        // The staff is the top of the rope. Putting the harness rope back would drag it
+        // across the mountain to wherever the scene took the leader.
+        if (TeamAnchorSession.LeaderLeft)
+        {
+            if (RopeInterop.HasRopeTeamAnchors) RopeInterop.ReleaseAllAnchors();
+            return;
+        }
 
         if (partner == -1 || !_network.RemotePlayers.TryGetValue(partner, out var remote)
             || remote == null || remote.State != PlayerState.InGame
@@ -394,11 +458,15 @@ internal sealed class RopeCoupleController
     internal void ClearLinks()
     {
         RopeClipPrompt.Hide();
+        RopeRoleMarks.Hide();
+        // The socket may already be down. Still drop a hang before the rope is released.
+        TearDownAllLocalRopeLinks("session ended", notify: false);
         RopeLinkState.Clear();
-        TeamAnchorSession.Clear();
+        if (TeamAnchorSession.PitchRemains)
+            TeamAnchorSession.Clear();
         TeamAnchorSession.DisarmRules();
-        RopeInterop.ReleaseAllAnchors();
-        RopeInterop.ResetPartnerFall();
+        ReleaseRopeAfterUntie();
+        RopeInterop.StopHoldingPartner();
         _ropeHardTornDown = false;
         _partnerWasFalling = false;
     }

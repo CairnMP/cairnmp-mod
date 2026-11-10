@@ -20,6 +20,12 @@ internal static partial class RopeInterop
     {
         try
         {
+            if (CutsceneStaffPolicy.RestWaits(CutsceneStaffSession.StoryHold, CutsceneStaffSession.TakeCampRest()))
+            {
+                ModLog.Info("[RopeTeam] The story rest left the staff for the follower.");
+                return;
+            }
+
             UntieForRest(network);
             ReleaseQueuedPitons();
             DestroyStaffNow(RestStaff);
@@ -48,7 +54,7 @@ internal static partial class RopeInterop
         }
 
         RopeLinkState.Clear();
-        if (TeamAnchorSession.IsLinked || TeamAnchorSession.LeaderLeft || TopAnchorSession.HasStick)
+        if (TeamAnchorSession.PitchRemains)
             TeamAnchorSession.Clear();
         else
             TopAnchorSession.Reset();

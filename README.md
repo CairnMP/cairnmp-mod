@@ -31,7 +31,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **16**; lobby admission may also require the exact mod version.
+> protocol is **17**; lobby admission may also require the exact mod version.
 
 ## Features
 
@@ -81,13 +81,13 @@ on a keyboard.
 Temporary test tools, taken out after the rope-team trial. The practice climber is
 off unless `PracticeClimber = true` is set under `[Debug]` in
 `UserData/MelonPreferences.cfg`. Then `F9` spawns or removes
-a practice climber beside the host. `H` takes over his body. The mouse looks,
-`WASD` flies, `Space` rises, `Ctrl` descends, and `Shift` goes faster. `H` again
-puts you back in your own climber. While the rope is tied, a gold marker sits on
-the piton protecting the leader and a red marker sits on the follower's. The HUD
-says "Leader unprotected" when the leader's piton is gone. While the rope is
-tied, the HUD also shows the rope path against the coil, and "paid out" when a
-further step away is refused.
+a practice climber beside the host. `H` switches places with him. You climb
+from his spot with the normal controls, and the body you leave stays there.
+Switching back puts you on the same holds. Leaving the wall stands you where
+he stood. A spot in the air hovers instead of dropping you.
+`H` again puts you back. Switching places leaves every piton on the rope, so
+the follower can take the ones above the anchor. A planted staff is not one
+of them. A piton on the rope catches a fall.
 
 | Controller shortcut | Action |
 | --- | --- |

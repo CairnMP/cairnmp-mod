@@ -16,6 +16,13 @@ internal static partial class RopeInterop
     private static Harness _localHarnessCached;
     private static int _lastLocalHarnessSearchFrame;
 
+    /// <summary>The local climber's harness. False until that climber exists.</summary>
+    internal static bool TryGetLocalHarness(out Harness harness)
+    {
+        harness = ResolveLocalHarness();
+        return harness != null;
+    }
+
     /// <summary>Returns the local player's Harness from Cairn's PawnManager. The MC may
     /// appear late, so failed reads are throttled.</summary>
     private static Harness ResolveLocalHarness()

@@ -73,6 +73,9 @@ internal static class BivouacEntryGatePatch
         {
             _hud?.HideMessage(MessageId);
             RememberCamp(__instance);
+            // She chose this camp. The rest that follows is not the scene that left the staff.
+            if (BivouacSaveSession.RopeTeamSession)
+                CutsceneStaffSession.NoteCampRest();
             return true;
         }
 

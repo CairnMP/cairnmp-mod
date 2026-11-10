@@ -108,6 +108,28 @@ public sealed class PitonRecoveryPolicyTests
     }
 
     [Fact]
+    public void APlantedStaffIsNotOfferedAsAPiton()
+    {
+        Assert.Equal(PitonRecoveryPolicy.TakeSide.None,
+            PitonRecoveryPolicy.Classify(tracked: false, allowsTake: false, staffPointer: true));
+        Assert.Equal(PitonRecoveryPolicy.TakeSide.None,
+            PitonRecoveryPolicy.Classify(tracked: true, allowsTake: false, staffPointer: true));
+        Assert.Equal(PitonRecoveryPolicy.TakeSide.None,
+            PitonRecoveryPolicy.Classify(tracked: true, allowsTake: true, staffPointer: true));
+    }
+
+    [Fact]
+    public void AnOrdinaryPitonStillGoesToTheClimberWhoMayTakeIt()
+    {
+        Assert.Equal(PitonRecoveryPolicy.TakeSide.Local,
+            PitonRecoveryPolicy.Classify(tracked: false, allowsTake: false, staffPointer: false));
+        Assert.Equal(PitonRecoveryPolicy.TakeSide.Local,
+            PitonRecoveryPolicy.Classify(tracked: true, allowsTake: true, staffPointer: false));
+        Assert.Equal(PitonRecoveryPolicy.TakeSide.PracticeGhost,
+            PitonRecoveryPolicy.Classify(tracked: true, allowsTake: false, staffPointer: false));
+    }
+
+    [Fact]
     public void TheNearestReachablePitonIsTheOneOffered()
     {
         var choice = PitonRecoveryPolicy.Choose(new[]

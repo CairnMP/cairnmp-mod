@@ -29,12 +29,97 @@ internal static class RopeLengthPolicy
         => float.IsFinite(pathLength) && float.IsFinite(coilLength) && coilLength > 0f
            && pathLength >= coilLength - SkinMeters;
 
-    /// <summary>Temporary test line. Null when the lengths cannot be shown.</summary>
-    internal static string Readout(float pathLength, float coilLength)
+    /// <summary>
+    /// The rope warning is worth showing. The distance is the one stored on Cairn's own warning.
+    /// </summary>
+    internal static bool ShowsAlmostOut(float remaining, float showWithin)
+        => float.IsFinite(remaining) && remaining >= 0f
+           && float.IsFinite(showWithin) && showWithin > 0f
+           && remaining <= showWithin;
+
+    /// <summary>
+    /// The metres Cairn prints, in its own format, with whatever it puts after the number.
+    /// Null when the length cannot be shown. A format the runtime rejects falls back to one decimal.
+    /// </summary>
+    internal static string WarningText(float remaining, string format, string suffix)
     {
-        if (!float.IsFinite(pathLength) || pathLength < 0f || !IsFiniteCoil(coilLength)) return null;
-        var text = string.Format(CultureInfo.InvariantCulture, "Rope {0:0.00} / {1:0.00} m", pathLength, coilLength);
-        return IsPaidOut(pathLength, coilLength) ? text + " — paid out" : text;
+        if (!float.IsFinite(remaining) || remaining < 0f) return null;
+        string number;
+        try
+        {
+            number = string.IsNullOrEmpty(format)
+                ? remaining.ToString("0.0", CultureInfo.InvariantCulture)
+                : format.Contains("{0", StringComparison.Ordinal)
+                    ? string.Format(CultureInfo.InvariantCulture, format, remaining)
+                    : remaining.ToString(format, CultureInfo.InvariantCulture);
+        }
+        catch (FormatException)
+        {
+            number = null;
+        }
+
+        // A format with no digit slot is copied through as words, which is not a length.
+        if (string.IsNullOrEmpty(number) || !HasDigit(number))
+            number = remaining.ToString("0.0", CultureInfo.InvariantCulture);
+        return number + (suffix ?? "");
+    }
+
+    private static bool HasDigit(string text)
+    {
+        for (var i = 0; i < text.Length; i++)
+            if (char.IsDigit(text[i])) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// How far the number has moved toward the end color. Zero at the outline distance and
+    /// beyond, one when nothing is left. A missing outline distance uses the show distance.
+    /// </summary>
+    internal static float EndColorBlend(float remaining, float showWithin, float outlineWithin)
+    {
+        if (!float.IsFinite(remaining)) return 0f;
+        if (remaining <= 0f) return 1f;
+        var span = float.IsFinite(outlineWithin) && outlineWithin > 0f ? outlineWithin : showWithin;
+        if (!float.IsFinite(span) || span <= 0f || remaining >= span) return 0f;
+        return 1f - remaining / span;
+    }
+
+    /// <summary>The number picks up its outline once the leftover is inside that distance.</summary>
+    internal static bool UsesOutline(float remaining, float outlineWithin)
+        => float.IsFinite(remaining) && remaining >= 0f
+           && float.IsFinite(outlineWithin) && outlineWithin > 0f
+           && remaining <= outlineWithin;
+
+    /// <summary>
+    /// Which rope picture to use. Each entry is the least leftover that picture is for.
+    /// The picture is the one with the highest such distance that the leftover still meets.
+    /// Below every distance, the picture with the lowest distance is the short one.
+    /// </summary>
+    internal static int RopePictureIndex(float remaining, IReadOnlyList<float> minimums)
+    {
+        if (!float.IsFinite(remaining) || minimums == null || minimums.Count == 0) return -1;
+        var best = -1;
+        var bestMin = float.NegativeInfinity;
+        var lowest = -1;
+        var lowestMin = float.PositiveInfinity;
+        for (var i = 0; i < minimums.Count; i++)
+        {
+            var min = minimums[i];
+            if (!float.IsFinite(min)) continue;
+            if (min < lowestMin)
+            {
+                lowestMin = min;
+                lowest = i;
+            }
+
+            if (remaining >= min && min >= bestMin)
+            {
+                bestMin = min;
+                best = i;
+            }
+        }
+
+        return best >= 0 ? best : lowest;
     }
 
     private static bool IsFiniteCoil(float coilLength)
@@ -78,6 +163,26 @@ internal static class RopeLengthPolicy
     /// </summary>
     internal static float ReportedRemaining(float nativeRemaining, float teamRemaining)
         => float.IsFinite(teamRemaining) ? teamRemaining : nativeRemaining;
+
+    /// <summary>
+    /// Flat unit direction from the previous rope point toward this climber, for the wall
+    /// Cairn places in front of a walk. Null when the coil still has slack, or when this
+    /// climber is stacked above the previous point and there is no flat direction to face.
+    /// </summary>
+    internal static Vector3? WalkDirection(bool localIsLeader, IReadOnlyList<Vector3> path, float coilLength)
+    {
+        if (!TryMeasure(localIsLeader, path, out var anchor, out var end, out var length)) return null;
+        if (!IsPaidOut(length, coilLength)) return null;
+
+        var flat = new Vector3(end.X - anchor.X, 0f, end.Z - anchor.Z);
+        var sqr = flat.LengthSquared();
+        // A centimetre of flat separation is still "directly above". Cairn multiplies
+        // this direction by its own wall distance, so it has to be one unit long.
+        if (!(sqr > 0.01f * 0.01f)) return null;
+        var scale = 1f / MathF.Sqrt(sqr);
+        var unit = flat * scale;
+        return IsFinite(unit) ? unit : null;
+    }
 
     /// <summary>Metres of coil still unused. Zero once paid out, including a path past the coil.</summary>
     internal static float RemainingMeters(float pathLength, float coilLength)

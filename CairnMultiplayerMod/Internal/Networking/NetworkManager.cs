@@ -207,6 +207,13 @@ namespace CairnMultiplayerMod.Internal.Networking
         public PlayerState State;
         public double LastUpdateTime;
 
+        /// <summary>
+        /// Last in-game presence position. Clip range reads this and not <see cref="X"/>,
+        /// because animation frames also write that slot from the capture root.
+        /// </summary>
+        public bool HasLinkPose;
+        public float LinkX, LinkY, LinkZ;
+
         public byte BoneCount;
         public float[] BonePositions;
         public float[] BoneRotations;

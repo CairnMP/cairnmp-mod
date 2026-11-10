@@ -65,6 +65,8 @@ internal sealed class PitonActions
 /// side carries it out. Two rules keep it safe: a pointer is only ever handed back while the
 /// Lifeline still holds it, and a piton is told apart from another by where it sits once its
 /// pointer can no longer be trusted — after the Lifeline was rebuilt by a reload.
+/// An unclip is the exception, whether one higher piton or the whole pitch. The piton stays
+/// in the rock, so its pointer stays too.
 /// </summary>
 internal sealed class PitonSync
 {
@@ -114,6 +116,10 @@ internal sealed class PitonSync
     private readonly Dictionary<uint, Remote> _remote = new();
     private readonly Dictionary<IntPtr, uint> _remoteByPointer = new();
     private readonly HashSet<IntPtr> _foreign = new();
+    // A piton unclipped on purpose: a higher one during the pitch, or every one on a
+    // wall untie. It stays in the rock. Leaving the placed list is not a take and not
+    // a withdrawal, and the pointer has to stay so a climber can still pick it up.
+    private readonly HashSet<IntPtr> _unclipped = new();
     private readonly PitonActions _actions = new();
     private readonly HashSet<IntPtr> _current = new();
     private readonly List<IntPtr> _gone = new();
@@ -159,6 +165,7 @@ internal sealed class PitonSync
         foreach (var id in _drop) _remote.Remove(id);
         _remoteByPointer.Clear();
         _foreign.Clear();
+        _unclipped.Clear();
 
         _settling = true;
         _afterReload = reload;
@@ -210,13 +217,46 @@ internal sealed class PitonSync
     }
 
     /// <summary>
-    /// This climber just took someone else's piton off the wall. The next time that
-    /// replica is missing, tell the host, even when the pawn is far from the announced root.
+    /// This piton was taken off the rope on purpose. The hardware stays in the rock.
+    /// A later absence from the placed list is not a take and not a withdrawal. The
+    /// pointer stays so a climber can pick it up, or so the rope can clip it on again.
+    /// One of ours and someone else's copy are both remembered. False when this
+    /// pointer is no longer tracked.
+    /// </summary>
+    internal bool KeepUnclipped(IntPtr pointer)
+    {
+        if (pointer == IntPtr.Zero) return false;
+        if (!_remoteByPointer.ContainsKey(pointer) && !_ownByPointer.ContainsKey(pointer))
+            return false;
+        _unclipped.Add(pointer);
+        return true;
+    }
+
+    /// <summary>True when the last reconcile still saw this piton on the placed list.</summary>
+    internal bool WasPlaced(IntPtr pointer) => _current.Contains(pointer);
+
+    /// <summary>Pitons kept off the rope, still in the rock, for the take scan.</summary>
+    internal void CopyUnclipped(List<IntPtr> into)
+    {
+        into.Clear();
+        foreach (var pointer in _unclipped)
+            if (pointer != IntPtr.Zero
+                && (_remoteByPointer.ContainsKey(pointer) || _ownByPointer.ContainsKey(pointer)))
+                into.Add(pointer);
+    }
+
+    /// <summary>
+    /// This climber just took a piton off the wall. Someone else's copy is reported
+    /// even when the pawn is far from the announced root. One of ours leaves the
+    /// remember-list so the absence is withdrawn once.
     /// </summary>
     internal void MarkTaken(IntPtr pointer)
     {
-        if (pointer != IntPtr.Zero && _remoteByPointer.TryGetValue(pointer, out var id))
+        if (pointer == IntPtr.Zero) return;
+        if (_remoteByPointer.TryGetValue(pointer, out var id))
             _markedTaken.Add(id);
+        else
+            _unclipped.Remove(pointer);
     }
 
     internal PitonActions Reconcile(IReadOnlyList<PlacedPiton> placed, Vector3? localPosition, double now)
@@ -240,20 +280,46 @@ internal sealed class PitonSync
     {
         _gone.Clear();
         foreach (var pointer in _ownByPointer.Keys)
-            if (!_current.Contains(pointer)) _gone.Add(pointer);
+        {
+            // Back on the placed list: an ordinary piton of ours again.
+            if (_current.Contains(pointer)) _unclipped.Remove(pointer);
+            else _gone.Add(pointer);
+        }
         foreach (var pointer in _gone)
         {
             var id = _ownByPointer[pointer];
+            // Unclipped on purpose, and still ours. The placed list no longer has it.
+            // That is not a withdrawal, and the pointer is still the piton in the rock.
+            if (_unclipped.Contains(pointer) && !_ownTakenByOthers.Contains(id)) continue;
+            var kept = _unclipped.Remove(pointer);
             _ownByPointer.Remove(pointer);
             _ownPositions.Remove(id);
             if (!_ownTakenByOthers.Remove(id)) _actions.Removed.Add(id);
+            else if (kept) _actions.Strip.Add(pointer);
         }
 
         _gone.Clear();
         foreach (var pointer in _remoteByPointer.Keys)
-            if (!_current.Contains(pointer)) _gone.Add(pointer);
+        {
+            if (_current.Contains(pointer))
+            {
+                // Back on the placed list: an ordinary replica again.
+                _unclipped.Remove(pointer);
+                continue;
+            }
+
+            var id = _remoteByPointer[pointer];
+            var withdrawn = _remote.TryGetValue(id, out var remote) && remote.State == RemoteState.Withdrawn;
+            // Unclipped on purpose. The placed list no longer has it, and the
+            // climber may be standing far below it. That is not a take, and the
+            // pointer is still the piton in the rock.
+            if (_unclipped.Contains(pointer) && !withdrawn && !_markedTaken.Contains(id))
+                continue;
+            _gone.Add(pointer);
+        }
         foreach (var pointer in _gone)
         {
+            var kept = _unclipped.Remove(pointer);
             var id = _remoteByPointer[pointer];
             _remoteByPointer.Remove(pointer);
             if (!_remote.TryGetValue(id, out var remote)) continue;
@@ -262,6 +328,9 @@ internal sealed class PitonSync
             {
                 _markedTaken.Remove(id);
                 _remote.Remove(id);
+                // The host already withdrew it. The copy is off the placed list, so the
+                // usual strip never sees it. Delete the hardware once.
+                if (kept) _actions.Strip.Add(pointer);
             }
             else if (_markedTaken.Remove(id)
                      || (attributable && localPosition.HasValue
@@ -472,6 +541,7 @@ internal sealed class PitonSync
         _remoteByPointer.Clear();
         _markedTaken.Clear();
         _foreign.Clear();
+        _unclipped.Clear();
     }
 
     internal void ForgetSession()
@@ -484,6 +554,7 @@ internal sealed class PitonSync
         _remote.Clear();
         _remoteByPointer.Clear();
         _foreign.Clear();
+        _unclipped.Clear();
         _lifeline = IntPtr.Zero;
         _settling = false;
         _afterReload = false;

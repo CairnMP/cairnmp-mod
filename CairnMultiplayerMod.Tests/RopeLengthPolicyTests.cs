@@ -75,16 +75,50 @@ public sealed class RopeLengthPolicyTests
     }
 
     [Fact]
-    public void TheTestReadoutShowsThePathAgainstTheCoil()
+    public void TheWarningStaysHiddenWhileTheRopeHasSlack()
     {
-        Assert.Equal("Rope 12.50 / 40.00 m", RopeLengthPolicy.Readout(12.5f, 40f));
-        Assert.Equal("Rope 40.00 / 40.00 m — paid out", RopeLengthPolicy.Readout(40f, 40f));
-        Assert.Null(RopeLengthPolicy.Readout(float.NaN, 40f));
-        Assert.Null(RopeLengthPolicy.Readout(12f, 0f));
+        Assert.False(RopeLengthPolicy.ShowsAlmostOut(5.1f, 5f));
+        Assert.False(RopeLengthPolicy.ShowsAlmostOut(float.NaN, 5f));
+        Assert.False(RopeLengthPolicy.ShowsAlmostOut(-1f, 5f));
+        Assert.False(RopeLengthPolicy.ShowsAlmostOut(1f, 0f));
+        Assert.False(RopeLengthPolicy.ShowsAlmostOut(1f, float.NaN));
+    }
 
-        var slack = RopeLengthPolicy.Readout(40f - RopeLengthPolicy.SkinMeters - 0.02f, 40f);
-        Assert.StartsWith("Rope ", slack);
-        Assert.DoesNotContain("paid out", slack);
+    [Fact]
+    public void TheWarningShowsOnceTheRopeIsAlmostOut()
+    {
+        Assert.True(RopeLengthPolicy.ShowsAlmostOut(5f, 5f));
+        Assert.True(RopeLengthPolicy.ShowsAlmostOut(0f, 5f));
+        Assert.Equal("3.25m", RopeLengthPolicy.WarningText(3.25f, "0.00", "m"));
+        Assert.Equal("3.0 m", RopeLengthPolicy.WarningText(3f, "0.0", " m"));
+        Assert.Null(RopeLengthPolicy.WarningText(float.NaN, "0.0", "m"));
+        Assert.Equal("3.0m", RopeLengthPolicy.WarningText(3f, "not a format", "m"));
+    }
+
+    [Fact]
+    public void TheNumberMovesTowardTheEndColor()
+    {
+        Assert.Equal(0f, RopeLengthPolicy.EndColorBlend(6f, 5f, 2f));
+        Assert.Equal(0f, RopeLengthPolicy.EndColorBlend(2f, 5f, 2f));
+        Assert.Equal(0.5f, RopeLengthPolicy.EndColorBlend(1f, 5f, 2f));
+        Assert.Equal(1f, RopeLengthPolicy.EndColorBlend(0f, 5f, 2f));
+        Assert.Equal(0.5f, RopeLengthPolicy.EndColorBlend(2.5f, 5f, 0f));
+        Assert.Equal(0f, RopeLengthPolicy.EndColorBlend(float.NaN, 5f, 2f));
+        Assert.True(RopeLengthPolicy.UsesOutline(2f, 2f));
+        Assert.False(RopeLengthPolicy.UsesOutline(2.1f, 2f));
+        Assert.False(RopeLengthPolicy.UsesOutline(1f, 0f));
+    }
+
+    [Fact]
+    public void TheRopePictureFollowsTheMetresLeft()
+    {
+        var pictures = new[] { 0f, 2f, 4f };
+        Assert.Equal(2, RopeLengthPolicy.RopePictureIndex(4.5f, pictures));
+        Assert.Equal(1, RopeLengthPolicy.RopePictureIndex(3f, pictures));
+        Assert.Equal(0, RopeLengthPolicy.RopePictureIndex(0f, pictures));
+        Assert.Equal(0, RopeLengthPolicy.RopePictureIndex(0.5f, new[] { 1f, 3f }));
+        Assert.Equal(2, RopeLengthPolicy.RopePictureIndex(3f, new[] { 4f, 0f, 2f }));
+        Assert.Equal(-1, RopeLengthPolicy.RopePictureIndex(1f, null));
     }
 
     [Fact]
@@ -153,5 +187,48 @@ public sealed class RopeLengthPolicyTests
         Assert.True(RopeLengthPolicy.IsPaidOut(coil - RopeLengthPolicy.SkinMeters, coil));
         Assert.False(RopeLengthPolicy.IsPaidOut(float.NaN, coil));
         Assert.False(RopeLengthPolicy.IsPaidOut(coil, 0f));
+    }
+
+    [Fact]
+    public void APaidOutWalkFacesAwayFromThePreviousPoint()
+    {
+        var path = new[] { Vector3.Zero, new Vector3(30f, 10f, 40f) };
+
+        var leader = RopeLengthPolicy.WalkDirection(localIsLeader: true, path, 40f);
+        var follower = RopeLengthPolicy.WalkDirection(localIsLeader: false, path, 40f);
+        Assert.NotNull(leader);
+        Assert.NotNull(follower);
+        Assert.Equal(0f, leader.Value.Y);
+        Assert.Equal(1f, leader.Value.Length(), 3);
+        Assert.Equal(0.6f, leader.Value.X, 3);
+        Assert.Equal(0.8f, leader.Value.Z, 3);
+        Assert.Equal(-1f, Vector3.Dot(leader.Value, follower.Value), 3);
+
+        var paidPastThePiton = new[]
+        {
+            Vector3.Zero,
+            new Vector3(35f, 0f, 0f),
+            new Vector3(35f, 0f, 40f),
+        };
+        var fromThePiton = RopeLengthPolicy.WalkDirection(localIsLeader: true, paidPastThePiton, 40f);
+        Assert.NotNull(fromThePiton);
+        Assert.Equal(0f, fromThePiton.Value.X, 3);
+        Assert.Equal(0f, fromThePiton.Value.Y);
+        Assert.Equal(1f, fromThePiton.Value.Z, 3);
+    }
+
+    [Fact]
+    public void SlackAndAVerticalPairDoNotFaceAWalkWall()
+    {
+        var slack = new[] { Vector3.Zero, new Vector3(2f, 0f, 0f) };
+        Assert.Null(RopeLengthPolicy.WalkDirection(localIsLeader: true, slack, 40f));
+
+        var stacked = new[] { Vector3.Zero, new Vector3(0f, 40f, 0f) };
+        Assert.True(RopeLengthPolicy.IsPaidOut(40f, 40f));
+        Assert.Null(RopeLengthPolicy.WalkDirection(localIsLeader: true, stacked, 40f));
+        Assert.Null(RopeLengthPolicy.WalkDirection(localIsLeader: false, stacked, 40f));
+
+        var oneCentimetre = new[] { Vector3.Zero, new Vector3(0.01f, 40f, 0f) };
+        Assert.Null(RopeLengthPolicy.WalkDirection(localIsLeader: true, oneCentimetre, 40f));
     }
 }

@@ -195,7 +195,7 @@
 
   <!--
     Copie automatiquement les DLL dans les dossiers Mods apres le build.
-    Quand l'instance 2 existe (clonee via tools/clone-cairn.ps1), elle est
+    Quand l'instance 2 existe (clonee via scripts/clone-cairn.ps1), elle est
     aussi mise a jour pour que les deux processus Cairn chargent le rebuild.
   -->
   <ItemGroup>

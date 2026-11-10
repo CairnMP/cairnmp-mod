@@ -106,6 +106,9 @@ internal sealed class BivouacSyncGate
     /// <summary>Runs before the network pump so packets cannot cross a stale bivouac boundary.</summary>
     public void Update()
     {
+        // Every frame, including the menu, so a disconnect does not look like solo
+        // and the mark clears once the player is back at the main menu.
+        BivouacSaveSession.Tick();
         HookBeforeEnter();
         UpdateSuspension();
         PublishCamp();

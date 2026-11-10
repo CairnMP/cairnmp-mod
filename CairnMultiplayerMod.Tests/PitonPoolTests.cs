@@ -6,12 +6,15 @@ namespace CairnMultiplayerMod.Tests;
 public sealed class PitonPoolTests
 {
     [Theory]
-    [InlineData(4, 6, 10, 6)]
-    [InlineData(8, 6, 10, 2)]
+    [InlineData(4, 6, 10, 2)]
+    [InlineData(8, 6, 10, 0)]
     [InlineData(10, 3, 10, 0)]
     [InlineData(0, 0, 10, 0)]
-    [InlineData(3, 4, 0, 4)]
+    [InlineData(3, 4, 0, 3)]
     [InlineData(-2, 5, 10, 5)]
+    [InlineData(0, 1, 6, 1)]
+    [InlineData(6, 4, 6, 0)]
+    [InlineData(2, 4, 6, 4)]
     public void TheLeaderReceivesTheTotalUpToTheBagLimit(
         int leader, int follower, int max, int gain)
     {
@@ -31,6 +34,13 @@ public sealed class PitonPoolTests
         payload[6] = 0xFF;
         payload[7] = 0xFF;
         Assert.False(PitonPool.TryReadContribution(payload, out _, out _));
+
+        var stored = PitonPool.WriteStored(3, 1);
+        Assert.True(PitonPool.TryRead(stored, out linkId, out count, out var returned));
+        Assert.Equal(3, linkId);
+        Assert.Equal(1, count);
+        Assert.True(returned);
+        Assert.Equal(5, PitonPool.KeptByFollower(carried: 6, stored: 1));
     }
 
     [Fact]

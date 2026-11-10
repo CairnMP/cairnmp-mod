@@ -30,12 +30,23 @@ internal static partial class RopeInterop
     private static readonly List<PitonRecoveryPolicy.Candidate> _recoveryCandidates = new();
     private static readonly List<RecoveryTarget> _partnerTargets = new();
     private static readonly List<PitonRecoveryPolicy.Candidate> _partnerCandidates = new();
+    private static readonly HashSet<IntPtr> _recoverySeen = new();
+    private static readonly List<IntPtr> _unclippedPointers = new();
     private static readonly List<uint> _teamDetachIds = new();
     private static readonly List<uint> _teamReattachIds = new();
     private static readonly Key TakeKey = Enum.Parse<Key>(PitonRecoverySession.TakeKeyName);
     private static float _dpadUpPressedAt = -1f;
     private static readonly Dictionary<uint, float> _teamDetachRetryAt = new();
+    private static readonly List<uint> _teamChainIds = new();
+    private static readonly HashSet<uint> _anchorMissLogged = new();
+    private static readonly HashSet<uint> _quickdrawMissLogged = new();
+    // DetachPiton on a higher piton must leave the quickdraw in the rock. If it
+    // does not, later pitons stay on the rope so they can still be taken.
+    private static bool _unclipClearsQuickdraw;
     private static readonly List<TeamAnchorSession.ChainRelease> _releaseIds = new();
+    // Untie detaches first. The placed list may drop the piton on a later frame.
+    // Remember it until that frame, or the drop is announced as a take.
+    private static readonly List<IntPtr> _rememberUnclipped = new();
     private static readonly Dictionary<(bool Local, uint Id), float> _releaseRetryAt = new();
     private static bool _releaseAnnounced;
     private static ushort _pitonPoolChannel;
@@ -46,6 +57,8 @@ internal static partial class RopeInterop
     private static int _heldPoolFrom;
     private static int _heldPoolLink;
     private static int _heldPoolCount;
+    private static bool _rackFormed;
+    private static NetworkManager _poolNetwork;
 
     private struct RecoveryTarget
     {
@@ -63,12 +76,19 @@ internal static partial class RopeInterop
         _lastLifelineSearchFrame = 0;
         _detachRetryAt.Clear();
         _releaseRetryAt.Clear();
+        _rememberUnclipped.Clear();
+        _teamDetachRetryAt.Clear();
+        _anchorMissLogged.Clear();
+        _quickdrawMissLogged.Clear();
+        _unclipClearsQuickdraw = false;
         _localClimbControllerCached = null;
     }
 
     /// <summary>Leaving the session: the other climbers' pitons come off this Lifeline.</summary>
     internal static void ClearRemotePitons()
     {
+        _rackFormed = false;
+        _poolNetwork = null;
         try
         {
             var lifeline = TryGetLifeline();
@@ -125,7 +145,6 @@ internal static partial class RopeInterop
         if (lifeline == null || network == null)
         {
             PitonRecoverySession.HideTip();
-            LeaderProtectionMarker.Hide();
             RopeLengthReadout.Hide();
             return;
         }
@@ -134,7 +153,6 @@ internal static partial class RopeInterop
         {
             double now = Time.unscaledTime;
             TeamAnchorSession.SetLocalPlayer(network.LocalPlayerId);
-            LeaderProtectionMarker.Tick();
             RopeLengthReadout.Tick();
             _pitons.OnLifeline(lifeline.Pointer, now);
             ReleaseUnhookedPitons(lifeline);
@@ -171,6 +189,7 @@ internal static partial class RopeInterop
             }
 
             ApplyFollowerAnchorRope();
+            RememberUnclippedPitons();
             TickTopAnchor(network);
         }
         catch (Exception ex)
@@ -221,42 +240,21 @@ internal static partial class RopeInterop
             if (placed != null)
             {
                 for (var i = 0; i < placed.Count; i++)
+                    OfferPlacedPiton(lifeline, placed[i]?.Piton, pose, havePartner, partnerOrigin);
+            }
+
+            // A higher piton leaves the placed list when it is unclipped. The hardware
+            // is still in the rock, and it is still a take.
+            _pitons.CopyUnclipped(_unclippedPointers);
+            for (var i = 0; i < _unclippedPointers.Count; i++)
+            {
+                try
                 {
-                    var piton = placed[i]?.Piton;
-                    if (piton == null || piton.Pointer == IntPtr.Zero || piton.ItemId.value == 0) continue;
-                    if (IsOffBelay(lifeline, piton) || !TryGetPitonPosition(piton, out var position)) continue;
-                    var held = false;
-                    if (pose == PartnerPose.Hanging)
-                    {
-                        try
-                        {
-                            held = lifeline.IsPitonCriticalForLifeline(piton);
-                        }
-                        catch (Exception exception)
-                        {
-                            ModLog.SuppressedException("rope.piton-recovery-scan", exception);
-                            continue;
-                        }
-                    }
-
-                    var candidate = new PitonRecoveryPolicy.Candidate(
-                        position, PitonRecoveryPolicy.RefusesHeldPiton(pose, held), BagCanTake(piton));
-                    if (_pitons.TryGetId(piton.Pointer, out var tracked, out var ownLocalId)
-                        && !TeamAnchorSession.AllowsTake(tracked, ownLocalId))
-                    {
-                        if (!havePartner) continue;
-                        var distance = System.Numerics.Vector3.Distance(partnerOrigin, position);
-                        if (!PracticePitonTake.OffersChainPiton(
-                                TeamAnchorSession.IsLinked, TeamAnchorSession.IsLocalLeader,
-                                TeamAnchorSession.FollowerId, true, distance))
-                            continue;
-                        _partnerTargets.Add(new RecoveryTarget { Piton = piton, Candidate = candidate });
-                        _partnerCandidates.Add(candidate);
-                        continue;
-                    }
-
-                    _recoveryTargets.Add(new RecoveryTarget { Piton = piton, Candidate = candidate });
-                    _recoveryCandidates.Add(candidate);
+                    OfferPlacedPiton(lifeline, new Il2Cpp.Piton(_unclippedPointers[i]), pose, havePartner, partnerOrigin);
+                }
+                catch (Exception exception)
+                {
+                    ModLog.SuppressedException("rope.piton-recovery-scan", exception);
                 }
             }
 
@@ -295,7 +293,60 @@ internal static partial class RopeInterop
             _recoveryCandidates.Clear();
             _partnerTargets.Clear();
             _partnerCandidates.Clear();
+            _recoverySeen.Clear();
+            _unclippedPointers.Clear();
         }
+    }
+
+    /// <summary>One placed piton, or a chain piton kept in the rock after it left the rope.</summary>
+    private static void OfferPlacedPiton(
+        Il2Cpp.Lifeline lifeline,
+        Il2Cpp.Piton piton,
+        PartnerPose pose,
+        bool havePartner,
+        System.Numerics.Vector3 partnerOrigin)
+    {
+        if (piton == null || piton.Pointer == IntPtr.Zero || piton.ItemId.value == 0) return;
+        if (!_recoverySeen.Add(piton.Pointer)) return;
+        if (IsOffBelay(lifeline, piton) || !TryGetPitonPosition(piton, out var position)) return;
+        var held = false;
+        if (pose == PartnerPose.Hanging)
+        {
+            try
+            {
+                held = lifeline.IsPitonCriticalForLifeline(piton);
+            }
+            catch (Exception exception)
+            {
+                ModLog.SuppressedException("rope.piton-recovery-scan", exception);
+                return;
+            }
+        }
+
+        var candidate = new PitonRecoveryPolicy.Candidate(
+            position, PitonRecoveryPolicy.RefusesHeldPiton(pose, held), BagCanTake(piton));
+        var tracked = _pitons.TryGetId(piton.Pointer, out var trackedId, out var ownLocalId);
+        var side = PitonRecoveryPolicy.Classify(
+            tracked,
+            tracked && TeamAnchorSession.AllowsTake(trackedId, ownLocalId),
+            TopAnchorSession.OwnsPointer(piton.Pointer));
+        if (side == PitonRecoveryPolicy.TakeSide.PracticeGhost)
+        {
+            if (!havePartner) return;
+            var distance = System.Numerics.Vector3.Distance(partnerOrigin, position);
+            if (!PracticePitonTake.OffersChainPiton(
+                    TeamAnchorSession.IsLinked, TeamAnchorSession.IsLocalLeader,
+                    TeamAnchorSession.FollowerId, true, distance))
+                return;
+            _partnerTargets.Add(new RecoveryTarget { Piton = piton, Candidate = candidate });
+            _partnerCandidates.Add(candidate);
+            return;
+        }
+
+        if (side != PitonRecoveryPolicy.TakeSide.Local) return;
+
+        _recoveryTargets.Add(new RecoveryTarget { Piton = piton, Candidate = candidate });
+        _recoveryCandidates.Add(candidate);
     }
 
     private static bool RecoveryPressed(bool dpadUpTapped)
@@ -348,6 +399,8 @@ internal static partial class RopeInterop
     private static void TryTakePiton(Il2Cpp.Lifeline lifeline, NetworkManager network, Il2Cpp.Piton piton, bool forPracticeFollower)
     {
         if (piton == null || piton.Pointer == IntPtr.Zero) return;
+        // The staff stays in the rock. RecoverQuickDraw would put it in the bag.
+        if (TopAnchorSession.OwnsPointer(piton.Pointer)) return;
         var haveClimber = forPracticeFollower
             ? TryGetPracticeFollowerPosition(network, out var climber)
             : TryGetClimberPosition(out climber);
@@ -379,6 +432,8 @@ internal static partial class RopeInterop
         }
         var quickdraw = piton.Quickdraw;
         if (quickdraw == null || quickdraw.Pointer == IntPtr.Zero)
+            quickdraw = piton.includedQuickdraw;
+        if (quickdraw == null || quickdraw.Pointer == IntPtr.Zero)
         {
             ModLog.Warning("[Piton] The placed piton has no quickdraw to recover");
             return;
@@ -399,6 +454,7 @@ internal static partial class RopeInterop
         var playerBefore = CountPitons(manager, manager?.PitonInventoryData);
         var storedBefore = CountStored(manager, itemId);
         bool recovered;
+        PitonReturn.BeginTake();
         try
         {
             recovered = recovering.RecoverQuickDraw(quickdraw, showUi: false);
@@ -407,6 +463,10 @@ internal static partial class RopeInterop
         {
             ModLog.Warning($"[Piton] RecoverQuickDraw failed: {exception.Message}");
             return;
+        }
+        finally
+        {
+            PitonReturn.EndTake();
         }
 
         if (!recovered || LifelineHolds(lifeline, pointer))
@@ -478,11 +538,13 @@ internal static partial class RopeInterop
     }
 
     /// <summary>
-    /// A new link. Both climbers advance the same link id because both saw the clip.
-    /// The follower empties the carried piton bag and tells the leader how many left it.
+    /// A rope-up. The first one in a session makes the shared rack: the leader keeps
+    /// at most six, and the follower's own pitons leave. After that, the follower
+    /// only hands over the pitons the leader's rack still has room for.
     /// </summary>
     internal static void BeginPitonPool(NetworkManager network)
     {
+        _poolNetwork = network;
         _pitonPoolId = ++_nextPitonPoolId;
         _appliedPitonPoolId = 0;
         if (!TeamAnchorSession.IsLocalFollower)
@@ -493,21 +555,36 @@ internal static partial class RopeInterop
         }
 
         _heldPool = false;
-        var count = ClearCarriedPitons();
+        var forming = !_rackFormed;
+        var count = forming ? ClearCarriedPitons() : CountCarriedPitons();
+        _rackFormed = true;
         if (network == null || _pitonPoolChannel == 0)
         {
-            ModLog.Warning("[RopeTeam] The follower's pitons were cleared and the count was not sent");
+            ModLog.Warning("[RopeTeam] The follower's pitons were counted and the count was not sent");
             return;
         }
 
         network.SendFeatureStream(
             _pitonPoolChannel, PitonPool.WriteContribution(_pitonPoolId, count), reliable: true);
-        ModLog.Info($"[RopeTeam] Follower emptied {count} carried pitons into the pool");
+        ModLog.Info(forming
+            ? $"[RopeTeam] Follower emptied {count} carried pitons into the rack"
+            : $"[RopeTeam] Follower is carrying {count} pitons back");
     }
 
     internal static void AcceptPitonPool(int fromPlayerId, byte[] payload)
     {
-        if (!PitonPool.TryReadContribution(payload, out var linkId, out var count)) return;
+        if (!PitonPool.TryRead(payload, out var linkId, out var count, out var stored)) return;
+        if (stored)
+        {
+            if (!TeamAnchorSession.IsLocalFollower || linkId != _pitonPoolId) return;
+            var removed = RemoveCarriedPitons(count);
+            var kept = PitonPool.KeptByFollower(CountCarriedPitons() + removed, removed);
+            ModLog.Info(kept == 0
+                ? $"[RopeTeam] Follower handed {removed} pitons to the leader"
+                : $"[RopeTeam] Follower handed {removed} pitons to the leader and kept {kept}");
+            return;
+        }
+
         if (PitonPool.ShouldHold(TeamAnchorSession.IsLocalLeader))
         {
             _heldPool = true;
@@ -546,27 +623,49 @@ internal static partial class RopeInterop
         var inventory = manager?.PitonInventoryData;
         var leaderCount = CountPitons(manager, inventory);
         var max = ReadPitonBagLimit(inventory);
-        var gain = PitonPool.FreshPitonsForLeader(leaderCount, count, max);
-        GrantFreshPitons(manager, gain);
+        var forming = !_rackFormed;
+        var requested = PitonPool.FreshPitonsForLeader(leaderCount, count, max);
+        GrantFreshPitons(manager, requested);
+        var gained = CountPitons(manager, inventory) - leaderCount;
+        var gain = PitonReturn.RecordedGain(requested, gained);
+        _rackFormed = true;
         ModLog.Info($"[RopeTeam] Leader bag held {leaderCount}, follower contributed {count}, gained {gain} new pitons");
+        if (!forming)
+            TellFollowerWhatFit(linkId, gain);
     }
 
-    private static int ClearCarriedPitons()
+    private static void TellFollowerWhatFit(int linkId, int stored)
     {
+        if (_poolNetwork == null || _pitonPoolChannel == 0) return;
+        _poolNetwork.SendFeatureStream(
+            _pitonPoolChannel, PitonPool.WriteStored(linkId, stored), reliable: true);
+    }
+
+    private static int CountCarriedPitons()
+    {
+        var manager = InventoryManager.Instance;
+        return CountPitons(manager, manager?.PitonInventoryData);
+    }
+
+    private static int ClearCarriedPitons() => RemoveCarriedPitons(int.MaxValue);
+
+    private static int RemoveCarriedPitons(int count)
+    {
+        if (count <= 0) return 0;
         try
         {
             var manager = InventoryManager.Instance;
             var inventory = manager?.PitonInventoryData;
             if (manager == null || inventory == null) return 0;
 
-            var count = CountPitons(manager, inventory);
-            for (var index = inventory.Count - 1; index >= 0; index--)
+            var before = CountPitons(manager, inventory);
+            var target = count >= before ? 0 : before - count;
+            for (var index = inventory.Count - 1; index >= 0 && CountPitons(manager, inventory) > target; index--)
                 inventory.RemoveAt(index);
-            if (CountPitons(manager, inventory) > 0)
-            {
+            if (target == 0 && CountPitons(manager, inventory) > 0)
                 manager.RemoveAllPitons(out _);
-            }
-            return count;
+            var removed = before - CountPitons(manager, inventory);
+            return removed < 0 ? 0 : removed;
         }
         catch (Exception exception)
         {
@@ -891,6 +990,14 @@ internal static partial class RopeInterop
         }
 
         _pitons.Spawned(placed.PitonId, spawned);
+        // AddPiton does not clip a quickdraw once another piton is already on the rope.
+        // The stick clips at this moment for that reason. The follower's copy needs the
+        // same clip, or the grab has nothing to pull. A higher one is taken off this
+        // rope afterwards so a fall still catches on the lower piton.
+        if (TeamAnchorSession.IsLocalFollower
+            && SecuringRopeIsOnHarness()
+            && !PitonIsOnRope(lifeline, spawned))
+            TryAttachTeamPiton(spawned);
         ModLog.Debug($"[Piton] Spawned remote piton #{placed.PitonId} via Lifeline.AddPiton @ ({placed.PosX:F1},{placed.PosY:F1},{placed.PosZ:F1}) quality={placed.Quality} hp={placed.PitonHp}");
     }
 
@@ -1007,6 +1114,10 @@ internal static partial class RopeInterop
 
             if (!attached || TryDetachPitonViaLifeline(pointer))
             {
+                // The detach drops it from the placed list, sometimes not until a later
+                // frame. Remember it now, and keep remembering until the list lets go.
+                _pitons.KeepUnclipped(pointer);
+                if (!_rememberUnclipped.Contains(pointer)) _rememberUnclipped.Add(pointer);
                 _releaseRetryAt.Remove(key);
                 TeamAnchorSession.MarkReleased(piton);
             }
@@ -1017,14 +1128,30 @@ internal static partial class RopeInterop
         }
     }
 
+    /// <summary>
+    /// The untie already unclipped these. Keep each one until a reconcile has seen it
+    /// off the placed list. While it is still listed, that reconcile forgets the mark,
+    /// so the mark has to be put back afterwards.
+    /// </summary>
+    private static void RememberUnclippedPitons()
+    {
+        for (var i = _rememberUnclipped.Count - 1; i >= 0; i--)
+        {
+            var pointer = _rememberUnclipped[i];
+            if (!_pitons.KeepUnclipped(pointer) || !_pitons.WasPlaced(pointer))
+                _rememberUnclipped.RemoveAt(i);
+        }
+    }
+
     private static bool TryResolveReleasedPointer(TeamAnchorSession.ChainRelease piton, out IntPtr pointer)
         => piton.LocalId
             ? _pitons.TryGetOwnPointer(piton.Id, out pointer)
             : _pitons.TryGetRemotePointer(piton.Id, out pointer);
 
     /// <summary>
-    /// The follower's securing rope stops at their anchor. Newer team pitons stay in the rock
-    /// for the leader and are unclipped here so they are not the follower's last protection.
+    /// The follower's securing rope stops at their anchor. Newer team pitons get a quickdraw
+    /// when they are placed, then leave this rope so they are not the follower's last protection.
+    /// The quickdraw stays in the rock. When the anchor comes off, the next piton is clipped on.
     /// </summary>
     private static void ApplyFollowerAnchorRope()
     {
@@ -1035,27 +1162,165 @@ internal static partial class RopeInterop
         }
 
         TeamAnchorSession.CopyRopeEdits(_teamDetachIds, _teamReattachIds);
+        // The climber who placed these pitons still has the local numbers after a practice
+        // switch. A real follower's chain is the host's numbers.
+        var own = TeamAnchorSession.OwnsLocalChainIds;
         var now = Time.unscaledTime;
-        foreach (var id in _teamDetachIds)
+        var lifeline = TryGetLifeline();
+        // The harness clip lands in LateUpdate, after this pass. Attaching before
+        // that leaves the quickdraw off, and the follower then falls unsecured.
+        var ropeOnHarness = SecuringRopeIsOnHarness();
+        ClipMissingQuickdraws(own, ropeOnHarness, now);
+        if (!_unclipClearsQuickdraw)
         {
-            if (TeamEditWaiting(id, now) || !TryChainPointer(id, own: false, out var pointer)) continue;
-            if (TryDetachPitonViaLifeline(pointer))
+            foreach (var id in _teamDetachIds)
             {
+                if (TeamEditWaiting(id, now) || !TryChainPointer(id, own, out var pointer)) continue;
+                var hadQuickdraw = PitonKeepsQuickdraw(pointer);
+                if (!TryDetachPitonViaLifeline(pointer))
+                {
+                    _teamDetachRetryAt[id] = now + DetachRetrySeconds;
+                    continue;
+                }
+
+                if (hadQuickdraw && !PitonKeepsQuickdraw(pointer))
+                {
+                    // The unclip took the quickdraw with it. Stop unclipping. The piton
+                    // stays on the rope so it can still be taken.
+                    _unclipClearsQuickdraw = true;
+                    ModLog.Info("[RopeTeam] Taking a higher piton off the rope removed its quickdraw. It stays on the rope so it can be taken.");
+                    TryAttachTeamPiton(pointer);
+                    break;
+                }
+
+                // The unclip can drop the piton from the placed list while the hardware
+                // stays in the rock. That is not a take. Without the pointer, the next
+                // piton cannot be clipped on, and the grab never sees it.
+                _pitons.KeepUnclipped(pointer);
+
+                if (lifeline != null && PitonIsOnRope(lifeline, pointer))
+                {
+                    NoteOnce(_quickdrawMissLogged, id, "[RopeTeam] A higher piton stayed on the rope. Trying again.");
+                    _teamDetachRetryAt[id] = now + DetachRetrySeconds;
+                    continue;
+                }
+
                 _teamDetachRetryAt.Remove(id);
+                _quickdrawMissLogged.Remove(id);
                 TeamAnchorSession.MarkDetached(id);
             }
-            else _teamDetachRetryAt[id] = now + DetachRetrySeconds;
         }
 
         foreach (var id in _teamReattachIds)
         {
-            if (TeamEditWaiting(id, now) || !TryChainPointer(id, own: false, out var pointer)) continue;
+            if (TeamEditWaiting(id, now)) continue;
+            if (!TryChainPointer(id, own, out var pointer))
+            {
+                NoteOnce(_anchorMissLogged, id, "[RopeTeam] The next piton did not clip on. Trying again.");
+                _teamDetachRetryAt[id] = now + DetachRetrySeconds;
+                continue;
+            }
+
+            if (lifeline != null && PitonIsOnRope(lifeline, pointer))
+            {
+                _teamDetachRetryAt.Remove(id);
+                _anchorMissLogged.Remove(id);
+                NoteFollowerClip(id);
+                continue;
+            }
+
+            if (!ropeOnHarness) continue;
             if (TryAttachTeamPiton(pointer))
             {
                 _teamDetachRetryAt.Remove(id);
-                TeamAnchorSession.MarkAttached(id);
+                _anchorMissLogged.Remove(id);
+                NoteFollowerClip(id);
             }
-            else _teamDetachRetryAt[id] = now + DetachRetrySeconds;
+            else
+            {
+                NoteOnce(_anchorMissLogged, id, "[RopeTeam] The next piton did not clip on. Trying again.");
+                _teamDetachRetryAt[id] = now + DetachRetrySeconds;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A piton the leader placed gets a quickdraw on this copy even when it is above
+    /// the anchor. The spawn does this the moment the piton exists. A copy that shows
+    /// up a frame late is caught here.
+    /// </summary>
+    private static void ClipMissingQuickdraws(bool own, bool ropeOnHarness, float now)
+    {
+        if (!ropeOnHarness) return;
+        TeamAnchorSession.CopyIds(_teamChainIds);
+        foreach (var id in _teamChainIds)
+        {
+            // The anchor is clipped below. This pass is the pitons above it.
+            if (!_teamDetachIds.Contains(id)) continue;
+            if (TeamEditWaiting(id, now)) continue;
+            if (!TryChainPointer(id, own, out var pointer))
+            {
+                NoteOnce(_quickdrawMissLogged, id, "[RopeTeam] A placed piton did not get a quickdraw. Trying again.");
+                _teamDetachRetryAt[id] = now + DetachRetrySeconds;
+                continue;
+            }
+
+            if (PitonKeepsQuickdraw(pointer)) continue;
+            if (TryAttachTeamPiton(pointer))
+            {
+                _teamDetachRetryAt.Remove(id);
+                _quickdrawMissLogged.Remove(id);
+                continue;
+            }
+
+            NoteOnce(_quickdrawMissLogged, id, "[RopeTeam] A placed piton did not get a quickdraw. Trying again.");
+            _teamDetachRetryAt[id] = now + DetachRetrySeconds;
+        }
+    }
+
+    private static bool PitonKeepsQuickdraw(IntPtr pitonPtr)
+    {
+        if (pitonPtr == IntPtr.Zero) return false;
+        try
+        {
+            var quickdraw = new Il2Cpp.Piton(pitonPtr).Quickdraw;
+            return quickdraw != null && quickdraw.Pointer != IntPtr.Zero;
+        }
+        catch (Exception ex)
+        {
+            ModLog.SuppressedException("rope.piton-quickdraw", ex);
+            return true;
+        }
+    }
+
+    private static void NoteOnce(HashSet<uint> logged, uint id, string message)
+    {
+        if (!logged.Add(id)) return;
+        ModLog.Info(message);
+    }
+
+    private static void NoteFollowerClip(uint id)
+    {
+        TeamAnchorSession.MarkAttached(id);
+        if (TeamAnchorSession.TryGetFollowerAnchor(out var anchor, out _) && anchor == id)
+            ModLog.Info("[RopeTeam] The follower's anchor is clipped on.");
+    }
+
+    private static bool SecuringRopeIsOnHarness()
+    {
+        var harness = ResolveLocalHarness();
+        var rope = harness != null && harness.PersonalLifeline != null
+            ? harness.PersonalLifeline.securingRope
+            : null;
+        if (rope == null || harness == null) return false;
+        try
+        {
+            return rope.IsAttached(harness.Cast<IRopeHolder>());
+        }
+        catch (Exception ex)
+        {
+            ModLog.SuppressedException("rope.follower-harness-clip", ex);
+            return false;
         }
     }
 
@@ -1069,8 +1334,9 @@ internal static partial class RopeInterop
         if (lifeline == null || controller == null || pitonPtr == IntPtr.Zero) return false;
         try
         {
-            lifeline.AttachToPiton(new Il2Cpp.Piton(pitonPtr), controller, true);
-            return true;
+            var piton = new Il2Cpp.Piton(pitonPtr);
+            lifeline.AttachToPiton(piton, controller, true);
+            return lifeline.AttachedPitonsContains(piton);
         }
         catch (Exception ex)
         {

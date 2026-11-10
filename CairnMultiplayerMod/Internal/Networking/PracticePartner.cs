@@ -68,13 +68,134 @@ internal static class PracticePartner
     }
 }
 
+/// <summary>Where one of the two practice bodies is, and whether that body was on the wall.</summary>
+internal readonly struct PracticeSpot
+{
+    internal PracticeSpot(float x, float y, float z, float yaw, bool climbing)
+    {
+        X = x;
+        Y = y;
+        Z = z;
+        Yaw = yaw;
+        Climbing = climbing;
+    }
+
+    internal float X { get; }
+    internal float Y { get; }
+    internal float Z { get; }
+    internal float Yaw { get; }
+    internal bool Climbing { get; }
+}
+
+/// <summary>
+/// Trading places with the practice climber. The other body keeps the spot you leave.
+/// The job, when the rope is tied, stays with the body.
+/// </summary>
+internal static class PracticeSwap
+{
+    internal enum Block
+    {
+        None,
+        Paused,
+        Falling,
+        Dead,
+        Unready,
+    }
+
+    internal const string FailedText = "Could not switch places";
+    internal const string UntiedText = "H switches back";
+    internal const string LeadingText = "Leading — H switches back";
+    internal const string FollowingText = "Following — H switches back";
+
+    internal readonly struct Result
+    {
+        internal Result(PracticeSpot you, PracticeSpot frozen, bool youLead)
+        {
+            You = you;
+            Frozen = frozen;
+            YouLead = youLead;
+        }
+
+        internal PracticeSpot You { get; }
+        internal PracticeSpot Frozen { get; }
+        internal bool YouLead { get; }
+    }
+
+    /// <summary>Paused, dead, and falling do not move either body. Anything else on the wall counts as climbing.</summary>
+    internal static Block Refusal(bool paused, bool falling, bool dead, bool walkingOrClimbing)
+    {
+        if (paused) return Block.Paused;
+        if (dead) return Block.Dead;
+        if (falling) return Block.Falling;
+        if (!walkingOrClimbing) return Block.Unready;
+        return Block.None;
+    }
+
+    /// <summary>You take his spot. He keeps yours. A tied rope gives you the job his body had.</summary>
+    internal static Result Exchange(PracticeSpot you, PracticeSpot them, bool tied, bool youLead)
+        => new(them, you, tied ? !youLead : youLead);
+
+    /// <summary>Shown while you are in his body. Null when you are back in your own.</summary>
+    internal static string StatusText(bool swapped, bool tied, bool youLead)
+    {
+        if (!swapped) return null;
+        if (!tied) return UntiedText;
+        return youLead ? LeadingText : FollowingText;
+    }
+
+    internal enum Arrival
+    {
+        /// <summary>Stand where that body was standing.</summary>
+        Walk,
+
+        /// <summary>The spot is on the wall and has somewhere to grip.</summary>
+        Climb,
+
+        /// <summary>The spot is in the air. Hovering there does not start a fall.</summary>
+        Hover,
+    }
+
+    internal readonly struct Place
+    {
+        internal Place(Arrival arrival, bool leaveClimb)
+        {
+            Arrival = arrival;
+            LeaveClimb = leaveClimb;
+        }
+
+        internal Arrival Arrival { get; }
+
+        /// <summary>Leaving the wall for the ground. The climb exit has to run, then the walking body is seated.</summary>
+        internal bool LeaveClimb { get; }
+
+        /// <summary>The walking capsule has to be moved onto the ground. A mode change alone stays on the wall.</summary>
+        internal bool SeatWalkingBody => Arrival == Arrival.Walk;
+    }
+
+    /// <summary>
+    /// Forcing a walk on the wall drops the grip, and the next step falls.
+    /// A standing spot is a walk that seats the body. A wall spot with nothing
+    /// under it hovers. A wall spot with a grip stays a climb.
+    /// </summary>
+    internal static Place ChoosePlace(bool destinationClimbing, bool currentlyClimbing, bool spotNeedsHover)
+    {
+        if (!destinationClimbing)
+            return new Place(Arrival.Walk, leaveClimb: currentlyClimbing);
+        if (spotNeedsHover)
+            return new Place(Arrival.Hover, leaveClimb: false);
+        return new Place(Arrival.Climb, leaveClimb: false);
+    }
+
+    /// <summary>A climb is put back only when that body left one behind.</summary>
+    internal static bool UsesStoredClimb(bool destinationClimbing, bool hasStoredClimb)
+        => destinationClimbing && hasStoredClimb;
+}
+
 /// <summary>Moves the practice climber without letting one frame jump far enough to drop the rope.</summary>
 internal static class PracticePartnerMotion
 {
     internal const float MaxStepMeters = 4f;
     internal const float SpawnSideMeters = 0.5f;
-    internal const float FlySpeedMetersPerSecond = 8f;
-    internal const float FlyBoost = 3f;
 
     internal static bool TryStep(
         float fromX, float fromY, float fromZ,
@@ -121,47 +242,6 @@ internal static class PracticePartnerMotion
         outY = y;
         outZ = z - MathF.Sin(yaw) * sideMeters;
         return Finite(outX, outY, outZ);
-    }
-
-    /// <summary>
-    /// Flies from the current point. ahead and strafe are in the look frame.
-    /// vertical is world up. A frame that would jump past maxStep is shortened.
-    /// </summary>
-    internal static bool TryFly(
-        float fromX, float fromY, float fromZ,
-        float forwardX, float forwardY, float forwardZ,
-        float rightX, float rightY, float rightZ,
-        float strafe, float ahead, float vertical,
-        float speed, float deltaSeconds, float maxStep,
-        out float x, out float y, out float z)
-    {
-        x = fromX;
-        y = fromY;
-        z = fromZ;
-        if (!Finite(fromX, fromY, fromZ) || !Finite(forwardX, forwardY, forwardZ) || !Finite(rightX, rightY, rightZ))
-            return false;
-        if (!float.IsFinite(strafe) || !float.IsFinite(ahead) || !float.IsFinite(vertical)
-            || !float.IsFinite(speed) || speed < 0f
-            || !float.IsFinite(deltaSeconds) || deltaSeconds < 0f)
-            return false;
-
-        var wishX = rightX * strafe + forwardX * ahead;
-        var wishY = rightY * strafe + forwardY * ahead + vertical;
-        var wishZ = rightZ * strafe + forwardZ * ahead;
-        var squared = wishX * wishX + wishY * wishY + wishZ * wishZ;
-        if (!float.IsFinite(squared)) return false;
-        if (squared > 1f)
-        {
-            var scale = 1f / MathF.Sqrt(squared);
-            wishX *= scale;
-            wishY *= scale;
-            wishZ *= scale;
-        }
-
-        var distance = speed * deltaSeconds;
-        return TryStep(fromX, fromY, fromZ,
-            fromX + wishX * distance, fromY + wishY * distance, fromZ + wishZ * distance,
-            maxStep, out x, out y, out z);
     }
 
     internal static bool Finite(float x, float y, float z)

@@ -247,6 +247,60 @@ internal static class RemotePlayerManager
         }
     }
 
+    /// <summary>
+    /// A point on this ghost for a mark above the climber. The floating name when it
+    /// sits near the body, otherwise the body root. A ghost parked under the world
+    /// is not a point.
+    /// </summary>
+    internal static bool TryGetRoleAnchor(int playerId, out Vector3 position, out Vector3 up, out bool atName)
+    {
+        position = default;
+        up = Vector3.up;
+        atName = false;
+        if (!_ghosts.TryGetValue(playerId, out var entry)) return false;
+        if (!entry.IsRealModel || entry.Root == null) return false;
+        try
+        {
+            var root = entry.Root.transform;
+            if (root == null) return false;
+            var rootPos = root.position;
+            if (!IsClimbablePoint(rootPos)) return false;
+            var bodyUp = root.up;
+            if (bodyUp.sqrMagnitude > 1e-4f) up = bodyUp.normalized;
+
+            var mesh = entry.NrpComponent != null ? entry.NrpComponent.nameMesh : null;
+            if (mesh != null)
+            {
+                var named = mesh.transform.position;
+                if (IsClimbablePoint(named) && (named - rootPos).sqrMagnitude <= 9f)
+                {
+                    position = named;
+                    atName = true;
+                    return true;
+                }
+            }
+
+            position = rootPos;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("remote-player.role-anchor", exception);
+            return false;
+        }
+    }
+
+    /// <summary>A body on the mountain. The ghost hold at (0, -10000, 0) is not.</summary>
+    internal static bool IsClimbablePoint(Vector3 position)
+    {
+        if (float.IsNaN(position.x) || float.IsInfinity(position.x)
+            || float.IsNaN(position.y) || float.IsInfinity(position.y)
+            || float.IsNaN(position.z) || float.IsInfinity(position.z))
+            return false;
+        var parked = position - HiddenSpawnPosition;
+        return parked.sqrMagnitude > 1f;
+    }
+
     internal static bool TryGetGhostHarness(int playerId, out Il2Cpp.Harness harness)
     {
         harness = null;

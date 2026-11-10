@@ -48,6 +48,13 @@ public partial class Mod : MelonMod
     private bool _quitIssued;
     private bool _multiplayerModeActive;
 
+    // Set by scripts/start-local-client.ps1 and scripts/start-second-client.ps1.
+    private readonly bool _keepSimulatingWhenUnfocused =
+        string.Equals(
+            Environment.GetEnvironmentVariable("CAIRNMP_RUN_IN_BACKGROUND"),
+            "1",
+            StringComparison.Ordinal);
+
     private DateTime? _connectingStart;
     private string _connectingVerb = "Creating lobby";
     private string _lastLobbyError;
@@ -106,6 +113,8 @@ public partial class Mod : MelonMod
             LoggerInstance.Msg($"  Cairn Multiplayer Mod v{Protocol.GameVersion} loaded!");
             LoggerInstance.Msg("  Diagnostics stay local unless you share them.");
             LoggerInstance.Msg("===========================================");
+            if (_keepSimulatingWhenUnfocused)
+                ModLog.Info("[CairnMP] This window keeps simulating when it is in the background.");
         }
         catch (Exception exception)
         {
@@ -182,17 +191,21 @@ public partial class Mod : MelonMod
             () => Network?.IsHandshakeComplete == true
                   && _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam);
         // The mode defaults to Rope Team for solo too. The lobby, the handshake, or the
-        // story-save handoff is what makes this a Rope Team session.
+        // story-save handoff is what makes this a Rope Team session. After a disconnect
+        // the save run stays marked until the main menu, so a wall quick save cannot land.
         BivouacSaveSession.Bind(
             () => _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam
                   && (Network?.IsHandshakeComplete == true
                       || Lobby.IsInLobby
-                      || StoryLaunchSetupPatch.MultiplayerStoryPending));
+                      || StoryLaunchSetupPatch.MultiplayerStoryPending),
+            () => SceneRoles.IsMainMenu(_runtimeState.CurrentScene)
+                  && Network?.IsHandshakeComplete != true
+                  && !Lobby.IsInLobby
+                  && !StoryLaunchSetupPatch.MultiplayerStoryPending);
         BivouacEntryGatePatch.Bind(
             _hud,
             () => Network,
             () => SceneRoles.ResolveNetworkScene(_runtimeState.CurrentScene, _runtimeState.LastGameplayScene));
-        LeaderProtectionMarker.Bind(_hud);
         RopeLengthReadout.Bind(_hud);
         RopeInterop.BindFallHud(_hud);
         PracticePartnerController.Bind(_hud);
@@ -237,10 +250,11 @@ public partial class Mod : MelonMod
             StartGame.Cancel();
             _runtimeState.ModeRules = MultiplayerModes.RopeTeam;
             RopeInterop.ClearRemotePitons();
+            // Untie while this climber's id and the partner's body are still here.
+            Rope.ClearLinks();
             Network.Disconnect();
             WeatherInterop.ResetRemoteState();
             RemotePlayerManager.ClearAll();
-            Rope.ClearLinks();
             Bivouac.ForceResume();
             _panel.SetStatus("Disconnected", false);
         };
@@ -300,6 +314,8 @@ public partial class Mod : MelonMod
         Network.OnPlayerLeft += id =>
         {
             _panel.SetStatus($"Player {id} left", Network.IsConnected);
+            // The body is the other end of the rope. Untie before it is destroyed.
+            Rope.PartnerLeft(id);
             RemotePlayerManager.OnPlayerLeft(id);
             RopeLinkState.RemovePlayer(id);
         };
@@ -307,15 +323,15 @@ public partial class Mod : MelonMod
         {
             if (!clip)
                 RopeInterop.PrepareUntie(from, target, TeamAnchorSession.IsLocalLeader, from == Network.LocalPlayerId);
-            var samePair = TeamAnchorSession.IsLinked
-                && TeamAnchorSession.LeaderId == from
-                && TeamAnchorSession.FollowerId == target;
+            var samePair = TeamAnchorSession.ResumesHeldPair(from, target);
+            var movePitons = PitonReturn.ReturnsOnRopeUp(
+                samePair, TeamAnchorSession.LeaderLeft, TopAnchorSession.HasStick);
             RopeLinkState.Apply(from, target, clip);
             TeamAnchorSession.OnClip(Network.LocalPlayerId, from, target, clip);
-            if (clip && !samePair && TeamAnchorSession.IsLinked)
+            if (clip && movePitons && TeamAnchorSession.IsLinked)
             {
                 RopeInterop.BeginPitonPool(Network);
-                if (!BivouacSyncGate.AtCamp)
+                if (!samePair && !BivouacSyncGate.AtCamp)
                     RopeInterop.ReplayPitonsOnLink(Network);
             }
         };

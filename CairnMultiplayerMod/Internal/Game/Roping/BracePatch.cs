@@ -7,8 +7,9 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 
 /// <summary>
 /// Holds the bracing follower still. Cairn's spike-wall timer and its walking
-/// blocked flag do not stop a step on a normal pitch, so the walk and the climb
-/// body move are skipped instead. This does not move the pawn.
+/// blocked flag do not stop a step on a normal pitch, so the walk, the ledge
+/// step, a new reach, and a dyno are skipped instead. A reach already going
+/// is left to finish. This does not move the pawn.
 /// </summary>
 internal static class BracePatch
 {
@@ -25,18 +26,26 @@ internal static class BracePatch
             Patch(typeof(WalkingPawnController), nameof(WalkingPawnController.Update),
                 nameof(WidenDeadZone), nameof(RestoreDeadZone));
             Patch(typeof(WalkingPawnController), "MoveCapsule", nameof(KeepStepping), null);
-            Patch(typeof(ClimbingV2PawnControllerModule), nameof(ClimbingV2PawnControllerModule.ShouldSolveBodyMove),
-                null, nameof(HoldTheBody));
-            Patch(typeof(ClimbingV2PawnControllerModuleLedgeWalking),
-                nameof(ClimbingV2PawnControllerModuleLedgeWalking.ShouldSolveBodyMove),
-                null, nameof(HoldTheBody));
-            Patch(typeof(ClimbingV2PawnControllerModuleHangIdle),
-                nameof(ClimbingV2PawnControllerModuleHangIdle.ShouldSolveBodyMove),
-                null, nameof(HoldTheBody));
+            // The climb module's virtual body-solve, and the same method on the ledge and
+            // hang modules, overflowed the stack at boot. The call came back through
+            // il2cpp_runtime_invoke into the same hook, before the menu existed. The walk and
+            // the ledge step are still skipped while she is bracing.
             Patch(typeof(ClimbingV2PawnControllerModuleLedgeWalking),
                 nameof(ClimbingV2PawnControllerModuleLedgeWalking.UpdateBodyPosition),
                 nameof(KeepStepping), null);
             Patch(typeof(LedgeWalkingStates.LedgeWalkingState), "UpdateBodyPosition", nameof(KeepStepping), null);
+            // These four sit on the climber, not on the shared climb module. The shared
+            // body-solve is virtual and the hook called itself at startup, so a new hold
+            // is refused here instead: no reach starts, and a dyno does not start.
+            Patch(typeof(ClimbingV2PawnController), nameof(ClimbingV2PawnController.StartReachingWithLimb),
+                nameof(KeepStepping), null);
+            Patch(typeof(ClimbingV2PawnController), nameof(ClimbingV2PawnController.CanStartReaching),
+                nameof(KeepStepping), null);
+            Patch(typeof(ClimbingV2PawnController), nameof(ClimbingV2PawnController.InputRequestDynoJump),
+                nameof(KeepStepping), null);
+            Patch(typeof(ClimbingV2PawnControllerModuleReaching),
+                nameof(ClimbingV2PawnControllerModuleReaching.UpdateReachSmoothedInput),
+                nameof(KeepStepping), null);
             _installed = true;
         }
         catch (Exception ex)
@@ -81,10 +90,5 @@ internal static class BracePatch
         if (!_deadZoneRaised) return;
         _deadZoneRaised = false;
         WalkingPawnController.walkInputSqrDeadZone = __state;
-    }
-
-    private static void HoldTheBody(ref bool __result)
-    {
-        if (RopeInterop.IsBracing) __result = false;
     }
 }

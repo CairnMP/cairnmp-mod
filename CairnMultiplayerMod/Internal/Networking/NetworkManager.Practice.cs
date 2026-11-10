@@ -38,8 +38,29 @@ internal sealed partial class NetworkManager
         if (!_remotePlayers.TryGetValue(PracticePartner.PlayerId, out var player) || player == null)
             return false;
         if (!PracticePartnerMotion.Finite(x, y, z) || !float.IsFinite(yaw)) return false;
-        WritePracticePose(player, x, y, z, yaw, sceneName, DateTime.UtcNow.Ticks / (double)TimeSpan.TicksPerSecond);
+        var now = DateTime.UtcNow.Ticks / (double)TimeSpan.TicksPerSecond;
+        WritePracticePose(player, x, y, z, yaw, sceneName, now);
+        // The frozen shape has to stay fresh or the body snaps back to a standing bind pose.
+        if (player.HasPlayerFrame) player.LastPlayerFrameTime = now;
         return true;
+    }
+
+    /// <summary>
+    /// Holds the shape of the body you just left. His climbot stays off: that child has
+    /// no frame, and turning it on kills the runtime.
+    /// </summary>
+    internal bool TryHoldPracticeShape(NetFrameData frame)
+    {
+        if (!_remotePlayers.TryGetValue(PracticePartner.PlayerId, out var player) || player == null)
+            return false;
+        var usable = frame.IsValid && frame.Positions != null && frame.Positions.Length >= 3;
+        player.HasPlayerFrame = usable;
+        player.PlayerFrame = usable ? frame : default;
+        player.HasClimbotFrame = false;
+        player.ClimbotFrame = default;
+        if (usable)
+            player.LastPlayerFrameTime = DateTime.UtcNow.Ticks / (double)TimeSpan.TicksPerSecond;
+        return usable;
     }
 
     internal bool DespawnPracticePartner()
@@ -58,5 +79,9 @@ internal sealed partial class NetworkManager
         player.SceneName = sceneName ?? "";
         player.State = PlayerState.InGame;
         player.LastUpdateTime = now;
+        player.HasLinkPose = true;
+        player.LinkX = x;
+        player.LinkY = y;
+        player.LinkZ = z;
     }
 }

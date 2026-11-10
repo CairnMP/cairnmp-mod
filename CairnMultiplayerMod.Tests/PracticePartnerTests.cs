@@ -56,35 +56,108 @@ public sealed class PracticePartnerTests
     }
 
     [Fact]
-    public void FlyMovesAlongTheLookAndShortensALongFrame()
+    public void ASwitchTradesTheSpotsAndTheJobAndTheNextSwitchGivesThemBack()
     {
-        Assert.True(PracticePartnerMotion.TryFly(
-            0f, 0f, 0f, forwardX: 0f, forwardY: 0f, forwardZ: 1f, rightX: 1f, rightY: 0f, rightZ: 0f,
-            strafe: 0f, ahead: 1f, vertical: 0f,
-            speed: PracticePartnerMotion.FlySpeedMetersPerSecond, deltaSeconds: 0.5f,
-            maxStep: PracticePartnerMotion.MaxStepMeters,
-            out var x, out var y, out var z));
-        Assert.Equal(0f, x);
-        Assert.Equal(0f, y);
-        Assert.Equal(4f, z);
+        var you = new PracticeSpot(1f, 2f, 3f, yaw: 10f, climbing: true);
+        var them = new PracticeSpot(4f, 5f, 6f, yaw: 20f, climbing: false);
 
-        Assert.True(PracticePartnerMotion.TryFly(
-            0f, 0f, 0f, 0f, 0f, 1f, 1f, 0f, 0f,
-            strafe: 0f, ahead: 1f, vertical: 0f,
-            speed: PracticePartnerMotion.FlySpeedMetersPerSecond, deltaSeconds: 1f,
-            maxStep: PracticePartnerMotion.MaxStepMeters,
-            out x, out y, out z));
-        Assert.Equal(4f, z);
+        var once = PracticeSwap.Exchange(you, them, tied: true, youLead: true);
 
-        Assert.True(PracticePartnerMotion.TryFly(
-            1f, 2f, 3f, 0f, 0f, 1f, 1f, 0f, 0f,
-            strafe: 0f, ahead: 0f, vertical: 0f,
-            speed: PracticePartnerMotion.FlySpeedMetersPerSecond, deltaSeconds: 1f,
-            maxStep: PracticePartnerMotion.MaxStepMeters,
-            out x, out y, out z));
-        Assert.Equal(1f, x);
-        Assert.Equal(2f, y);
-        Assert.Equal(3f, z);
+        Assert.Equal(them.X, once.You.X);
+        Assert.Equal(them.Y, once.You.Y);
+        Assert.Equal(them.Z, once.You.Z);
+        Assert.Equal(them.Yaw, once.You.Yaw);
+        Assert.False(once.You.Climbing);
+        Assert.Equal(you.X, once.Frozen.X);
+        Assert.Equal(you.Y, once.Frozen.Y);
+        Assert.Equal(you.Z, once.Frozen.Z);
+        Assert.True(once.Frozen.Climbing);
+        Assert.False(once.YouLead);
+        Assert.Equal(PracticeSwap.FollowingText, PracticeSwap.StatusText(swapped: true, tied: true, once.YouLead));
+
+        var twice = PracticeSwap.Exchange(once.You, once.Frozen, tied: true, once.YouLead);
+
+        Assert.Equal(you.X, twice.You.X);
+        Assert.Equal(you.Y, twice.You.Y);
+        Assert.Equal(you.Z, twice.You.Z);
+        Assert.Equal(you.Yaw, twice.You.Yaw);
+        Assert.True(twice.You.Climbing);
+        Assert.Equal(them.X, twice.Frozen.X);
+        Assert.True(twice.YouLead);
+        Assert.Null(PracticeSwap.StatusText(swapped: false, tied: true, twice.YouLead));
+    }
+
+    [Fact]
+    public void AnUntiedSwitchTradesTheSpotsAndLeavesTheJob()
+    {
+        var you = new PracticeSpot(1f, 2f, 3f, yaw: 0f, climbing: false);
+        var them = new PracticeSpot(8f, 9f, 10f, yaw: 90f, climbing: true);
+
+        var once = PracticeSwap.Exchange(you, them, tied: false, youLead: true);
+
+        Assert.Equal(them.X, once.You.X);
+        Assert.Equal(you.X, once.Frozen.X);
+        Assert.True(once.YouLead);
+        Assert.Equal(PracticeSwap.UntiedText, PracticeSwap.StatusText(swapped: true, tied: false, once.YouLead));
+        Assert.Equal(PracticeSwap.LeadingText, PracticeSwap.StatusText(swapped: true, tied: true, youLead: true));
+    }
+
+    [Fact]
+    public void LeavingTheWallForTheGroundSeatsTheWalk()
+    {
+        var place = PracticeSwap.ChoosePlace(destinationClimbing: false, currentlyClimbing: true, spotNeedsHover: false);
+
+        Assert.Equal(PracticeSwap.Arrival.Walk, place.Arrival);
+        Assert.True(place.LeaveClimb);
+        Assert.True(place.SeatWalkingBody);
+    }
+
+    [Fact]
+    public void AStandingSwitchSeatsTheWalkWithoutTheClimbExit()
+    {
+        var place = PracticeSwap.ChoosePlace(destinationClimbing: false, currentlyClimbing: false, spotNeedsHover: true);
+
+        Assert.Equal(PracticeSwap.Arrival.Walk, place.Arrival);
+        Assert.False(place.LeaveClimb);
+        Assert.True(place.SeatWalkingBody);
+    }
+
+    [Fact]
+    public void AWallSpotWithNothingUnderItHovers()
+    {
+        var place = PracticeSwap.ChoosePlace(destinationClimbing: true, currentlyClimbing: true, spotNeedsHover: true);
+
+        Assert.Equal(PracticeSwap.Arrival.Hover, place.Arrival);
+        Assert.False(place.LeaveClimb);
+        Assert.False(place.SeatWalkingBody);
+    }
+
+    [Fact]
+    public void SwitchingBackOntoAClimbUsesTheStoredHolds()
+    {
+        Assert.True(PracticeSwap.UsesStoredClimb(destinationClimbing: true, hasStoredClimb: true));
+        Assert.False(PracticeSwap.UsesStoredClimb(destinationClimbing: true, hasStoredClimb: false));
+        Assert.False(PracticeSwap.UsesStoredClimb(destinationClimbing: false, hasStoredClimb: true));
+    }
+
+    [Fact]
+    public void AWallSpotWithAGripStaysAClimb()
+    {
+        var place = PracticeSwap.ChoosePlace(destinationClimbing: true, currentlyClimbing: false, spotNeedsHover: false);
+
+        Assert.Equal(PracticeSwap.Arrival.Climb, place.Arrival);
+        Assert.False(place.LeaveClimb);
+        Assert.False(place.SeatWalkingBody);
+    }
+
+    [Fact]
+    public void ASwitchDoesNothingWhilePausedFallingOrDead()
+    {
+        Assert.Equal(PracticeSwap.Block.Paused, PracticeSwap.Refusal(paused: true, falling: false, dead: false, walkingOrClimbing: true));
+        Assert.Equal(PracticeSwap.Block.Dead, PracticeSwap.Refusal(paused: false, falling: true, dead: true, walkingOrClimbing: true));
+        Assert.Equal(PracticeSwap.Block.Falling, PracticeSwap.Refusal(paused: false, falling: true, dead: false, walkingOrClimbing: false));
+        Assert.Equal(PracticeSwap.Block.Unready, PracticeSwap.Refusal(paused: false, falling: false, dead: false, walkingOrClimbing: false));
+        Assert.Equal(PracticeSwap.Block.None, PracticeSwap.Refusal(paused: false, falling: false, dead: false, walkingOrClimbing: true));
     }
 
     [Fact]
@@ -117,14 +190,6 @@ public sealed class PracticePartnerTests
     {
         Assert.False(PracticePartner.IsPublicRemote(PracticePartner.PlayerId));
         Assert.True(PracticePartner.IsPublicRemote(4));
-    }
-
-    [Fact]
-    public void UnprotectedLineShowsOnlyWhileTiedWithNoLeaderAnchor()
-    {
-        Assert.Equal(LeaderProtectionMarker.UnprotectedText, LeaderProtectionMarker.StatusText(linked: true, hasLeaderAnchor: false));
-        Assert.Null(LeaderProtectionMarker.StatusText(linked: true, hasLeaderAnchor: true));
-        Assert.Null(LeaderProtectionMarker.StatusText(linked: false, hasLeaderAnchor: false));
     }
 
     [Fact]

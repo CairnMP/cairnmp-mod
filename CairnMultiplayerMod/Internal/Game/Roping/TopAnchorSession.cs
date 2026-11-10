@@ -11,6 +11,8 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 internal static class TopAnchorSession
 {
     private static readonly Dictionary<uint, Vector3> Sticks = new();
+    private static readonly Dictionary<uint, Vector3> Outwards = new();
+    private static readonly Dictionary<uint, string> Scenes = new();
     private static readonly Dictionary<uint, IntPtr> Pointers = new();
     private static readonly HashSet<uint> Cleaned = new();
     private static readonly List<uint> Order = new();
@@ -18,6 +20,9 @@ internal static class TopAnchorSession
     private static uint _next = TopAnchorPolicy.FirstId;
 
     internal static bool HasStick => Sticks.Count > 0;
+
+    /// <summary>A stick left by a story scene. Standing beside it does not pull it.</summary>
+    internal static bool HasCutsceneStick => Scenes.Count > 0;
     internal static bool HoldRequested { get; private set; }
     internal static bool DropRequested { get; private set; }
 
@@ -43,6 +48,45 @@ internal static class TopAnchorSession
         Sticks[id] = position;
         if (!Order.Contains(id)) Order.Add(id);
     }
+
+    /// <summary>The story scene that left this stick, and the direction it points out of the rock.</summary>
+    internal static void RememberCutscene(uint id, Vector3 outward, string key)
+    {
+        if (!Sticks.ContainsKey(id) || string.IsNullOrEmpty(key)) return;
+        Outwards[id] = TopAnchorPolicy.OutwardOrUp(outward);
+        Scenes[id] = key;
+    }
+
+    internal static bool IsCutscene(uint id) => Scenes.ContainsKey(id);
+
+    internal static bool HasKey(string key)
+    {
+        if (string.IsNullOrEmpty(key)) return false;
+        foreach (var scene in Scenes.Values)
+            if (scene == key) return true;
+        return false;
+    }
+
+    internal static bool TryIdForKey(string key, out uint id)
+    {
+        id = 0;
+        if (string.IsNullOrEmpty(key)) return false;
+        foreach (var pair in Scenes)
+        {
+            if (pair.Value != key) continue;
+            id = pair.Key;
+            return true;
+        }
+
+        return false;
+    }
+
+    internal static Vector3 OutwardOrUp(uint id)
+        => Outwards.TryGetValue(id, out var outward) ? TopAnchorPolicy.OutwardOrUp(outward) : new Vector3(0f, 1f, 0f);
+
+    /// <summary>The nearest mantle stick. A story stick stays until that scene plays for the follower.</summary>
+    internal static bool TryNearestMantle(Vector3 climber, out uint id)
+        => TopAnchorPolicy.TryNearest(Order, Sticks, climber, out id, IsCutscene);
 
     internal static void Forget(uint id)
     {
@@ -92,12 +136,15 @@ internal static class TopAnchorSession
     {
         foreach (var pointer in Pointers.Values) QueueDestroy(pointer);
         Sticks.Clear();
+        Outwards.Clear();
+        Scenes.Clear();
         Pointers.Clear();
         Cleaned.Clear();
         Order.Clear();
         _next = TopAnchorPolicy.FirstId;
         HoldRequested = false;
         DropRequested = false;
+        CutsceneStaffSession.Reset();
     }
 
     private static void Drop(uint id)
@@ -105,6 +152,8 @@ internal static class TopAnchorSession
         if (Pointers.TryGetValue(id, out var pointer)) QueueDestroy(pointer);
         Pointers.Remove(id);
         Sticks.Remove(id);
+        Outwards.Remove(id);
+        Scenes.Remove(id);
         Order.Remove(id);
     }
 

@@ -42,6 +42,21 @@ internal sealed class TeamAnchorChain
     internal static bool KeepsClimbotCoil(bool isLocalLeader, bool leaderLeft)
         => isLocalLeader && !leaderLeft;
 
+    /// <summary>
+    /// The follower is caught by the piton at their anchor. That clip stays on the harness.
+    /// The climbot coil stays off, so Climbot is not the belay. An empty chain protects nobody.
+    /// </summary>
+    internal static bool FollowerKeepsSecuringClip(bool isLocalFollower, bool hasProtection)
+        => isLocalFollower && hasProtection;
+
+    /// <summary>
+    /// A real follower has their own copy of the rope, so pitons above their anchor leave
+    /// that copy. The practice pair shares one rope. Unclipping those pitons takes the
+    /// quickdraw off the only rope, and then they cannot be taken.
+    /// </summary>
+    internal static bool FollowerUnclipsNewerPitons(bool sharedRope)
+        => !sharedRope;
+
     internal bool Contains(uint id) => id != 0 && _nodes.ContainsKey(id);
 
     internal uint ParentOf(uint id)

@@ -69,7 +69,7 @@ internal readonly struct PartnerUntie
 internal static class PartnerFallPenalty
 {
     /// <summary>A full grip is gone after this many seconds of holding the follower.</summary>
-    internal const float FullGripSeconds = 5f;
+    internal const float FullGripSeconds = 3f;
 
     internal static PartnerPose Classify(bool dead, bool falling, bool offBelay, string moduleName, bool voidHang = false)
     {

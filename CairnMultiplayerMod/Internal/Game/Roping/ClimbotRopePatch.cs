@@ -14,7 +14,8 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 /// After a tie has been made, the rope Cairn draws from a climber to Climbot stays hidden
 /// until camp. The rope object is left in place: a partner rope still clones its segment prefab from it.
 /// The logical tether is clipped to the harness only while this climber is the tied leader
-/// and has not left at a staff. That clip is what lets a piton attach, and it is also
+/// and has not left at a staff. The clip waits while this climber's own bot is still out.
+/// That clip is what lets a piton attach, and it is also
 /// Cairn's paid-out stop. After the leader unclips there, the coil stays with the follower
 /// and this harness comes off. Anyone else keeps it down, including a climber who untied
 /// on the wall, so Climbot does not belay a climber who is not leading. Before the first
@@ -32,6 +33,10 @@ internal static class ClimbotRopePatch
     private static bool _logged;
     private static bool _loggedLeaderRope;
     private static bool _loggedLeaderRelease;
+    private static bool _loggedFollowerRope;
+    private static bool _loggedRecall;
+    private static int _recallAsks;
+    private static float _recallAskedAt = -1f;
 
     public static void Install()
     {
@@ -61,6 +66,65 @@ internal static class ClimbotRopePatch
         _logged = false;
         _loggedLeaderRope = false;
         _loggedLeaderRelease = false;
+        _loggedFollowerRope = false;
+        ForgetRecall();
+    }
+
+    /// <summary>
+    /// The follower on the live chain stays clipped while a piton protects them.
+    /// So does the climber a staff untie left on the old chain. A new follower
+    /// does not inherit that catch.
+    /// </summary>
+    private static bool KeepsFollowerCatch()
+        => TeamAnchorSession.LocalKeepsCatch
+           || (TeamAnchorSession.IsLocalFollower && TeamAnchorSession.HasProtection);
+
+    /// <summary>
+    /// This climber is on the tied rope and their own bot is not home yet.
+    /// The partner's bot is not this object. An inactive practice bot does not run here.
+    /// </summary>
+    private static bool LeaveRopeUntilClimbotIsHome(RobotPawnController robot)
+    {
+        var onTie = TeamAnchorChain.KeepsClimbotCoil(TeamAnchorSession.IsLocalLeader, TeamAnchorSession.LeaderLeft)
+                    || TeamAnchorSession.IsLocalFollower;
+        if (!onTie)
+        {
+            ForgetRecall();
+            return false;
+        }
+
+        var reported = robot.GetClimbotStatus();
+        var outThere = robot.WaitingForRecall || ClimbotPitonRecoveryPatch.OutToFetch;
+        var arrived = !outThere && reported == ClimbotStatus.Ready;
+        var since = _recallAskedAt < 0f
+            ? ClimbotRecall.RetryAfterSeconds
+            : Time.time - _recallAskedAt;
+        var step = ClimbotRecall.Decide(outThere, arrived, _recallAsks, since);
+        _recallAsks = step.Asks;
+        if (step.Asks == 0)
+        {
+            _recallAskedAt = -1f;
+            _loggedRecall = false;
+        }
+
+        if (!step.Call) return step.HoldRope;
+
+        _recallAskedAt = Time.time;
+        robot.RecallClimbot();
+        if (!_loggedRecall)
+        {
+            _loggedRecall = true;
+            ModLog.Info("[Rope] Climbot is coming home.");
+        }
+
+        return true;
+    }
+
+    private static void ForgetRecall()
+    {
+        _recallAsks = 0;
+        _recallAskedAt = -1f;
+        _loggedRecall = false;
     }
 
     private static void AfterLocalRobot(RobotPawnController __instance)
@@ -69,45 +133,78 @@ internal static class ClimbotRopePatch
         // Taking the rope down on the frames before that removes the coroutine the
         // restore starts, and the loading screen stays on the dots it has shown.
         // At camp the rope is Cairn's. Hiding it here would store a climber who walked off.
-        if (__instance == null || SaveStillLoading() || BivouacSyncGate.AtCamp) return;
-        if (!TeamAnchorSession.RulesArmed) return;
+        if (__instance == null || SaveStillLoading() || BivouacSyncGate.AtCamp)
+        {
+            if (BivouacSyncGate.AtCamp) ForgetRecall();
+            return;
+        }
+        if (!TeamAnchorSession.RulesArmed)
+        {
+            ForgetRecall();
+            return;
+        }
         try
         {
             // The mesh stays hidden below. A piton needs the securing rope clipped to the
-            // harness. Turning the rope object on is not that clip. Only the tied leader who
-            // is still on the rope gets it. After they unclip at a staff, IsLocalLeader stays
-            // true for the follower's chain, and this clip is what keeps Cairn's paid-out stop.
-            if (TeamAnchorChain.KeepsClimbotCoil(TeamAnchorSession.IsLocalLeader, TeamAnchorSession.LeaderLeft))
+            // harness. Turning the rope object on is not that clip. The tied leader who is
+            // still on the rope gets it, and so does the follower while a piton protects
+            // them. That follower clip is the catch on their anchor. After the leader
+            // unclips at a staff, the coil comes off the leader. Climbot stays off either way.
+            // A bot that is still out is called home first. Pinning while it is out is what
+            // stops the whistle, and it leaves the leader unable to place a piton.
+            if (!LeaveRopeUntilClimbotIsHome(__instance))
             {
-                _loggedLeaderRelease = false;
-                if (!LeaderLifelineIsAttached(__instance))
-                    __instance.SetAttachedToHarness(true);
-                else if (!_loggedLeaderRope)
+                if (TeamAnchorChain.KeepsClimbotCoil(TeamAnchorSession.IsLocalLeader, TeamAnchorSession.LeaderLeft))
                 {
-                    _loggedLeaderRope = true;
-                    ModLog.Info("[Rope] The leader's lifeline is clipped on.");
-                }
-            }
-            else if (TeamAnchorSession.IsLocalLeader && TeamAnchorSession.LeaderLeft)
-            {
-                // The rope object stays. The follower's pitons are still on it. Only the
-                // harness comes off, which is the clip Cairn's paid-out stop follows.
-                if (LeaderLifelineIsAttached(__instance))
-                {
-                    __instance.SetAttachedToHarness(false);
-                    if (!_loggedLeaderRelease)
+                    _loggedLeaderRelease = false;
+                    _loggedFollowerRope = false;
+                    if (!LeaderLifelineIsAttached(__instance))
+                        __instance.SetAttachedToHarness(true);
+                    else if (!_loggedLeaderRope)
                     {
-                        _loggedLeaderRelease = true;
-                        _loggedLeaderRope = false;
-                        ModLog.Info("[Rope] The leader left the rope. The lifeline is off their harness.");
+                        _loggedLeaderRope = true;
+                        ModLog.Info("[Rope] The leader's lifeline is clipped on.");
                     }
                 }
-            }
-            else if (__instance.RopeDisplayed || __instance.HasSecuringRope || LeaderLifelineIsAttached(__instance))
-            {
-                if (LeaderLifelineIsAttached(__instance))
-                    __instance.SetAttachedToHarness(false);
-                __instance.SetRopeActive(false, false);
+                else if (TeamAnchorSession.IsLocalLeader && TeamAnchorSession.LeaderLeft)
+                {
+                    // The rope object stays. The follower's pitons are still on it. Only the
+                    // harness comes off, which is the clip Cairn's paid-out stop follows.
+                    _loggedFollowerRope = false;
+                    if (LeaderLifelineIsAttached(__instance))
+                    {
+                        __instance.SetAttachedToHarness(false);
+                        if (!_loggedLeaderRelease)
+                        {
+                            _loggedLeaderRelease = true;
+                            _loggedLeaderRope = false;
+                            ModLog.Info("[Rope] The leader left the rope. The lifeline is off their harness.");
+                        }
+                    }
+                }
+                else if (TeamAnchorChain.FollowerKeepsSecuringClip(
+                    KeepsFollowerCatch(),
+                    KeepsFollowerCatch()))
+                {
+                    // Pitons above the anchor leave this rope. The anchor stays, and the harness
+                    // stays clipped, so a fall ends there. The climbot mesh is hidden below.
+                    _loggedLeaderRelease = false;
+                    _loggedLeaderRope = false;
+                    if (!LeaderLifelineIsAttached(__instance))
+                        __instance.SetAttachedToHarness(true);
+                    else if (!_loggedFollowerRope)
+                    {
+                        _loggedFollowerRope = true;
+                        ModLog.Info("[Rope] The follower's lifeline stays clipped on.");
+                    }
+                }
+                else if (__instance.RopeDisplayed || __instance.HasSecuringRope || LeaderLifelineIsAttached(__instance))
+                {
+                    _loggedFollowerRope = false;
+                    if (LeaderLifelineIsAttached(__instance))
+                        __instance.SetAttachedToHarness(false);
+                    __instance.SetRopeActive(false, false);
+                }
             }
 
             Suppress(__instance.GetRope());

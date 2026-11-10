@@ -26,7 +26,10 @@ internal static class TopAnchorPlant
         internal Quaternion Upright;
         internal float Lift;
         internal float ShaftTop;
+        internal float ShaftReach;
         internal string ShaftName;
+        internal bool AlongRock;
+        internal Vector3 Axis;
         internal bool Seated;
         internal bool LoggedMeshes;
         internal bool Held;
@@ -46,8 +49,20 @@ internal static class TopAnchorPlant
         if (!Plants.TryGetValue(id, out var planted) || planted.Bone == null || !planted.Held) return false;
         try
         {
-            if (!planted.Seated || planted.ShaftTop < planted.Lip.y + 0.25f) return false;
+            if (!planted.Seated) return false;
             var at = planted.Bone.position;
+            if (planted.AlongRock)
+            {
+                if (planted.ShaftReach < 0.25f) return false;
+                var expected = planted.Lip + planted.Axis * planted.Lift;
+                var ox = at.x - expected.x;
+                var oy = at.y - expected.y;
+                var oz = at.z - expected.z;
+                if (ox * ox + oy * oy + oz * oz > 0.25f) return false;
+                return EnabledRendererCount(planted) > 0;
+            }
+
+            if (planted.ShaftTop < planted.Lip.y + 0.25f) return false;
             var dx = at.x - planted.Lip.x;
             var dy = at.y - (planted.Lip.y + planted.Lift);
             var dz = at.z - planted.Lip.z;
@@ -61,11 +76,21 @@ internal static class TopAnchorPlant
         }
     }
 
-    internal static bool Plant(uint id, Vector3 lip)
+    internal static bool Plant(uint id, Vector3 lip) => Plant(id, lip, alongRock: false, Vector3.up);
+
+    /// <summary>The shaft points out of the rock along <paramref name="outward"/>.</summary>
+    internal static bool Plant(uint id, Vector3 lip, Vector3 outward)
+    {
+        if (outward.sqrMagnitude < 0.0001f) outward = Vector3.up;
+        else outward.Normalize();
+        return Plant(id, lip, alongRock: true, outward);
+    }
+
+    private static bool Plant(uint id, Vector3 lip, bool alongRock, Vector3 axis)
     {
         try
         {
-            return PlantCore(id, lip);
+            return PlantCore(id, lip, alongRock, axis);
         }
         catch (Exception exception)
         {
@@ -74,11 +99,13 @@ internal static class TopAnchorPlant
         }
     }
 
-    private static bool PlantCore(uint id, Vector3 lip)
+    private static bool PlantCore(uint id, Vector3 lip, bool alongRock, Vector3 axis)
     {
         if (Plants.ContainsKey(id))
         {
             Plants[id].Lip = lip;
+            Plants[id].AlongRock = alongRock;
+            Plants[id].Axis = axis;
             return true;
         }
 
@@ -113,6 +140,8 @@ internal static class TopAnchorPlant
             Clone = clone,
             Lip = lip,
             Upright = Quaternion.identity,
+            AlongRock = alongRock,
+            Axis = axis,
         };
         Plants[id] = planted;
         if (!clone) PauseLocalStickAnchor();
@@ -178,13 +207,23 @@ internal static class TopAnchorPlant
         // further than the shaft, and seating those left the stick in the air.
         if (!planted.Seated)
         {
-            planted.Upright = Quaternion.identity;
-            bone.SetPositionAndRotation(planted.Lip, planted.Upright);
-            planted.Seated = TrySeatShaft(bone, planted);
+            if (planted.AlongRock)
+            {
+                planted.Upright = Quaternion.FromToRotation(Vector3.up, planted.Axis);
+                bone.SetPositionAndRotation(planted.Lip, planted.Upright);
+                planted.Seated = TrySeatAlongRock(bone, planted);
+            }
+            else
+            {
+                planted.Upright = Quaternion.identity;
+                bone.SetPositionAndRotation(planted.Lip, planted.Upright);
+                planted.Seated = TrySeatShaft(bone, planted);
+            }
         }
 
         var seat = planted.Lip;
-        seat.y += planted.Lift;
+        if (planted.AlongRock) seat += planted.Axis * planted.Lift;
+        else seat.y += planted.Lift;
         bone.SetPositionAndRotation(seat, planted.Upright);
     }
 
@@ -197,16 +236,42 @@ internal static class TopAnchorPlant
     }
 
     /// <summary>
-    /// The upright pose that showed the staff. The bone's children are the lamp glow, and
-    /// their lowest corner sat 2.05 m down, which left the shaft in the air. The shaft
-    /// itself is skinned to this bone on the body. Seat that tip in the lip.
+    /// The tip sits a few centimeters in the stone. The head points out along the face.
+    /// If the shaft cannot be read, a short lift still leaves it sticking out.
     /// </summary>
+    private static bool TrySeatAlongRock(Transform bone, Planted planted)
+    {
+        var found = TrySkinnedStickSpan(bone, out var localMin, out var localMax, out var name);
+        if (!found || !TopAnchorPolicy.TrySeatLift(0f, localMin, out var lift))
+        {
+            planted.Lift = 0.70f;
+            planted.ShaftReach = planted.Lift;
+            planted.ShaftName = "fallback";
+            if (!planted.LoggedMeshes)
+            {
+                planted.LoggedMeshes = true;
+                LogMeshSpans(bone);
+            }
+
+            ModLog.Info("[RopeTeam] The staff shaft could not be measured, so it stands 0.70 m out of the rock.");
+            return true;
+        }
+
+        planted.Lift = lift;
+        planted.ShaftReach = localMax + lift;
+        planted.ShaftName = name;
+        ModLog.Info(
+            $"[RopeTeam] Staff shaft '{name}' points out of the rock, tip {TopAnchorPolicy.SeatEmbedMeters:F2} m in.");
+        return true;
+    }
+
     private static bool TrySeatShaft(Transform bone, Planted planted)
     {
         // The wooden mesh is skinned onto the body. The flare is only a stand-in when that
         // mesh cannot be read, and it is still shorter than the billboard that floated the stick.
-        var found = TrySkinnedStickSpan(bone, out var tip, out var top, out var name)
-                    || TryVerticalFlareSpan(bone, out tip, out top, out name);
+        var found = TryLocalShaft(bone, out var localMin, out var localMax, out var name);
+        var tip = bone.position.y + localMin;
+        var top = bone.position.y + localMax;
         if (!found || !TopAnchorPolicy.TrySeatLift(planted.Lip.y, tip, out var lift))
         {
             if (!planted.LoggedMeshes)
@@ -228,12 +293,22 @@ internal static class TopAnchorPlant
 
     /// <summary>
     /// How far the wooden stick hangs from bn_Stick. Vertices weighted to that bone, or to
-    /// a child of it, keep their offset when the bone stands upright.
+    /// a child of it, keep their offset along the bone. The flare is the stand-in when
+    /// that mesh cannot be read.
     /// </summary>
-    private static bool TrySkinnedStickSpan(Transform bone, out float tip, out float top, out string meshName)
+    private static bool TryLocalShaft(Transform bone, out float localMin, out float localMax, out string meshName)
     {
-        tip = 0f;
-        top = 0f;
+        if (TrySkinnedStickSpan(bone, out localMin, out localMax, out meshName)) return true;
+        if (!TryVerticalFlareSpan(bone, out var tip, out var top, out meshName)) return false;
+        localMin = tip - bone.position.y;
+        localMax = top - bone.position.y;
+        return true;
+    }
+
+    private static bool TrySkinnedStickSpan(Transform bone, out float localMin, out float localMax, out string meshName)
+    {
+        localMin = 0f;
+        localMax = 0f;
         meshName = null;
         var body = LocalPlayerInterop.TryGetMCGameObject();
         if (body == null || bone == null) return false;
@@ -262,9 +337,8 @@ internal static class TopAnchorPlant
 
         // A handful of lamp verts is not the shaft. The glow seat was the miss.
         if (count < 8 || !float.IsFinite(min) || !float.IsFinite(max)) return false;
-        var origin = bone.position.y;
-        tip = origin + min;
-        top = origin + max;
+        localMin = min;
+        localMax = max;
         meshName = foundName ?? "bn_Stick";
         return max - min >= 0.45f;
     }

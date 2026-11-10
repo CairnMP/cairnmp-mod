@@ -44,19 +44,25 @@ internal static partial class RopeInterop
                 if (fromPlayerId != TeamAnchorSession.LeaderId || TeamAnchorSession.IsLocalLeader) return;
                 AcceptPlace(packet.Id, packet.Position);
                 break;
+            case TopAnchorFact.Cutscene:
+                if (fromPlayerId != TeamAnchorSession.LeaderId || TeamAnchorSession.IsLocalLeader) return;
+                AcceptCutscene(packet.Id, packet.Position, packet.Outward, packet.Key);
+                break;
             case TopAnchorFact.Clean:
                 if (!PairMember(fromPlayerId)) return;
                 RemoveStick(packet.Id, tellPartner: false);
                 break;
             case TopAnchorFact.Topped:
                 if (fromPlayerId != TeamAnchorSession.FollowerId || !TeamAnchorSession.IsLocalLeader) return;
-                if (!TopAnchorSession.TryNearest(packet.Position, out var stick)) return;
+                if (!TopAnchorSession.TryNearestMantle(packet.Position, out var stick)) return;
                 RemoveStick(stick, tellPartner: true);
                 break;
             case TopAnchorFact.Leave:
-                if (fromPlayerId != TeamAnchorSession.LeaderId) return;
+                // A story leave can arrive before its stick. Wait for the plant, which
+                // ends the pair once the stick is on the chain. A mantle stick is already in.
+                if (fromPlayerId != TeamAnchorSession.LeaderId || !TopAnchorSession.HasStick) return;
                 TopAnchorSession.RequestHold();
-                TeamAnchorSession.HoldForFollower();
+                TeamAnchorSession.EndPartnership();
                 break;
             case TopAnchorFact.Drop:
                 if (fromPlayerId != TeamAnchorSession.LeaderId && fromPlayerId != TeamAnchorSession.LocalPlayerId) return;
@@ -70,7 +76,7 @@ internal static partial class RopeInterop
     {
         if (TopAnchorPolicy.IsStickId(id))
         {
-            var tie = TopAnchorPolicy.TiePoint(stored);
+            var tie = TopAnchorPolicy.TiePoint(stored, TopAnchorSession.OutwardOrUp(id));
             return new UnityEngine.Vector3(tie.X, tie.Y, tie.Z);
         }
 
@@ -84,21 +90,36 @@ internal static partial class RopeInterop
         DrainStaffPitons();
         TopAnchorPlant.DropMissing();
         PresentStaffPitons();
-        if (!TeamAnchorSession.IsLinked) 
+        if (!TeamAnchorSession.IsLinked)
         {
             _mantle = default;
-            HideHeldLine();
+            if (TeamAnchorSession.HasLeftoverCatch)
+            {
+                if (TeamAnchorSession.LocalKeepsCatch)
+                    WatchFollowerStanding(network);
+                DrawHeldLine(network, retired: false);
+            }
+            else if (TeamAnchorSession.HasRetiredCatch)
+            {
+                if (TeamAnchorSession.LocalKeepsCatch)
+                    WatchFollowerStanding(network);
+                DrawHeldLine(network, retired: true);
+            }
+            else
+                HideHeldLine();
             return;
         }
 
         if (TeamAnchorSession.IsLocalLeader && !TeamAnchorSession.LeaderLeft)
             WatchLeaderMantle(network);
-        if (TeamAnchorSession.IsLocalFollower)
+        if (TeamAnchorSession.IsLocalFollower || TeamAnchorSession.LocalKeepsCatch)
             WatchFollowerStanding(network);
         // The partner rope goes with the leader. This line is the follower's:
         // their harness, then every piton still on the chain, ending at the staff.
         if (TeamAnchorSession.LeaderLeft)
-            DrawHeldLine(network);
+            DrawHeldLine(network, retired: false);
+        else if (TeamAnchorSession.HasRetiredCatch)
+            DrawHeldLine(network, retired: true);
         else
             HideHeldLine();
     }
@@ -110,7 +131,7 @@ internal static partial class RopeInterop
         if (!TryGetClimberPosition(out var harness)) harness = default;
         if (!_mantle.Observe(module, walking, harness, out var lip)) return;
 
-        if (TopAnchorSession.TryNearest(lip, out _))
+        if (TopAnchorSession.TryNearestMantle(lip, out _))
         {
             ModLog.Info("[RopeTeam] Mantle finished on a ledge that already has a stick.");
             return;
@@ -131,7 +152,7 @@ internal static partial class RopeInterop
     private static void WatchFollowerStanding(NetworkManager network)
     {
         if (!PawnCaptureInterop.IsLocalPlayerWalking() || !TryGetClimberPosition(out var position)) return;
-        if (TopAnchorSession.TryNearest(position, out var stick))
+        if (TopAnchorSession.TryNearestMantle(position, out var stick))
         {
             _toppedSent = false;
             RemoveStick(stick, tellPartner: true);
@@ -146,6 +167,10 @@ internal static partial class RopeInterop
     }
 
     private static bool PlantStick(uint id, Vector3 lip, bool tellPartner, NetworkManager network)
+        => PlantStick(id, lip, tellPartner, network, alongRock: false, default);
+
+    private static bool PlantStick(
+        uint id, Vector3 lip, bool tellPartner, NetworkManager network, bool alongRock, Vector3 outward)
     {
         var before = TeamAnchorSession.Count;
         TopAnchorSession.Remember(id, lip);
@@ -161,7 +186,11 @@ internal static partial class RopeInterop
             return false;
         }
 
-        TopAnchorPlant.Plant(id, new UnityEngine.Vector3(lip.X, lip.Y, lip.Z));
+        var at = new UnityEngine.Vector3(lip.X, lip.Y, lip.Z);
+        if (alongRock)
+            TopAnchorPlant.Plant(id, at, new UnityEngine.Vector3(outward.X, outward.Y, outward.Z));
+        else
+            TopAnchorPlant.Plant(id, at);
         if (tellPartner) SendTopAnchor(network, TopAnchorMessage.Place(id, lip));
         return true;
     }
@@ -176,10 +205,55 @@ internal static partial class RopeInterop
     private static void RemoveStick(uint id, bool tellPartner)
     {
         if (!TopAnchorSession.TryGetPosition(id, out _)) return;
+        var cutscene = TopAnchorSession.IsCutscene(id);
         TopAnchorPlant.Restore(id);
         TopAnchorSession.Forget(id);
         TeamAnchorSession.NoteRemoved(id);
         if (tellPartner) SendTopAnchor(null, TopAnchorMessage.Clean(id));
+        // The scene is taking the follower. This is not an untie, so nobody is dropped.
+        if (cutscene) TeamAnchorSession.RejoinIfStillTied();
+    }
+
+    /// <summary>
+    /// Leaves a stick where the leader was. The chain stays for the follower, and the
+    /// harness rope is not dragged to wherever the scene takes her.
+    /// </summary>
+    internal static bool PlantCutsceneStick(Vector3 where, Vector3 outward, string key, bool endsTie, NetworkManager network)
+    {
+        if (string.IsNullOrEmpty(key) || TopAnchorSession.HasKey(key)) return false;
+        if (!TeamAnchorSession.IsLocalLeader || TeamAnchorSession.LeaderLeft) return false;
+        if (!TopAnchorPolicy.Finite(where)) return false;
+        outward = TopAnchorPolicy.OutwardOrUp(outward);
+        var id = TopAnchorSession.Allocate();
+        if (!PlantStick(id, where, tellPartner: false, network, alongRock: true, outward)) return false;
+        TopAnchorSession.RememberCutscene(id, outward, key);
+        SendTopAnchor(network, TopAnchorMessage.Cutscene(id, where, outward, key));
+        TopAnchorSession.RequestHold();
+        TeamAnchorSession.EndPartnership();
+        SendTopAnchorLeave(network);
+        // The scene may be about to rest. That rest waits so it does not throw this stick away.
+        CutsceneStaffSession.ArmStory();
+        var why = endsTie ? "the scene would have ended the tie" : "the scene moved her";
+        ModLog.Info($"[RopeTeam] Planted a staff for the story scene at ({where.X:F1},{where.Y:F1},{where.Z:F1}): {why}.");
+        return true;
+    }
+
+    private static void AcceptCutscene(uint id, Vector3 where, Vector3 outward, string key)
+    {
+        if (string.IsNullOrEmpty(key) || TopAnchorSession.WasCleaned(id) || TopAnchorSession.HasKey(key)) return;
+        if (TopAnchorSession.TryGetPosition(id, out _)) return;
+        if (!PlantStick(id, where, tellPartner: false, network: null, alongRock: true, outward)) return;
+        TopAnchorSession.RememberCutscene(id, outward, key);
+        TopAnchorSession.RequestHold();
+        TeamAnchorSession.EndPartnership();
+        ModLog.Info($"[RopeTeam] Staff for the leader's story scene planted at ({where.X:F1},{where.Y:F1},{where.Z:F1}).");
+    }
+
+    internal static void RemoveCutsceneStick(string key)
+    {
+        if (!TopAnchorSession.TryIdForKey(key, out var id)) return;
+        RemoveStick(id, tellPartner: true);
+        ModLog.Info("[RopeTeam] The follower started the story scene. The staff came out.");
     }
 
     private static bool SpawnStaffPiton(uint id, Vector3 lip)
@@ -231,7 +305,25 @@ internal static partial class RopeInterop
         }
         _pitons.Ignore(spawned);
         TopAnchorSession.SetPointer(id, spawned);
+        // AddPiton while standing on the ledge does not clip a quickdraw. Without that
+        // clip the staff is not a catch once the pitons below it are gone.
+        if (!PitonIsOnRope(lifeline, spawned))
+            TryAttachTeamPiton(spawned);
         return true;
+    }
+
+    private static bool PitonIsOnRope(Il2Cpp.Lifeline lifeline, IntPtr piton)
+    {
+        if (lifeline == null || piton == IntPtr.Zero) return false;
+        try
+        {
+            return lifeline.AttachedPitonsContains(new Il2Cpp.Piton(piton));
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.piton-on-rope", exception);
+            return false;
+        }
     }
 
     private static void DrainStaffPitons()
@@ -258,6 +350,63 @@ internal static partial class RopeInterop
             else ShowPitonRenderers(pointer);
         }
     }
+
+    /// <summary>
+    /// The nearest stone around the body, close enough to be the face she is on.
+    /// The normal points out of that stone. Her own body is not the rock.
+    /// </summary>
+    internal static bool TryRockSurface(UnityEngine.Vector3 origin, out UnityEngine.Vector3 point, out UnityEngine.Vector3 outward)
+    {
+        point = origin;
+        outward = UnityEngine.Vector3.up;
+        try
+        {
+            var body = LocalPlayerInterop.TryGetMCGameObject();
+            var best = 1.5f;
+            var found = false;
+            for (var i = 0; i < RockProbes.Length; i++)
+            {
+                var hits = Physics.RaycastAll(
+                    origin, RockProbes[i], best, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+                if (hits == null) continue;
+                for (var h = 0; h < hits.Length; h++)
+                {
+                    var hit = hits[h];
+                    if (hit.collider == null || hit.distance >= best) continue;
+                    var transform = hit.collider.transform;
+                    if (body != null && transform != null
+                        && (transform == body.transform || transform.IsChildOf(body.transform)))
+                        continue;
+                    if (hit.normal.sqrMagnitude < 0.01f) continue;
+                    best = hit.distance;
+                    point = hit.point;
+                    outward = hit.normal;
+                    found = true;
+                }
+            }
+
+            return found;
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.staff-surface", exception);
+            return false;
+        }
+    }
+
+    private static readonly UnityEngine.Vector3[] RockProbes =
+    {
+        UnityEngine.Vector3.down,
+        UnityEngine.Vector3.up,
+        UnityEngine.Vector3.forward,
+        UnityEngine.Vector3.back,
+        UnityEngine.Vector3.left,
+        UnityEngine.Vector3.right,
+        new(1f, -1f, 0f),
+        new(-1f, -1f, 0f),
+        new(0f, -1f, 1f),
+        new(0f, -1f, -1f),
+    };
 
     /// <summary>The rock under the standing harness. The climber's own body is not the ledge.</summary>
     private static Vector3 LedgeUnder(Vector3 standing)
@@ -382,9 +531,9 @@ internal static partial class RopeInterop
 
     private static NetworkManager _topAnchorNetwork;
 
-    private static void DrawHeldLine(NetworkManager network)
+    private static void DrawHeldLine(NetworkManager network, bool retired)
     {
-        if (!TryGetHeldFollowerPosition(network, out var harness))
+        if (!TryGetHeldFollowerPosition(network, retired, out var harness))
         {
             HideHeldLine();
             return;
@@ -392,8 +541,16 @@ internal static partial class RopeInterop
 
         _heldPoints.Clear();
         _heldPoints.Add(new UnityEngine.Vector3(harness.X, harness.Y, harness.Z));
-        TeamAnchorSession.CopyPath(_heldChain);
-        TeamAnchorSession.CopyIds(_staffIds);
+        if (retired)
+        {
+            TeamAnchorSession.CopyRetiredPath(_heldChain);
+            TeamAnchorSession.CopyRetiredIds(_staffIds);
+        }
+        else
+        {
+            TeamAnchorSession.CopyPath(_heldChain);
+            TeamAnchorSession.CopyIds(_staffIds);
+        }
         for (var i = 0; i < _heldChain.Count; i++)
         {
             var id = i < _staffIds.Count ? _staffIds[i] : 0;
@@ -425,16 +582,19 @@ internal static partial class RopeInterop
     /// the local climber. On the leader's client it is the follower's ghost, which
     /// is the only body in view during a practice climb.
     /// </summary>
-    private static bool TryGetHeldFollowerPosition(NetworkManager network, out Vector3 position)
+    private static bool TryGetHeldFollowerPosition(NetworkManager network, bool retired, out Vector3 position)
     {
         position = default;
-        if (TeamAnchorSession.IsLocalFollower)
+        var localCatch = retired
+            ? TeamAnchorSession.LocalKeepsCatch
+            : TeamAnchorSession.IsLocalFollower || TeamAnchorSession.LocalKeepsCatch;
+        if (localCatch)
             return TryGetClimberPosition(out position);
 
-        if (TryGetPracticeFollowerPosition(network, out position))
+        if (!retired && TryGetPracticeFollowerPosition(network, out position))
             return true;
 
-        var followerId = TeamAnchorSession.FollowerId;
+        var followerId = retired ? TeamAnchorSession.LineFollowerId : TeamAnchorSession.FollowerId;
         if (followerId <= 0) return false;
         if (RemotePlayerManager.TryGetGhostHarnessAttachPosition(followerId, out var harness)
             && TryUsePosition(harness, out position))

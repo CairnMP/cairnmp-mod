@@ -20,6 +20,22 @@ internal static class PitonRecoveryPolicy
     internal static bool RefusesHeldPiton(PartnerPose pose, bool heldByRope)
         => pose == PartnerPose.Hanging && heldByRope;
 
+    /// <summary>Who may be offered this placed piton.</summary>
+    internal enum TakeSide { None, Local, PracticeGhost }
+
+    /// <summary>
+    /// A planted staff is not gear. That piton is kept off the piton list, so the
+    /// scan never learns the id that already refuses a take. The staff pointer
+    /// itself refuses the prompt, for this climber and for the practice follower.
+    /// An ordinary piton the role cannot take is still offered to that follower.
+    /// </summary>
+    internal static TakeSide Classify(bool tracked, bool allowsTake, bool staffPointer)
+    {
+        if (staffPointer) return TakeSide.None;
+        if (tracked && !allowsTake) return TakeSide.PracticeGhost;
+        return TakeSide.Local;
+    }
+
     internal readonly struct Candidate
     {
         internal Candidate(Vector3 position, bool critical, bool bagCanTake)

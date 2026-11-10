@@ -148,11 +148,13 @@ internal sealed class HudAdapter : IGameHudApi
     {
         if (id == "revive.recall")
             Roping.RopeClipPrompt.Tick(id, true, label, cue, "<Keyboard>/r", "<Gamepad>/buttonWest");
+        else if (id == "revive.reach")
+            Roping.RopeClipPrompt.TickSkull(id, true, label);
     }
 
     public void HideControlTip(string id)
     {
-        if (id == "revive.recall")
+        if (id == "revive.recall" || id == "revive.reach")
             Roping.RopeClipPrompt.Hide(id);
     }
 
@@ -275,7 +277,7 @@ internal sealed class PlayersAdapter : IPlayersApi
 
     public IReadOnlyList<int> RemoteSleepParticipants => CollectInGameOrBivouac(_sleepParticipants);
 
-    public IReadOnlyList<int> RemotePlayersInGameOrBivouac => CollectInGameOrBivouac(_inGameOrBivouacPlayers);
+    public IReadOnlyList<int> RemotePlayersInGameOrBivouac => CollectStillInTheClimb(_inGameOrBivouacPlayers);
 
     public bool IsRemotePlayerInBivouac(int playerId)
     {
@@ -293,6 +295,26 @@ internal sealed class PlayersAdapter : IPlayersApi
             foreach (var pair in network.RemotePlayers)
                 if (PracticePartner.IsPublicRemote(pair.Key)
                     && pair.Value?.State is PlayerState.InGame or PlayerState.Bivouac)
+                    players.Add(pair.Key);
+        return players;
+    }
+
+    /// <summary>
+    /// Wall, camp, and the gap between scenes. A loading report is a zone load or a story
+    /// scene, and that climber is still in the run. The main menu stays out.
+    /// </summary>
+    internal static bool IsStillInTheClimb(PlayerState state)
+        => state is PlayerState.InGame or PlayerState.Bivouac or PlayerState.Loading;
+
+    private IReadOnlyList<int> CollectStillInTheClimb(List<int> players)
+    {
+        players.Clear();
+        var network = _network();
+        if (network != null)
+            foreach (var pair in network.RemotePlayers)
+                if (PracticePartner.IsPublicRemote(pair.Key)
+                    && pair.Value != null
+                    && IsStillInTheClimb(pair.Value.State))
                     players.Add(pair.Key);
         return players;
     }

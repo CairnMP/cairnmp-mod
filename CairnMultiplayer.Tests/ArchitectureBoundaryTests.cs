@@ -255,6 +255,19 @@ public sealed class ArchitectureBoundaryTests
         Assert.DoesNotContain("ReleaseAllAnchors()", pins, StringComparison.Ordinal);
         Assert.Contains("FollowHarnesses(", MethodBody(interop, "private bool MaintainParkedLine()"), StringComparison.Ordinal);
         Assert.Contains("StartUnsecuredFall", pitons, StringComparison.Ordinal);
+        var followerRope = MethodBody(pitons, "private static void ApplyFollowerAnchorRope(");
+        Assert.Contains("OwnsLocalChainIds", followerRope, StringComparison.Ordinal);
+        Assert.DoesNotContain("own: false", followerRope, StringComparison.Ordinal);
+        Assert.Contains("TryDetachPitonViaLifeline(", followerRope, StringComparison.Ordinal);
+        Assert.Contains("KeepUnclipped(", followerRope, StringComparison.Ordinal);
+        Assert.Contains("The next piton did not clip on.", followerRope, StringComparison.Ordinal);
+        Assert.Contains("KeepUnclipped(", MethodBody(pitons, "private static void ReleaseUnhookedPitons("), StringComparison.Ordinal);
+        Assert.Contains("RememberUnclippedPitons()", MethodBody(pitons, "internal static void SyncPitons("), StringComparison.Ordinal);
+        Assert.Contains("includedQuickdraw", MethodBody(pitons, "private static void TryTakePiton("), StringComparison.Ordinal);
+        Assert.Contains("CopyUnclipped(", MethodBody(pitons, "private static void TickPitonRecovery("), StringComparison.Ordinal);
+        var spawn = MethodBody(pitons, "private static void SpawnRemotePiton(");
+        Assert.Contains("TryAttachTeamPiton(", spawn, StringComparison.Ordinal);
+        Assert.Contains("IsLocalFollower", spawn, StringComparison.Ordinal);
 
         var fall = File.ReadAllText(Path.Combine(
             ProjectDirectory, "Internal", "Game", "Roping", "RopeInterop.Fall.cs"));
@@ -275,10 +288,14 @@ public sealed class ArchitectureBoundaryTests
             ProjectDirectory, "Internal", "Game", "GamePatchRegistry.cs"));
         Assert.Contains("MoveCapsule", bracePatch, StringComparison.Ordinal);
         Assert.Contains("walkInputSqrDeadZone", bracePatch, StringComparison.Ordinal);
-        Assert.Contains("ShouldSolveBodyMove", bracePatch, StringComparison.Ordinal);
+        Assert.Contains("StartReachingWithLimb", bracePatch, StringComparison.Ordinal);
+        Assert.Contains("CanStartReaching", bracePatch, StringComparison.Ordinal);
+        Assert.Contains("InputRequestDynoJump", bracePatch, StringComparison.Ordinal);
+        Assert.Contains("UpdateReachSmoothedInput", bracePatch, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShouldSolveBodyMove", bracePatch, StringComparison.Ordinal);
         Assert.Contains("UpdateBodyPosition", bracePatch, StringComparison.Ordinal);
         Assert.Contains("LedgeWalkingState", bracePatch, StringComparison.Ordinal);
-        Assert.Contains("ClimbingV2PawnControllerModuleHangIdle", bracePatch, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClimbingV2PawnControllerModuleHangIdle", bracePatch, StringComparison.Ordinal);
         Assert.DoesNotContain("lockClimberTimer", bracePatch, StringComparison.Ordinal);
         Assert.DoesNotContain("IsLocomotionBlocked", bracePatch, StringComparison.Ordinal);
         Assert.DoesNotMatch(@"\.securingRope\s*=(?!=)", bracePatch);
@@ -311,8 +328,18 @@ public sealed class ArchitectureBoundaryTests
             + File.ReadAllText(Path.Combine(
                 ProjectDirectory, "Internal", "Game", "Roping", "TopAnchorPlant.cs"))
             + File.ReadAllText(Path.Combine(
-                ProjectDirectory, "Internal", "Game", "Roping", "TopAnchorMessage.cs"));
+                ProjectDirectory, "Internal", "Game", "Roping", "TopAnchorMessage.cs"))
+            + File.ReadAllText(Path.Combine(
+                ProjectDirectory, "Internal", "Game", "Roping", "CutsceneStaffPolicy.cs"))
+            + File.ReadAllText(Path.Combine(
+                ProjectDirectory, "Internal", "Game", "Roping", "CutsceneStaffSession.cs"))
+            + File.ReadAllText(Path.Combine(
+                ProjectDirectory, "Internal", "Game", "Roping", "RopeInterop.Cutscene.cs"));
         Assert.DoesNotMatch(@"\.securingRope\s*=(?!=)", staff);
+        Assert.DoesNotContain("add_onCutscenePlay", staff, StringComparison.Ordinal);
+        Assert.DoesNotContain("add_OnAboutToPlayCutscene", staff, StringComparison.Ordinal);
+        Assert.DoesNotContain("Harmony.Patch", staff, StringComparison.Ordinal);
+        Assert.Contains("CurrentCutscene", staff, StringComparison.Ordinal);
 
         var heldPath = MethodBody(lengthPatch, "private static bool TryBuildHeldPath(");
         Assert.Contains("AppendChain", heldPath, StringComparison.Ordinal);
@@ -348,15 +375,55 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("postfix:", patch, StringComparison.Ordinal);
         var canGo = MethodBody(patch, "private static void ApplyCoil(");
         Assert.Contains("RopeLengthPolicy.StepAllowed", canGo, StringComparison.Ordinal);
+        Assert.Contains("_holdAnswers", canGo, StringComparison.Ordinal);
         Assert.Contains("__result = true", canGo, StringComparison.Ordinal);
         var remaining = MethodBody(patch, "private static void CapRemaining(");
         Assert.Contains("RopeLengthPolicy.ReportedRemaining", remaining, StringComparison.Ordinal);
+        Assert.Contains("_holdAnswers", remaining, StringComparison.Ordinal);
+        var swap = MethodBody(File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Players", "PracticePartnerController.cs")),
+            "private static void SwitchPlaces(");
+        Assert.Contains("RopeLengthPatch.HoldLengthAnswers()", swap, StringComparison.Ordinal);
+        Assert.Contains("RopeLengthPatch.ReleaseLengthAnswers()", swap, StringComparison.Ordinal);
+        var capture = MethodBody(File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Players", "PracticePartnerController.cs")),
+            "private static ClimbingV2PawnController.ClimbingModeSetup CaptureClimb()");
+        Assert.Contains("GenerateCurrentClimbModeSetup", capture, StringComparison.Ordinal);
+        var restore = MethodBody(File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Players", "PracticePartnerController.cs")),
+            "private static bool TryRestoreClimb(");
+        Assert.Contains("ApplyClimbModeSetup", restore, StringComparison.Ordinal);
         Assert.DoesNotContain("left >= __result", remaining, StringComparison.Ordinal);
         Assert.Contains("PawnStateType.Falling", patch, StringComparison.Ordinal);
         Assert.Contains("PawnStateType.Dead", patch, StringComparison.Ordinal);
         Assert.DoesNotContain("ClampDist", patch, StringComparison.Ordinal);
         Assert.DoesNotContain("HardValidateTargetBodyPosition", patch, StringComparison.Ordinal);
         Assert.DoesNotContain("OnRopeForbidGoingToward", patch, StringComparison.Ordinal);
+        Assert.Contains("UpdateRopeMoveLimit", patch, StringComparison.Ordinal);
+        Assert.Contains("nameof(Harness.IsSecured)", patch, StringComparison.Ordinal);
+        Assert.Contains("nameof(Harness.GetRopeDirectionOnHarness)", patch, StringComparison.Ordinal);
+        Assert.Contains("finalizer:", patch, StringComparison.Ordinal);
+        var hold = MethodBody(patch, "private static bool HoldForWalk(");
+        Assert.Contains("if (!TryPrepareWalkDirection(__instance)) return true;", hold, StringComparison.Ordinal);
+        Assert.Contains("__result = true", hold, StringComparison.Ordinal);
+        Assert.Contains("return false;", hold, StringComparison.Ordinal);
+        var walkDirection = MethodBody(patch, "private static bool DirectionForWalk(");
+        Assert.Contains("if (!TryPrepareWalkDirection(__instance)) return true;", walkDirection, StringComparison.Ordinal);
+        Assert.Contains("__result = _walkDirection", walkDirection, StringComparison.Ordinal);
+        Assert.Contains("success = true", walkDirection, StringComparison.Ordinal);
+        Assert.Contains("return false;", walkDirection, StringComparison.Ordinal);
+        Assert.Contains("_insideWalkCheck = true", MethodBody(patch, "private static void BeginWalkCheck("), StringComparison.Ordinal);
+        var endWalk = MethodBody(patch, "private static Exception EndWalkCheck(");
+        Assert.Contains("_insideWalkCheck = false", endWalk, StringComparison.Ordinal);
+        Assert.Contains("return __exception", endWalk, StringComparison.Ordinal);
+        var prepare = MethodBody(patch, "private static bool TryPrepareWalkDirection(");
+        Assert.Contains("_insideWalkCheck", prepare, StringComparison.Ordinal);
+        Assert.Contains("_holdAnswers", prepare, StringComparison.Ordinal);
+        Assert.Contains("RopeLengthPolicy.WalkDirection", prepare, StringComparison.Ordinal);
+        Assert.Contains("if (flat == null) return false;", prepare, StringComparison.Ordinal);
+        Assert.DoesNotContain("WalkDirection", canGo, StringComparison.Ordinal);
+        Assert.DoesNotContain("WalkDirection", remaining, StringComparison.Ordinal);
+        Assert.DoesNotContain("UnpatchSelf", MethodBody(patch, "private static void UnpatchWalkStop("), StringComparison.Ordinal);
         Assert.Contains("RopeLengthPatch.Install", registry, StringComparison.Ordinal);
         Assert.Contains("RopeLengthPatch.Uninstall", registry, StringComparison.Ordinal);
         Assert.Contains("RopeLengthPolicy.IsPaidOut", draw, StringComparison.Ordinal);
@@ -368,6 +435,13 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("RopeLengthReadout.Tick()", sync, StringComparison.Ordinal);
         Assert.Contains("RopeLengthReadout.Hide()", sync, StringComparison.Ordinal);
         Assert.Contains("RopeLengthReadout.Bind", bootstrap, StringComparison.Ordinal);
+        Assert.Contains("RopeLengthReadout.Install", registry, StringComparison.Ordinal);
+        var warning = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "RopeLengthReadout.cs"));
+        Assert.Contains("OnRopeForbidGoingToward", warning, StringComparison.Ordinal);
+        Assert.Contains("HasHiddenReasons", warning, StringComparison.Ordinal);
+        Assert.Contains("TryReadRemaining", warning, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShowMessage", warning, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -384,6 +458,7 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("HideRemote", source, StringComparison.Ordinal);
         Assert.Contains("TeamAnchorSession.IsLocalLeader", source, StringComparison.Ordinal);
         Assert.Contains("TeamAnchorChain.KeepsClimbotCoil", source, StringComparison.Ordinal);
+        Assert.Contains("TeamAnchorChain.FollowerKeepsSecuringClip", source, StringComparison.Ordinal);
         Assert.Contains("TeamAnchorSession.LeaderLeft", source, StringComparison.Ordinal);
         Assert.Contains("HasSecuringRope", source, StringComparison.Ordinal);
         Assert.Contains("SetAttachedToHarness(true)", source, StringComparison.Ordinal);
@@ -391,6 +466,8 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("IsAttached", source, StringComparison.Ordinal);
         Assert.Contains("SetRopeActive(false, false)", source, StringComparison.Ordinal);
         Assert.Contains("SetVisible(false, false)", source, StringComparison.Ordinal);
+        Assert.Contains("RecallClimbot()", source, StringComparison.Ordinal);
+        Assert.Contains("ClimbotRecall.Decide", source, StringComparison.Ordinal);
         Assert.Contains("SaveStillLoading()", source, StringComparison.Ordinal);
         Assert.Contains("LoadingState.LoadingSave", source, StringComparison.Ordinal);
         var robot = MethodBody(source, "private static void AfterLocalRobot(");
@@ -399,6 +476,9 @@ public sealed class ArchitectureBoundaryTests
         var armed = robot.IndexOf("TeamAnchorSession.RulesArmed", StringComparison.Ordinal);
         var unclip = robot.IndexOf("SetAttachedToHarness(false)", StringComparison.Ordinal);
         Assert.True(loading >= 0 && loading < camp && camp < armed && armed < unclip);
+        var followerClip = robot.IndexOf("FollowerKeepsSecuringClip", StringComparison.Ordinal);
+        var deactivate = robot.IndexOf("SetRopeActive(false, false)", StringComparison.Ordinal);
+        Assert.True(followerClip > unclip && deactivate > followerClip);
         var line = MethodBody(source, "private static void AfterRopeLine(");
         Assert.Contains("BivouacSyncGate.AtCamp", line, StringComparison.Ordinal);
         Assert.Contains("TeamAnchorSession.RulesArmed", line, StringComparison.Ordinal);
@@ -424,7 +504,7 @@ public sealed class ArchitectureBoundaryTests
     }
 
     [Fact]
-    public void RopeTeamSaveGateOnlyRefusesOutsideCamp()
+    public void RopeTeamSaveGateRefusesQuickSavesAndDeathSegments()
     {
         var source = File.ReadAllText(Path.Combine(
             ProjectDirectory, "Internal", "Game", "Roping", "BivouacSaveGatePatch.cs"));
@@ -440,6 +520,11 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("nameof(SavegameManager.AutoSave)", source, StringComparison.Ordinal);
         Assert.Contains("nameof(SavegameManager.QuickSave)", source, StringComparison.Ordinal);
         Assert.Contains("nameof(SavegameManager.SaveAndClose)", source, StringComparison.Ordinal);
+        Assert.Contains("nameof(SavegameManager.IncrementDeathSegmentOnSave)", source, StringComparison.Ordinal);
+        Assert.Contains("nameof(Disk.IncrementDeathSegmentOnSave)", source, StringComparison.Ordinal);
+        Assert.Contains("isQuickSave", source, StringComparison.Ordinal);
+        Assert.Contains("isQuickSave", policy, StringComparison.Ordinal);
+        Assert.Contains("RunRemainsMarked", policy, StringComparison.Ordinal);
         Assert.Contains("lastBivouacAge", source, StringComparison.Ordinal);
         Assert.Contains("lastBivouacAge", policy, StringComparison.Ordinal);
         Assert.DoesNotContain("lastBivouacDistance", source, StringComparison.Ordinal);
@@ -447,6 +532,9 @@ public sealed class ArchitectureBoundaryTests
         Assert.DoesNotContain("HoldWrite", source, StringComparison.Ordinal);
         Assert.DoesNotContain("ExitBivouac", source, StringComparison.Ordinal);
         Assert.Contains("nameof(BlockQuickSave)", source, StringComparison.Ordinal);
+        Assert.Contains("nameof(BlockAutoSave)", source, StringComparison.Ordinal);
+        Assert.Contains("nameof(BlockDeathSegment)", source, StringComparison.Ordinal);
+        Assert.Contains("nameof(BlockDiskDeathSegment)", source, StringComparison.Ordinal);
         Assert.Contains("nameof(BlockSave)", source, StringComparison.Ordinal);
         Assert.Contains("Disk.IOOperationCallback then)", source, StringComparison.Ordinal);
         Assert.Contains("Disk.IOOperationCallback thenMT)", source, StringComparison.Ordinal);
@@ -465,6 +553,21 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("StoryLaunchSetupPatch.MultiplayerStoryPending", bootstrap, StringComparison.Ordinal);
         Assert.Contains("Lobby.IsInLobby", bootstrap, StringComparison.Ordinal);
         Assert.Contains("IsHandshakeComplete", bootstrap, StringComparison.Ordinal);
+        Assert.Contains("SceneRoles.IsMainMenu", bootstrap, StringComparison.Ordinal);
+        Assert.Contains("BivouacSaveSession.Tick", File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Bivouac", "BivouacSyncGate.cs")), StringComparison.Ordinal);
+
+        var notice = File.ReadAllText(Path.Combine(roping, "BivouacSaveSlotNotice.cs"));
+        var runtime = File.ReadAllText(Path.Combine(ProjectDirectory, "Bootstrap", "Mod.Runtime.cs"));
+        Assert.Contains("Only saves in tent allowed", notice, StringComparison.Ordinal);
+        Assert.Contains("BivouacSaveSlotNotice.Refresh", runtime, StringComparison.Ordinal);
+        Assert.Contains("_loadedScenes.Contains(SceneRoles.MainMenuScene)", runtime, StringComparison.Ordinal);
+        Assert.Contains("ShowsTentOnlyNotice", policy, StringComparison.Ordinal);
+        Assert.DoesNotContain("Harmony", notice, StringComparison.Ordinal);
+        Assert.DoesNotContain("LoadGameSlotUi.Setup", notice, StringComparison.Ordinal);
+        Assert.DoesNotContain("ref Savegame", notice, StringComparison.Ordinal);
+        Assert.DoesNotContain("LoadInternal", notice, StringComparison.Ordinal);
+        Assert.DoesNotContain("lastBivouacDistance", notice, StringComparison.Ordinal);
     }
 
     [Fact]

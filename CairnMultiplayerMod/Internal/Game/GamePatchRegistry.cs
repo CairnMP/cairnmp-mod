@@ -31,6 +31,7 @@ internal static class GamePatchRegistry
         new("bivouac safety", BivouacDiagnostics.Install, BivouacDiagnostics.Uninstall),
         new("direct rope team", RopeTeamFallPatch.Install, RopeTeamFallPatch.Uninstall),
         new("rope length", RopeLengthPatch.Install, RopeLengthPatch.Uninstall),
+        new("rope length warning", RopeLengthReadout.Install, RopeLengthReadout.Uninstall),
         new("rope brace", BracePatch.Install, BracePatch.Uninstall),
         new("clip-in prompt", RopeClipPromptPatch.Install, RopeClipPromptPatch.Uninstall),
         new("climbot piton recovery", ClimbotPitonRecoveryPatch.Install, ClimbotPitonRecoveryPatch.Uninstall),

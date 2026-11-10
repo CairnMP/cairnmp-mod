@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Text;
 
 namespace CairnMultiplayerMod.Internal.Game.Roping;
 
@@ -11,22 +12,34 @@ internal enum TopAnchorFact : byte
     Topped = 3,
     Leave = 4,
     Drop = 5,
+
+    /// <summary>A stick left where the leader was taken by a story scene.</summary>
+    Cutscene = 6,
 }
 
 /// <summary>One fact on the rope.top-anchor stream. Leave carries the sticks already planted.</summary>
 internal readonly struct TopAnchorPacket
 {
     internal TopAnchorPacket(TopAnchorFact fact, uint id, Vector3 position, uint[] leaveIds)
+        : this(fact, id, position, default, null, leaveIds)
+    {
+    }
+
+    internal TopAnchorPacket(TopAnchorFact fact, uint id, Vector3 position, Vector3 outward, string key, uint[] leaveIds)
     {
         Fact = fact;
         Id = id;
         Position = position;
+        Outward = outward;
+        Key = key;
         LeaveIds = leaveIds ?? Array.Empty<uint>();
     }
 
     internal TopAnchorFact Fact { get; }
     internal uint Id { get; }
     internal Vector3 Position { get; }
+    internal Vector3 Outward { get; }
+    internal string Key { get; }
     internal uint[] LeaveIds { get; }
 }
 
@@ -69,6 +82,22 @@ internal static class TopAnchorMessage
 
     internal static byte[] Drop() => new[] { (byte)TopAnchorFact.Drop };
 
+    /// <summary>Where the stick is, the direction it points out of the rock, and which scene owns it.</summary>
+    internal static byte[] Cutscene(uint id, Vector3 position, Vector3 outward, string key)
+    {
+        if (id == 0 || string.IsNullOrEmpty(key)) return null;
+        var text = Encoding.UTF8.GetBytes(key);
+        if (text.Length == 0 || text.Length > CutsceneStaffPolicy.MaxKeyBytes) return null;
+        var payload = new byte[30 + text.Length];
+        payload[0] = (byte)TopAnchorFact.Cutscene;
+        WriteUInt(payload, 1, id);
+        WriteVector(payload, 5, position);
+        WriteVector(payload, 17, outward);
+        payload[29] = (byte)text.Length;
+        Buffer.BlockCopy(text, 0, payload, 30, text.Length);
+        return payload;
+    }
+
     internal static bool TryRead(byte[] payload, out TopAnchorPacket packet)
     {
         packet = default;
@@ -103,6 +132,15 @@ internal static class TopAnchorMessage
                 return true;
             case TopAnchorFact.Drop:
                 packet = new TopAnchorPacket(fact, 0, default, Array.Empty<uint>());
+                return true;
+            case TopAnchorFact.Cutscene:
+                if (payload.Length < 30 || !TryReadUInt(payload, 1, out var sceneStick) || sceneStick == 0) return false;
+                if (!TryReadVector(payload, 5, out var sceneAt) || !TryReadVector(payload, 17, out var sceneOut)) return false;
+                var keyBytes = payload[29];
+                if (keyBytes == 0 || payload.Length < 30 + keyBytes) return false;
+                var sceneKey = Encoding.UTF8.GetString(payload, 30, keyBytes);
+                if (string.IsNullOrEmpty(sceneKey)) return false;
+                packet = new TopAnchorPacket(fact, sceneStick, sceneAt, sceneOut, sceneKey, Array.Empty<uint>());
                 return true;
             default:
                 return false;

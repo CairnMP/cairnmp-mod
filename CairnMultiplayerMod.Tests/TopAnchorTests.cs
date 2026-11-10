@@ -196,23 +196,31 @@ public sealed class TopAnchorTests
         TeamAnchorSession.OnClip(4, 4, 7, false);
         TeamAnchorSession.ReconcileLink();
 
-        Assert.True(TeamAnchorSession.LeaderLeft);
-        Assert.True(TeamAnchorSession.IsLinked);
+        Assert.False(TeamAnchorSession.IsLinked);
+        Assert.False(TeamAnchorSession.LeaderLeft);
         Assert.True(TeamAnchorSession.RulesArmed);
         Assert.Equal(2, TeamAnchorSession.Count);
         Assert.Equal(1u, FollowerAnchor());
         Assert.Equal(Stick, LeaderAnchor());
         Assert.False(TeamAnchorSession.AllowsPlacement);
+        AssertReleased();
 
         RopeLinkState.Apply(4, 7, true);
         TeamAnchorSession.OnClip(4, 4, 7, true);
 
-        Assert.False(TeamAnchorSession.LeaderLeft);
-        Assert.Equal(2, TeamAnchorSession.Count);
+        Assert.True(TeamAnchorSession.IsLinked);
+        Assert.Equal(4, TeamAnchorSession.LeaderId);
+        Assert.Equal(7, TeamAnchorSession.FollowerId);
+        Assert.Equal(0, TeamAnchorSession.Count);
+        Assert.Equal(2, TeamAnchorSession.CatchCount);
+        Assert.True(TeamAnchorSession.Protects(1));
+        Assert.True(TeamAnchorSession.Protects(Stick));
+        Assert.True(TeamAnchorSession.AllowsPlacement);
+        AssertReleased();
     }
 
     [Fact]
-    public void TheFollowerCannotRetieOverAHeldStaff()
+    public void TheFollowerStartsANewLeadWhileTheStaffIsIn()
     {
         Reset();
         RopeLinkState.Apply(4, 7, true);
@@ -228,14 +236,68 @@ public sealed class TopAnchorTests
         RopeLinkState.Apply(7, 4, true);
         TeamAnchorSession.OnClip(7, 7, 4, true);
 
-        Assert.True(TeamAnchorSession.LeaderLeft);
+        Assert.False(TeamAnchorSession.StaffHoldsPitch);
+        Assert.True(TeamAnchorSession.IsLinked);
+        Assert.Equal(7, TeamAnchorSession.LeaderId);
+        Assert.Equal(4, TeamAnchorSession.FollowerId);
+        Assert.True(TeamAnchorSession.IsLocalLeader);
+        Assert.Equal(0, TeamAnchorSession.Count);
+        Assert.Equal(2, TeamAnchorSession.CatchCount);
+        Assert.True(TopAnchorSession.HasStick);
+        Assert.True(RopeLinkState.IsLinked(7, 4));
+        AssertReleased();
+    }
+
+    [Fact]
+    public void AStandingPullLetsTheFollowerClipAndKeepsThePiton()
+    {
+        HoldAPitch();
+        TopAnchorSession.Forget(Stick);
+        TeamAnchorSession.NoteRemoved(Stick);
+
+        Assert.False(TeamAnchorSession.StaffHoldsPitch);
+        Assert.False(TopAnchorSession.HasStick);
+        Assert.Equal(1, TeamAnchorSession.Count);
+        var released = new List<TeamAnchorSession.ChainRelease>();
+        TeamAnchorSession.CopyReleased(released);
+        Assert.Empty(released);
+
+        RopeLinkState.Apply(7, 4, true);
+        TeamAnchorSession.OnClip(7, 7, 4, true);
+        TeamAnchorSession.ReconcileLink();
+
+        Assert.True(TeamAnchorSession.IsLinked);
+        Assert.Equal(7, TeamAnchorSession.LeaderId);
+        Assert.Equal(4, TeamAnchorSession.FollowerId);
+        Assert.Equal(0, TeamAnchorSession.Count);
+        Assert.Equal(1, TeamAnchorSession.CatchCount);
+        Assert.True(TeamAnchorSession.Protects(1));
+        Assert.True(RopeLinkState.IsLinked(7, 4));
+        TeamAnchorSession.CopyReleased(released);
+        Assert.Empty(released);
+    }
+
+    [Fact]
+    public void AStandingPullLetsTheLeaderClipAndKeepsThePiton()
+    {
+        HoldAPitch();
+        TopAnchorSession.Forget(Stick);
+        TeamAnchorSession.NoteRemoved(Stick);
+
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(7, 4, 7, true);
+        TeamAnchorSession.ReconcileLink();
+
         Assert.True(TeamAnchorSession.IsLinked);
         Assert.Equal(4, TeamAnchorSession.LeaderId);
         Assert.Equal(7, TeamAnchorSession.FollowerId);
-        Assert.False(TeamAnchorSession.IsLocalLeader);
-        Assert.Equal(2, TeamAnchorSession.Count);
-        Assert.True(TopAnchorSession.HasStick);
-        Assert.Equal(-1, RopeLinkState.PartnerOf(7));
+        Assert.Equal(0, TeamAnchorSession.Count);
+        Assert.Equal(1, TeamAnchorSession.CatchCount);
+        Assert.True(TeamAnchorSession.Protects(1));
+        Assert.True(RopeLinkState.IsLinked(4, 7));
+        var released = new List<TeamAnchorSession.ChainRelease>();
+        TeamAnchorSession.CopyReleased(released);
+        Assert.Empty(released);
     }
 
     [Fact]
@@ -250,21 +312,17 @@ public sealed class TopAnchorTests
         TopAnchorSession.Remember(Stick, new Vector3(0f, 4f, 0f));
         TopAnchorSession.RequestHold();
 
-        // ReleaseClip drops the link before a client runs OnClip. The hold is
-        // committed first, and the same-frame reconcile must leave the chain.
-        TeamAnchorSession.HoldForFollower();
-        RopeLinkState.Apply(4, 7, false);
+        // The untie ends the pair before the same frame reconciles the dropped link.
+        TeamAnchorSession.EndPartnership();
         TeamAnchorSession.ReconcileLink();
 
-        Assert.True(TeamAnchorSession.LeaderLeft);
-        Assert.True(TeamAnchorSession.IsLinked);
+        Assert.False(TeamAnchorSession.IsLinked);
+        Assert.False(TeamAnchorSession.LeaderLeft);
         Assert.Equal(3, TeamAnchorSession.Count);
         Assert.Equal(1u, FollowerAnchor());
         Assert.Equal(Stick, LeaderAnchor());
         Assert.True(TopAnchorSession.HasStick);
-        var released = new List<TeamAnchorSession.ChainRelease>();
-        TeamAnchorSession.CopyReleased(released);
-        Assert.Empty(released);
+        AssertReleased();
     }
 
     [Fact]
@@ -277,20 +335,19 @@ public sealed class TopAnchorTests
         TeamAnchorSession.NoteLocalLeaderPlacement(Stick, new Vector3(0f, 4f, 0f));
         TopAnchorSession.Remember(Stick, new Vector3(0f, 4f, 0f));
         TopAnchorSession.RequestHold();
-        TeamAnchorSession.HoldForFollower();
+        TeamAnchorSession.EndPartnership();
         RopeLinkState.Apply(4, 7, false);
 
         PartnerFallSession.ForceRelease = true;
         TeamAnchorSession.OnClip(4, 4, 7, false);
 
-        Assert.True(TeamAnchorSession.LeaderLeft);
-        Assert.True(TeamAnchorSession.IsLinked);
+        Assert.False(TeamAnchorSession.IsLinked);
         Assert.Equal(2, TeamAnchorSession.Count);
         Assert.Equal(1u, FollowerAnchor());
         Assert.Equal(Stick, LeaderAnchor());
         Assert.True(TopAnchorSession.HasStick);
-        Assert.False(TopAnchorSession.HoldRequested);
         Assert.False(PartnerFallSession.ForceRelease);
+        AssertReleased();
     }
 
     [Fact]
@@ -418,11 +475,85 @@ public sealed class TopAnchorTests
 
         TeamAnchorSession.OnClip(4, 7, 4, false);
 
+        Assert.True(TeamAnchorSession.HasProtection);
+        Assert.True(TeamAnchorSession.Protects(1));
+        Assert.False(TeamAnchorSession.IsLinked);
+        AssertReleased();
+    }
+
+    [Fact]
+    public void EndingTheSessionReleasesTheCatchAStaffUntieLeft()
+    {
+        HoldAPitch();
+        Assert.True(TeamAnchorSession.PitchRemains);
+
+        TeamAnchorSession.Clear();
+
+        Assert.False(TeamAnchorSession.PitchRemains);
         Assert.False(TeamAnchorSession.HasProtection);
+        Assert.False(TeamAnchorSession.HasRetiredCatch);
+        Assert.False(TopAnchorSession.HasStick);
         var released = new List<TeamAnchorSession.ChainRelease>();
         TeamAnchorSession.CopyReleased(released);
         var only = Assert.Single(released);
         Assert.Equal(1u, only.Id);
+        Assert.False(only.LocalId);
+    }
+
+    [Fact]
+    public void ANewLeadKeepsACatchWhoseNumberMatchesAHostPiton()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(7, 4, 7, true);
+        TeamAnchorSession.NoteRemotePlacement(4, 5, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteRemotePlacement(4, Stick, new Vector3(0f, 4f, 0f));
+        TopAnchorSession.Remember(Stick, new Vector3(0f, 4f, 0f));
+        TopAnchorSession.RequestHold();
+        RopeLinkState.Apply(4, 7, false);
+        TeamAnchorSession.OnClip(7, 4, 7, false);
+
+        RopeLinkState.Apply(7, 4, true);
+        TeamAnchorSession.OnClip(7, 7, 4, true);
+        TeamAnchorSession.NoteLocalLeaderPlacement(5, new Vector3(1f, 2f, 0f));
+
+        TeamAnchorSession.NoteLocalRemoval(5);
+
+        Assert.Equal(0, TeamAnchorSession.Count);
+        Assert.True(TeamAnchorSession.Protects(5));
+        Assert.True(TeamAnchorSession.Protects(Stick));
+        AssertReleased();
+
+        TeamAnchorSession.NoteAuthoritativeRemoval(5);
+
+        Assert.False(TeamAnchorSession.Protects(5));
+        Assert.True(TeamAnchorSession.Protects(Stick));
+        AssertReleased();
+    }
+
+    [Fact]
+    public void StayingClippedAfterAStaffKeepsTheSameLeader()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+        TeamAnchorSession.NoteLocalLeaderPlacement(1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteLocalLeaderPlacement(Stick, new Vector3(0f, 4f, 0f));
+        TopAnchorSession.Remember(Stick, new Vector3(0f, 4f, 0f));
+
+        Assert.True(TeamAnchorSession.IsLinked);
+        Assert.Equal(4, TeamAnchorSession.LeaderId);
+        Assert.Equal(7, TeamAnchorSession.FollowerId);
+        Assert.True(TeamAnchorSession.AllowsPlacement);
+        Assert.Equal(2, TeamAnchorSession.Count);
+        Assert.Equal(0, TeamAnchorSession.CatchCount);
+    }
+
+    private static void AssertReleased()
+    {
+        var released = new List<TeamAnchorSession.ChainRelease>();
+        TeamAnchorSession.CopyReleased(released);
+        Assert.Empty(released);
     }
 
     private static uint FollowerAnchor()
@@ -435,6 +566,22 @@ public sealed class TopAnchorTests
     {
         Assert.True(TeamAnchorSession.TryGetLeaderAnchor(out var id, out _));
         return id;
+    }
+
+    private static void HoldAPitch()
+    {
+        Reset();
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(7, 4, 7, true);
+        TeamAnchorSession.NoteRemotePlacement(4, 1, new Vector3(0f, 1f, 0f));
+        TeamAnchorSession.NoteRemotePlacement(4, Stick, new Vector3(0f, 4f, 0f));
+        TopAnchorSession.Remember(Stick, new Vector3(0f, 4f, 0f));
+        TopAnchorSession.RequestHold();
+        RopeLinkState.Apply(4, 7, false);
+        TeamAnchorSession.OnClip(7, 4, 7, false);
+        Assert.False(TeamAnchorSession.IsLinked);
+        Assert.True(TeamAnchorSession.HasProtection);
+        Assert.True(TopAnchorSession.HasStick);
     }
 
     private static void Reset()

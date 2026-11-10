@@ -59,6 +59,18 @@ internal static class TopAnchorPolicy
 
     internal static bool TryNearest(
         IReadOnlyList<uint> ids, IReadOnlyDictionary<uint, Vector3> positions, Vector3 climber, out uint id)
+        => TryNearest(ids, positions, climber, out id, skip: null);
+
+    /// <summary>
+    /// The nearest stick in the ledge volume. <paramref name="skip"/> drops sticks that
+    /// are not pulled by standing there, such as one left by a story scene.
+    /// </summary>
+    internal static bool TryNearest(
+        IReadOnlyList<uint> ids,
+        IReadOnlyDictionary<uint, Vector3> positions,
+        Vector3 climber,
+        out uint id,
+        System.Func<uint, bool> skip)
     {
         id = 0;
         var best = float.MaxValue;
@@ -66,6 +78,7 @@ internal static class TopAnchorPolicy
         for (var i = 0; i < ids.Count; i++)
         {
             var candidate = ids[i];
+            if (skip != null && skip(candidate)) continue;
             if (!positions.TryGetValue(candidate, out var stick) || !InVolume(stick, climber)) continue;
             var dx = climber.X - stick.X;
             var dz = climber.Z - stick.Z;
@@ -79,7 +92,23 @@ internal static class TopAnchorPolicy
         return found;
     }
 
-    internal static Vector3 TiePoint(Vector3 lip) => new(lip.X, lip.Y + TieHeightMeters, lip.Z);
+    internal static Vector3 TiePoint(Vector3 lip) => TiePoint(lip, new Vector3(0f, 1f, 0f));
+
+    /// <summary>The rope meets the head of the stick, out along the direction it leaves the rock.</summary>
+    internal static Vector3 TiePoint(Vector3 lip, Vector3 outward)
+    {
+        var dir = OutwardOrUp(outward);
+        return lip + dir * TieHeightMeters;
+    }
+
+    /// <summary>A missing or flat direction stands the stick upright.</summary>
+    internal static Vector3 OutwardOrUp(Vector3 outward)
+    {
+        if (!Finite(outward)) return new Vector3(0f, 1f, 0f);
+        var length = outward.Length();
+        if (length < 0.001f) return new Vector3(0f, 1f, 0f);
+        return outward / length;
+    }
 
     /// <summary>
     /// How far to raise the bone so the shaft tip sits in the lip. False when the measured

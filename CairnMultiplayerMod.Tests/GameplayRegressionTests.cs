@@ -359,13 +359,16 @@ public sealed class GameplayRegressionTests
     [Fact]
     public void RopeTeamDoesNotReviveOnTheFace()
     {
-        var (runtime, _, game) = Create(new ReviveFeature());
+        var (runtime, host, game) = Create(new ReviveFeature());
         runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
 
         Assert.False(game.LifeImpl.CanRevive(2));
         Assert.False(runtime.ExecuteHostCommand(2, Command("revive.request", new ReviveRequest(1))).Committed);
         Assert.Equal(1, game.InventoryImpl.HealingItems);
-        Assert.Equal("Guest is down. Reach a bivouac to bring them back.", game.HudImpl.Messages["revive.notice"]);
+        Assert.False(game.HudImpl.Messages.ContainsKey("revive.notice"));
+
+        host.Tick(FeaturePhase.Always);
+        Assert.Equal(ReviveFeature.ReachLabel, game.HudImpl.Tips["revive.reach"].Label);
     }
 
     [Fact]
@@ -511,6 +514,39 @@ public sealed class GameplayRegressionTests
     }
 
     [Fact]
+    public void APartnerBetweenScenesStillKeepsTheRunOpen()
+    {
+        var (runtime, host, game) = Create(new ReviveFeature());
+        // A zone load and a story scene both look like this: the partner is still in the
+        // session, just not on the wall or in camp for the moment.
+        game.PlayersImpl.Loading = new[] { 2 };
+
+        Assert.True(game.LifeImpl.ReportDeath());
+        game.TimeImpl.Now += 600f;
+        host.Tick(FeaturePhase.Always);
+
+        Assert.True(game.LifeImpl.IsDown);
+        Assert.False(game.LifeImpl.RunEnded);
+
+        runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
+        host.Tick(FeaturePhase.Always);
+        Assert.True(game.LifeImpl.RunEnded);
+    }
+
+    [Fact]
+    public void APartnerWhoLeavesTheClimbEndsTheRun()
+    {
+        var (_, host, game) = Create(new ReviveFeature());
+        game.PlayersImpl.Loading = new[] { 2 };
+        Assert.True(game.LifeImpl.ReportDeath());
+
+        game.PlayersImpl.Loading = Array.Empty<int>();
+        host.Tick(FeaturePhase.Always);
+
+        Assert.True(game.LifeImpl.RunEnded);
+    }
+
+    [Fact]
     public void InFreeSoloNoCampBringsTheDeadBack()
     {
         var (runtime, host, game) = Create(new ReviveFeature(), MultiplayerMode.FreeSolo);
@@ -535,6 +571,7 @@ public sealed class GameplayRegressionTests
         host.Tick(FeaturePhase.Always);
 
         Assert.False(game.HudImpl.Tips.ContainsKey("revive.recall"));
+        Assert.False(game.HudImpl.Tips.ContainsKey("revive.reach"));
         Assert.Equal("Guest is out of the climb.", game.HudImpl.Messages["revive.notice"]);
     }
 
@@ -691,9 +728,11 @@ public sealed class GameplayRegressionTests
         game.PlayersImpl.InGame = new[] { 2 };
         runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
 
-        // Outside a camp there is nothing to offer, however many climbers are down.
+        // Outside a camp the walk stays on screen. There is no key to press yet.
         host.Tick(FeaturePhase.Always);
         Assert.False(game.HudImpl.Tips.ContainsKey("revive.recall"));
+        Assert.Equal(ReviveFeature.ReachLabel, game.HudImpl.Tips["revive.reach"].Label);
+        Assert.Equal("", game.HudImpl.Tips["revive.reach"].Cue);
 
         // The approach, before the rest. The dead partner still holds the door.
         game.StateImpl.InVolume = true;
@@ -701,21 +740,69 @@ public sealed class GameplayRegressionTests
         host.Tick(FeaturePhase.Always);
         Assert.Equal(ReviveFeature.RecallLabel, game.HudImpl.Tips["revive.recall"].Label);
         Assert.Equal(ReviveFeature.RecallCue, game.HudImpl.Tips["revive.recall"].Cue);
+        Assert.False(game.HudImpl.Tips.ContainsKey("revive.reach"));
 
         game.StateImpl.InVolume = false;
         game.StateImpl.Camp = null;
         host.Tick(FeaturePhase.Always);
         Assert.False(game.HudImpl.Tips.ContainsKey("revive.recall"));
+        Assert.Equal(ReviveFeature.ReachLabel, game.HudImpl.Tips["revive.reach"].Label);
 
         game.StateImpl.InBivouac = true;
         game.StateImpl.Camp = new WorldPosition(10, 20, 30);
         host.Tick(FeaturePhase.Always);
         Assert.Equal(ReviveFeature.RecallLabel, game.HudImpl.Tips["revive.recall"].Label);
+        Assert.False(game.HudImpl.Tips.ContainsKey("revive.reach"));
 
         // And it goes away again when everyone is back on their feet.
         runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(false)));
         host.Tick(FeaturePhase.Always);
         Assert.False(game.HudImpl.Tips.ContainsKey("revive.recall"));
+        Assert.False(game.HudImpl.Tips.ContainsKey("revive.reach"));
+    }
+
+    [Fact]
+    public void TheReachRowHidesWhenTheSurvivorDiesOrThePartnerLeaves()
+    {
+        var (runtime, host, game) = Create(new ReviveFeature());
+        runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
+        host.Tick(FeaturePhase.Always);
+        Assert.Equal(ReviveFeature.ReachLabel, game.HudImpl.Tips["revive.reach"].Label);
+
+        game.LifeImpl.IsDown = true;
+        host.Tick(FeaturePhase.Always);
+        Assert.False(game.HudImpl.Tips.ContainsKey("revive.reach"));
+
+        game.LifeImpl.IsDown = false;
+        host.Tick(FeaturePhase.Always);
+        Assert.Equal(ReviveFeature.ReachLabel, game.HudImpl.Tips["revive.reach"].Label);
+
+        runtime.NotifyPlayerLeft(new MultiplayerPlayer(2, "Guest", false, false));
+        host.Tick(FeaturePhase.Always);
+        Assert.False(game.HudImpl.Tips.ContainsKey("revive.reach"));
+    }
+
+    [Fact]
+    public void TheReachRowHidesWhenTheSessionEnds()
+    {
+        var (runtime, host, game) = Create(new ReviveFeature());
+        runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
+        host.Tick(FeaturePhase.Always);
+        Assert.True(game.HudImpl.Tips.ContainsKey("revive.reach"));
+
+        host.NotifySessionEnded();
+        Assert.False(game.HudImpl.Tips.ContainsKey("revive.reach"));
+    }
+
+    [Fact]
+    public void AFaceRescueStillUsesTheCornerLine()
+    {
+        var (runtime, host, game) = Create(new ReviveFeature(), rules: () => FaceRescue);
+        runtime.ExecuteHostCommand(2, Command("revive.downed", new DownedChanged(true)));
+        host.Tick(FeaturePhase.Always);
+
+        Assert.Equal("Guest is down. Reach them and revive them.", game.HudImpl.Messages["revive.notice"]);
+        Assert.False(game.HudImpl.Tips.ContainsKey("revive.reach"));
     }
 
     [Fact]
@@ -1479,10 +1566,12 @@ public sealed class GameplayRegressionTests
         internal float TargetX = 2;
         internal IReadOnlyList<int> InGame = Array.Empty<int>();
         internal IReadOnlyList<int> Camping = Array.Empty<int>();
+        internal IReadOnlyList<int> Loading = Array.Empty<int>();
         internal float LocalY;
         public IReadOnlyList<int> RemotePlayersInGame => InGame;
         public IReadOnlyList<int> RemoteSleepParticipants => new[] { 2 };
-        public IReadOnlyList<int> RemotePlayersInGameOrBivouac => InGame.Concat(Camping).ToArray();
+        public IReadOnlyList<int> RemotePlayersInGameOrBivouac
+            => InGame.Concat(Camping).Concat(Loading).ToArray();
         public bool IsRemotePlayerInBivouac(int playerId) => Camping.Contains(playerId);
         /// <summary>False while the local climber is camped: the real adapter has no location
         /// for them then, because gameplay sync stands down in a bivouac.</summary>
