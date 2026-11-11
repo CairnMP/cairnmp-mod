@@ -256,6 +256,9 @@ public partial class Mod
 
         Bivouac.Update();
 
+        // Every mode, solo included, and before the piton sync below can see them.
+        RopeInterop.TickSavedPitonCleanup();
+
         using (Measure(PerformanceArea.Network)) Network.Update();
 
         // Features that must keep running whatever the state (input, HUD upkeep) — placed

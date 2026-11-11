@@ -39,8 +39,6 @@ internal static class GamePatchRegistry
         new("team piton drill", TeamPitonPlacePatch.Install, TeamPitonPlacePatch.Uninstall),
         new("multiplayer pause", MultiplayerPausePatch.Install, MultiplayerPausePatch.Uninstall),
         new("main-menu buttons", MainMenuButtonIntegration.Install, MainMenuButtonIntegration.Uninstall),
-        new("savegame piton guard", SavegamePitonGuardPatch.Install, SavegamePitonGuardPatch.Uninstall),
-        new("saved piton load guard", SavedPitonLoadGuard.Install, SavedPitonLoadGuard.Uninstall),
         new("bivouac save", BivouacSaveGatePatch.Install, BivouacSaveGatePatch.Uninstall),
         new("bivouac entry", BivouacEntryGatePatch.Install, BivouacEntryGatePatch.Uninstall),
         new("native performance probe", NativePerformanceProbe.Install, NativePerformanceProbe.Uninstall),

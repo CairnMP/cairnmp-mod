@@ -47,6 +47,21 @@ All notable CairnMP changes are documented here. Releases follow
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- Saves no longer lose their pitons. The mod's save guard on Cairn's piton
+  writer made every piton on the rope save as an empty record, in every mode.
+  Such a save loaded its pitons at no position, logged "invalid
+  savedPlayerPosition", let climbers fall through the rock, and could crash the
+  game. The guard is removed, and pitons save as Cairn writes them. (#37, found
+  by @XanYder, with @Tippy-Tipster in #39)
+- A save that already holds those empty pitons loads again. Once the world has
+  loaded, pitons with no valid position are taken off the rope and the log says
+  how many. Pitons with a real position are left alone. Other climbers are not
+  told of a take or a removal, and the save file is not rewritten until the next
+  save. (#37, #39)
+
 ## [2.5.0] — 2026-11-10 (beta)
 
 > A Rope Team rebuild and a controller radial menu. The lobby protocol goes from 16

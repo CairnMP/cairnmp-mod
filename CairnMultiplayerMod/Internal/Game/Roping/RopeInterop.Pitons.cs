@@ -887,6 +887,9 @@ internal static partial class RopeInterop
                     var transform = piton.transform;
                     if (transform == null || transform.Pointer == IntPtr.Zero) continue;
                     var p = transform.position;
+                    // A hollow saved piton is not anyone's piton. The session never hears
+                    // of it, so its clean-up is neither a take nor a withdrawal.
+                    if (SavedPitonLoadGuard.IsHollow(p.x, p.y, p.z)) continue;
                     position = new System.Numerics.Vector3(p.x, p.y, p.z);
                 }
                 catch (Exception exception)
