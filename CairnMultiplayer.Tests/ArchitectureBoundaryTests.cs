@@ -208,6 +208,59 @@ public sealed class ArchitectureBoundaryTests
     }
 
     [Fact]
+    public void ThePitonSaveGuardIsNoLongerRegistered()
+    {
+        var registry = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "GamePatchRegistry.cs"));
+
+        // Its finalizer on Piton.WriteToSavegame emptied every saved piton record.
+        Assert.DoesNotContain("SavegamePitonGuardPatch", registry, StringComparison.Ordinal);
+        Assert.DoesNotContain("savegame piton guard", registry, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SavedPitonLoadGuard", registry, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "SavegamePitonGuardPatch.cs")));
+    }
+
+    [Fact]
+    public void NoPatchTakesASavegameRecordByReference()
+    {
+        // The detour cannot carry a by-reference Savegame.* record: the game then reads
+        // or writes the wrong memory, and the save or the load is silently damaged.
+        var byReference = new Regex(
+            @"\b(?:ref|in|out)\s+(?:\w+\.)*Savegame\b|typeof\((?:\w+\.)*Savegame[\w.]*\)\.MakeByRefType",
+            RegexOptions.CultureInvariant);
+        var violations = SourceFilesUnder(string.Empty)
+            .Where(file => byReference.IsMatch(File.ReadAllText(file)))
+            .Select(file => Path.GetRelativePath(ProjectDirectory, file))
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void HollowSavedPitonsLeaveThroughCairnsOwnRemoval()
+    {
+        var cleanup = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "RopeInterop.SavedPitons.cs"));
+        var remove = MethodBody(cleanup, "private static bool TryRemoveHollowPiton(");
+
+        Assert.DoesNotContain("HarmonyLib", cleanup, StringComparison.Ordinal);
+        Assert.Contains("lifeline.RemovePiton(piton)", remove, StringComparison.Ordinal);
+        // The ripped-out path makes the piton physical, and this one has no position.
+        Assert.DoesNotContain(".DetachPiton(", remove, StringComparison.Ordinal);
+        Assert.Contains("SavedPitonLoadGuard.IsHollow(", cleanup, StringComparison.Ordinal);
+
+        // The piton sync never sees one, so removing it is not announced as a take or a withdrawal.
+        var pitons = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "RopeInterop.Pitons.cs"));
+        Assert.Contains(
+            "SavedPitonLoadGuard.IsHollow(",
+            MethodBody(pitons, "private static bool TryCollectPlacedPitons("),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CooperativeRopeStaysATetherAndLeavesProtectionToRealPitons()
     {
         var interop = File.ReadAllText(Path.Combine(
