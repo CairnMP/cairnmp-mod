@@ -31,13 +31,13 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **16**; lobby admission may also require the exact mod version.
+> protocol is **17**; lobby admission may also require the exact mod version.
 
 ## Features
 
 | Area | Included functionality |
 | --- | --- |
-| Climbing | A cooperative rope between partners; your own pitons protect your falls |
+| Climbing | Two climbers on one rope. Only the leader places pitons. Untying takes those pitons off the rope; they stay in the rock. With none left on the rope, a fall drops both |
 | Players | Position, animation, cosmetics, lamps, hand and finger poses |
 | World | Weather, time of day, pitons, shared ground items, and world pings |
 | Communication | In-game chat, completion, host commands, and experimental proximity voice |
@@ -51,21 +51,59 @@ base URL for local testing with `CAIRNMP_API_URL`.
 ### Controller
 
 CairnMP uses **View/Share/Create** as a modifier so its commands do not replace
-Cairn's normal controller layout. Hold the modifier first, then press the action
-button; Cairn's native actions are temporarily blocked while it is held.
+Cairn's normal controller layout. Cairn's native actions are temporarily blocked
+while it is held.
+
+Hold `View/Share` to open a radial menu. Aim with the right stick, then release
+`View/Share` to choose the highlighted action. Release with the stick centred to
+choose nothing.
+
+| Radial menu item | Action |
+| --- | --- |
+| Multiplayer panel | Open or close the multiplayer panel |
+| Attach or detach rope | Attach or detach the cooperative rope |
+| Ping | Place a multiplayer ping |
+| Show or hide names | Show or hide player names |
+| Pick up shared item | Pick up a shared ground item |
+
+Prefer button combinations? In the game's settings, open the **CairnMP** page and set
+**Shortcut style** to *Button combos*. Hold `View/Share` and press `Y/Triangle` (rope),
+`D-pad ↑` (names), `A/Cross` (pick up), `RB/R1` (ping) or `Menu` (multiplayer panel). The same page lists the shortcuts for the
+style you have chosen.
+
+A few actions stay as button combinations in either style because they are held or
+repeated, or because they only apply in the backpack.
+Hold `View/Share` first, then press the button; the menu steps aside.
+
+Press the right stick to attach or detach the cooperative rope. `L` does the same
+on a keyboard.
+
+Temporary test tools, taken out after the rope-team trial. The practice climber is
+off unless `PracticeClimber = true` is set under `[Debug]` in
+`UserData/MelonPreferences.cfg`. Then `F9` spawns or removes
+a practice climber beside the host. `H` switches places with him. You climb
+from his spot with the normal controls, and the body you leave stays there.
+Switching back puts you on the same holds. Leaving the wall stands you where
+he stood. A spot in the air hovers instead of dropping you.
+`H` again puts you back. Switching places leaves every piton on the rope, so
+the follower can take the ones above the anchor. A planted staff is not one
+of them. A piton on the rope catches a fall.
 
 | Controller shortcut | Action |
 | --- | --- |
 | `View/Share` + `Menu/Options` | Open or close the multiplayer panel |
-| `View/Share` + `Y/△` | Attach or detach the cooperative rope |
 | `View/Share` + `A/✕` | Pick up a shared ground item |
 | `View/Share` + `X/□` | Give the selected backpack item |
 | `View/Share` + `B/○` | Drop the selected backpack item |
 | `View/Share` + D-pad `←` / `→` | Select a shared ground item |
-| `View/Share` + D-pad `↑` | Show or hide player names |
-| `View/Share` + `RB/R1` | Place a multiplayer ping |
 | Hold `View/Share` + `LB/L1` | Push to talk |
 | `View/Share` + right-stick click | Emergency input release |
+| Hold Square (`X` on an Xbox pad), or hold `R` | Revive partner at a camp |
+
+Hold Square or `R` for about half a second while you are at a camp and a partner is down.
+View/Share plus Square still gives an item. After a death the view flies free. On a pad the
+left stick moves, the right stick looks, the right trigger rises, the left trigger sinks,
+and holding the left stick goes faster. The mouse and WASD do the same.
 
 The multiplayer panel supports D-pad/stick navigation, confirm, and `B/○` to
 close. Text chat and manual lobby-code entry still require text input; public
@@ -93,8 +131,8 @@ an argument as `<player>`.
 
 Select an ordinary consumable in Cairn’s backpack. The native action bar adds:
 
-- **`G` or `View/Share + X/□` — Give nearest:** transfer one unit to the nearest eligible player;
-- **`X` or `View/Share + B/○` — Drop:** place one unit into the shared world.
+- **`G` or `View/Share` + `X/Square` — Give nearest:** transfer one unit to the nearest eligible player;
+- **`X` or `View/Share` + `B/Circle` — Drop:** place one unit into the shared world.
 
 | Rule | Limit |
 | --- | ---: |
@@ -108,7 +146,7 @@ the same area. The prompts are disabled while an item is being dragged or the ba
 is busy.
 
 Dropped items are owned by the host, synchronized to every player, and picked up
-with **`E`** or **`View/Share + A/✕`**. If the recipient’s backpack is full, the item returns to the ground
+with **`E`** or the radial menu's *Pick up shared item*. If the recipient’s backpack is full, the item returns to the ground
 instead of being destroyed or duplicated.
 
 > [!NOTE]
@@ -411,6 +449,10 @@ notes are that changelog section. A tag that disagrees with `versions.json`, or 
 version without a changelog section, fails before anything is built. A suffixed
 tag (`vx.y.z-r2`) republishes the same version.
 
+Credit first-time contributors under `### New contributors` in that section. Once
+published, the notes are posted to Discord if the webhook secret below is set; if
+that post fails, **Re-run failed jobs** sends it again without touching the release.
+
 ### One-time setup
 
 The build needs the game's generated assemblies, which must never be published:
@@ -433,6 +475,10 @@ Until LavaGang releases the fix for non-ASCII game paths
 [patched fork](https://github.com/yutho-o/MelonLoader/tree/cairnmp)'s
 `v0.7.2-cairnmp.N` build; afterwards, the official `MelonLoader.x64.zip`. Its URL
 and SHA-256 are pinned in the workflow and in the launcher: change both together.
+
+To announce releases on Discord, create a webhook in the channel's settings and add
+its full URL as the `DISCORD_WEBHOOK_URL` Actions secret of this repository. Without
+the secret, releases publish as usual and nothing is posted.
 
 ## Versioning
 

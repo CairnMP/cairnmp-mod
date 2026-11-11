@@ -2,9 +2,11 @@ using System;
 using System.Linq;
 using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Framework;
+using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game;
 using CairnMultiplayerMod.Internal.Game.Players;
+using CairnMultiplayerMod.Internal.Game.Roping;
 using CairnMultiplayerMod.Internal.Game.World;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -64,6 +66,7 @@ public partial class Mod
         if (strandedConnection)
         {
             LoggerInstance.Msg("[State] Returned to MainMenu — auto-disconnecting");
+            Rope.ClearLinks();
             Network.Disconnect();
             _panel.SetStatus("Disconnected (returned to menu)", false);
         }
@@ -74,8 +77,8 @@ public partial class Mod
             return;
         }
 
-        RemotePlayerManager.ClearAll();
         Rope.ClearLinks();
+        RemotePlayerManager.ClearAll();
     }
 
     public override void OnSceneWasUnloaded(int buildIndex, string sceneName)
@@ -132,6 +135,34 @@ public partial class Mod
             : null;
     }
 
+    public override void OnLateUpdate()
+    {
+        // A second copy on this PC is only useful if the climber you are not
+        // controlling stays active. Re-apply every frame in case the game clears
+        // the flag when the window loses focus.
+        if (_keepSimulatingWhenUnfocused)
+            Application.runInBackground = true;
+
+        if (CrashHandler.IsFatal) return;
+        try
+        {
+            Internal.Game.Roping.TopAnchorPlant.Apply();
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.staff-plant", exception);
+        }
+
+        try
+        {
+            Internal.Game.Roping.RopeClipPrompt.ApplyLabel();
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.clip-prompt.label", exception);
+        }
+    }
+
     public override void OnUpdate()
     {
         if (CrashHandler.IsFatal)
@@ -162,10 +193,24 @@ public partial class Mod
         // Arm controller shortcuts only after their modifier has already blocked Cairn for
         // one frame. This runs before inventory/features so every consumer sees one coherent
         // controller snapshot and secondary buttons cannot trigger both action sets.
-        ModControllerInput.Update();
+        var controllerShortcutsAvailable = (_multiplayerModeActive || SceneRoles.IsMainMenu(CurrentScene))
+                                           && !MultiplayerPausePatch.IsPauseMenuActive;
+        // The backpack only takes the give/drop combos; its View/Share press must neither open
+        // the radial menu nor close the screen.
+        var backpackOpen = _multiplayerModeActive && _inventory?.IsBackpackVisible == true;
+        ModControllerInput.Update(controllerShortcutsAvailable && !backpackOpen, Time.unscaledDeltaTime);
         InputCaptureState.IsControllerShortcutCaptured = ModControllerInput.IsModifierHeld
-            && (_multiplayerModeActive || SceneRoles.IsMainMenu(CurrentScene));
+                                                         && controllerShortcutsAvailable;
         InputInterop.ReconcileGameplayInput(InputCaptureState.WantsGameplayBlocked);
+        InputInterop.SuppressNativeInput(
+            blockViewShare: backpackOpen && controllerShortcutsAvailable,
+            blockCameraLook: ModControllerInput.IsRadialHeld,
+            blockFaceButtons: backpackOpen && controllerShortcutsAvailable && ModControllerInput.IsModifierPressedNow);
+
+        if (ModControllerInput.RadialMenu.IsVisible) _radialContext = BuildRadialContext();
+
+        if (_multiplayerModeActive && ModControllerInput.PressedThisFrame is { } pressedShortcut)
+            _game?.Hud.ShowMessage("controller-shortcut", ControllerShortcutBindings.FeedbackFor(pressedShortcut, ControllerPreferences.UseRadialMenu), 1.5f);
 
         if (_multiplayerModeActive)
         {
@@ -196,6 +241,11 @@ public partial class Mod
             using var performance = Measure(PerformanceArea.Ui);
             _mainMenu.Tick();
         }
+
+        // Background scenes load on top of MainMenu and become CurrentScene. The save
+        // cards are still up then, so the tent line follows the loaded menu scene.
+        if (_loadedScenes.Contains(SceneRoles.MainMenuScene))
+            BivouacSaveSlotNotice.Refresh();
 
         using (Measure(PerformanceArea.Network))
         {
@@ -244,6 +294,12 @@ public partial class Mod
         Bivouac.TickRecoveryLog();
 
         StartGame.Tick();
+
+        try
+        {
+            PracticePartnerController.Tick(Network, _runtimeState);
+        }
+        catch (Exception ex) { LoggerInstance.Error($"[Practice] tick failed: {ex.Message}"); }
 
         try
         {
@@ -319,6 +375,15 @@ public partial class Mod
         return Enum.TryParse<Key>(name, true, out var result) ? result : fallback;
     }
 
+    private RadialContext _radialContext;
+
+    /// <summary>Gathered once a frame while the radial menu is open, not on every IMGUI pass.</summary>
+    private RadialContext BuildRadialContext()
+    {
+        var ropeAttached = Network != null && RopeLinkState.PartnerOf(Network.LocalPlayerId) >= 0;
+        return new RadialContext(ropeAttached, RemotePlayerManager.ShowNames);
+    }
+
     private void TickNameToggleInput()
     {
         var keyboardPressed = Keyboard.current?[Key.N].wasPressedThisFrame == true;
@@ -382,6 +447,10 @@ public partial class Mod
         Features?.DrawHud();
         if (_multiplayerModeActive)
             _hud?.Draw();
+        RadialMenuView.Draw(ModControllerInput.RadialMenu, _radialContext);
+        if (_voice != null && _voice.TryGetShortcutGuideRect(out var guideRect))
+            ShortcutGuideView.Draw(guideRect, ShortcutGuide.Columns(ControllerPreferences.UseRadialMenu,
+                _connectKey.ToString(), _disconnectKey.ToString(), CairnMultiplayerMod.Internal.Game.Voice.VoicePreferences.PushToTalkKey.Value));
     }
 
     private void TickConnectingStatus()

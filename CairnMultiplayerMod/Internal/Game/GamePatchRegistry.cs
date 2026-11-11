@@ -30,13 +30,23 @@ internal static class GamePatchRegistry
         new("netplay frame", NetplaySetFramePatch.Install, NetplaySetFramePatch.Uninstall),
         new("bivouac safety", BivouacDiagnostics.Install, BivouacDiagnostics.Uninstall),
         new("direct rope team", RopeTeamFallPatch.Install, RopeTeamFallPatch.Uninstall),
+        new("rope length", RopeLengthPatch.Install, RopeLengthPatch.Uninstall),
+        new("rope length warning", RopeLengthReadout.Install, RopeLengthReadout.Uninstall),
+        new("rope brace", BracePatch.Install, BracePatch.Uninstall),
+        new("clip-in prompt", RopeClipPromptPatch.Install, RopeClipPromptPatch.Uninstall),
+        new("climbot piton recovery", ClimbotPitonRecoveryPatch.Install, ClimbotPitonRecoveryPatch.Uninstall),
+        new("climbot rope", ClimbotRopePatch.Install, ClimbotRopePatch.Uninstall),
+        new("team piton drill", TeamPitonPlacePatch.Install, TeamPitonPlacePatch.Uninstall),
         new("multiplayer pause", MultiplayerPausePatch.Install, MultiplayerPausePatch.Uninstall),
         new("main-menu buttons", MainMenuButtonIntegration.Install, MainMenuButtonIntegration.Uninstall),
         new("savegame piton guard", SavegamePitonGuardPatch.Install, SavegamePitonGuardPatch.Uninstall),
         new("saved piton load guard", SavedPitonLoadGuard.Install, SavedPitonLoadGuard.Uninstall),
+        new("bivouac save", BivouacSaveGatePatch.Install, BivouacSaveGatePatch.Uninstall),
+        new("bivouac entry", BivouacEntryGatePatch.Install, BivouacEntryGatePatch.Uninstall),
         new("native performance probe", NativePerformanceProbe.Install, NativePerformanceProbe.Uninstall),
         new("downed climbers", DeathScreenPatch.Install, DeathScreenPatch.Uninstall),
         new("revive prompt", RevivePromptPatch.Install, RevivePromptPatch.Uninstall),
+        new("story launch setup", StoryLaunchSetupPatch.Install, StoryLaunchSetupPatch.Uninstall),
     };
 
     private static readonly List<PatchModule> Installed = new();

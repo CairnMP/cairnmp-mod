@@ -24,6 +24,18 @@ internal sealed partial class NetworkManager
         clock: null,
         onLocalPitonRecovered: localId => OnOwnPitonRecovered?.Invoke(localId));
 
+    /// <summary>
+    /// A new tie. The partner hears the committed book again, and this host learns which of
+    /// those pitons to create on its own wall. Not the host, or no partner: nothing to send.
+    /// </summary>
+    internal bool ReplayPitonsForLink(int partnerId, List<ServerPitonPlaced> intoLocal)
+    {
+        if (_steamLobby == null || !_steamLobby.IsHost || partnerId <= 0) return false;
+        Pitons.SendSnapshotTo(partnerId);
+        Pitons.CopyForLocalReplay(LocalPlayerId, intoLocal);
+        return true;
+    }
+
     private sealed class SteamAuthoritativeSink : IAuthoritativeSink
     {
         private readonly NetworkManager _t;

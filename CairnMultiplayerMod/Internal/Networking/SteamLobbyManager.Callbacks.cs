@@ -46,7 +46,8 @@ namespace CairnMultiplayerMod.Internal.Networking
                 SteamMatchmaking.SetLobbyData(lobbyId, KeyWorld,
                     ((int)cfg.World).ToString(CultureInfo.InvariantCulture));
                 SteamMatchmaking.SetLobbyData(lobbyId, KeyStartNonce, "");
-                SteamMatchmaking.SetLobbyMemberLimit(lobbyId, Math.Max(2, Math.Min(cfg.MaxPlayers, 16)));
+                SteamMatchmaking.SetLobbyMemberLimit(lobbyId,
+                    MultiplayerModes.ClampLobbySize(cfg.Mode, cfg.MaxPlayers));
                 SteamMatchmaking.SetLobbyJoinable(lobbyId, true);
             }
             catch (Exception ex)

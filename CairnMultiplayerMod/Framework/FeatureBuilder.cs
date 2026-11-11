@@ -156,6 +156,11 @@ internal sealed class FeatureBuilder
 
         public void HideMessage(string id) => _inner.HideMessage($"{_featureId}.{id}");
 
+        public void ShowControlTip(string id, string label, string cue)
+            => _inner.ShowControlTip($"{_featureId}.{id}", label, cue);
+
+        public void HideControlTip(string id) => _inner.HideControlTip($"{_featureId}.{id}");
+
         // Standings are a single screen-wide surface; only one feature can own it at a time,
         // so there is nothing to namespace here.
         public void ShowStandings(string title, IReadOnlyList<StandingRow> rows)
@@ -202,6 +207,7 @@ internal sealed class FeatureBuilder
             Func<bool> canDrop, Action<ShareableItem> drop)
             => _own(_inner.AddShareActions(canGive, give, canDrop, drop));
         public void SetGroundItems(IReadOnlyList<GroundItem> items) => _inner.SetGroundItems(items);
+        public void SetGroundTakeHandler(Action<uint> take) => _inner.SetGroundTakeHandler(take);
         public void DrawGroundItems() => _inner.DrawGroundItems();
         public uint SelectGroundItem(IReadOnlyList<GroundItem> nearbyItems)
             => _inner.SelectGroundItem(nearbyItems);
@@ -218,10 +224,6 @@ internal sealed class FeatureBuilder
         public bool HasHealingItem => _inner.HasHealingItem;
         public bool TryConsumeHealingItem(out string itemName)
             => _inner.TryConsumeHealingItem(out itemName);
-        public IGameRegistration AddItemUsedListener(Action<int> onUsed)
-            => _own(_inner.AddItemUsedListener(onUsed));
-        public bool ApplySharedConsumable(int definitionId)
-            => _inner.ApplySharedConsumable(definitionId);
     }
 
     private sealed class FeatureLifeApi : ILifeApi
@@ -233,12 +235,12 @@ internal sealed class FeatureBuilder
         { _inner = inner; _own = own; }
 
         public bool IsLocalPlayerDown => _inner.IsLocalPlayerDown;
+        public bool IsDeathScreenHeld => _inner.IsDeathScreenHeld;
         public IGameRegistration HoldBackDeathScreen(Func<bool> keepHolding, Action onWentDown)
             => _own(_inner.HoldBackDeathScreen(keepHolding, onWentDown));
         public void EndLocalPlayer() => _inner.EndLocalPlayer();
         public bool ReviveLocalPlayer(float healthRatio) => _inner.ReviveLocalPlayer(healthRatio);
         public void ExhaustLocalPlayer(float amount) => _inner.ExhaustLocalPlayer(amount);
-        public float FallenPartnerStaminaCost(float fallback) => _inner.FallenPartnerStaminaCost(fallback);
         public IGameRegistration AddRevivePrompt(Func<int, bool> canRevive, Action<int> onRevive)
             => _own(_inner.AddRevivePrompt(canRevive, onRevive));
     }

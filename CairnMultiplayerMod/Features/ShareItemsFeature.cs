@@ -242,6 +242,9 @@ internal sealed class ShareItemsFeature : MultiplayerFeature
     private const int MaxHostPending = 32;
     private const int MaxTransfersPerSession = 4096;
     private const float PickupDistance = 1.6f;
+    // Items sit in a bag the game lets you open from further away than a floating item can be
+    // selected, and a bag may hold items up to a pile radius from its centre.
+    private const float HostPickupDistance = 4.5f;
 
     private HostCommand<ShareItemOffer> _offers;
     private HostCommand<ShareItemReceipt> _receipts;
@@ -280,6 +283,7 @@ internal sealed class ShareItemsFeature : MultiplayerFeature
         _pickupDeliveries = feature.HostEvent<GroundItemDelivery>("pickup-delivery", OnPickupDelivery);
         _pickupReceipts = feature.HostCommand<GroundItemReceipt>("pickup-receipt", HandlePickupReceiptOnHost);
 
+        Game.Inventory.SetGroundTakeHandler(RequestPickup);
         Game.Inventory.AddShareActions(CanGiveSelected, GiveSelectedToNearest,
             CanDropSelected, DropSelected);
 
@@ -555,12 +559,18 @@ internal sealed class ShareItemsFeature : MultiplayerFeature
         if (!_groundItems.TryGetValue(selectedId, out item)) return;
         var pickupPressed = Game.Input.WasKeyPressed(GameKey.E)
                             || Game.Input.WasPressed(GameInputAction.PickupSharedItemController);
-        if (!pickupPressed || !_pickupRequested.Add(item.Id)) return;
-        _pickupRequests.Send(new PickupGroundItemRequest { GroundItemId = item.Id },
+        if (!pickupPressed) return;
+        RequestPickup(item.Id);
+    }
+
+    private void RequestPickup(uint id)
+    {
+        if (!_pickupRequested.Add(id)) return;
+        _pickupRequests.Send(new PickupGroundItemRequest { GroundItemId = id },
             (accepted, answer) =>
             {
                 if (accepted) return;
-                _pickupRequested.Remove(item.Id);
+                _pickupRequested.Remove(id);
                 if (!string.IsNullOrWhiteSpace(answer)) Game.Chat.AddSystemLine(answer);
             });
     }
@@ -591,7 +601,7 @@ internal sealed class ShareItemsFeature : MultiplayerFeature
         if (!Game.Players.TryGetLocation(request.FromPlayerId, out var player)
             || player.State != PlayerState.InGame
             || !string.Equals(player.Scene, item.Scene, StringComparison.Ordinal)
-            || SquaredDistance(player, item) > PickupDistance * PickupDistance)
+            || SquaredDistance(player, item) > HostPickupDistance * HostPickupDistance)
         { request.Reject("Move closer to the item to pick it up."); return; }
 
         var pending = new PendingPickup(item.Copy(), request.FromPlayerId,

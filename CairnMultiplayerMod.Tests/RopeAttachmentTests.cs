@@ -16,6 +16,14 @@ public sealed class RopeAttachmentTests
         => Assert.False(RopeAttachmentPolicy.CanReach(length, distance));
 
     [Fact]
+    public void AHarnessJumpPastFiveMetersSnapsAndDoesNotUseTheBoundary()
+    {
+        Assert.False(RopeAttachmentPolicy.NeedsSnap(5f));
+        Assert.True(RopeAttachmentPolicy.NeedsSnap(5.01f));
+        Assert.False(RopeAttachmentPolicy.NeedsSnap(float.NaN));
+    }
+
+    [Fact]
     public void NearbyPartnerWithInitializedRopeCanAttach()
         => Assert.True(RopeAttachmentPolicy.CanReach(30, 1.9f));
 
@@ -36,4 +44,20 @@ public sealed class RopeAttachmentTests
     [InlineData(float.NaN, 1f)]
     public void InvalidOrExhaustedRopeHasNoInitialLength(float maxLength, float distance)
         => Assert.False(RopeAttachmentPolicy.TryGetInitialLength(maxLength, distance, out _));
+
+    [Theory]
+    [InlineData(2f, 2.1f)]
+    [InlineData(2f, 2.4f)]
+    [InlineData(30f, 32f)]
+    public void ASnapHasLandedWhenThePaidOutLengthIsNearTheRequest(float requested, float reported)
+        => Assert.True(RopeAttachmentPolicy.SnapLanded(requested, reported));
+
+    [Theory]
+    [InlineData(2f, 40f)]
+    [InlineData(2f, float.NaN)]
+    [InlineData(float.NaN, 2f)]
+    [InlineData(0f, 0f)]
+    [InlineData(30f, 40f)]
+    public void ThePrefabLengthHasNotLanded(float requested, float reported)
+        => Assert.False(RopeAttachmentPolicy.SnapLanded(requested, reported));
 }

@@ -21,6 +21,16 @@ public sealed class PauseRegressionTests
                 CairnGameLifecycleState.Cutscene, pauseMenuActive: true));
     }
 
+    [Theory]
+    [InlineData(PlayerState.InGame, true)]
+    [InlineData(PlayerState.Bivouac, true)]
+    [InlineData(PlayerState.Loading, true)]
+    [InlineData(PlayerState.InMenu, false)]
+    [InlineData(PlayerState.Unknown, false)]
+    [InlineData(PlayerState.Connecting, false)]
+    public void APartnerBetweenScenesIsStillInTheClimb(PlayerState state, bool stillInTheClimb)
+        => Assert.Equal(stillInTheClimb, PlayersAdapter.IsStillInTheClimb(state));
+
     [Fact]
     public void AdditiveStreamingDoesNotAdvertiseAFalseLoadingTransition()
     {

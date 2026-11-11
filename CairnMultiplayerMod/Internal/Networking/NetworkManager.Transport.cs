@@ -308,6 +308,11 @@ internal sealed partial class NetworkManager
                     var pkt = new ClientRopeClip();
                     pkt.Deserialize(r);
                     var fromId = EnsureSteamRemotePlayer(remoteSteamId);
+                    if (pkt.Clip && TryRefuseOutOfRangeClip(fromId, pkt.TargetPlayerId, out var refusal))
+                    {
+                        ModLog.Info($"[RopeCouple] Refused clip {fromId} -> {pkt.TargetPlayerId}: {refusal}");
+                        break;
+                    }
                     if (!RopeRequests.IsAllowed(fromId, pkt.TargetPlayerId, pkt.Clip, _ropeLinks(), IsAdmittedPlayer)) break;
                     if (pkt.Clip && !_ropeCreationBudget.Take(fromId)) break;
                     var outPkt = new ServerRopeClip { FromPlayerId = fromId, TargetPlayerId = pkt.TargetPlayerId, Clip = pkt.Clip };
@@ -479,13 +484,131 @@ internal sealed partial class NetworkManager
             new ClientFeatureStream { Channel = channel, Reliable = reliable, Payload = payload }, reliable);
     }
 
+    /// <summary>
+    /// The pose a tie-in is measured from. This climber's is the last in-game presence
+    /// they sent. Everyone else's is the last in-game presence already stored for them.
+    /// Animation frames must not supply it: their first point is the capture root, and
+    /// that root is not the presence position the other window measured.
+    /// </summary>
+    internal bool TryGetLinkPosition(int playerId, out float x, out float y, out float z)
+    {
+        if (playerId == LocalPlayerId && _hasLocalLinkPose)
+        {
+            x = _localLinkX;
+            y = _localLinkY;
+            z = _localLinkZ;
+            return float.IsFinite(x) && float.IsFinite(y) && float.IsFinite(z);
+        }
+
+        if (_remotePlayers.TryGetValue(playerId, out var player)
+            && player != null
+            && player.HasLinkPose
+            && player.State == PlayerState.InGame)
+        {
+            x = player.LinkX;
+            y = player.LinkY;
+            z = player.LinkZ;
+            return float.IsFinite(x) && float.IsFinite(y) && float.IsFinite(z);
+        }
+
+        x = y = z = 0f;
+        return false;
+    }
+
+    /// <summary>
+    /// Stores one climber's presence. The ghost root may move later; the clip point does not.
+    /// </summary>
+    internal void ApplyRemotePresence(
+        int playerId, float x, float y, float z, float yaw, string sceneName, PlayerState state)
+    {
+        if (!_remotePlayers.TryGetValue(playerId, out var player) || player == null)
+        {
+            player = new RemotePlayer { Id = playerId, Name = $"Player{playerId}" };
+            _remotePlayers[playerId] = player;
+        }
+
+        player.X = x;
+        player.Y = y;
+        player.Z = z;
+        player.YawDeg = yaw;
+        player.SceneName = sceneName ?? "";
+        player.State = state;
+        player.LastUpdateTime = NowSeconds();
+        RememberLinkPose(player, x, y, z, state);
+    }
+
+    /// <summary>Moves the ghost root. Leaves the presence point the clip check reads.</summary>
+    internal void NoteRemoteFrameRoot(RemotePlayer player, float x, float y, float z)
+    {
+        if (player == null) return;
+        player.X = x;
+        player.Y = y;
+        player.Z = z;
+        player.LastUpdateTime = NowSeconds();
+    }
+
+    private static void RememberLinkPose(RemotePlayer player, float x, float y, float z, PlayerState state)
+    {
+        if (state == PlayerState.InGame
+            && float.IsFinite(x) && float.IsFinite(y) && float.IsFinite(z))
+        {
+            player.HasLinkPose = true;
+            player.LinkX = x;
+            player.LinkY = y;
+            player.LinkZ = z;
+            return;
+        }
+
+        player.HasLinkPose = false;
+    }
+
+    internal bool TryRefuseOutOfRangeClip(int fromId, int targetId, out string refusal)
+    {
+        if (!TryGetLinkPosition(fromId, out var ax, out var ay, out var az))
+        {
+            refusal = $"no presence pose for {fromId}";
+            return true;
+        }
+
+        if (!TryGetLinkPosition(targetId, out var bx, out var by, out var bz))
+        {
+            refusal = $"no presence pose for {targetId}";
+            return true;
+        }
+
+        if (RopeRequests.WithinLinkRange(ax, ay, az, bx, by, bz))
+        {
+            refusal = null;
+            return false;
+        }
+
+        var dx = ax - bx;
+        var dy = ay - by;
+        var dz = az - bz;
+        refusal = $"{MathF.Sqrt(dx * dx + dy * dy + dz * dz):F1}m apart";
+        return true;
+    }
+
     private void SendSteamRopeClip(int targetPlayerId, bool clip)
     {
         if (!IsHandshakeComplete || targetPlayerId == LocalPlayerId) return;
 
+        // The practice climber is not a lobby member. His tie stays on this host.
+        if (PracticePartner.Is(targetPlayerId))
+        {
+            if (!CanHostPracticePartner) return;
+            OnRopeClip?.Invoke(LocalPlayerId, targetPlayerId, clip);
+            return;
+        }
+
         if (_steamLobby != null && _steamLobby.IsHost)
         {
             var pkt = new ServerRopeClip { FromPlayerId = LocalPlayerId, TargetPlayerId = targetPlayerId, Clip = clip };
+            if (clip && TryRefuseOutOfRangeClip(LocalPlayerId, targetPlayerId, out var refusal))
+            {
+                ModLog.Info($"[RopeCouple] Refused clip {LocalPlayerId} -> {targetPlayerId}: {refusal}");
+                return;
+            }
             if (!RopeRequests.IsAllowed(LocalPlayerId, targetPlayerId, clip, _ropeLinks(), IsAdmittedPlayer)) return;
             if (clip && !_ropeCreationBudget.Take(LocalPlayerId)) return;
             OnRopeClip?.Invoke(LocalPlayerId, targetPlayerId, clip);
@@ -659,14 +782,8 @@ internal sealed partial class NetworkManager
     private void ApplyRemotePlayerState(int playerId, ClientPlayerState pkt)
     {
         if (!PacketValidation.IsValidPose(pkt.X, pkt.Y, pkt.Z, pkt.YawDeg)) return;
-        if (!_remotePlayers.TryGetValue(playerId, out var p)) return;
-        p.X = pkt.X;
-        p.Y = pkt.Y;
-        p.Z = pkt.Z;
-        p.YawDeg = pkt.YawDeg;
-        p.SceneName = pkt.SceneName;
-        p.State = pkt.State;
-        p.LastUpdateTime = DateTime.UtcNow.Ticks / (double)TimeSpan.TicksPerSecond;
+        if (!_remotePlayers.ContainsKey(playerId)) return;
+        ApplyRemotePresence(playerId, pkt.X, pkt.Y, pkt.Z, pkt.YawDeg, pkt.SceneName, pkt.State);
     }
 
     private static byte[] BuildPayload(PacketId id, IPacket packet)

@@ -10,7 +10,7 @@ internal sealed partial class UiToolkitMultiplayerPanel
     private sealed class StepperControl
     {
         private readonly int _min;
-        private readonly int _max;
+        private int _max;
         private readonly Label _valueLabel;
         private readonly Button _minus;
         private readonly Button _plus;
@@ -47,6 +47,13 @@ internal sealed partial class UiToolkitMultiplayerPanel
         {
             _minus.SetEnabled(enabled);
             _plus.SetEnabled(enabled);
+        }
+
+        public void SetCeiling(int max)
+        {
+            _max = Math.Max(_min, max);
+            Value = Mathf.Clamp(Value, _min, _max);
+            _valueLabel.text = Value.ToString();
         }
 
         private void Change(int delta)

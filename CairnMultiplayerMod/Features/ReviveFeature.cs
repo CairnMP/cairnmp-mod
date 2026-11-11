@@ -8,12 +8,13 @@ namespace CairnMultiplayerMod.Features;
 
 /// <summary>
 /// Dying with a partner around no longer ends the run on the spot: the climber goes down and
-/// stays there, and a teammate can come and put them back on their feet.
+/// stays in the session. Rope Team watches, and the partner brings them back from a bivouac.
+/// A mode that still rescues on the face can stand them up where they fell.
 ///
 /// Cairn already supports every step — it skips the death screen inside a netplay room, ships
 /// a "revive" prompt on the ghost prefab, and can stand a climber up where their body lies.
 /// This feature only decides when to use them: hold the death screen back while somebody is
-/// still standing, count down, and spend a healing item for the rescue.
+/// still standing, and spend a healing item only in a mode that rescues on the face.
 /// </summary>
 internal sealed class ReviveFeature : MultiplayerFeature
 {
@@ -29,14 +30,13 @@ internal sealed class ReviveFeature : MultiplayerFeature
     /// brings them back tired.</summary>
     private const float BivouacHealthRatio = 0.5f;
 
-    private const GameKey BivouacRecallKey = GameKey.R;
+    internal const string RecallLabel = "Revive partner";
+    internal const string RecallCue = "Hold";
+    internal const string ReachLabel = "Reach a bivouac";
 
     /// <summary>A climber who has just stood up is not walking yet, and the game refuses to
     /// move anyone who is not. Keep trying for a few seconds, then let them walk down.</summary>
     private const float RecallTeleportWindowSeconds = 5f;
-
-    /// <summary>Used only when the game's own netplay tweakables are not loaded yet.</summary>
-    private const float FallbackFallenPartnerCost = 1.5f;
 
     /// <summary>
     /// How far from the body the host still believes a rescuer. The game's own prompt reaches
@@ -67,8 +67,6 @@ internal sealed class ReviveFeature : MultiplayerFeature
     private int _lastShownSecondsLeft = -1;
     private WorldPosition _pendingRecall;
     private float _pendingRecallUntil;
-    private bool _recallPromptShown;
-
     public override string Id => "revive";
 
     protected internal override void OnRegister(FeatureBuilder feature)
@@ -126,9 +124,8 @@ internal sealed class ReviveFeature : MultiplayerFeature
 
     private int CountStandingTeammates()
     {
-        // A teammate at camp is still standing — they are the one who can call the fallen
-        // back. Counting only climbers on the wall ended every downed run the moment the last
-        // of them sat down by the fire.
+        // Still in the climb and not dead: on the wall, in camp, on a loading screen, or in
+        // a story scene. Any of those can still reach a bivouac and call the fallen back.
         var standing = 0;
         foreach (var playerId in Game.Players.RemotePlayersInGameOrBivouac)
             if (!_downedPlayers.Contains(playerId) && !_outPlayers.Contains(playerId)) standing++;
@@ -141,22 +138,27 @@ internal sealed class ReviveFeature : MultiplayerFeature
         _isOut = false;
         _downedUntil = Game.Time.UnscaledTime + DownedSeconds;
         _lastShownSecondsLeft = -1;
+        HideReachPrompt();
         Report(ClimberCondition.Down);
         LogInfo($"Down, waiting for help for {DownedSeconds:F0}s");
     }
 
     private void Tick()
     {
+        var reviveHeld = Game.Input.WasPressed(GameInputAction.RevivePartner);
         TickPendingRecall();
         TickRescuesUnderway();
 
         if (!_isDown)
         {
             TickBackInTheClimb();
-            TickDeadWeight();
-            TickBivouacRecall();
+            TickBivouacRecall(reviveHeld);
+            TickBivouacReach();
             return;
         }
+
+        HideRecallPrompt();
+        HideReachPrompt();
 
         // Without a field rescue there is nothing to count down to: the climber watches — or
         // waits for a camp, in a mode that offers one — for as long as somebody is still
@@ -371,54 +373,24 @@ internal sealed class ReviveFeature : MultiplayerFeature
     }
 
     /// <summary>
-    /// A partner hanging from your rope is weight you carry.
-    ///
-    /// The game already prices this: its netplay tweakables hold a stamina malus per corpse,
-    /// meant for exactly this situation. Reading it rather than inventing a number keeps a
-    /// rescue expensive in the game's own terms -- and the drain stops short of a critical
-    /// state, so carrying someone never kills the carrier by itself.
+    /// A camp is where a run can be put back together. The living climber calls from the
+    /// volume on the mountain, before the rest, or from inside if they got there first.
+    /// Reaching it is the price, so it costs no item. The dead partner is not put inside
+    /// the rest: they arrive in the volume, and the two enter together.
     /// </summary>
-    private void TickDeadWeight()
+    private void TickBivouacRecall(bool reviveHeld)
     {
-        if (!IsConnected || _downedPlayers.Count == 0) return;
-
-        var carried = 0;
-        foreach (var playerId in _downedPlayers)
-            if (Game.Players.IsRopedToLocalPlayer(playerId)) carried++;
-        if (carried == 0) return;
-
-        var perSecond = Game.Life.FallenPartnerStaminaCost(FallbackFallenPartnerCost);
-        Game.Life.ExhaustLocalPlayer(perSecond * carried * Game.Time.UnscaledDeltaTime);
-    }
-
-    /// <summary>
-    /// A camp is where a run can be put back together: whoever is still standing calls the
-    /// fallen climbers back to the fire. Reaching it is the price, so it costs no item.
-    /// </summary>
-    private void TickBivouacRecall()
-    {
-        if (!Rules.BivouacRevive || !IsConnected
-            || !Game.State.IsLocalPlayerInBivouac || _downedPlayers.Count == 0)
+        if (!CanCallFromHere() || KeyboardCaptured)
         {
-            if (_recallPromptShown)
-            {
-                _recallPromptShown = false;
-                Game.Hud.HideMessage("recall");
-            }
+            HideRecallPrompt();
             return;
         }
 
-        if (!_recallPromptShown)
-        {
-            _recallPromptShown = true;
-            Game.Hud.ShowMessage("recall",
-                $"{BivouacRecallKey}: call the fallen climbers back to camp", 6f);
-        }
-
-        if (KeyboardCaptured || !Game.Input.WasKeyPressed(BivouacRecallKey)) return;
-        // Not TryGetLocation: a camper's player location is unknown for the whole camp, so
-        // asking for it turned every press into a silent no-op.
-        if (!Game.State.TryGetCampPosition(out var camp))
+        Game.Hud.ShowControlTip("recall", RecallLabel, RecallCue);
+        if (!reviveHeld) return;
+        // The mountain marker, not the interior pose. A camper who never came through the
+        // volume has nothing safe to send.
+        if (!Game.State.TryGetRecallCamp(out var camp))
         {
             LogWarning("Could not locate our camp to call the fallen back to it.");
             return;
@@ -432,6 +404,33 @@ internal sealed class ReviveFeature : MultiplayerFeature
         LogInfo($"Called {called} downed player(s) back to the bivouac");
     }
 
+    private void HideRecallPrompt() => Game.Hud.HideControlTip("recall");
+
+    /// <summary>
+    /// Away from camp the death skull stays up with the walk. The recall row
+    /// replaces it once this climber can actually call the partner back.
+    /// </summary>
+    private void TickBivouacReach()
+    {
+        var atCamp = Game.State.IsLocalPlayerInBivouac || Game.State.IsInCampVolume;
+        if (!BivouacReachPrompt.ShouldShow(
+                Rules.BivouacRevive, Rules.TeammateRevive, IsConnected,
+                localAlive: !Game.Life.IsLocalPlayerDown, partnerDown: _downedPlayers.Count > 0, atCamp))
+        {
+            HideReachPrompt();
+            return;
+        }
+
+        Game.Hud.ShowControlTip("reach", ReachLabel, "");
+    }
+
+    private void HideReachPrompt() => Game.Hud.HideControlTip("reach");
+
+    /// <summary>Inside the rest, or standing in its volume on the mountain. Not elsewhere.</summary>
+    private bool CanCallFromHere()
+        => Rules.BivouacRevive && IsConnected && _downedPlayers.Count > 0
+           && (Game.State.IsLocalPlayerInBivouac || Game.State.IsInCampVolume);
+
     /// <summary>
     /// The recall travels from any player, so the fallen check it before acting on it: it
     /// must come from someone actually sitting at a camp, and point somewhere in the world.
@@ -439,7 +438,7 @@ internal sealed class ReviveFeature : MultiplayerFeature
     private void OnRecalled(int fromPlayerId, BivouacRecall recall)
     {
         if (!Rules.BivouacRevive || !_isDown) return;
-        if (!Game.Players.IsRemotePlayerInBivouac(fromPlayerId))
+        if (!SenderIsAtTheCamp(fromPlayerId, recall.Position))
         {
             LogWarning($"Ignored a call back to camp from player {fromPlayerId}, who is not at one.");
             return;
@@ -487,7 +486,11 @@ internal sealed class ReviveFeature : MultiplayerFeature
             case ClimberCondition.Down:
                 _outPlayers.Remove(playerId);
                 if (_downedPlayers.Add(playerId))
-                    Game.Hud.ShowMessage("notice", DownedNotice(playerId), NoticeSeconds);
+                {
+                    var notice = DownedNotice(playerId);
+                    if (notice != null)
+                        Game.Hud.ShowMessage("notice", notice, NoticeSeconds);
+                }
                 break;
             case ClimberCondition.Out:
                 _downedPlayers.Remove(playerId);
@@ -500,13 +503,27 @@ internal sealed class ReviveFeature : MultiplayerFeature
         }
     }
 
-    /// <summary>What the others can do about it depends on the mode, so the notice does too.</summary>
+    /// <summary>
+    /// What the others can do about it depends on the mode, so the notice does too.
+    /// A bivouac recall keeps the instruction on the prompt row instead of a line that expires.
+    /// </summary>
     private string DownedNotice(int playerId)
     {
         var name = GetPlayerName(playerId);
         if (Rules.TeammateRevive) return $"{name} is down. Reach them and revive them.";
-        if (Rules.BivouacRevive) return $"{name} is down. Make camp to call them back.";
+        if (Rules.BivouacRevive) return null;
         return $"{name} is out of the climb.";
+    }
+
+    /// <summary>
+    /// Already inside counts: their pose is the interior, which is not the volume. Otherwise
+    /// the pose they are replicating has to be in the camp this call names.
+    /// </summary>
+    private bool SenderIsAtTheCamp(int fromPlayerId, WorldPosition camp)
+    {
+        if (Game.Players.IsRemotePlayerInBivouac(fromPlayerId)) return true;
+        if (!Game.Players.TryGetLocation(fromPlayerId, out var where)) return false;
+        return Game.State.SameCampVolume(camp, new WorldPosition(where.X, where.Y, where.Z));
     }
 
     private void ForgetPlayer(int playerId)
@@ -529,14 +546,28 @@ internal sealed class ReviveFeature : MultiplayerFeature
         _isOut = false;
         _sceneResetSinceOut = false;
         _pendingRecallUntil = 0f;
-        if (_recallPromptShown)
-        {
-            _recallPromptShown = false;
-            Game.Hud.HideMessage("recall");
-        }
+        HideRecallPrompt();
+        HideReachPrompt();
         ClearDownedState();
         if (wasDown) Game.Life.EndLocalPlayer();
     }
+}
+
+/// <summary>
+/// When the living climber should be told to walk to a bivouac. At the camp
+/// itself the recall row takes over, and a mode that still rescues on the face
+/// keeps its own notice.
+/// </summary>
+internal static class BivouacReachPrompt
+{
+    internal static bool ShouldShow(
+        bool bivouacRevive,
+        bool teammateRevive,
+        bool connected,
+        bool localAlive,
+        bool partnerDown,
+        bool atCamp)
+        => bivouacRevive && !teammateRevive && connected && localAlive && partnerDown && !atCamp;
 }
 
 /// <summary>Where a climber stands, as far as their teammates need to know.</summary>

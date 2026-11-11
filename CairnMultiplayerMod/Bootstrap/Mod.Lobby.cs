@@ -120,7 +120,7 @@ public partial class Mod
     {
         PlayerName = GetSteamPlayerName(),
         LobbyName = config.LobbyName,
-        MaxPlayers = config.MaxPlayers,
+        MaxPlayers = MultiplayerModes.ClampLobbySize(config.Mode, config.MaxPlayers),
         Visibility = config.Visibility,
         Mode = config.Mode,
         World = config.World,
@@ -220,6 +220,9 @@ public partial class Mod
         Lobby.Leave();
         Network.Disconnect();
         WeatherInterop.ResetRemoteState();
+        // Leave() already untied when a lobby was up. With no lobby, the tie and
+        // the partner's body are still here, so untie before the body is removed.
+        Rope.ClearLinks();
         RemotePlayerManager.ClearAll();
         PingMarkerManager.ClearAll();
         Bivouac.ForceResume();

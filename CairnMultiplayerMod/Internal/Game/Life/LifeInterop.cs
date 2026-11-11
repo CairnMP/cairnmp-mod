@@ -2,7 +2,6 @@ using System;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using Il2Cpp;
 using Il2CppTheGameBakers.Cairn;
-using Il2CppTheGameBakers.Cairn.Netplay;
 
 namespace CairnMultiplayerMod.Internal.Game.Life;
 
@@ -35,11 +34,8 @@ internal static class LifeInterop
     }
 
     /// <summary>
-    /// Tires the local climber out, the way carrying weight does.
-    ///
-    /// The game's own flag is what keeps this fair: <c>onlyAboveWarning</c> stops the drain
-    /// before it pushes anyone into a critical state, so hauling a fallen partner costs
-    /// endurance without quietly killing the one doing the hauling.
+    /// Tires the local climber out. <c>onlyAboveWarning</c> stops the drain before a critical
+    /// state, so the cost cannot by itself finish them.
     /// </summary>
     internal static void Exhaust(float amount)
     {
@@ -51,27 +47,6 @@ internal static class LifeInterop
         catch (Exception exception)
         {
             ModLog.SuppressedException("life.exhaust", exception);
-        }
-    }
-
-    /// <summary>
-    /// The endurance a fallen rope member costs per second, as the game itself sets it in its
-    /// netplay tweakables. Falls back to a mild value when the table is not loaded, rather
-    /// than inventing a number that contradicts the game's balance.
-    /// </summary>
-    internal static float StaminaCostPerFallenPartner(float fallback)
-    {
-        try
-        {
-            if (!TweakableBase<NetplayTweakables>.IsReady) return fallback;
-            var settings = TweakableBase<NetplayTweakables>.Instance?.SharedRopeSettings;
-            var cost = settings?.staminaMalusPerCorpse ?? 0f;
-            return cost > 0f ? cost : fallback;
-        }
-        catch (Exception exception)
-        {
-            ModLog.SuppressedException("life.read-corpse-malus", exception);
-            return fallback;
         }
     }
 

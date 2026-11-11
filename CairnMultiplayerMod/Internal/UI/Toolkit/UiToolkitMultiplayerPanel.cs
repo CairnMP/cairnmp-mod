@@ -396,6 +396,7 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         _modeSegment = new SegmentControl(ModeNames(), 0);
         _modeSegment.Changed += _ =>
         {
+            ApplySlotCeiling();
             if (_modeSummary != null) _modeSummary.text = DescribeMode(SelectedMode(), SelectedWorld());
         };
         modeCol.Add(_modeSegment.Root);
@@ -425,6 +426,7 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         slotsCol.style.marginRight = 10;
         slotsCol.Add(CairnUi.MicroLabel("SLOTS"));
         _slotsStepper = new StepperControl(Mathf.Clamp(ModConfig.MaxPlayers.Value, 2, 8), 2, 8);
+        ApplySlotCeiling();
         slotsCol.Add(_slotsStepper.Root);
         configRow.Add(slotsCol);
 
@@ -775,6 +777,14 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         return index >= 0 && index < modes.Count ? modes[index] : modes[0];
     }
 
+    /// <summary>Rope team is a pair. The stepper shows that, and the host config clamps it again.</summary>
+    private void ApplySlotCeiling()
+    {
+        if (_slotsStepper == null) return;
+        var ceiling = SelectedMode().Mode == MultiplayerMode.RopeTeam ? 2 : 8;
+        _slotsStepper.SetCeiling(ceiling);
+    }
+
     private void OnCreateClicked()
     {
         if (_isConnecting || _worldIssue != null) return;
@@ -794,7 +804,7 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         {
             PlayerName = GetLocalPlayerName(),
             LobbyName = lobbyName,
-            MaxPlayers = _slotsStepper.Value,
+            MaxPlayers = MultiplayerModes.ClampLobbySize(SelectedMode().Mode, _slotsStepper.Value, 8),
             Visibility = visibility,
             Mode = SelectedMode().Mode,
             World = SelectedWorld(),

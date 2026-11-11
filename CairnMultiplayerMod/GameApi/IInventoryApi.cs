@@ -49,6 +49,12 @@ internal interface IInventoryApi
     IGameRegistration AddShareActions(Func<bool> canGive, Action<ShareableItem> give,
         Func<bool> canDrop, Action<ShareableItem> drop);
     void SetGroundItems(IReadOnlyList<GroundItem> items);
+
+    /// <summary>
+    /// Called with a ground item's id when the player takes it out of a bag in the world. The
+    /// handler asks the host for the item; nothing is added to the backpack here.
+    /// </summary>
+    void SetGroundTakeHandler(Action<uint> take) { }
     void DrawGroundItems();
     uint SelectGroundItem(IReadOnlyList<GroundItem> nearbyItems);
     bool IsShareableDefinition(int definitionId);
@@ -65,16 +71,4 @@ internal interface IInventoryApi
     /// item would have healed is not applied here: the caller decides what it buys.
     /// </summary>
     bool TryConsumeHealingItem(out string itemName);
-
-    /// <summary>
-    /// Calls back whenever the local climber uses an item, with its definition id. Disposing
-    /// the registration stops the callbacks.
-    /// </summary>
-    IGameRegistration AddItemUsedListener(Action<int> onUsed);
-
-    /// <summary>
-    /// Applies a consumable's effects to the local climber without consuming anything from
-    /// their bag -- for a ration somebody else opened.
-    /// </summary>
-    bool ApplySharedConsumable(int definitionId);
 }
