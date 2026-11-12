@@ -282,27 +282,13 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("SetStaminaRatio(1f)", fall, StringComparison.Ordinal);
         Assert.DoesNotContain("lockClimberTimer", fall, StringComparison.Ordinal);
         Assert.DoesNotContain("IsLocomotionBlocked", fall, StringComparison.Ordinal);
-        var bracePatch = File.ReadAllText(Path.Combine(
-            ProjectDirectory, "Internal", "Game", "Roping", "BracePatch.cs"));
+        Assert.DoesNotContain("ShouldSolveBodyMove", fall, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsBracing", fall, StringComparison.Ordinal);
         var registry = File.ReadAllText(Path.Combine(
             ProjectDirectory, "Internal", "Game", "GamePatchRegistry.cs"));
-        Assert.Contains("MoveCapsule", bracePatch, StringComparison.Ordinal);
-        Assert.Contains("walkInputSqrDeadZone", bracePatch, StringComparison.Ordinal);
-        Assert.Contains("StartReachingWithLimb", bracePatch, StringComparison.Ordinal);
-        Assert.Contains("CanStartReaching", bracePatch, StringComparison.Ordinal);
-        Assert.Contains("InputRequestDynoJump", bracePatch, StringComparison.Ordinal);
-        Assert.Contains("UpdateReachSmoothedInput", bracePatch, StringComparison.Ordinal);
-        Assert.DoesNotContain("ShouldSolveBodyMove", bracePatch, StringComparison.Ordinal);
-        Assert.Contains("UpdateBodyPosition", bracePatch, StringComparison.Ordinal);
-        Assert.Contains("LedgeWalkingState", bracePatch, StringComparison.Ordinal);
-        Assert.DoesNotContain("ClimbingV2PawnControllerModuleHangIdle", bracePatch, StringComparison.Ordinal);
-        Assert.DoesNotContain("lockClimberTimer", bracePatch, StringComparison.Ordinal);
-        Assert.DoesNotContain("IsLocomotionBlocked", bracePatch, StringComparison.Ordinal);
-        Assert.DoesNotMatch(@"\.securingRope\s*=(?!=)", bracePatch);
-        Assert.DoesNotContain("AddForce", bracePatch, StringComparison.Ordinal);
-        Assert.DoesNotContain(".velocity", bracePatch, StringComparison.Ordinal);
-        Assert.Contains("BracePatch.Install", registry, StringComparison.Ordinal);
-        Assert.Contains("BracePatch.Uninstall", registry, StringComparison.Ordinal);
+        Assert.DoesNotContain("BracePatch", registry, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "BracePatch.cs")));
         var unanchored = MethodBody(couple, "private void TickUnanchoredFall(");
         Assert.Contains("PawnStateType.Falling", unanchored, StringComparison.Ordinal);
         Assert.Contains("FallUnsecuredWithPartner", unanchored, StringComparison.Ordinal);
@@ -467,7 +453,9 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("SetRopeActive(false, false)", source, StringComparison.Ordinal);
         Assert.Contains("SetVisible(false, false)", source, StringComparison.Ordinal);
         Assert.Contains("RecallClimbot()", source, StringComparison.Ordinal);
+        Assert.Contains("OrderToStopSecuring()", source, StringComparison.Ordinal);
         Assert.Contains("ClimbotRecall.Decide", source, StringComparison.Ordinal);
+        Assert.Contains("ClimbotRecall.IsStuckBelay", source, StringComparison.Ordinal);
         Assert.Contains("SaveStillLoading()", source, StringComparison.Ordinal);
         Assert.Contains("LoadingState.LoadingSave", source, StringComparison.Ordinal);
         var robot = MethodBody(source, "private static void AfterLocalRobot(");
@@ -504,70 +492,67 @@ public sealed class ArchitectureBoundaryTests
     }
 
     [Fact]
-    public void RopeTeamSaveGateRefusesQuickSavesAndDeathSegments()
+    public void RopeTeamSaveFollowsCairnAndDoesNotUntie()
     {
-        var source = File.ReadAllText(Path.Combine(
-            ProjectDirectory, "Internal", "Game", "Roping", "BivouacSaveGatePatch.cs"));
+        var roping = Path.Combine(ProjectDirectory, "Internal", "Game", "Roping");
+        var source = File.ReadAllText(Path.Combine(roping, "BivouacSaveGatePatch.cs"));
+        var policy = File.ReadAllText(Path.Combine(roping, "BivouacSavePolicy.cs"));
+        var snapshot = File.ReadAllText(Path.Combine(roping, "BivouacSaveSnapshot.cs"));
+        var parked = File.ReadAllText(Path.Combine(roping, "RopeInterop.Snapshot.cs"));
         var registry = File.ReadAllText(Path.Combine(
             ProjectDirectory, "Internal", "Game", "GamePatchRegistry.cs"));
         var bootstrap = File.ReadAllText(Path.Combine(ProjectDirectory, "Bootstrap", "Mod.cs"));
-        var roping = Path.Combine(ProjectDirectory, "Internal", "Game", "Roping");
-        var policy = File.ReadAllText(Path.Combine(roping, "BivouacSavePolicy.cs"));
+        var runtime = File.ReadAllText(Path.Combine(ProjectDirectory, "Bootstrap", "Mod.Runtime.cs"));
+        var bivouac = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Bivouac", "BivouacSyncGate.cs"));
 
-        Assert.Contains("CannotSaveReason.PawnSaidNo", source, StringComparison.Ordinal);
-        Assert.Contains("success = false", source, StringComparison.Ordinal);
-        Assert.Contains("_IOCallback_b__0", source, StringComparison.Ordinal);
         Assert.Contains("nameof(SavegameManager.AutoSave)", source, StringComparison.Ordinal);
         Assert.Contains("nameof(SavegameManager.QuickSave)", source, StringComparison.Ordinal);
         Assert.Contains("nameof(SavegameManager.SaveAndClose)", source, StringComparison.Ordinal);
         Assert.Contains("nameof(SavegameManager.IncrementDeathSegmentOnSave)", source, StringComparison.Ordinal);
         Assert.Contains("nameof(Disk.IncrementDeathSegmentOnSave)", source, StringComparison.Ordinal);
-        Assert.Contains("isQuickSave", source, StringComparison.Ordinal);
-        Assert.Contains("isQuickSave", policy, StringComparison.Ordinal);
-        Assert.Contains("RunRemainsMarked", policy, StringComparison.Ordinal);
-        Assert.Contains("lastBivouacAge", source, StringComparison.Ordinal);
-        Assert.Contains("lastBivouacAge", policy, StringComparison.Ordinal);
+        Assert.Contains("nameof(PrepareContinued)", source, StringComparison.Ordinal);
+        Assert.Contains("nameof(PrepareLeaving)", source, StringComparison.Ordinal);
+        Assert.Contains("ClimbotRopePatch.HoldForSnapshot", source, StringComparison.Ordinal);
+        Assert.Contains("RopeInterop.ParkForeignPitons", source, StringComparison.Ordinal);
+        Assert.Contains("RopeInterop.UnparkForeignPitons", source, StringComparison.Ordinal);
+        Assert.Contains("ClimbotRopePatch.ReleaseSnapshot", source, StringComparison.Ordinal);
+        Assert.Contains("ForWrite", policy, StringComparison.Ordinal);
+        Assert.Contains("TellsPartner => false", policy, StringComparison.Ordinal);
+        Assert.DoesNotContain("SendRopeClip", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestDrop", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("RestForBivouac", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SendRopeClip", snapshot, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestDrop", snapshot, StringComparison.Ordinal);
+        Assert.DoesNotContain("SendRopeClip", MethodBody(parked, "internal static void ParkForeignPitons("), StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestDrop", MethodBody(parked, "internal static void ParkForeignPitons("), StringComparison.Ordinal);
+        Assert.DoesNotContain("Destroy", MethodBody(parked, "internal static void ParkForeignPitons("), StringComparison.Ordinal);
+        Assert.DoesNotContain("Detach", MethodBody(parked, "internal static void ParkForeignPitons("), StringComparison.Ordinal);
+        Assert.DoesNotContain("Only saves in tent allowed", policy, StringComparison.Ordinal);
+        Assert.DoesNotContain("Only saves in tent allowed", runtime, StringComparison.Ordinal);
+        Assert.DoesNotContain("BivouacSaveSlotNotice", runtime, StringComparison.Ordinal);
+        Assert.DoesNotContain("BivouacSaveSession.Tick", bivouac, StringComparison.Ordinal);
+        Assert.DoesNotContain("lastBivouacAge", source, StringComparison.Ordinal);
         Assert.DoesNotContain("lastBivouacDistance", source, StringComparison.Ordinal);
         Assert.DoesNotContain("lastBivouacDistance", policy, StringComparison.Ordinal);
-        Assert.DoesNotContain("HoldWrite", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("ExitBivouac", source, StringComparison.Ordinal);
-        Assert.Contains("nameof(BlockQuickSave)", source, StringComparison.Ordinal);
-        Assert.Contains("nameof(BlockAutoSave)", source, StringComparison.Ordinal);
-        Assert.Contains("nameof(BlockDeathSegment)", source, StringComparison.Ordinal);
-        Assert.Contains("nameof(BlockDiskDeathSegment)", source, StringComparison.Ordinal);
-        Assert.Contains("nameof(BlockSave)", source, StringComparison.Ordinal);
-        Assert.Contains("Disk.IOOperationCallback then)", source, StringComparison.Ordinal);
-        Assert.Contains("Disk.IOOperationCallback thenMT)", source, StringComparison.Ordinal);
-        Assert.Contains("Invoke(false)", source, StringComparison.Ordinal);
-        Assert.Contains("PawnControllerSwitcher.CanSave", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("isQuickSave", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Invoke(false)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Invoke(true)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("success = false", source, StringComparison.Ordinal);
         Assert.DoesNotContain("LoadInternal", source, StringComparison.Ordinal);
         Assert.DoesNotContain("WriteToSavegame", source, StringComparison.Ordinal);
         Assert.DoesNotContain("ref Savegame", source, StringComparison.Ordinal);
         Assert.DoesNotContain("ref Action", source, StringComparison.Ordinal);
         Assert.DoesNotContain("ref World.Robot", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("Invoke(true)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("PawnControllerSwitcher.CanSave", source, StringComparison.Ordinal);
         Assert.False(File.Exists(Path.Combine(roping, "CampSaveFilePatch.cs")));
         Assert.False(File.Exists(Path.Combine(roping, "SavegameLoadPatch.cs")));
+        Assert.False(File.Exists(Path.Combine(roping, "BivouacSaveSlotNotice.cs")));
         Assert.Contains("BivouacSaveGatePatch.Install", registry, StringComparison.Ordinal);
         Assert.Contains("BivouacSaveGatePatch.Uninstall", registry, StringComparison.Ordinal);
         Assert.Contains("StoryLaunchSetupPatch.MultiplayerStoryPending", bootstrap, StringComparison.Ordinal);
         Assert.Contains("Lobby.IsInLobby", bootstrap, StringComparison.Ordinal);
         Assert.Contains("IsHandshakeComplete", bootstrap, StringComparison.Ordinal);
-        Assert.Contains("SceneRoles.IsMainMenu", bootstrap, StringComparison.Ordinal);
-        Assert.Contains("BivouacSaveSession.Tick", File.ReadAllText(Path.Combine(
-            ProjectDirectory, "Internal", "Game", "Bivouac", "BivouacSyncGate.cs")), StringComparison.Ordinal);
-
-        var notice = File.ReadAllText(Path.Combine(roping, "BivouacSaveSlotNotice.cs"));
-        var runtime = File.ReadAllText(Path.Combine(ProjectDirectory, "Bootstrap", "Mod.Runtime.cs"));
-        Assert.Contains("Only saves in tent allowed", notice, StringComparison.Ordinal);
-        Assert.Contains("BivouacSaveSlotNotice.Refresh", runtime, StringComparison.Ordinal);
-        Assert.Contains("_loadedScenes.Contains(SceneRoles.MainMenuScene)", runtime, StringComparison.Ordinal);
-        Assert.Contains("ShowsTentOnlyNotice", policy, StringComparison.Ordinal);
-        Assert.DoesNotContain("Harmony", notice, StringComparison.Ordinal);
-        Assert.DoesNotContain("LoadGameSlotUi.Setup", notice, StringComparison.Ordinal);
-        Assert.DoesNotContain("ref Savegame", notice, StringComparison.Ordinal);
-        Assert.DoesNotContain("LoadInternal", notice, StringComparison.Ordinal);
-        Assert.DoesNotContain("lastBivouacDistance", notice, StringComparison.Ordinal);
     }
 
     [Fact]

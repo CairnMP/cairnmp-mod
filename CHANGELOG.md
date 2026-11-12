@@ -47,6 +47,27 @@ All notable CairnMP changes are documented here. Releases follow
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- A staff unclip, or a fall back to the ground, no longer leaves Climbot busy,
+  so the next climb can place pitons. The follower cannot clip into a piton
+  already on their chain. Resting on a piton the rope already runs through
+  stays. (#58)
+- The leader no longer clips into the ground after falling to a placed piton
+  that the follower then takes. (#55)
+
+### Changed
+- Rope Team saves wherever Cairn saves. A save from a Rope Team climb loads in
+  native Cairn, and a save from native Cairn loads in Rope Team. The other
+  climber's pitons and the planted staff are set aside for the write and put
+  back after it. (#37)
+
+### Removed
+- Rope Team: the follower no longer freezes in place while the leader hangs.
+  The leader's grip still empties after 3 seconds, and untying still drops
+  whoever is hanging. (#57)
+
 ## [2.5.0] — 2026-11-10 (beta)
 
 > A Rope Team rebuild and a controller radial menu. The lobby protocol goes from 16

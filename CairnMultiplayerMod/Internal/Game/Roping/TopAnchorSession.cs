@@ -125,6 +125,14 @@ internal static class TopAnchorSession
         into.AddRange(Order);
     }
 
+    /// <summary>Live staff pitons. Appends. Does not clear <paramref name="into"/>.</summary>
+    internal static void CopyPointers(List<IntPtr> into)
+    {
+        if (into == null) return;
+        foreach (var pointer in Pointers.Values)
+            if (pointer != IntPtr.Zero && !into.Contains(pointer)) into.Add(pointer);
+    }
+
     internal static void DrainDestroy(List<IntPtr> into)
     {
         into.Clear();

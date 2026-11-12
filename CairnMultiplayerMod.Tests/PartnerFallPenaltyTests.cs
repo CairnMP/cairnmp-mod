@@ -35,80 +35,31 @@ public sealed class PartnerFallPenaltyTests
     }
 
     [Fact]
-    public void TheFollowerBracesWhileTheLeaderHangsAndLetsGoOnTheGround()
-    {
-        var hanging = Hold(localIsLeader: false, partner: PartnerPose.Hanging, wasLatched: false);
-        Assert.True(hanging.Brace);
-        Assert.True(hanging.Latched);
-
-        var walking = Hold(localIsLeader: false, partner: PartnerPose.OnGround, wasLatched: hanging.Latched);
-        Assert.False(walking.Brace);
-        Assert.False(walking.Latched);
-
-        var offBelay = PartnerFallPenalty.Tick(
-            linked: true, leaderLeft: false, localIsLeader: false,
-            selfFalling: false, selfOffBelay: true, selfDown: false,
-            PartnerPose.Hanging, wasLatched: true);
-        Assert.False(offBelay.Brace);
-        Assert.True(offBelay.Latched);
-
-        var climbing = Hold(localIsLeader: false, partner: PartnerPose.Climbing, wasLatched: true);
-        Assert.False(climbing.Brace);
-        Assert.False(climbing.Latched);
-    }
-
-    [Fact]
-    public void TheBraceLetsGoWhenTheLeaderIsDownOrTheFollowerFalls()
-    {
-        var down = Hold(localIsLeader: false, partner: PartnerPose.Down, wasLatched: true);
-        Assert.False(down.Brace);
-        Assert.False(down.Latched);
-
-        var untied = PartnerFallPenalty.Tick(
-            linked: false, leaderLeft: false, localIsLeader: false,
-            selfFalling: false, selfOffBelay: false, selfDown: false,
-            PartnerPose.Hanging, wasLatched: true);
-        Assert.False(untied.Brace);
-
-        var left = PartnerFallPenalty.Tick(
-            linked: true, leaderLeft: true, localIsLeader: false,
-            selfFalling: false, selfOffBelay: false, selfDown: false,
-            PartnerPose.Hanging, wasLatched: true);
-        Assert.False(left.Brace);
-
-        var falling = PartnerFallPenalty.Tick(
-            linked: true, leaderLeft: false, localIsLeader: false,
-            selfFalling: true, selfOffBelay: false, selfDown: false,
-            PartnerPose.OnGround, wasLatched: true);
-        Assert.False(falling.Brace);
-        Assert.False(falling.Latched);
-    }
-
-    [Fact]
     public void TheLeaderDrainsOnlyWhileTheFollowerHangs()
     {
-        Assert.True(Hold(localIsLeader: true, partner: PartnerPose.Hanging, wasLatched: false).Drain);
-        var resting = PartnerFallPenalty.Tick(
-            linked: true, leaderLeft: false, localIsLeader: true,
-            selfFalling: false, selfOffBelay: true, selfDown: false,
-            PartnerPose.Hanging, wasLatched: false);
-        Assert.True(resting.Drain);
-        Assert.False(Hold(localIsLeader: true, partner: PartnerPose.OnGround, wasLatched: false).Drain);
-        Assert.False(Hold(localIsLeader: true, partner: PartnerPose.Climbing, wasLatched: false).Drain);
-        Assert.False(Hold(localIsLeader: true, partner: PartnerPose.Down, wasLatched: false).Drain);
+        Assert.True(Hold(localIsLeader: true, partner: PartnerPose.Hanging).Drain);
+        Assert.False(Hold(localIsLeader: true, partner: PartnerPose.OnGround).Drain);
+        Assert.False(Hold(localIsLeader: true, partner: PartnerPose.Climbing).Drain);
+        Assert.False(Hold(localIsLeader: true, partner: PartnerPose.Down).Drain);
 
         var falling = PartnerFallPenalty.Tick(
             linked: true, leaderLeft: false, localIsLeader: true,
-            selfFalling: true, selfOffBelay: false, selfDown: false,
-            PartnerPose.Hanging, wasLatched: false);
+            selfFalling: true, selfDown: false,
+            PartnerPose.Hanging);
         Assert.False(falling.Drain);
 
         var left = PartnerFallPenalty.Tick(
             linked: true, leaderLeft: true, localIsLeader: true,
-            selfFalling: false, selfOffBelay: false, selfDown: false,
-            PartnerPose.Hanging, wasLatched: false);
+            selfFalling: false, selfDown: false,
+            PartnerPose.Hanging);
         Assert.False(left.Drain);
-        Assert.False(Hold(localIsLeader: false, partner: PartnerPose.Hanging, wasLatched: false).Drain);
+        Assert.False(Hold(localIsLeader: false, partner: PartnerPose.Hanging).Drain);
+
+        var down = PartnerFallPenalty.Tick(
+            linked: true, leaderLeft: false, localIsLeader: true,
+            selfFalling: false, selfDown: true,
+            PartnerPose.Hanging);
+        Assert.False(down.Drain);
     }
 
     [Fact]
@@ -174,33 +125,17 @@ public sealed class PartnerFallPenaltyTests
     }
 
     [Fact]
-    public void AnInAirHangBracesTheFollowerAndAHoldLetsThemGo()
+    public void AnInAirHangCountsAsHangingAndAHoldStaysClimbing()
     {
         Assert.Equal(PartnerPose.Hanging, PartnerFallPenalty.Classify(
             false, false, false, "ClimbingV2PawnControllerModuleHangIdle", voidHang: true));
-        var air = Hold(localIsLeader: false, partner: PartnerPose.Hanging, wasLatched: false);
-        Assert.True(air.Brace);
-        Assert.True(air.Latched);
-
         Assert.Equal(PartnerPose.Climbing, PartnerFallPenalty.Classify(
             false, false, false, "ClimbingV2PawnControllerModuleHangIdle"));
-        var hold = Hold(localIsLeader: false, partner: PartnerPose.Climbing, wasLatched: air.Latched);
-        Assert.False(hold.Brace);
-        Assert.False(hold.Latched);
     }
 
-    [Fact]
-    public void OffBelayMakesTheFollowerBrace()
-    {
-        Assert.Equal(PartnerPose.Hanging, PartnerFallPenalty.Classify(false, false, true, "OffBelay"));
-        var hold = Hold(localIsLeader: false, partner: PartnerPose.Hanging, wasLatched: false);
-        Assert.True(hold.Brace);
-        Assert.False(hold.Drain);
-    }
-
-    private static PartnerHold Hold(bool localIsLeader, PartnerPose partner, bool wasLatched)
+    private static PartnerHold Hold(bool localIsLeader, PartnerPose partner)
         => PartnerFallPenalty.Tick(
             linked: true, leaderLeft: false, localIsLeader,
-            selfFalling: false, selfOffBelay: false, selfDown: false,
-            partner, wasLatched);
+            selfFalling: false, selfDown: false,
+            partner);
 }

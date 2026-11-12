@@ -32,7 +32,6 @@ internal static class GamePatchRegistry
         new("direct rope team", RopeTeamFallPatch.Install, RopeTeamFallPatch.Uninstall),
         new("rope length", RopeLengthPatch.Install, RopeLengthPatch.Uninstall),
         new("rope length warning", RopeLengthReadout.Install, RopeLengthReadout.Uninstall),
-        new("rope brace", BracePatch.Install, BracePatch.Uninstall),
         new("clip-in prompt", RopeClipPromptPatch.Install, RopeClipPromptPatch.Uninstall),
         new("climbot piton recovery", ClimbotPitonRecoveryPatch.Install, ClimbotPitonRecoveryPatch.Uninstall),
         new("climbot rope", ClimbotRopePatch.Install, ClimbotRopePatch.Uninstall),

@@ -1167,11 +1167,12 @@ internal static partial class RopeInterop
         var own = TeamAnchorSession.OwnsLocalChainIds;
         var now = Time.unscaledTime;
         var lifeline = TryGetLifeline();
-        // The harness clip lands in LateUpdate, after this pass. Attaching before
-        // that leaves the quickdraw off, and the follower then falls unsecured.
+        // The harness clip lands in LateUpdate, after this pass. Attaching or
+        // unclipping before that leaves the quickdraw off. The follower then falls
+        // unsecured, or can clip into a piton the chain already counts.
         var ropeOnHarness = SecuringRopeIsOnHarness();
         ClipMissingQuickdraws(own, ropeOnHarness, now);
-        if (!_unclipClearsQuickdraw)
+        if (ropeOnHarness && !_unclipClearsQuickdraw)
         {
             foreach (var id in _teamDetachIds)
             {
@@ -1306,7 +1307,10 @@ internal static partial class RopeInterop
             ModLog.Info("[RopeTeam] The follower's anchor is clipped on.");
     }
 
-    private static bool SecuringRopeIsOnHarness()
+    internal static bool TryGetChainId(IntPtr pointer, out uint id, out bool ownLocalId)
+        => _pitons.TryGetId(pointer, out id, out ownLocalId);
+
+    internal static bool SecuringRopeIsOnHarness()
     {
         var harness = ResolveLocalHarness();
         var rope = harness != null && harness.PersonalLifeline != null

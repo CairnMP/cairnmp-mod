@@ -1,58 +1,41 @@
 namespace CairnMultiplayerMod.Internal.Game.Roping;
 
 /// <summary>
-/// Rope Team may write the leave-camp autosave only, and may load that file.
-/// The autosave is the one Cairn writes on the way out: the bivouac flag is
-/// already clear. A quick save and a death segment are refused for the whole
-/// run, including at camp. Solo and the other modes are not asked. The file
-/// itself is never rewritten.
+/// Cairn decides when a save or a load may run. Rope Team does not add a second
+/// answer. While a pitch is live, the snapshot of that save sets the pitch aside
+/// and, when the climb continues, puts it back. A camp rest has already made the
+/// world this climber's own, so that write is left alone. The partner is never told.
 /// </summary>
 internal static class BivouacSavePolicy
 {
-    /// <summary>
-    /// ExitBivouac stamps LastUsedBivouacTime, then writes in that same exit.
-    /// The three files from that write were 0.024, 0.096, and 0.120 seconds old.
-    /// One second still belongs to the exit. A save made after the climber has
-    /// been out is older.
-    /// </summary>
-    internal const float ExitWriteAgeSeconds = 1f;
+    internal readonly struct SaveSnapshotPlan
+    {
+        internal bool SetAside { get; }
+        internal bool Restore { get; }
 
-    internal static bool MayWrite(bool ropeTeamSession, bool atCamp, bool restComplete)
-        => !ropeTeamSession || (atCamp && restComplete);
+        /// <summary>A snapshot never tells the partner the rope was dropped.</summary>
+        internal bool TellsPartner => false;
 
-    /// <summary>A quick save is a second file the menu prefers over the leave-camp autosave.</summary>
-    internal static bool MayWriteQuick(bool ropeTeamSession) => !ropeTeamSession;
-
-    /// <summary>A death segment rewrites the slot from the wall. The leave-camp autosave carries its own path.</summary>
-    internal static bool MayWriteDeath(bool ropeTeamSession) => !ropeTeamSession;
-
-    internal static bool MayWriteAutosave(bool ropeTeamSession, bool atCamp, bool restComplete, bool quick)
-        => quick ? MayWriteQuick(ropeTeamSession) : MayWrite(ropeTeamSession, atCamp, restComplete);
-
-    internal static bool MayLoad(bool ropeTeamSession, bool fileIsInBivouac, float lastBivouacAge, bool isQuickSave = false)
-        => !ropeTeamSession || (!isQuickSave && (fileIsInBivouac || IsCairnExitWrite(lastBivouacAge)));
+        internal SaveSnapshotPlan(bool setAside, bool restore)
+        {
+            SetAside = setAside;
+            Restore = restore;
+        }
+    }
 
     /// <summary>
-    /// The save-select card for a file this run would refuse. An empty slot is a
-    /// new game, so it stays quiet. Solo and the other modes are not asked.
+    /// A live Rope Team pitch is set aside for the write. The camp rest already
+    /// cleared that pitch, so it is not set aside again. Leaving the game does not
+    /// need the pitch put back. A failed write still does.
     /// </summary>
-    internal const string TentOnlyNotice = "Only saves in tent allowed";
+    internal static SaveSnapshotPlan ForWrite(bool ropeTeam, bool pitchLive, bool alreadyClean, bool leaving)
+    {
+        var setAside = ropeTeam && pitchLive && !alreadyClean;
+        return new SaveSnapshotPlan(setAside, setAside && !leaving);
+    }
 
-    internal static bool ShowsTentOnlyNotice(
-        bool ropeTeamSaveSelect, bool hasSave, float lastBivouacAge,
-        bool isQuickSave = false, bool fileIsInBivouac = false)
-        => ropeTeamSaveSelect && hasSave
-           && !MayLoad(true, fileIsInBivouac, lastBivouacAge, isQuickSave);
-
-    /// <summary>
-    /// Disconnect on the wall ends the live session and would otherwise look like solo.
-    /// The run stays marked until the main menu, with no lobby, handshake, or story handoff.
-    /// </summary>
-    internal static bool RunRemainsMarked(bool marked, bool liveSession, bool backAtMenu)
-        => liveSession || (marked && !backAtMenu);
-
-    internal static bool IsCairnExitWrite(float lastBivouacAge)
-        => lastBivouacAge >= 0f && lastBivouacAge < ExitWriteAgeSeconds;
+    internal static bool Restores(SaveSnapshotPlan plan, bool failed)
+        => plan.SetAside && (plan.Restore || failed);
 
     /// <summary>
     /// The indoor scene counts. A lifecycle flag that has been judged stuck does not,

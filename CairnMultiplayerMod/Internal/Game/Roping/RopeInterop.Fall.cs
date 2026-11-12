@@ -12,19 +12,12 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 
 internal static partial class RopeInterop
 {
-    internal const string BraceMessageId = "rope.brace";
-    private const string BraceText = "Bracing";
-    private const float BraceRefreshSeconds = 0.35f;
     private const float StatusRepeatSeconds = 1f;
     private const float DrainStepCapSeconds = 0.25f;
 
     private static ushort _fallChannel;
-    private static HudAdapter _fallHud;
-    private static bool _bracing;
     private static bool _statusSent;
 
-    /// <summary>The local follower is held still. Movement hooks read this.</summary>
-    internal static bool IsBracing => _bracing;
     private static PartnerPose _lastStatus;
     private static float _nextStatusAt;
     private static int _watchedPartner = int.MinValue;
@@ -43,8 +36,6 @@ internal static partial class RopeInterop
     internal static float GripSecondsLeft { get; private set; } = float.PositiveInfinity;
 
     internal static void BindFallChannel(ushort channel) => _fallChannel = channel;
-
-    internal static void BindFallHud(HudAdapter hud) => _fallHud = hud;
 
     internal static void AcceptFallState(int fromPlayerId, byte[] payload)
     {
@@ -113,7 +104,6 @@ internal static partial class RopeInterop
                 _watchedPartner = int.MinValue;
                 _statusSent = false;
                 PartnerFallSession.ForgetPartner();
-                ApplyBrace(false);
             }
 
             return;
@@ -134,12 +124,8 @@ internal static partial class RopeInterop
             leaderLeft: false,
             TeamAnchorSession.IsLocalLeader,
             local.Falling,
-            local.OffBelay,
             local.Down,
-            PartnerFallSession.Partner,
-            PartnerFallSession.BraceLatched);
-        PartnerFallSession.BraceLatched = hold.Latched;
-        ApplyBrace(hold.Brace);
+            PartnerFallSession.Partner);
         GripDraining = hold.Drain;
         ClearCriticalGrip();
         if (!hold.Drain) return;
@@ -155,14 +141,13 @@ internal static partial class RopeInterop
         GripDraining = false;
         ClearCriticalGrip();
         PartnerFallSession.Reset();
-        ApplyBrace(false);
     }
 
     /// <summary>This climber is dangling, falling, or off belay. A hold on the wall is not.</summary>
     internal static bool LocalClimberIsHanging() => ReadLocal().Hanging;
 
     /// <summary>
-    /// The partner is gone. Let go of the brace and the grip drain. A drop that was
+    /// The partner is gone. Let go of the grip drain. A drop that was
     /// just armed still happens on a later frame, after the shared pitons leave the rope.
     /// </summary>
     internal static void StopHoldingPartner()
@@ -172,7 +157,6 @@ internal static partial class RopeInterop
         _watchedPartner = int.MinValue;
         _statusSent = false;
         PartnerFallSession.ForgetPartner();
-        ApplyBrace(false);
     }
 
     /// <summary>
@@ -343,22 +327,6 @@ internal static partial class RopeInterop
         }
     }
 
-    private static void ApplyBrace(bool brace)
-    {
-        if (brace)
-        {
-            if (!_bracing) ModLog.Info("[RopeTeam] Bracing.");
-            _fallHud?.ShowMessage(BraceMessageId, BraceText, BraceRefreshSeconds);
-            _bracing = true;
-            return;
-        }
-
-        if (!_bracing) return;
-        ModLog.Info("[RopeTeam] The brace let go.");
-        _fallHud?.HideMessage(BraceMessageId);
-        _bracing = false;
-    }
-
     /// <summary>
     /// Cairn's hang after a piton catch. CurrentModule is boxed as the base module,
     /// so the hang-idle cast is what exposes the in-air mode.
@@ -371,17 +339,15 @@ internal static partial class RopeInterop
 
     private readonly struct LocalPose
     {
-        internal LocalPose(PartnerPose status, bool falling, bool offBelay, bool down)
+        internal LocalPose(PartnerPose status, bool falling, bool down)
         {
             Status = status;
             Falling = falling;
-            OffBelay = offBelay;
             Down = down;
         }
 
         internal PartnerPose Status { get; }
         internal bool Falling { get; }
-        internal bool OffBelay { get; }
         internal bool Hanging => Status == PartnerPose.Hanging;
         internal bool Down { get; }
     }
@@ -398,7 +364,7 @@ internal static partial class RopeInterop
             var status = PartnerFallPenalty.Classify(dead, falling, offBelay: false, moduleName: null);
             if (state == NetFrame.PawnStateType.Climbing && status == PartnerPose.OnGround)
                 status = PartnerPose.Climbing;
-            return new LocalPose(status, falling, false, dead || status == PartnerPose.Down);
+            return new LocalPose(status, falling, dead || status == PartnerPose.Down);
         }
 
         try
@@ -413,12 +379,12 @@ internal static partial class RopeInterop
                           || PartnerFallPenalty.IsSuspendedOnRope(moduleName);
             var status = PartnerFallPenalty.Classify(
                 dead, falling, offBelay, moduleName, IsVoidHang(pawn.CurrentModule));
-            return new LocalPose(status, falling, offBelay, dead || status == PartnerPose.Down);
+            return new LocalPose(status, falling, dead || status == PartnerPose.Down);
         }
         catch (Exception exception)
         {
             ModLog.SuppressedException("rope.fall-pose", exception);
-            return new LocalPose(PartnerPose.OnGround, false, false, dead);
+            return new LocalPose(PartnerPose.OnGround, false, dead);
         }
     }
 

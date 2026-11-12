@@ -14,21 +14,10 @@ internal enum PartnerPose : byte
     Down = 3,
 }
 
-/// <summary>Whether this climber locks, or spends grip, while the partner hangs.</summary>
+/// <summary>Whether this climber spends grip while the partner hangs.</summary>
 internal readonly struct PartnerHold
 {
-    internal PartnerHold(bool brace, bool latched, bool drain)
-    {
-        Brace = brace;
-        Latched = latched;
-        Drain = drain;
-    }
-
-    /// <summary>The follower is locked in place. Their own off belay does not count.</summary>
-    internal bool Brace { get; }
-
-    /// <summary>The brace stays through a landing until the leader climbs again.</summary>
-    internal bool Latched { get; }
+    internal PartnerHold(bool drain) => Drain = drain;
 
     /// <summary>The leader is holding the follower's weight.</summary>
     internal bool Drain { get; }
@@ -59,10 +48,9 @@ internal readonly struct PartnerUntie
 
 /// <summary>
 /// The rope-team answer when the other climber comes off the wall, dangles on the rope,
-/// hangs in the air, or sits off belay. A hang on a hold does not count. The follower
-/// braces while the leader is hanging, and lets go when the leader is standing or
-/// walking. The leader's grip empties while the
-/// follower hangs. An untie drops whoever is hanging.
+/// hangs in the air, or sits off belay. A hang on a hold does not count. The leader's
+/// grip empties while the follower hangs. The follower keeps moving. An untie drops
+/// whoever is hanging.
 /// Only the leader's cut fills their grip. An empty chain still uses Cairn's own
 /// unsecured fall, elsewhere.
 /// </summary>
@@ -88,25 +76,14 @@ internal static class PartnerFallPenalty
         bool leaderLeft,
         bool localIsLeader,
         bool selfFalling,
-        bool selfOffBelay,
         bool selfDown,
-        PartnerPose partner,
-        bool wasLatched)
+        PartnerPose partner)
     {
         if (!linked || leaderLeft || selfDown)
-            return new PartnerHold(false, false, false);
+            return new PartnerHold(false);
 
-        var latched = wasLatched;
-        if (localIsLeader || selfFalling)
-            latched = false;
-        else if (partner == PartnerPose.Hanging)
-            latched = true;
-        else if (partner is PartnerPose.Climbing or PartnerPose.Down or PartnerPose.OnGround)
-            latched = false;
-
-        var brace = latched && !selfOffBelay;
         var drain = localIsLeader && !selfFalling && partner == PartnerPose.Hanging;
-        return new PartnerHold(brace, latched, drain);
+        return new PartnerHold(drain);
     }
 
     internal static PartnerUntie Untie(bool localIsLeader, bool localUntied, bool localHanging, bool partnerHanging)

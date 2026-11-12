@@ -8,8 +8,6 @@ internal static class PartnerFallSession
 {
     internal static PartnerPose Partner { get; private set; }
 
-    internal static bool BraceLatched { get; set; }
-
     internal static bool ForceRelease { get; set; }
 
     internal static bool DropPending { get; private set; }
@@ -19,7 +17,6 @@ internal static class PartnerFallSession
     internal static void ForgetPartner()
     {
         Partner = PartnerPose.OnGround;
-        BraceLatched = false;
     }
 
     internal static bool TakeForceRelease()
@@ -36,7 +33,6 @@ internal static class PartnerFallSession
     internal static void Reset()
     {
         Partner = PartnerPose.OnGround;
-        BraceLatched = false;
         ForceRelease = false;
         DropPending = false;
     }

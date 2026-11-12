@@ -191,23 +191,17 @@ public partial class Mod : MelonMod
             () => Network?.IsHandshakeComplete == true
                   && _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam);
         // The mode defaults to Rope Team for solo too. The lobby, the handshake, or the
-        // story-save handoff is what makes this a Rope Team session. After a disconnect
-        // the save run stays marked until the main menu, so a wall quick save cannot land.
+        // story-save handoff is what makes this a Rope Team session.
         BivouacSaveSession.Bind(
             () => _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam
                   && (Network?.IsHandshakeComplete == true
                       || Lobby.IsInLobby
-                      || StoryLaunchSetupPatch.MultiplayerStoryPending),
-            () => SceneRoles.IsMainMenu(_runtimeState.CurrentScene)
-                  && Network?.IsHandshakeComplete != true
-                  && !Lobby.IsInLobby
-                  && !StoryLaunchSetupPatch.MultiplayerStoryPending);
+                      || StoryLaunchSetupPatch.MultiplayerStoryPending));
         BivouacEntryGatePatch.Bind(
             _hud,
             () => Network,
             () => SceneRoles.ResolveNetworkScene(_runtimeState.CurrentScene, _runtimeState.LastGameplayScene));
         RopeLengthReadout.Bind(_hud);
-        RopeInterop.BindFallHud(_hud);
         PracticePartnerController.Bind(_hud);
         Player = new PlayerStateBroadcaster(
             Network, _runtimeState, Rope.Reset, () => Bivouac?.BlocksGameplaySync() == true,
