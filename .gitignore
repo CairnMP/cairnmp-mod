@@ -39,6 +39,7 @@ Thumbs.db
 # Local tooling, temporary work and private research notes
 .codex/
 .claude/
+CLAUDE.local.md
 .agents/
 .superpowers/
 .tmp/
