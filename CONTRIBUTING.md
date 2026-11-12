@@ -27,7 +27,7 @@ French**.
 | Documentation-only change | Repository checkout |
 | Portable protocol or architecture change | .NET SDK pinned by `global.json` |
 | Mod or gameplay change | Local Cairn references and .NET 6 runtime |
-| Native gameplay validation | Two clients and distinct Steam identities |
+| Native gameplay validation | Two clients and distinct Steam identities ([one copy of Cairn is enough](#two-clients-on-one-pc)) |
 
 For a substantial feature, open an issue before investing in implementation.
 This confirms scope and avoids duplicated work.
@@ -97,8 +97,83 @@ is how that folder is created and signed in.
 
 CairnMP treats each climber as one Steam account. Two windows on one account
 are the same person and cannot join each other. Steam Families will not run
-two copies of Cairn at the same time on one purchase, so the second account
-needs its own copy of the game.
+two copies of Cairn at the same time on one purchase. Two setups get around
+this:
+
+| Setup | You need | It tests |
+| --- | --- | --- |
+| [Goldberg emulator](#one-copy-with-the-goldberg-emulator) | One copy of Cairn, on Windows or Linux | Gameplay between two windows, over the emulator's local network |
+| [Two Steam accounts](#two-steam-accounts) | A second copy on a second account, on Windows | The Steam lobby and relay path that players use |
+
+Start with the emulator for everyday work. Use two Steam accounts before a
+release, or when a change touches lobbies, admission or the Steam transport.
+
+### One copy, with the Goldberg emulator
+
+[gbe_fork](https://github.com/Detanup01/gbe_fork), the maintained fork of the
+[Goldberg emulator](https://mr_goldberg.gitlab.io/goldberg_emulator/), stands
+in for Steam inside two copies of your game. Each copy gets its own Steam name
+and ID, and the two find each other over `127.0.0.1`. Steam does not need to
+be running.
+
+> [!IMPORTANT]
+> This is a development tool for people who own Cairn on Steam. The setup stops
+> unless Cairn is installed through Steam on the PC, and it never changes that
+> install. Do not share the copies it makes. Players always use the Steam build.
+
+The scripts use gbe_fork because the original Goldberg stops at Steamworks SDK
+1.57 and lacks `SteamInternal_SteamAPI_Init`, which CairnMP calls. They pin
+one gbe_fork release and check its SHA-256 before they install anything.
+
+1. Install CairnMP in your usual game folder and start the game once, so
+   MelonLoader generates its assemblies. Then quit Cairn.
+2. Run the setup:
+
+   | System | Command |
+   | --- | --- |
+   | Windows | `pwsh ./scripts/setup-goldberg.ps1` |
+   | Linux, with Proton | `bash scripts/setup-goldberg.sh` |
+
+   It makes `client1` (`CairnDev1`) and `client2` (`CairnDev2`) under
+   `%LOCALAPPDATA%\CairnMultiplayerData\goldberg` on Windows, or
+   `~/.local/share/CairnMultiplayerData/goldberg` on Linux. It looks for the
+   game in `CAIRN_DIR`, then the launcher folder (Windows only), then your
+   Steam libraries. To choose the folder, pass it as `-Source` on Windows or
+   as the first argument on Linux. Files under `Cairn_Data` are hard links
+   when the disk allows it, so the two copies take little extra space. The
+   folder must be new or empty the first time.
+3. Start both windows with `pwsh ./scripts/start-goldberg.ps1` or
+   `bash scripts/start-goldberg.sh`. Before it starts a client, the script
+   copies the source game's `Mods` folder into it, so a deploy from Rider
+   reaches it. A client that is already open is left alone. To start one
+   again, close its window, then pass its number: `-Clients 2` on Windows,
+   `2` on Linux.
+
+Host in one window and join from the other. Mute voice. Two games in one room
+feed each other's microphones.
+
+- The emulator carries lobbies and packets over the local network, not the
+  Steam relay. Lobby admission, relay and NAT behavior still need two Steam
+  accounts.
+- Hosting does not reach the CairnMP platform. The start scripts point
+  `CAIRNMP_API_URL` at a closed local port, so emulated Steam IDs never
+  appear on the public lobby list.
+- On Windows both clients share your Windows profile, and with it Cairn's
+  story saves. Pick a different save slot in each window. On Linux each client
+  has its own Proton prefix and so its own saves. The first start of a prefix
+  takes about a minute.
+- Linux starts the newest `Proton N.N` in your Steam libraries, or Proton
+  Experimental when there is none. Set `PROTON` to a Proton folder to choose
+  another.
+- The setup unpacks the emulator with 7-Zip on Windows, and with `bsdtar` or
+  7-Zip on Linux. Without 7-Zip it tries Windows' own `tar`, which cannot read
+  the archive on Windows 10.
+- Run the setup again after a game, MelonLoader or launcher update. Each client
+  keeps its `UserData`, `Logs` and emulator saves (`gse-saves`).
+
+### Two Steam accounts
+
+The second account needs its own copy of the game.
 
 1. Create a local Windows user named `cairnmp2` with a password and no
    Microsoft account (Settings, Accounts, Other users). The second Steam login
@@ -224,6 +299,8 @@ Dependency updates must include the affected `packages.lock.json` files.
 - Stage explicit paths with `git add -- <paths>`; avoid `git add -A`.
 - Keep working audits under ignored `docs/local/`.
 - Never commit proprietary assemblies, game saves, player logs, or credentials.
+- Never commit the Steam emulator or the game copies the Goldberg scripts make.
+  The scripts keep both outside the repository.
 
 ---
 
