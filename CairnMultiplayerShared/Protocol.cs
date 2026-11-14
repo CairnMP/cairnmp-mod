@@ -6,7 +6,7 @@ namespace CairnMultiplayer.Shared;
 /// </summary>
 public static class Protocol
 {
-    public const int Version = 17;
+    public const int Version = 19;
     public const string ConnectionKey = "cairnmp";
     public const int DefaultPort = 14000;
 

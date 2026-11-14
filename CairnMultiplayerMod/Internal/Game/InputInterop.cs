@@ -15,6 +15,8 @@ internal static class InputInterop
     private static bool _savedDisableInputs;
     // Track the applied state, rather than the request, so a missing singleton is retried.
     private static bool _blockApplied;
+    private static bool _ignoreInputApplied;
+    private static bool _belayBlockApplied;
     private static bool _mapDiagLogged;
 
     /// <summary>
@@ -23,6 +25,8 @@ internal static class InputInterop
     /// </summary>
     public static void ReconcileGameplayInput(bool wantBlocked)
     {
+        if (InputCaptureState.IsBelayPanelCaptured || _belayBlockApplied)
+        { ReconcileBelayPanelInput(wantBlocked); return; }
         if (wantBlocked == _blockApplied) return;
 
         try
@@ -34,14 +38,18 @@ internal static class InputInterop
             {
                 _savedDisableInputs = mgr.disabledInputs;
                 mgr.disabledInputs = true;
-                // While the game ignores input events, the gamepad's own state can stop updating,
-                // and the radial menu reads that state directly. Only the chat needs the flag.
-                if (InputCaptureState.IsKeyboardCaptured) mgr.SetIgnoreInputEvents(true);
+                // Preserve upstream chat/radial behavior outside the Belay modal.
+                if (InputCaptureState.IsKeyboardCaptured)
+                {
+                    mgr.SetIgnoreInputEvents(true);
+                    _ignoreInputApplied = true;
+                }
                 _blockApplied = true;
             }
             else
             {
                 mgr.SetIgnoreInputEvents(false);
+                _ignoreInputApplied = false;
                 mgr.disabledInputs = _savedDisableInputs;
                 mgr.EnableInputs();
                 mgr.UpdateInputContext();
@@ -52,6 +60,48 @@ internal static class InputInterop
         catch (Exception ex)
         {
             ModLog.Warning($"[Input] ReconcileGameplayInput failed: {ex.Message}");
+        }
+    }
+
+    private static void ReconcileBelayPanelInput(bool wantBlocked)
+    {
+        try
+        {
+            var mgr = FindInputManager();
+            if (mgr == null) return;
+            if (wantBlocked)
+            {
+                if (!_blockApplied) _savedDisableInputs = mgr.disabledInputs;
+                mgr.disabledInputs = true;
+                _blockApplied = true;
+                // L can take ownership while chat/radial already blocks gameplay.
+                // Acquire/release the native counter only across that modal transition.
+                var wantIgnoreInput = InputCaptureState.IsKeyboardCaptured;
+                if (wantIgnoreInput != _ignoreInputApplied)
+                {
+                    mgr.SetIgnoreInputEvents(wantIgnoreInput);
+                    _ignoreInputApplied = wantIgnoreInput;
+                }
+                if (InputCaptureState.IsBelayPanelCaptured) mgr.DisableAllMaps();
+                _belayBlockApplied = InputCaptureState.IsBelayPanelCaptured;
+            }
+            else
+            {
+                if (_ignoreInputApplied)
+                {
+                    mgr.SetIgnoreInputEvents(false);
+                    _ignoreInputApplied = false;
+                }
+                mgr.EnableInputs();
+                mgr.disabledInputs = _savedDisableInputs;
+                mgr.UpdateInputContext();
+                _blockApplied = _belayBlockApplied = false;
+                LogMapStatusOnce(mgr);
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLog.Warning($"[BelayInput] Modal reconciliation failed: {ex.Message}");
         }
     }
 
@@ -132,8 +182,23 @@ internal static class InputInterop
 
     private static void RestoreDisabled(List<UnityEngine.InputSystem.InputAction> actions)
     {
-        foreach (var action in actions)
-            if (action != null && DisabledByUs.Remove(action) && !action.enabled) action.Enable();
+        var restored = false;
+        try
+        {
+            foreach (var action in actions)
+                if (action != null && DisabledByUs.Remove(action) && !action.enabled)
+                {
+                    restored = true;
+                    action.Enable();
+                }
+        }
+        finally
+        {
+            // Radial/backpack suppression can end after Belay captured this
+            // frame. Restoring its individual actions must not reopen climbing
+            // maps behind L; normal panel close rebuilds the native context.
+            if (restored && InputCaptureState.IsBelayPanelCaptured) FindInputManager()?.DisableAllMaps();
+        }
     }
 
     private static void ScanNativeActions()
@@ -258,7 +323,11 @@ internal static class InputInterop
             var mgr = FindInputManager();
             if (mgr != null)
             {
-                mgr.SetIgnoreInputEvents(false);
+                if (!_belayBlockApplied || _ignoreInputApplied)
+                {
+                    mgr.SetIgnoreInputEvents(false);
+                    _ignoreInputApplied = false;
+                }
                 mgr.disabledInputs = false;
                 mgr.EnableInputs();
                 mgr.UpdateInputContext();
@@ -269,6 +338,7 @@ internal static class InputInterop
             ModLog.Warning($"[Input] ForceClearBlock failed: {ex.Message}");
         }
         _blockApplied = false;
+        _belayBlockApplied = false;
     }
 
     private static void LogMapStatusOnce(Il2Cpp.InputManager mgr)

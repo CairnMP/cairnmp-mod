@@ -5,6 +5,7 @@ using CairnMultiplayerMod.Framework;
 using CairnMultiplayerMod.GameApi;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game;
+using CairnMultiplayerMod.Internal.Game.MainMenu;
 using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Game.Roping;
 using CairnMultiplayerMod.Internal.Game.World;
@@ -256,7 +257,26 @@ public partial class Mod
 
         Bivouac.Update();
 
+        // Refresh native pitons before incoming belay callbacks and station validation.
+        // The broadcaster keeps loading/bivouac guards and skips the later Belay sync.
+        try
+        {
+            using var ropes = Measure(PerformanceArea.Ropes);
+            Player.TickBelayPitonSync();
+        }
+        catch (Exception ex)
+        {
+            LoggerInstance.Error(ex.ToString());
+            CrashHandler.RecordRecoverableExceptionOnce(ex, "Mod.TickBelayPitonSync");
+        }
+
         using (Measure(PerformanceArea.Network)) Network.Update();
+
+        if (_game?.Belay.NeedsTick == true)
+        {
+            using var ropes = Measure(PerformanceArea.Ropes);
+            _game.Belay.Tick();
+        }
 
         // Features that must keep running whatever the state (input, HUD upkeep) — placed
         // before the bivouac early-return, like the other always-on ticks below.
@@ -497,6 +517,7 @@ public partial class Mod
         _runtimeStopped = true;
 
         SafeStop("performance diagnostics", StopPerformance);
+        SafeStop("manual belay", () => _game?.Belay.Shutdown());
         SafeStop("input", InputInterop.ForceClearBlock);
         SafeStop("panel", () =>
         {

@@ -70,6 +70,23 @@ public class PacketCodecTests
         var packet = new ClientHandshake { PlayerName = new string('x', ushort.MaxValue) };
         Assert.Throws<InvalidDataException>(() => PacketCodec.Frame(PacketId.ClientHandshake, packet));
     }
+
+    [Fact]
+    public void PitonSnapshotPreservesThePlacersIdSeparatelyFromTheHostId()
+    {
+        var sent = new ServerPitonPlaced { FromPlayerId = 2, PitonId = 41, SourcePitonId = 7,
+            PosX = 3, RotW = 1, Quality = 1, PitonHp = 80, ItemId = 5 };
+        using var buffer = new MemoryStream();
+        using (var writer = new BinaryWriter(buffer, Encoding.UTF8, leaveOpen: true)) sent.Serialize(writer);
+        Assert.Equal(49, buffer.Length); // Four bytes added to the protocol-17 snapshot.
+        buffer.Position = 0;
+        using var reader = new BinaryReader(buffer);
+        var received = new ServerPitonPlaced(); received.Deserialize(reader);
+        Assert.Equal(sent.FromPlayerId, received.FromPlayerId);
+        Assert.Equal(sent.PitonId, received.PitonId); Assert.Equal(sent.SourcePitonId, received.SourcePitonId);
+        Assert.Equal(sent.PosX, received.PosX); Assert.Equal(sent.PitonHp, received.PitonHp);
+        Assert.Equal(buffer.Length, buffer.Position);
+    }
 }
 
 public class ProtocolVersionTests
@@ -81,7 +98,7 @@ public class ProtocolVersionTests
     {
         // When you bump Protocol.Version, update this value AND the release notes
         // to signal to clients that they need to update.
-        Assert.Equal(17, Protocol.Version);
+        Assert.Equal(19, Protocol.Version);
     }
 
     [Fact]

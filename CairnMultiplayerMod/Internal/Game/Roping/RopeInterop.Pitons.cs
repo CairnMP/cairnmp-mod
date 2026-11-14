@@ -115,6 +115,27 @@ internal static partial class RopeInterop
     /// <summary>Another climber took up one of our pitons.</summary>
     internal static void ForgetOwnPiton(uint localId) => _pitons.TakenByOther(localId);
 
+    internal static bool TryGetPitonReference(Il2Cpp.Lifeline lifeline, Il2Cpp.Piton piton, int localPlayer,
+        out int owner, out uint sourceId)
+    {
+        owner = -1; sourceId = 0;
+        return lifeline != null && lifeline == _lifelineCached && piton != null
+            && lifeline.PlacedPitons != null && lifeline.PlacedPitons.Count <= 128
+            && TryCollectPitonPointers(lifeline, _pitonPointers) && _pitonPointers.Contains(piton.Pointer)
+            && _pitons.TryGetReference(piton.Pointer, localPlayer, Time.unscaledTime, out owner, out sourceId);
+    }
+
+    internal static bool TryResolvePitonReference(Il2Cpp.Lifeline lifeline, int owner, uint sourceId, int localPlayer,
+        out Il2Cpp.Piton piton)
+    {
+        piton = null;
+        if (lifeline == null || lifeline != _lifelineCached || lifeline.PlacedPitons == null || lifeline.PlacedPitons.Count > 128
+            || !_pitons.TryResolveReference(owner, sourceId, localPlayer, Time.unscaledTime, out var pointer)
+            || !TryCollectPitonPointers(lifeline, _pitonPointers) || !_pitonPointers.Contains(pointer)) return false;
+        piton = new Il2Cpp.Piton(pointer);
+        return true;
+    }
+
     public static Il2Cpp.Lifeline TryGetLifeline()
     {
         if (_lifelineCached != null) return _lifelineCached;
@@ -139,7 +160,7 @@ internal static partial class RopeInterop
     /// One pass per frame of play: read what the Lifeline holds, let PitonSync decide, carry
     /// out the native part and tell the host the rest.
     /// </summary>
-    internal static void SyncPitons(NetworkManager network)
+    internal static void SyncPitons(NetworkManager network, MultiplayerMode mode)
     {
         var lifeline = TryGetLifeline();
         if (lifeline == null || network == null)
@@ -167,7 +188,7 @@ internal static partial class RopeInterop
             if (Players.LocalPlayerInterop.TryGetPose(out var pose, out _))
                 localPosition = new System.Numerics.Vector3(pose.x, pose.y, pose.z);
 
-            _pitons.SpawnReplicas = TeamAnchorSession.RulesArmed;
+            _pitons.SetReplicaContext(mode, TeamAnchorSession.RulesArmed);
             var actions = _pitons.Reconcile(_placedPitons, localPosition, now);
             if (!actions.IsEmpty)
             {

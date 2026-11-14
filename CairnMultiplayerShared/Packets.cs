@@ -522,6 +522,7 @@ public struct ServerPitonPlaced : IPacket
 {
     public int FromPlayerId;
     public uint PitonId;
+    public uint SourcePitonId;
     public float PosX, PosY, PosZ;
     public float RotX, RotY, RotZ, RotW;
     public byte Quality;
@@ -532,6 +533,7 @@ public struct ServerPitonPlaced : IPacket
     {
         w.Write(FromPlayerId);
         w.Write(PitonId);
+        w.Write(SourcePitonId);
         w.Write(PosX); w.Write(PosY); w.Write(PosZ);
         w.Write(RotX); w.Write(RotY); w.Write(RotZ); w.Write(RotW);
         w.Write(Quality);
@@ -543,6 +545,7 @@ public struct ServerPitonPlaced : IPacket
     {
         FromPlayerId = r.ReadInt32();
         PitonId = r.ReadUInt32();
+        SourcePitonId = r.ReadUInt32();
         PosX = r.ReadSingle(); PosY = r.ReadSingle(); PosZ = r.ReadSingle();
         RotX = r.ReadSingle(); RotY = r.ReadSingle(); RotZ = r.ReadSingle(); RotW = r.ReadSingle();
         Quality = r.ReadByte();

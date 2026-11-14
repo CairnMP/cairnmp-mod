@@ -47,6 +47,15 @@ internal sealed class PlayerStateBroadcaster
         _boneTickTimer = 0f;
     }
 
+    /// <summary>Refresh exact station references before belay validates them this frame.</summary>
+    internal void TickBelayPitonSync()
+    {
+        if (!_state.ModeRules.UsesPartnerBelay || !_network.IsHandshakeComplete
+            || _isGameplaySyncSuspended() || _state.LocalPlayerState != PlayerState.InGame
+            || !IsGameplayGraphReady()) return;
+        RopeInterop.SyncPitons(_network, _state.ModeRules.Mode);
+    }
+
     internal void Tick()
     {
         if (_network.IsHandshakeComplete)
@@ -81,8 +90,8 @@ internal sealed class PlayerStateBroadcaster
             }
 
 
-            if (_state.LocalPlayerState == PlayerState.InGame)
-                RopeInterop.SyncPitons(_network);
+            if (_state.LocalPlayerState == PlayerState.InGame && !_state.ModeRules.UsesPartnerBelay)
+                RopeInterop.SyncPitons(_network, _state.ModeRules.Mode);
 
             RemotePlayerManager.Reconcile(_network, _state.LocalPlayerState);
             RemotePlayerManager.UpdateAll(_network, _state.LocalPlayerState, _isSpeaking);
@@ -256,7 +265,7 @@ internal sealed class PlayerStateBroadcaster
     private static int FrameVectorCount(float[] values) => values == null ? 0 : values.Length / 3;
 
     private string CurrentNetworkSceneName()
-        => SceneRoles.ResolveNetworkScene(_state.CurrentScene, _state.LastGameplayScene);
+        => NetworkSceneInterop.Resolve(_state);
 
     internal void ResetSyncState()
     {
