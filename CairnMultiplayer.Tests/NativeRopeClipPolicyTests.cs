@@ -27,13 +27,22 @@ public class NativeRopeClipPolicyTests
             "Your partner needs to recall Climbot first",
             NativeRopeClipPolicy.PartnerRecallLine("  "));
         Assert.Equal(
-            "Ava isn't ready yet. Try again in a moment.",
+            "Ava isn't ready. Try again.",
             NativeRopeClipPolicy.NotReadyLine("Ava"));
-        // The row already fits the old partner fallback. These three stay inside that.
-        const string longestAlreadyOnTheRow = "Your partner needs to recall their piton first";
-        Assert.True(NativeRopeClipPolicy.PartnerRecallLine("Ava").Length <= longestAlreadyOnTheRow.Length);
-        Assert.True(NativeRopeClipPolicy.PartnerRecallLine("  ").Length <= longestAlreadyOnTheRow.Length);
-        Assert.True(NativeRopeClipPolicy.NotReadyLine("Ava").Length <= longestAlreadyOnTheRow.Length);
+        // The old partner fallback is the longest line the row already fits.
+        const int row = 46;
+        const string twelve = "Longclimber!";
+        Assert.Equal(12, twelve.Length);
+        Assert.Equal(12, "Your partner".Length);
+        var partner = NativeRopeClipPolicy.PartnerRecallLine(twelve);
+        var partnerFallback = NativeRopeClipPolicy.PartnerRecallLine("  ");
+        var notReady = NativeRopeClipPolicy.NotReadyLine(twelve);
+        var notReadyFallback = NativeRopeClipPolicy.NotReadyLine("  ");
+        Assert.True(partner.Length <= row);
+        Assert.True(partnerFallback.Length <= row);
+        Assert.True(notReady.Length <= row);
+        Assert.True(notReadyFallback.Length <= row);
+        Assert.True(NativeRopeClipPolicy.RecallPrompt.Length <= row);
         Assert.True(NativeRopeClipPolicy.ShouldPromptRecall(
             alreadyLinked: false, hasTargetInRange: true, inputAvailable: true, selfHoldsNativePiton: true));
         Assert.False(NativeRopeClipPolicy.ShouldPromptRecall(

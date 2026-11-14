@@ -35,7 +35,7 @@ internal static class NativeRopeClipPolicy
     }
 
     internal static string NotReadyLine(string partnerName)
-        => DisplayName(partnerName) + " isn't ready yet. Try again in a moment.";
+        => DisplayName(partnerName) + " isn't ready. Try again.";
 
     private static string DisplayName(string partnerName)
         => string.IsNullOrWhiteSpace(partnerName) ? "Your partner" : partnerName.Trim();
