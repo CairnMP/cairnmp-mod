@@ -48,7 +48,8 @@ public partial class Mod : MelonMod
     private bool _quitIssued;
     private bool _multiplayerModeActive;
 
-    // Set by scripts/start-local-client.ps1 and scripts/start-second-client.ps1.
+    // Set by scripts/start-local-client.ps1, scripts/start-second-client.ps1,
+    // and the scripts/start-goldberg.* launchers.
     private readonly bool _keepSimulatingWhenUnfocused =
         string.Equals(
             Environment.GetEnvironmentVariable("CAIRNMP_RUN_IN_BACKGROUND"),
