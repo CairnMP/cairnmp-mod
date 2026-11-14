@@ -162,4 +162,51 @@ public sealed class ClimbotRecallTests
             reportedBusy: false, clippedWhileReady: false, whistleInFlight: false, keepsFollowerCatch: false));
     }
 
+    [Fact]
+    public void EveryHarnessFlagCombinationHasOneOutcome()
+    {
+        var rows = new (bool whistle, bool busy, bool leads, bool left, bool follow, ClimbotRecall.Harness answer)[]
+        {
+            (false, false, false, false, false, ClimbotRecall.Harness.Hide),
+            (false, false, false, false, true, ClimbotRecall.Harness.FollowerPin),
+            (false, false, false, true, false, ClimbotRecall.Harness.LeaderLeftRelease),
+            (false, false, false, true, true, ClimbotRecall.Harness.LeaderLeftRelease),
+            (false, false, true, false, false, ClimbotRecall.Harness.LeaderPin),
+            (false, false, true, false, true, ClimbotRecall.Harness.LeaderPin),
+            (false, false, true, true, false, ClimbotRecall.Harness.LeaderPin),
+            (false, false, true, true, true, ClimbotRecall.Harness.LeaderPin),
+            (false, true, false, false, false, ClimbotRecall.Harness.StaleRelease),
+            (false, true, false, false, true, ClimbotRecall.Harness.FollowerPin),
+            (false, true, false, true, false, ClimbotRecall.Harness.LeaderLeftRelease),
+            (false, true, false, true, true, ClimbotRecall.Harness.LeaderLeftRelease),
+            (false, true, true, false, false, ClimbotRecall.Harness.LeaderRelease),
+            (false, true, true, false, true, ClimbotRecall.Harness.LeaderRelease),
+            (false, true, true, true, false, ClimbotRecall.Harness.LeaderRelease),
+            (false, true, true, true, true, ClimbotRecall.Harness.LeaderRelease),
+            (true, false, false, false, false, ClimbotRecall.Harness.Leave),
+            (true, false, false, false, true, ClimbotRecall.Harness.FollowerPin),
+            (true, false, false, true, false, ClimbotRecall.Harness.Leave),
+            (true, false, false, true, true, ClimbotRecall.Harness.FollowerPin),
+            (true, false, true, false, false, ClimbotRecall.Harness.Leave),
+            (true, false, true, false, true, ClimbotRecall.Harness.FollowerPin),
+            (true, false, true, true, false, ClimbotRecall.Harness.Leave),
+            (true, false, true, true, true, ClimbotRecall.Harness.FollowerPin),
+            (true, true, false, false, false, ClimbotRecall.Harness.Leave),
+            (true, true, false, false, true, ClimbotRecall.Harness.FollowerPin),
+            (true, true, false, true, false, ClimbotRecall.Harness.Leave),
+            (true, true, false, true, true, ClimbotRecall.Harness.FollowerPin),
+            (true, true, true, false, false, ClimbotRecall.Harness.Leave),
+            (true, true, true, false, true, ClimbotRecall.Harness.FollowerPin),
+            (true, true, true, true, false, ClimbotRecall.Harness.Leave),
+            (true, true, true, true, true, ClimbotRecall.Harness.FollowerPin),
+        };
+
+        Assert.Equal(32, rows.Length);
+        foreach (var row in rows)
+        {
+            Assert.Equal(
+                row.answer,
+                ClimbotRecall.ChooseHarness(row.whistle, row.busy, row.leads, row.left, row.follow));
+        }
+    }
 }

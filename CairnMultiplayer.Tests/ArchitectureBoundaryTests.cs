@@ -485,6 +485,27 @@ public sealed class ArchitectureBoundaryTests
         var line = MethodBody(source, "private static void AfterRopeLine(");
         Assert.Contains("BivouacSyncGate.AtCamp", line, StringComparison.Ordinal);
         Assert.Contains("TeamAnchorSession.RulesArmed", line, StringComparison.Ordinal);
+        var place = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "TeamPitonPlacePatch.cs"));
+        var chainClip = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "TeamChainClipPatch.cs"));
+        Assert.DoesNotContain("PitonQuickdrawInteractionProvider", place, StringComparison.Ordinal);
+        Assert.DoesNotContain("PitonOffBelayInteractionProvider", place, StringComparison.Ordinal);
+        Assert.DoesNotContain("CanOffBelay", place, StringComparison.Ordinal);
+        Assert.Contains("CairnMultiplayerMod.TeamChainClip", chainClip, StringComparison.Ordinal);
+        Assert.Contains("team chain clip", registry, StringComparison.Ordinal);
+        var install = MethodBody(chainClip, "public static void Install()");
+        var installTry = install.IndexOf("try", StringComparison.Ordinal);
+        var installCatch = install.IndexOf("catch", StringComparison.Ordinal);
+        var unpatch = install.IndexOf("UnpatchSelf()", StringComparison.Ordinal);
+        Assert.True(installTry >= 0 && installTry < installCatch && installCatch < unpatch);
+        foreach (var hook in new[] { "void HideChainClip(", "bool SkipChainClip(", "bool FreshClipBlocked(" })
+        {
+            var body = MethodBody(chainClip, hook);
+            var keeps = body.IndexOf("KeepsCatch()", StringComparison.Ordinal);
+            var onChain = body.IndexOf("OnChain(", StringComparison.Ordinal);
+            Assert.True(keeps >= 0 && keeps < onChain, hook);
+        }
         Assert.Contains("SetRopeActive(true, false)", MethodBody(source, "internal static void HandBackToCairn("), StringComparison.Ordinal);
         Assert.Contains("SetVisible(true, false)", MethodBody(source, "internal static void HandBackToCairn("), StringComparison.Ordinal);
         Assert.DoesNotContain("SetAttachedToHarness", MethodBody(source, "internal static void HandBackToCairn("), StringComparison.Ordinal);
