@@ -467,7 +467,9 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("SetRopeActive(false, false)", source, StringComparison.Ordinal);
         Assert.Contains("SetVisible(false, false)", source, StringComparison.Ordinal);
         Assert.Contains("RecallClimbot()", source, StringComparison.Ordinal);
+        Assert.Contains("OrderToStopSecuring()", source, StringComparison.Ordinal);
         Assert.Contains("ClimbotRecall.Decide", source, StringComparison.Ordinal);
+        Assert.Contains("ClimbotRecall.IsStuckBelay", source, StringComparison.Ordinal);
         Assert.Contains("SaveStillLoading()", source, StringComparison.Ordinal);
         Assert.Contains("LoadingState.LoadingSave", source, StringComparison.Ordinal);
         var robot = MethodBody(source, "private static void AfterLocalRobot(");
@@ -477,11 +479,33 @@ public sealed class ArchitectureBoundaryTests
         var unclip = robot.IndexOf("SetAttachedToHarness(false)", StringComparison.Ordinal);
         Assert.True(loading >= 0 && loading < camp && camp < armed && armed < unclip);
         var followerClip = robot.IndexOf("FollowerKeepsSecuringClip", StringComparison.Ordinal);
+        var choose = robot.IndexOf("ChooseHarness(", StringComparison.Ordinal);
         var deactivate = robot.IndexOf("SetRopeActive(false, false)", StringComparison.Ordinal);
-        Assert.True(followerClip > unclip && deactivate > followerClip);
+        Assert.True(followerClip >= 0 && followerClip < choose && choose < unclip && deactivate > unclip);
         var line = MethodBody(source, "private static void AfterRopeLine(");
         Assert.Contains("BivouacSyncGate.AtCamp", line, StringComparison.Ordinal);
         Assert.Contains("TeamAnchorSession.RulesArmed", line, StringComparison.Ordinal);
+        var place = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "TeamPitonPlacePatch.cs"));
+        var chainClip = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Game", "Roping", "TeamChainClipPatch.cs"));
+        Assert.DoesNotContain("PitonQuickdrawInteractionProvider", place, StringComparison.Ordinal);
+        Assert.DoesNotContain("PitonOffBelayInteractionProvider", place, StringComparison.Ordinal);
+        Assert.DoesNotContain("CanOffBelay", place, StringComparison.Ordinal);
+        Assert.Contains("CairnMultiplayerMod.TeamChainClip", chainClip, StringComparison.Ordinal);
+        Assert.Contains("team chain clip", registry, StringComparison.Ordinal);
+        var install = MethodBody(chainClip, "public static void Install()");
+        var installTry = install.IndexOf("try", StringComparison.Ordinal);
+        var installCatch = install.IndexOf("catch", StringComparison.Ordinal);
+        var unpatch = install.IndexOf("UnpatchSelf()", StringComparison.Ordinal);
+        Assert.True(installTry >= 0 && installTry < installCatch && installCatch < unpatch);
+        foreach (var hook in new[] { "void HideChainClip(", "bool SkipChainClip(", "bool FreshClipBlocked(" })
+        {
+            var body = MethodBody(chainClip, hook);
+            var keeps = body.IndexOf("KeepsCatch()", StringComparison.Ordinal);
+            var onChain = body.IndexOf("OnChain(", StringComparison.Ordinal);
+            Assert.True(keeps >= 0 && keeps < onChain, hook);
+        }
         Assert.Contains("SetRopeActive(true, false)", MethodBody(source, "internal static void HandBackToCairn("), StringComparison.Ordinal);
         Assert.Contains("SetVisible(true, false)", MethodBody(source, "internal static void HandBackToCairn("), StringComparison.Ordinal);
         Assert.DoesNotContain("SetAttachedToHarness", MethodBody(source, "internal static void HandBackToCairn("), StringComparison.Ordinal);

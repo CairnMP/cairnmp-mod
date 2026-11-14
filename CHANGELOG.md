@@ -13,6 +13,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.5.1](#251--2026-11-14-beta) | 2026-11-14 | Beta | Staff unclip tells Climbot to stop securing |
 | [2.5.0](#250--2026-11-10-beta) | 2026-11-10 | Beta | Rope Team piton chain and a controller radial menu |
 | [2.4.4](#244--2026-11-07-stable) | 2026-11-07 | Stable | The 2.4.2 and 2.4.3 fixes on the stable channel |
 | [2.4.3](#243--2026-11-05-beta) | 2026-11-05 | Beta | New Story saves keep their difficulty instead of turning into Summit |
@@ -47,12 +48,12 @@ All notable CairnMP changes are documented here. Releases follow
 
 ---
 
-## [Unreleased]
+## [2.5.1] — 2026-11-14 (beta)
 
-### Changed
+> After a staff unclip, Climbot is told to stop securing. The lobby protocol is **18**, up from the released 2.5.0's 17.
 
-- The lobby protocol goes from 17 to **18**. Every lobby member must update
-  together, and a 2.5.0 player cannot join.
+### Fixed
+- Rope Team: after a staff unclip, Climbot is told to stop securing, and a piton already on the follower's chain is not a new clip. Resting on a piton the rope already runs through stays. The ready clip is kept. It is not cleared on reaching the ground. A fall is caught as on develop today. After a staff unclip the leader is unprotected on purpose until Climbot reports Ready, and the leader's rope dropping is intentional. The harness clip comes back when Climbot reports Ready. (Related to #58)
 
 ## [2.5.0] — 2026-11-10 (beta)
 
