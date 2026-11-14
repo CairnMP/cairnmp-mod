@@ -105,7 +105,15 @@ internal sealed class PitonSync
         internal RemoteState State;
         internal IntPtr Pointer;
         internal double RetryAt;
+        internal int TieGeneration;
         internal Vector3 Position => new(Placed.PosX, Placed.PosY, Placed.PosZ);
+    }
+
+    private struct NativeSeal
+    {
+        internal IntPtr Pointer;
+        internal Vector3 Position;
+        internal bool HasPosition;
     }
 
     private readonly Dictionary<IntPtr, uint> _ownByPointer = new();
@@ -127,7 +135,9 @@ internal sealed class PitonSync
     private readonly HashSet<IntPtr> _current = new();
     private readonly List<IntPtr> _gone = new();
     private readonly List<uint> _drop = new();
+    private readonly List<NativeSeal> _nativeSeals = new();
     private uint _nextLocalId = 1;
+    private int _tieGeneration;
     private IntPtr _lifeline;
     private bool _settling, _afterReload;
     private double _settleUntil, _lastReconcileAt = double.NegativeInfinity;
@@ -187,7 +197,49 @@ internal sealed class PitonSync
             return;
         }
         if (_remote.Count >= MaxRemotePitons) return;
-        _remote[placed.PitonId] = new Remote { Placed = placed, State = RemoteState.Pending };
+        _remote[placed.PitonId] = new Remote
+        {
+            Placed = placed,
+            State = RemoteState.Pending,
+            TieGeneration = _tieGeneration,
+        };
+    }
+
+    /// <summary>The next tie. Pitons already known keep the generation they arrived on.</summary>
+    internal void BeginTie() => _tieGeneration++;
+
+    /// <summary>True when this id was replicated before <see cref="BeginTie"/>.</summary>
+    internal bool KnownFromBeforeThisTie(uint pitonId)
+        => _remote.TryGetValue(pitonId, out var remote) && remote.TieGeneration != _tieGeneration;
+
+    /// <summary>
+    /// A piton already in the rock when the tie started. A later copy at the same
+    /// place is the same native piton, not a chain anchor.
+    /// </summary>
+    internal void SealNative(IntPtr pointer, Vector3 position)
+    {
+        if (IsSealedNative(pointer, position)) return;
+        var recordable = IsRecordable(position);
+        if (pointer == IntPtr.Zero && !recordable) return;
+        _nativeSeals.Add(new NativeSeal
+        {
+            Pointer = pointer,
+            Position = position,
+            HasPosition = recordable,
+        });
+    }
+
+    internal bool IsSealedNative(IntPtr pointer, Vector3 position)
+    {
+        for (var i = 0; i < _nativeSeals.Count; i++)
+        {
+            var seal = _nativeSeals[i];
+            if (pointer != IntPtr.Zero && seal.Pointer == pointer) return true;
+            if (seal.HasPosition && IsRecordable(position) && SamePlace(seal.Position, position))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>The host says this piton is gone.</summary>
@@ -277,9 +329,35 @@ internal sealed class PitonSync
 
         NoticeDisappearances(localPosition, attributable);
         RecogniseNewcomers(placed, now);
+        ReleaseRecalledNativeSeals(placed);
         QueueSpawns(now);
         QueueStrips();
         return _actions;
+    }
+
+    /// <summary>
+    /// The native piton left the rock. A later piton may use that place. A new
+    /// pointer still sitting there keeps the seal, so the rope break cannot rename it
+    /// onto the chain.
+    /// </summary>
+    private void ReleaseRecalledNativeSeals(IReadOnlyList<PlacedPiton> placed)
+    {
+        if (_settling || _nativeSeals.Count == 0) return;
+        for (var i = _nativeSeals.Count - 1; i >= 0; i--)
+        {
+            var seal = _nativeSeals[i];
+            if (seal.Pointer != IntPtr.Zero && _current.Contains(seal.Pointer)) continue;
+            if (seal.HasPosition && MatchesPlaced(placed, seal.Position)) continue;
+            _nativeSeals.RemoveAt(i);
+        }
+    }
+
+    private static bool MatchesPlaced(IReadOnlyList<PlacedPiton> placed, Vector3 position)
+    {
+        for (var i = 0; i < placed.Count; i++)
+            if (IsRecordable(placed[i].Position) && SamePlace(placed[i].Position, position))
+                return true;
+        return false;
     }
 
     private void NoticeDisappearances(Vector3? localPosition, bool attributable)
@@ -374,6 +452,9 @@ internal sealed class PitonSync
                 continue;
 
             if (TryRebindOwn(piton) || TryClaimRemote(piton)) continue;
+            // Not _foreign: that set is parked off the save. This piton is still theirs.
+            if (IsSealedNative(pointer, piton.Position)) continue;
+
             if (settling) continue;
 
             if (_settling && _afterReload)
@@ -604,12 +685,18 @@ internal sealed class PitonSync
         _foreign.Clear();
         _unclipped.Clear();
         _uncertainReferences.Clear();
+        _nativeSeals.Clear();
+        _tieGeneration = 0;
         _lifeline = IntPtr.Zero;
         _settling = false;
         _afterReload = false;
         _lastReconcileAt = double.NegativeInfinity;
         // Local ids keep counting: the host may still hold one of ours from before.
     }
+
+    private static bool IsRecordable(Vector3 position)
+        => float.IsFinite(position.X) && float.IsFinite(position.Y) && float.IsFinite(position.Z)
+           && position != Vector3.Zero;
 
     private static bool SamePlace(Vector3 a, Vector3 b)
         => Vector3.DistanceSquared(a, b) <= SamePlaceMeters * SamePlaceMeters;

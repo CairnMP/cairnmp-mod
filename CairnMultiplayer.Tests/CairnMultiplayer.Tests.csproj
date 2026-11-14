@@ -19,6 +19,8 @@
     <Compile Include="../CairnMultiplayerMod/Internal/Networking/Authoritative/RopeRequests.cs" Link="Production/RopeRequests.cs" />
     <Compile Include="../CairnMultiplayerMod/Internal/Game/Roping/ClimbotRecall.cs" Link="Production/ClimbotRecall.cs" />
     <Compile Include="../CairnMultiplayerMod.Tests/ClimbotRecallTests.cs" Link="ClimbotRecallTests.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Networking/Authoritative/NativeRopeClipPolicy.cs" Link="Production/NativeRopeClipPolicy.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Game/Roping/PitonSync.cs" Link="Production/PitonSync.cs" />
     <Compile Include="../CairnMultiplayerMod/Internal/Diagnostics/CrashArchiveBuilder.cs" Link="Production/CrashArchiveBuilder.cs" />
     <Compile Include="../CairnMultiplayerMod/Internal/Diagnostics/CrashFingerprint.cs" Link="Production/CrashFingerprint.cs" />
     <Compile Include="../CairnMultiplayerMod/Internal/Diagnostics/DiagnosticRetention.cs" Link="Production/DiagnosticRetention.cs" />

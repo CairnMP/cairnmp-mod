@@ -163,6 +163,7 @@ public partial class Mod : MelonMod
         _connectKey = ParseKey(ModConfig.ConnectKey.Value, Key.F5);
         _disconnectKey = ParseKey(ModConfig.DisconnectKey.Value, Key.F6);
         Network = new NetworkManager(RopeLinkState.Links);
+        Network.BindNativeRopeBlock(RopeInterop.NativeRopeHoldsUnrecalledPiton);
         Lobby = new SteamLobbyManager();
         _panel = MultiplayerPanelFactory.Create(Lobby, SummitWorldInterop.WhyUnavailable);
         _mainMenu = new MainMenuAdapter(OnSoloModeSelected);
@@ -322,13 +323,32 @@ public partial class Mod : MelonMod
         };
         Network.OnRopeClip += (from, target, clip) =>
         {
-            if (!clip)
-                RopeInterop.PrepareUntie(from, target, TeamAnchorSession.IsLocalLeader, from == Network.LocalPlayerId);
             var samePair = TeamAnchorSession.ResumesHeldPair(from, target);
+            var local = Network.LocalPlayerId;
+            var involvesLocal = from == local || target == local;
+            if (NativeRopeClipPolicy.BlocksNewTie(
+                    clip,
+                    samePair,
+                    involvesLocal && RopeInterop.NativeRopeHoldsUnrecalledPiton(),
+                    partnerHoldsNativePiton: false))
+            {
+                // The other climber may already have opened the tie. Drop it before their
+                // rope is broken. This climber does not open one.
+                var other = from == local ? target : from;
+                ModLog.Info("[RopeCouple] Clip refused: recall the piton before tying in.");
+                if (involvesLocal && other > 0 && other != local)
+                    Network.SendRopeClip(other, false);
+                return;
+            }
+
+            if (!clip)
+                RopeInterop.PrepareUntie(from, target, TeamAnchorSession.IsLocalLeader, from == local);
             var movePitons = PitonReturn.ReturnsOnRopeUp(
                 samePair, TeamAnchorSession.LeaderLeft, TopAnchorSession.HasStick);
             RopeLinkState.Apply(from, target, clip);
-            TeamAnchorSession.OnClip(Network.LocalPlayerId, from, target, clip);
+            TeamAnchorSession.OnClip(local, from, target, clip);
+            if (clip && !samePair && TeamAnchorSession.IsLinked)
+                RopeInterop.SealNativePitonsForNewTie();
             if (clip && movePitons && TeamAnchorSession.IsLinked)
             {
                 RopeInterop.BeginPitonPool(Network);
@@ -343,9 +363,12 @@ public partial class Mod : MelonMod
         {
             if (!PitonAuthority.IsOtherClimbersPiton(placed.FromPlayerId, Network.LocalPlayerId))
                 return;
+            var knownBefore = RopeInterop.KnownFromBeforeThisTie(placed.PitonId);
             RopeInterop.KnowRemotePiton(placed);
-            TeamAnchorSession.NoteRemotePlacement(placed.FromPlayerId, placed.PitonId,
-                new System.Numerics.Vector3(placed.PosX, placed.PosY, placed.PosZ));
+            var position = new System.Numerics.Vector3(placed.PosX, placed.PosY, placed.PosZ);
+            if (knownBefore || !NativeRopeClipPolicy.MayJoinChain(RopeInterop.IsSealedNative(IntPtr.Zero, position)))
+                return;
+            TeamAnchorSession.NoteRemotePlacement(placed.FromPlayerId, placed.PitonId, position);
         };
         Network.OnPitonRemoved += pkt =>
         {

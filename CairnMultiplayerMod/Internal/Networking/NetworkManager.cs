@@ -27,10 +27,27 @@ namespace CairnMultiplayerMod.Internal.Networking
         private float _localLinkY;
         private float _localLinkZ;
         private readonly Func<IEnumerable<(int a, int b)>> _ropeLinks;
+        private Func<bool> _nativeRopeBlocksClip;
         public IReadOnlyDictionary<int, RemotePlayer> RemotePlayers => _remotePlayers;
 
         internal NetworkManager(Func<IEnumerable<(int a, int b)>> ropeLinks)
             => _ropeLinks = ropeLinks ?? throw new ArgumentNullException(nameof(ropeLinks));
+
+        /// <summary>The local climber still has a piton on a native rope. Set by the game layer.</summary>
+        internal void BindNativeRopeBlock(Func<bool> blocks)
+            => _nativeRopeBlocksClip = blocks;
+
+        private bool NativeRopeBlocksClip()
+        {
+            var blocks = _nativeRopeBlocksClip;
+            if (blocks == null) return false;
+            try { return blocks(); }
+            catch (Exception exception)
+            {
+                ModLog.SuppressedException("rope.native-clip", exception);
+                return false;
+            }
+        }
 
         private bool _debugLoggedFirstLocalPlayerFrameSend;
         private bool _debugLoggedFirstLocalClimbotFrameSend;

@@ -313,6 +313,13 @@ internal sealed partial class NetworkManager
                         ModLog.Info($"[RopeCouple] Refused clip {fromId} -> {pkt.TargetPlayerId}: {refusal}");
                         break;
                     }
+                    if (pkt.Clip
+                        && (fromId == LocalPlayerId || pkt.TargetPlayerId == LocalPlayerId)
+                        && NativeRopeBlocksClip())
+                    {
+                        ModLog.Info("[RopeCouple] Refused clip: recall the piton before tying in.");
+                        break;
+                    }
                     if (!RopeRequests.IsAllowed(fromId, pkt.TargetPlayerId, pkt.Clip, _ropeLinks(), IsAdmittedPlayer)) break;
                     if (pkt.Clip && !_ropeCreationBudget.Take(fromId)) break;
                     var outPkt = new ServerRopeClip { FromPlayerId = fromId, TargetPlayerId = pkt.TargetPlayerId, Clip = pkt.Clip };
@@ -592,6 +599,11 @@ internal sealed partial class NetworkManager
     private void SendSteamRopeClip(int targetPlayerId, bool clip)
     {
         if (!IsHandshakeComplete || targetPlayerId == LocalPlayerId) return;
+        if (clip && NativeRopeBlocksClip())
+        {
+            ModLog.Info("[RopeCouple] Refused clip: recall the piton before tying in.");
+            return;
+        }
 
         // The practice climber is not a lobby member. His tie stays on this host.
         if (PracticePartner.Is(targetPlayerId))

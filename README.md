@@ -76,7 +76,8 @@ repeated, or because they only apply in the backpack.
 Hold `View/Share` first, then press the button; the menu steps aside.
 
 Press the right stick to attach or detach the cooperative rope. `L` does the same
-on a keyboard.
+on a keyboard. If a piton is still on your own rope, the tie waits and that row
+says to recall it first.
 
 Temporary test tools, taken out after the rope-team trial. The practice climber is
 off unless `PracticeClimber = true` is set under `[Debug]` in

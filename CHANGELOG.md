@@ -55,6 +55,13 @@ All notable CairnMP changes are documented here. Releases follow
 ### Fixed
 - Rope Team: after a staff unclip, Climbot is told to stop securing, and a piton already on the follower's chain is not a new clip. Resting on a piton the rope already runs through stays. The ready clip is kept. It is not cleared on reaching the ground. A fall is caught as on develop today. After a staff unclip the leader is unprotected on purpose until Climbot reports Ready, and the leader's rope dropping is intentional. The harness clip comes back when Climbot reports Ready. (Related to #58)
 
+## [Unreleased]
+
+### Fixed
+- Rope Team: tying in is refused while a piton is still on your own rope. The clip
+  prompt says to recall it first. That piton stays off the shared chain, so an
+  unclip cannot pull a climber to it.
+
 ## [2.5.0] — 2026-11-10 (beta)
 
 > A Rope Team rebuild and a controller radial menu. The lobby protocol goes from 16

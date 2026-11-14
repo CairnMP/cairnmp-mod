@@ -302,6 +302,16 @@ internal sealed class RopeCoupleController
             return;
         }
 
+        if (NativeRopeClipPolicy.BlocksNewTie(
+                clip: true,
+                TeamAnchorSession.ResumesHeldPair(self, bestId),
+                RopeInterop.NativeRopeHoldsUnrecalledPiton(),
+                partnerHoldsNativePiton: false))
+        {
+            ModLog.Info("[RopeCouple] Link pressed — recall the piton before tying in.");
+            return;
+        }
+
         if (RopeLinkState.IsLinked(self, bestId))
         {
             ReleaseClip(self, bestId);
@@ -336,12 +346,20 @@ internal sealed class RopeCoupleController
 
         var linked = RopeLinkState.PartnerOf(_network.LocalPlayerId) != -1;
         var pitchHeld = TeamAnchorSession.StaffHoldsPitch && TeamAnchorSession.IsLocalFollower;
+        var inRange = !linked && HasClipTargetInRange();
+        var recall = NativeRopeClipPolicy.ShouldPromptRecall(
+            linked,
+            inRange,
+            inputAvailable,
+            inRange && RopeInterop.NativeRopeHoldsUnrecalledPiton());
+        if (recall)
+        {
+            RopeClipPrompt.Tick(true, NativeRopeClipPolicy.RecallPrompt);
+            return;
+        }
+
         RopeClipPrompt.Tick(
-            RopeClipPromptPolicy.ShouldShow(
-                linked,
-                !linked && HasClipTargetInRange(),
-                inputAvailable,
-                pitchHeld),
+            RopeClipPromptPolicy.ShouldShow(linked, inRange, inputAvailable, pitchHeld),
             RopeClipPrompt.Label);
     }
 
