@@ -37,8 +37,22 @@ internal static class NativeRopeClipPolicy
     internal static string NotReadyLine(string partnerName)
         => DisplayName(partnerName) + " isn't ready. Try again.";
 
+    /// <summary>
+    /// Steam persona names run to 32 characters. The clip row fits 46, and the
+    /// longer refusal adds 30, so the name itself stops at 12. A longer name
+    /// keeps the first nine characters and a trailing ellipsis.
+    /// </summary>
     private static string DisplayName(string partnerName)
-        => string.IsNullOrWhiteSpace(partnerName) ? "Your partner" : partnerName.Trim();
+    {
+        const int max = 12;
+        const string ellipsis = "...";
+        var name = string.IsNullOrWhiteSpace(partnerName) ? "Your partner" : partnerName.Trim();
+        if (name.Length <= max) return name;
+        var stem = name.Substring(0, max - ellipsis.Length).TrimEnd();
+        if (stem.Length == 0)
+            stem = name.Substring(0, max - ellipsis.Length);
+        return stem + ellipsis;
+    }
 
     /// <summary>
     /// The same row as clip-in. It stays hidden while already tied, while nobody is
