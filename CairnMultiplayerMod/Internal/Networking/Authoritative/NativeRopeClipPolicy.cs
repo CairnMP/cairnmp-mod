@@ -18,13 +18,12 @@ internal static class NativeRopeClipPolicy
     /// </summary>
     internal const string RecallPrompt = "Recall Climbot to tie in";
 
-    /// <summary>How long the partner's refusal stays up after they walk out of reach.</summary>
-    internal const float PartnerRecallSeconds = 2.5f;
+    /// <summary>How long a tie refusal stays up after they walk out of reach.</summary>
+    internal const float TieRefusalSeconds = 2.5f;
 
     /// <summary>
-    /// The recall gate is for a new tie. Unclip stays open. Coming back to a held
-    /// pair is not a new tie: the pitons on that rope are the catch, and the
-    /// release queue is not part of the native-piton read.
+    /// The recall gate is for a new tie. Unclip stays open. A rejoin of a held
+    /// pair skips this gate, so the native-piton read does not matter there.
     /// </summary>
     internal static bool RecallGateApplies(bool clip, bool resumesHeldPair)
         => clip && !resumesHeldPair;

@@ -19,7 +19,7 @@ public class NativeRopeClipPolicyTests
     public void TheRecallPromptUsesClimbotAndOnlyShowsBesideAPartner()
     {
         Assert.Equal("Recall Climbot to tie in", NativeRopeClipPolicy.RecallPrompt);
-        Assert.Equal(2.5f, NativeRopeClipPolicy.PartnerRecallSeconds);
+        Assert.Equal(2.5f, NativeRopeClipPolicy.TieRefusalSeconds);
         Assert.Equal(
             "Ava needs to recall their piton first",
             NativeRopeClipPolicy.PartnerRecallLine("Ava"));

@@ -356,7 +356,7 @@ internal sealed class RopeCoupleController
             return;
         }
 
-        if (PartnerRecallPending())
+        if (TieRefusalPending())
         {
             RopeClipPrompt.Tick(true, _tieRefusalLine);
             return;
@@ -376,14 +376,14 @@ internal sealed class RopeCoupleController
         if (mustRecallPlayerId == _network.LocalPlayerId && pitonOut)
         {
             _tieRefusalLine = NativeRopeClipPolicy.RecallPrompt;
-            _tieRefusalUntil = Time.unscaledTime + NativeRopeClipPolicy.PartnerRecallSeconds;
+            _tieRefusalUntil = Time.unscaledTime + NativeRopeClipPolicy.TieRefusalSeconds;
             return;
         }
 
         _tieRefusalLine = pitonOut
             ? NativeRopeClipPolicy.PartnerRecallLine(name)
             : NativeRopeClipPolicy.NotReadyLine(name);
-        _tieRefusalUntil = Time.unscaledTime + NativeRopeClipPolicy.PartnerRecallSeconds;
+        _tieRefusalUntil = Time.unscaledTime + NativeRopeClipPolicy.TieRefusalSeconds;
     }
 
     /// <summary>Guests only. The host reads its own rope and stores what guests report.</summary>
@@ -397,7 +397,7 @@ internal sealed class RopeCoupleController
         _network.SendNativePiton(holds);
     }
 
-    private bool PartnerRecallPending()
+    private bool TieRefusalPending()
         => _tieRefusalLine != null && Time.unscaledTime < _tieRefusalUntil;
 
     private bool HasClipTargetInRange()
