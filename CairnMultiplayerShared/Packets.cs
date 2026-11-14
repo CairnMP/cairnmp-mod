@@ -367,6 +367,34 @@ public struct ClientRopeClip : IPacket
     public void Deserialize(BinaryReader r) { TargetPlayerId = r.ReadInt32(); Clip = r.ReadBoolean(); }
 }
 
+/// <summary>A guest's native rope, sent when it changes. The host does not relay it.</summary>
+public struct ClientNativePiton : IPacket
+{
+    public bool HoldsPiton;
+
+    public void Serialize(BinaryWriter w) => w.Write(HoldsPiton);
+    public void Deserialize(BinaryReader r) => HoldsPiton = r.ReadBoolean();
+}
+
+/// <summary>The tie was not started. Only the presser receives it.</summary>
+public struct ServerRopeClipRefusal : IPacket
+{
+    public int MustRecallPlayerId;
+    public bool PitonOut;
+
+    public void Serialize(BinaryWriter w)
+    {
+        w.Write(MustRecallPlayerId);
+        w.Write(PitonOut);
+    }
+
+    public void Deserialize(BinaryReader r)
+    {
+        MustRecallPlayerId = r.ReadInt32();
+        PitonOut = r.ReadBoolean();
+    }
+}
+
 
 public struct ServerHandshakeAck : IPacket
 {

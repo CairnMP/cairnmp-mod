@@ -7,41 +7,43 @@ namespace CairnMultiplayerShared.Tests;
 
 public class NativeRopeClipPolicyTests
 {
-    [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    public void ANewTieWaitsWhileEitherClimberStillHoldsANativePiton(bool self, bool partner)
+    [Fact]
+    public void ANewTieWaitsWhileThisClimberStillHoldsANativePiton()
     {
         Assert.True(NativeRopeClipPolicy.BlocksNewTie(
-            clip: true, resumesHeldPair: false, self, partner));
-    }
-
-    [Fact]
-    public void ATieIsAllowedWhenBothNativeRopesAreClear()
-    {
+            clip: true, resumesHeldPair: false, selfHoldsNativePiton: true));
         Assert.False(NativeRopeClipPolicy.BlocksNewTie(
-            clip: true, resumesHeldPair: false, selfHoldsNativePiton: false, partnerHoldsNativePiton: false));
+            clip: true, resumesHeldPair: false, selfHoldsNativePiton: false));
     }
 
     [Fact]
     public void UnclipStaysAllowedWhileANativePitonIsOut()
     {
         Assert.False(NativeRopeClipPolicy.BlocksNewTie(
-            clip: false, resumesHeldPair: false, selfHoldsNativePiton: true, partnerHoldsNativePiton: true));
+            clip: false, resumesHeldPair: false, selfHoldsNativePiton: true));
     }
 
     [Fact]
     public void RejoiningAHeldPairIsNotANewTie()
     {
         Assert.False(NativeRopeClipPolicy.BlocksNewTie(
-            clip: true, resumesHeldPair: true, selfHoldsNativePiton: true, partnerHoldsNativePiton: true));
+            clip: true, resumesHeldPair: true, selfHoldsNativePiton: true));
     }
 
     [Fact]
-    public void TheRecallPromptShowsOnlyBesideAPartnerWhileAPitonIsStillOut()
+    public void TheRecallPromptUsesClimbotAndOnlyShowsBesideAPartner()
     {
-        Assert.Equal("Recall piton first", NativeRopeClipPolicy.RecallPrompt);
+        Assert.Equal("Recall Climbot to tie in", NativeRopeClipPolicy.RecallPrompt);
+        Assert.Equal(2.5f, NativeRopeClipPolicy.PartnerRecallSeconds);
+        Assert.Equal(
+            "Ava needs to recall their piton first",
+            NativeRopeClipPolicy.PartnerRecallLine("Ava"));
+        Assert.Equal(
+            "Your partner needs to recall their piton first",
+            NativeRopeClipPolicy.PartnerRecallLine("  "));
+        Assert.Equal(
+            "Ava is not ready to tie in yet",
+            NativeRopeClipPolicy.NotReadyLine("Ava"));
         Assert.True(NativeRopeClipPolicy.ShouldPromptRecall(
             alreadyLinked: false, hasTargetInRange: true, inputAvailable: true, selfHoldsNativePiton: true));
         Assert.False(NativeRopeClipPolicy.ShouldPromptRecall(
@@ -52,15 +54,5 @@ public class NativeRopeClipPolicyTests
             alreadyLinked: false, hasTargetInRange: true, inputAvailable: false, selfHoldsNativePiton: true));
         Assert.False(NativeRopeClipPolicy.ShouldPromptRecall(
             alreadyLinked: false, hasTargetInRange: true, inputAvailable: true, selfHoldsNativePiton: false));
-    }
-
-    [Fact]
-    public void ANativePitonCannotJoinTheChainOrBecomeAnUnclipSnap()
-    {
-        Assert.False(NativeRopeClipPolicy.MayJoinChain(sealedAsNative: true));
-        Assert.True(NativeRopeClipPolicy.MayJoinChain(sealedAsNative: false));
-        Assert.False(NativeRopeClipPolicy.MaySnapOnUnclip(onThisTieChain: true, sealedAsNative: true));
-        Assert.False(NativeRopeClipPolicy.MaySnapOnUnclip(onThisTieChain: false, sealedAsNative: false));
-        Assert.True(NativeRopeClipPolicy.MaySnapOnUnclip(onThisTieChain: true, sealedAsNative: false));
     }
 }

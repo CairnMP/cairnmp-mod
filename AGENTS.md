@@ -96,7 +96,7 @@ owner is authoritative; there is no dedicated server.
 | Source generator / analyzer | `netstandard2.0` (Roslyn requirement) |
 | Portable tests | `net10.0`, xUnit |
 | Mod tests | `net6.0`, xUnit, need the game references |
-| Versions | `versions.json`: mod `2.5.1`, protocol `18` at the time of writing |
+| Versions | `versions.json`: mod `2.6.0`, protocol `19` at the time of writing |
 | Base branch | `develop` (CI also runs on `production`) |
 | License | AGPL-3.0; the game, Unity and MelonLoader assemblies are proprietary |
 | Owner and reviewer | `@yutho-o` (see `.github/CODEOWNERS`) |

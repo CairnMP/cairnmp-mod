@@ -88,6 +88,9 @@ internal sealed partial class NetworkManager
             case PacketId.ServerRopeClip:
                 HandleRopeClip(reader);
                 break;
+            case PacketId.ServerRopeClipRefusal:
+                HandleRopeClipRefusal(reader);
+                break;
             default:
                 ModLog.Warning($"[CairnMP] Unknown packet id {id}");
                 break;

@@ -33,7 +33,8 @@ public class NativePitonSealTests
         var actions = sync.Reconcile(Placed((9, Here)), null, PitonSync.SettleSeconds + 1);
 
         Assert.Empty(actions.Announce);
-        Assert.True(sync.IsSealedNative(new IntPtr(9), Here));
+        Assert.True(sync.IsSealedNative(new IntPtr(9), default));
+        Assert.False(sync.IsSealedNative(new IntPtr(1), default));
     }
 
     [Fact]

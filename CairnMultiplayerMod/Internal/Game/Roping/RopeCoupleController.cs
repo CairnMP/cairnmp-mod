@@ -29,6 +29,10 @@ internal sealed class RopeCoupleController
     private bool _partnerWasFalling;
     private bool _practiceAttachRefused;
     private float _deadSince = -1f;
+    private float _partnerRecallUntil = -1f;
+    private string _partnerRecallLine;
+    private bool _nativePitonSent;
+    private bool _nativePitonHolds;
     private readonly List<PracticePartner.LinkCandidate> _linkCandidates = new();
 
     internal RopeCoupleController(NetworkManager network, RuntimeState state)
@@ -61,6 +65,7 @@ internal sealed class RopeCoupleController
             return;
         }
 
+        PublishNativePiton(force: false);
         if (!InputCaptureState.IsKeyboardCaptured)
             HandleRopeClipInput();
         TeamAnchorSession.ReconcileLink();
@@ -302,16 +307,6 @@ internal sealed class RopeCoupleController
             return;
         }
 
-        if (NativeRopeClipPolicy.BlocksNewTie(
-                clip: true,
-                TeamAnchorSession.ResumesHeldPair(self, bestId),
-                RopeInterop.NativeRopeHoldsUnrecalledPiton(),
-                partnerHoldsNativePiton: false))
-        {
-            ModLog.Info("[RopeCouple] Link pressed — recall the piton before tying in.");
-            return;
-        }
-
         if (RopeLinkState.IsLinked(self, bestId))
         {
             ReleaseClip(self, bestId);
@@ -323,6 +318,9 @@ internal sealed class RopeCoupleController
         if (current != -1 && current != bestId)
             ReleaseClip(self, current);
 
+        // Tell the host this rope is clear before the request, so a lost earlier report
+        // cannot leave the tie refused. The send itself still waits for both climbers.
+        PublishNativePiton(force: true);
         _network.SendRopeClip(bestId, true);
         ModLog.Info($"[RopeCouple] Clip to player {bestId} at {bestDist:F1}m");
     }
@@ -358,10 +356,49 @@ internal sealed class RopeCoupleController
             return;
         }
 
+        if (PartnerRecallPending())
+        {
+            RopeClipPrompt.Tick(true, _partnerRecallLine);
+            return;
+        }
+
         RopeClipPrompt.Tick(
             RopeClipPromptPolicy.ShouldShow(linked, inRange, inputAvailable, pitchHeld),
             RopeClipPrompt.Label);
     }
+
+    /// <summary>
+    /// The host refused the tie. Stays up for a few seconds so walking apart
+    /// does not hide the reason.
+    /// </summary>
+    internal void ShowTieRefusal(int mustRecallPlayerId, bool pitonOut, string name)
+    {
+        if (mustRecallPlayerId == _network.LocalPlayerId && pitonOut)
+        {
+            _partnerRecallLine = NativeRopeClipPolicy.RecallPrompt;
+            _partnerRecallUntil = Time.unscaledTime + NativeRopeClipPolicy.PartnerRecallSeconds;
+            return;
+        }
+
+        _partnerRecallLine = pitonOut
+            ? NativeRopeClipPolicy.PartnerRecallLine(name)
+            : NativeRopeClipPolicy.NotReadyLine(name);
+        _partnerRecallUntil = Time.unscaledTime + NativeRopeClipPolicy.PartnerRecallSeconds;
+    }
+
+    /// <summary>Guests only. The host reads its own rope and stores what guests report.</summary>
+    internal void PublishNativePiton(bool force)
+    {
+        if (_network == null || !_network.IsHandshakeComplete || _network.IsHost) return;
+        var holds = RopeInterop.NativeRopeHoldsUnrecalledPiton();
+        if (!force && _nativePitonSent && _nativePitonHolds == holds) return;
+        _nativePitonSent = true;
+        _nativePitonHolds = holds;
+        _network.SendNativePiton(holds);
+    }
+
+    private bool PartnerRecallPending()
+        => _partnerRecallLine != null && Time.unscaledTime < _partnerRecallUntil;
 
     private bool HasClipTargetInRange()
     {
@@ -479,6 +516,7 @@ internal sealed class RopeCoupleController
         RopeRoleMarks.Hide();
         // The socket may already be down. Still drop a hang before the rope is released.
         TearDownAllLocalRopeLinks("session ended", notify: false);
+        _nativePitonSent = false;
         RopeLinkState.Clear();
         if (TeamAnchorSession.PitchRemains)
             TeamAnchorSession.Clear();

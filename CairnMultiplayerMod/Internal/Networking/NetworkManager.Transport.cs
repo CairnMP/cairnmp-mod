@@ -125,6 +125,7 @@ internal sealed partial class NetworkManager
             }
             _steamIdsByPlayerId.Remove(playerId);
             if (lobby.IsHost) _pitonAuthority?.RemovePlayer(playerId);
+            _nativePitons.Forget(playerId);
             if (_remotePlayers.Remove(playerId))
                 OnPlayerLeft?.Invoke(playerId);
         }
@@ -313,13 +314,8 @@ internal sealed partial class NetworkManager
                         ModLog.Info($"[RopeCouple] Refused clip {fromId} -> {pkt.TargetPlayerId}: {refusal}");
                         break;
                     }
-                    if (pkt.Clip
-                        && (fromId == LocalPlayerId || pkt.TargetPlayerId == LocalPlayerId)
-                        && NativeRopeBlocksClip())
-                    {
-                        ModLog.Info("[RopeCouple] Refused clip: recall the piton before tying in.");
+                    if (pkt.Clip && RefuseTie(fromId, pkt.TargetPlayerId))
                         break;
-                    }
                     if (!RopeRequests.IsAllowed(fromId, pkt.TargetPlayerId, pkt.Clip, _ropeLinks(), IsAdmittedPlayer)) break;
                     if (pkt.Clip && !_ropeCreationBudget.Take(fromId)) break;
                     var outPkt = new ServerRopeClip { FromPlayerId = fromId, TargetPlayerId = pkt.TargetPlayerId, Clip = pkt.Clip };
@@ -348,11 +344,20 @@ internal sealed partial class NetworkManager
                         exceptSteamId: remoteSteamId, reliable: pkt.Reliable);
                     break;
                 }
+            case PacketId.ClientNativePiton:
+                {
+                    var pkt = new ClientNativePiton();
+                    pkt.Deserialize(r);
+                    var playerId = EnsureSteamRemotePlayer(remoteSteamId);
+                    _nativePitons.Set(playerId, pkt.HoldsPiton);
+                    break;
+                }
             case PacketId.ClientDisconnect:
                 {
                     var playerId = EnsureSteamRemotePlayer(remoteSteamId);
                     _manifestHandledPeers.Add(remoteSteamId);
                     _pitonAuthority?.RemovePlayer(playerId);
+                    _nativePitons.Forget(playerId);
                     NotifyExtensionPeerLeft(playerId);
                     if (_remotePlayers.Remove(playerId))
                         OnPlayerLeft?.Invoke(playerId);
@@ -596,14 +601,70 @@ internal sealed partial class NetworkManager
         return true;
     }
 
+    internal bool IsHost => _steamLobby != null && _steamLobby.IsHost;
+
+    internal void SendNativePiton(bool holdsPiton)
+    {
+        if (!IsHandshakeComplete || IsHost) return;
+        SendSteamPacketToHost(PacketId.ClientNativePiton,
+            new ClientNativePiton { HoldsPiton = holdsPiton }, reliable: true);
+    }
+
+    /// <summary>
+    /// True when the tie must not start. Nothing is applied and nothing is broadcast.
+    /// The presser is told who has to recall, or that the other climber has not reported yet.
+    /// </summary>
+    private bool RefuseTie(int presserId, int partnerId)
+    {
+        NativePitonReport PresserReport()
+            => ReportFor(presserId);
+        NativePitonReport PartnerReport()
+            => PracticePartner.Is(partnerId) ? NativePitonReport.Clear : ReportFor(partnerId);
+
+        var decision = RopeTieAdmission.Decide(presserId, partnerId, PresserReport(), PartnerReport());
+        if (decision.Allowed) return false;
+
+        ModLog.Info($"[RopeCouple] Refused clip {presserId} -> {partnerId}: player {decision.MustRecallPlayerId} "
+            + (decision.PitonOut ? "still has a piton out" : "has not reported a clear rope"));
+        if (presserId == LocalPlayerId)
+        {
+            OnRopeClipRefused?.Invoke(decision.MustRecallPlayerId, decision.PitonOut);
+            return true;
+        }
+
+        if (_steamIdsByPlayerId.TryGetValue(presserId, out var steamId) && steamId != 0 && steamId != _steamLocalId)
+        {
+            SendSteamPayload(new CSteamID(steamId),
+                BuildPayload(PacketId.ServerRopeClipRefusal, new ServerRopeClipRefusal
+                {
+                    MustRecallPlayerId = decision.MustRecallPlayerId,
+                    PitonOut = decision.PitonOut,
+                }), reliable: true);
+        }
+
+        return true;
+    }
+
+    private NativePitonReport ReportFor(int playerId)
+    {
+        if (PracticePartner.Is(playerId)) return NativePitonReport.Clear;
+        return _nativePitons.Report(playerId, playerId == LocalPlayerId, NativeRopeBlocksClip());
+    }
+
     private void SendSteamRopeClip(int targetPlayerId, bool clip)
     {
         if (!IsHandshakeComplete || targetPlayerId == LocalPlayerId) return;
+        // Fast local check. The host still checks both climbers below before anyone is tied.
         if (clip && NativeRopeBlocksClip())
         {
-            ModLog.Info("[RopeCouple] Refused clip: recall the piton before tying in.");
+            ModLog.Info("[RopeCouple] Refused clip: recall Climbot before tying in.");
             return;
         }
+
+        // Only the host knows both climbers. A guest just asks. Applying the tie here
+        // would leave this client tied before the host has agreed.
+        if (clip && IsHost && RefuseTie(LocalPlayerId, targetPlayerId))
+            return;
 
         // The practice climber is not a lobby member. His tie stays on this host.
         if (PracticePartner.Is(targetPlayerId))
@@ -906,6 +967,7 @@ internal sealed partial class NetworkManager
     private void ResetSteamTransportState()
     {
         _ropeCreationBudget.Clear();
+        _nativePitons.Clear();
         ResetExtensionApi();
         _steamTransportActive = false;
         _steamLobby = null;

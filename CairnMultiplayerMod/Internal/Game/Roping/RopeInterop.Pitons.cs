@@ -1029,7 +1029,7 @@ internal static partial class RopeInterop
             if (t == null || t.Pointer == IntPtr.Zero) return;
             var position = t.position;
             var numerics = new System.Numerics.Vector3(position.x, position.y, position.z);
-            if (!NativeRopeClipPolicy.MayJoinChain(_pitons.IsSealedNative(pointer, numerics)))
+            if (_pitons.IsSealedNative(pointer, numerics))
                 return;
             var rotation = t.rotation;
             var quality = (byte)piton.executionQuality;
@@ -1220,9 +1220,10 @@ internal static partial class RopeInterop
                 continue;
             }
 
-            // Detaching a native piton here is what snaps the climber back to it.
-            if (!NativeRopeClipPolicy.MaySnapOnUnclip(
-                    onThisTieChain: true, _pitons.IsSealedNative(pointer, default)))
+            // A sealed native piton is not detached. Detach is what snaps the climber
+            // to it. Dropping it from the queue is intentional: it stays in the rock,
+            // on the rope the climber still has to recall.
+            if (_pitons.IsSealedNative(pointer, default))
             {
                 _releaseRetryAt.Remove(key);
                 TeamAnchorSession.MarkReleased(piton);

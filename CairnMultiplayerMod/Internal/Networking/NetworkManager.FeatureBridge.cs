@@ -33,19 +33,20 @@ internal sealed partial class NetworkManager
 
         SendSteamPacketToHost(PacketId.ClientExtensionManifest, new ClientExtensionManifest
         {
+            ProtocolVersion = Protocol.Version,
             Entries = MultiplayerApi.Runtime.Manifest(),
         }, reliable: true);
     }
 
     private bool HandleExtensionHostPacket(ulong remoteSteamId, PacketId id, System.IO.BinaryReader reader)
     {
-        int playerId = EnsureSteamRemotePlayer(remoteSteamId);
         if (id == PacketId.ClientExtensionManifest)
         {
-            HandleClientExtensionManifest(remoteSteamId, playerId, reader);
+            HandleClientExtensionManifest(remoteSteamId, reader);
             return true;
         }
 
+        int playerId = EnsureSteamRemotePlayer(remoteSteamId);
         if (!_enabledExtensionsByPlayer.ContainsKey(playerId))
             return true; // Admission is incomplete: ignore every gameplay/API packet.
 
@@ -58,14 +59,18 @@ internal sealed partial class NetworkManager
         return false;
     }
 
-    private void HandleClientExtensionManifest(
-        ulong remoteSteamId,
-        int playerId,
-        System.IO.BinaryReader reader)
+    private void HandleClientExtensionManifest(ulong remoteSteamId, System.IO.BinaryReader reader)
     {
         if (!_manifestHandledPeers.Add(remoteSteamId)) return;
-        var manifest = new ClientExtensionManifest();
-        manifest.Deserialize(reader);
+        if (!HandshakeAdmission.TryReadManifest(reader, out var manifest, out var rejectReason, out var error))
+        {
+            if (error != null)
+                ModLog.SuppressedException("handshake.manifest", error);
+            RejectHandshake(remoteSteamId, rejectReason);
+            return;
+        }
+
+        int playerId = EnsureSteamRemotePlayer(remoteSteamId);
         var result = ExtensionNegotiator.Negotiate(MultiplayerApi.Runtime.Manifest(), manifest.Entries);
         var enabled = result.EnabledExtensionIds.ToArray();
         SendSteamPayload(new Il2CppSteamworks.CSteamID(remoteSteamId),
@@ -93,6 +98,22 @@ internal sealed partial class NetworkManager
         if (!wasAdmitted)
             MultiplayerApi.Runtime.NotifyPlayerJoined(ToApiPlayer(playerId));
         ModLog.Info($"[Extensions] Player {playerId} admitted with {enabled.Length} extension(s).");
+    }
+
+    /// <summary>
+    /// The peer is not admitted and is not a player. Gameplay packets stay dropped
+    /// because <see cref="IsExtensionPeerAdmitted"/> is still false.
+    /// </summary>
+    private void RejectHandshake(ulong remoteSteamId, string reason)
+    {
+        SendSteamPayload(new Il2CppSteamworks.CSteamID(remoteSteamId),
+            BuildPayload(PacketId.ServerExtensionManifestResult, new ServerExtensionManifestResult
+            {
+                Accepted = false,
+                Reason = reason,
+                EnabledExtensionIds = System.Array.Empty<string>(),
+            }), reliable: true);
+        ModLog.Warning($"[CairnMP] Handshake rejected steam {remoteSteamId}: {reason}");
     }
 
     private void HandleClientExtensionCommand(int playerId, System.IO.BinaryReader reader)

@@ -242,6 +242,28 @@ internal sealed class PitonSync
         return false;
     }
 
+    /// <summary>
+    /// True when this piton is the sealed native one. A new pointer at the same
+    /// place replaces the old pointer on the seal.
+    /// </summary>
+    private bool TryAdoptSealPointer(IntPtr pointer, Vector3 position)
+    {
+        if (!IsSealedNative(pointer, position)) return false;
+        if (pointer == IntPtr.Zero) return true;
+        for (var i = 0; i < _nativeSeals.Count; i++)
+        {
+            var seal = _nativeSeals[i];
+            if (seal.Pointer == pointer) return true;
+            if (!seal.HasPosition || !IsRecordable(position) || !SamePlace(seal.Position, position))
+                continue;
+            seal.Pointer = pointer;
+            _nativeSeals[i] = seal;
+            return true;
+        }
+
+        return true;
+    }
+
     /// <summary>The host says this piton is gone.</summary>
     internal void Forget(uint pitonId)
     {
@@ -453,7 +475,9 @@ internal sealed class PitonSync
 
             if (TryRebindOwn(piton) || TryClaimRemote(piton)) continue;
             // Not _foreign: that set is parked off the save. This piton is still theirs.
-            if (IsSealedNative(pointer, piton.Position)) continue;
+            // A rope break replaces the pointer. Remember the new one so an unclip
+            // that only has the pointer still refuses to detach it.
+            if (TryAdoptSealPointer(pointer, piton.Position)) continue;
 
             if (settling) continue;
 

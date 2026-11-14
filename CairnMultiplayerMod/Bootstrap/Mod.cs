@@ -20,7 +20,7 @@ using MelonLoader;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-[assembly: MelonInfo(typeof(CairnMultiplayerMod.Bootstrap.Mod), "Cairn Multiplayer Mod", "2.5.1", "CairnModTeam")]
+[assembly: MelonInfo(typeof(CairnMultiplayerMod.Bootstrap.Mod), "Cairn Multiplayer Mod", "2.6.0", "CairnModTeam")]
 [assembly: MelonGame("TheGameBakers", "Cairn")]
 
 namespace CairnMultiplayerMod.Bootstrap;
@@ -292,7 +292,10 @@ public partial class Mod : MelonMod
         {
             _panel.SetStatus($"Connected to {Network.ServerName} (id={Network.LocalPlayerId})", true);
             SetMultiplayerModeActive(true);
+            Rope?.PublishNativePiton(force: true);
         };
+        Network.OnRopeClipRefused += (mustRecallId, pitonOut) =>
+            Rope?.ShowTieRefusal(mustRecallId, pitonOut, PartnerName(mustRecallId));
         Network.OnFeatureStream += (fromPlayerId, channel, payload) =>
             Features.DispatchStream(fromPlayerId, channel, payload);
         Network.OnHandshakeRejected += reason =>
@@ -323,24 +326,10 @@ public partial class Mod : MelonMod
         };
         Network.OnRopeClip += (from, target, clip) =>
         {
+            // The host already refused a tie that either climber could not accept.
+            // This handler only runs for a clip the host broadcast, or for an untie.
             var samePair = TeamAnchorSession.ResumesHeldPair(from, target);
             var local = Network.LocalPlayerId;
-            var involvesLocal = from == local || target == local;
-            if (NativeRopeClipPolicy.BlocksNewTie(
-                    clip,
-                    samePair,
-                    involvesLocal && RopeInterop.NativeRopeHoldsUnrecalledPiton(),
-                    partnerHoldsNativePiton: false))
-            {
-                // The other climber may already have opened the tie. Drop it before their
-                // rope is broken. This climber does not open one.
-                var other = from == local ? target : from;
-                ModLog.Info("[RopeCouple] Clip refused: recall the piton before tying in.");
-                if (involvesLocal && other > 0 && other != local)
-                    Network.SendRopeClip(other, false);
-                return;
-            }
-
             if (!clip)
                 RopeInterop.PrepareUntie(from, target, TeamAnchorSession.IsLocalLeader, from == local);
             var movePitons = PitonReturn.ReturnsOnRopeUp(
@@ -365,10 +354,9 @@ public partial class Mod : MelonMod
                 return;
             var knownBefore = RopeInterop.KnownFromBeforeThisTie(placed.PitonId);
             RopeInterop.KnowRemotePiton(placed);
-            var position = new System.Numerics.Vector3(placed.PosX, placed.PosY, placed.PosZ);
-            if (knownBefore || !NativeRopeClipPolicy.MayJoinChain(RopeInterop.IsSealedNative(IntPtr.Zero, position)))
-                return;
-            TeamAnchorSession.NoteRemotePlacement(placed.FromPlayerId, placed.PitonId, position);
+            if (knownBefore) return;
+            TeamAnchorSession.NoteRemotePlacement(placed.FromPlayerId, placed.PitonId,
+                new System.Numerics.Vector3(placed.PosX, placed.PosY, placed.PosZ));
         };
         Network.OnPitonRemoved += pkt =>
         {
@@ -402,5 +390,12 @@ public partial class Mod : MelonMod
         // Authoritative game launch by the server: queues the packet, applies it in
         // Update when the MainMenu scene is active.
         Network.OnStartGameReceived += pkt => StartGame.Begin(pkt);
+    }
+
+    private string PartnerName(int playerId)
+    {
+        if (Network == null || !Network.RemotePlayers.TryGetValue(playerId, out var remote))
+            return null;
+        return remote?.Name;
     }
 }

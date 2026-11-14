@@ -28,6 +28,7 @@ namespace CairnMultiplayerMod.Internal.Networking
         private float _localLinkZ;
         private readonly Func<IEnumerable<(int a, int b)>> _ropeLinks;
         private Func<bool> _nativeRopeBlocksClip;
+        private readonly Authoritative.NativePitonReports _nativePitons = new();
         public IReadOnlyDictionary<int, RemotePlayer> RemotePlayers => _remotePlayers;
 
         internal NetworkManager(Func<IEnumerable<(int a, int b)>> ropeLinks)
@@ -58,6 +59,8 @@ namespace CairnMultiplayerMod.Internal.Networking
         public event Action<int, string> OnPlayerJoined;
         public event Action<int> OnPlayerLeft;
         public event Action<int, int, bool> OnRopeClip;
+        /// <summary>The tie was not started. The id is who must recall, and the flag is whether a piton is out.</summary>
+        public event Action<int, bool> OnRopeClipRefused;
         public event Action OnHandshakeAck;
         public event Action<string> OnHandshakeRejected;
         public event Action<ServerStartGame> OnStartGameReceived;
