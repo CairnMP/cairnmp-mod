@@ -47,6 +47,13 @@ All notable CairnMP changes are documented here. Releases follow
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- The lobby protocol goes from 17 to **18**. Every lobby member must update
+  together, and a 2.5.0 player cannot join.
+
 ## [2.5.0] — 2026-11-10 (beta)
 
 > A Rope Team rebuild and a controller radial menu. The lobby protocol goes from 16
