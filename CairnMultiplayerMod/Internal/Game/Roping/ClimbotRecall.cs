@@ -35,6 +35,45 @@ internal static class ClimbotRecall
         internal int Asks { get; }
     }
 
+    /// <summary>What to do with the harness this frame. Each value is one outcome.</summary>
+    internal enum Harness
+    {
+        /// <summary>The leader clips the securing rope on.</summary>
+        LeaderPin,
+        /// <summary>The follower's catch stays clipped.</summary>
+        FollowerPin,
+        /// <summary>The leader's stale clip comes off until the bot is ready.</summary>
+        LeaderRelease,
+        /// <summary>The leader has left at a staff. The harness comes off.</summary>
+        LeaderLeftRelease,
+        /// <summary>A busy belay that is not this lead. The stale clip comes off.</summary>
+        StaleRelease,
+        /// <summary>Do not touch the harness.</summary>
+        Leave,
+        /// <summary>The rope stays off this harness.</summary>
+        Hide,
+    }
+
+    /// <summary>
+    /// One harness answer. Who is told to stop securing is decided by
+    /// <see cref="Decide"/>, not here. The flags are inputs.
+    /// </summary>
+    internal static Harness ChooseHarness(
+        bool whistleHold, bool busyHold, bool leads, bool leaderLeft, bool followerClip)
+    {
+        if (!whistleHold && leads)
+            return busyHold ? Harness.LeaderRelease : Harness.LeaderPin;
+        if (!whistleHold && leaderLeft)
+            return Harness.LeaderLeftRelease;
+        if (followerClip)
+            return Harness.FollowerPin;
+        if (!whistleHold && busyHold)
+            return Harness.StaleRelease;
+        if (whistleHold)
+            return Harness.Leave;
+        return Harness.Hide;
+    }
+
     /// <summary>
     /// A busy bot is stuck when this lead has not yet clipped while it was ready,
     /// a whistle is not already bringing it home, and this climber is not the

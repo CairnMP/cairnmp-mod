@@ -218,81 +218,80 @@ internal static class ClimbotRopePatch
             // A whistle already bringing the bot home leaves the harness as it is,
             // except the follower's catch, which stays clipped.
             var gate = LeaveRopeUntilClimbotIsHome(__instance);
-            if (!gate.WhistleHold && TeamAnchorChain.KeepsClimbotCoil(TeamAnchorSession.IsLocalLeader, TeamAnchorSession.LeaderLeft))
+            var leads = TeamAnchorChain.KeepsClimbotCoil(
+                TeamAnchorSession.IsLocalLeader, TeamAnchorSession.LeaderLeft);
+            var leaderLeft = TeamAnchorSession.IsLocalLeader && TeamAnchorSession.LeaderLeft;
+            var followerClip = TeamAnchorChain.FollowerKeepsSecuringClip(
+                KeepsFollowerCatch(), KeepsFollowerCatch());
+            switch (ClimbotRecall.ChooseHarness(
+                gate.WhistleHold, gate.BusyHold, leads, leaderLeft, followerClip))
             {
-                _loggedLeaderRelease = false;
-                _loggedFollowerRope = false;
-                if (gate.BusyHold)
-                {
-                    if (LeaderLifelineIsAttached(__instance))
-                        ReleaseUntilReady(__instance);
-                }
-                else if (!LeaderLifelineIsAttached(__instance))
-                {
-                    __instance.SetAttachedToHarness(true);
+                case ClimbotRecall.Harness.LeaderPin:
+                    _loggedLeaderRelease = false;
+                    _loggedFollowerRope = false;
                     if (gate.Ready)
                         _clippedWhileReady = true;
-                }
-                else
-                {
-                    if (gate.Ready)
-                        _clippedWhileReady = true;
-                    if (!_loggedLeaderRope)
+                    if (!LeaderLifelineIsAttached(__instance))
+                        __instance.SetAttachedToHarness(true);
+                    else if (!_loggedLeaderRope)
                     {
                         _loggedLeaderRope = true;
                         ModLog.Info("[Rope] The leader's lifeline is clipped on.");
                     }
-                }
-            }
-            else if (!gate.WhistleHold && TeamAnchorSession.IsLocalLeader && TeamAnchorSession.LeaderLeft)
-            {
-                // The rope object stays. The follower's pitons are still on it. Only the
-                // harness comes off, which is the clip Cairn's paid-out stop follows.
-                _loggedFollowerRope = false;
-                if (LeaderLifelineIsAttached(__instance))
-                {
-                    __instance.SetAttachedToHarness(false);
-                    if (!_loggedLeaderRelease)
+
+                    break;
+                case ClimbotRecall.Harness.FollowerPin:
+                    // Pitons above the anchor leave this rope. The anchor stays, and the harness
+                    // stays clipped, so a fall ends there. A whistle does not take this catch off.
+                    _loggedLeaderRelease = false;
+                    _loggedLeaderRope = false;
+                    if (!LeaderLifelineIsAttached(__instance))
+                        __instance.SetAttachedToHarness(true);
+                    else if (!_loggedFollowerRope)
                     {
-                        _loggedLeaderRelease = true;
-                        _loggedLeaderRope = false;
-                        ModLog.Info("[Rope] The leader left the rope. The lifeline is off their harness.");
+                        _loggedFollowerRope = true;
+                        ModLog.Info("[Rope] The follower's lifeline stays clipped on.");
                     }
-                }
-            }
-            else if (TeamAnchorChain.FollowerKeepsSecuringClip(
-                KeepsFollowerCatch(),
-                KeepsFollowerCatch()))
-            {
-                // Pitons above the anchor leave this rope. The anchor stays, and the harness
-                // stays clipped, so a fall ends there. The climbot mesh is hidden below.
-                // A busy bot, a stop, or a whistle does not take this catch off.
-                _loggedLeaderRelease = false;
-                _loggedLeaderRope = false;
-                if (!LeaderLifelineIsAttached(__instance))
-                    __instance.SetAttachedToHarness(true);
-                else if (!_loggedFollowerRope)
-                {
-                    _loggedFollowerRope = true;
-                    ModLog.Info("[Rope] The follower's lifeline stays clipped on.");
-                }
-            }
-            else if (!gate.WhistleHold && gate.BusyHold)
-            {
-                // The staff unclip and the short follower tie. The harness comes off.
-                // The rope object stays, so the stop order can finish. A new lead
-                // takes its stale clip off in the leader branch above.
-                _loggedFollowerRope = false;
-                if (LeaderLifelineIsAttached(__instance))
-                    ReleaseUntilReady(__instance);
-            }
-            else if (!gate.WhistleHold
-                && (__instance.RopeDisplayed || __instance.HasSecuringRope || LeaderLifelineIsAttached(__instance)))
-            {
-                _loggedFollowerRope = false;
-                if (LeaderLifelineIsAttached(__instance))
-                    __instance.SetAttachedToHarness(false);
-                __instance.SetRopeActive(false, false);
+
+                    break;
+                case ClimbotRecall.Harness.LeaderRelease:
+                    _loggedLeaderRelease = false;
+                    _loggedFollowerRope = false;
+                    if (LeaderLifelineIsAttached(__instance))
+                        ReleaseUntilReady(__instance);
+                    break;
+                case ClimbotRecall.Harness.LeaderLeftRelease:
+                    // The rope object stays. The follower's pitons are still on it. Only the
+                    // harness comes off, which is the clip Cairn's paid-out stop follows.
+                    _loggedFollowerRope = false;
+                    if (LeaderLifelineIsAttached(__instance))
+                    {
+                        __instance.SetAttachedToHarness(false);
+                        if (!_loggedLeaderRelease)
+                        {
+                            _loggedLeaderRelease = true;
+                            _loggedLeaderRope = false;
+                            ModLog.Info("[Rope] The leader left the rope. The lifeline is off their harness.");
+                        }
+                    }
+
+                    break;
+                case ClimbotRecall.Harness.StaleRelease:
+                    // A stale clip comes off until the bot is ready. The rope object stays.
+                    _loggedFollowerRope = false;
+                    if (LeaderLifelineIsAttached(__instance))
+                        ReleaseUntilReady(__instance);
+                    break;
+                case ClimbotRecall.Harness.Hide:
+                    if (__instance.RopeDisplayed || __instance.HasSecuringRope || LeaderLifelineIsAttached(__instance))
+                    {
+                        _loggedFollowerRope = false;
+                        if (LeaderLifelineIsAttached(__instance))
+                            __instance.SetAttachedToHarness(false);
+                        __instance.SetRopeActive(false, false);
+                    }
+
+                    break;
             }
 
             Suppress(__instance.GetRope());

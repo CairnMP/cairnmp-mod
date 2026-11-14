@@ -479,8 +479,9 @@ public sealed class ArchitectureBoundaryTests
         var unclip = robot.IndexOf("SetAttachedToHarness(false)", StringComparison.Ordinal);
         Assert.True(loading >= 0 && loading < camp && camp < armed && armed < unclip);
         var followerClip = robot.IndexOf("FollowerKeepsSecuringClip", StringComparison.Ordinal);
+        var choose = robot.IndexOf("ChooseHarness(", StringComparison.Ordinal);
         var deactivate = robot.IndexOf("SetRopeActive(false, false)", StringComparison.Ordinal);
-        Assert.True(followerClip > unclip && deactivate > followerClip);
+        Assert.True(followerClip >= 0 && followerClip < choose && choose < unclip && deactivate > unclip);
         var line = MethodBody(source, "private static void AfterRopeLine(");
         Assert.Contains("BivouacSyncGate.AtCamp", line, StringComparison.Ordinal);
         Assert.Contains("TeamAnchorSession.RulesArmed", line, StringComparison.Ordinal);
