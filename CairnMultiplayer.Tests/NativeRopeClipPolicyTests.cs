@@ -63,6 +63,16 @@ public class NativeRopeClipPolicyTests
         Assert.True(splitReady.Length <= row);
         AssertNoLoneSurrogate(splitPartner);
         AssertNoLoneSurrogate(splitReady);
+        var spaced = "ABCDEFG " + emoji + "ZZZ";
+        Assert.True(spaced.Length > 12);
+        Assert.Equal(' ', spaced[7]);
+        Assert.True(char.IsHighSurrogate(spaced[8]));
+        Assert.Equal(
+            "ABCDEFG... needs to recall Climbot first",
+            NativeRopeClipPolicy.PartnerRecallLine(spaced));
+        Assert.Equal(
+            "ABCDEFG... isn't ready. Try again.",
+            NativeRopeClipPolicy.NotReadyLine(spaced));
         Assert.True(NativeRopeClipPolicy.ShouldPromptRecall(
             alreadyLinked: false, hasTargetInRange: true, inputAvailable: true, selfHoldsNativePiton: true));
         Assert.False(NativeRopeClipPolicy.ShouldPromptRecall(

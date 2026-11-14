@@ -41,7 +41,8 @@ internal static class NativeRopeClipPolicy
     /// Steam persona names run to 32 characters. The clip row fits 46, and the
     /// longer refusal adds 30, so the name itself stops at 12. A longer name
     /// keeps the first nine characters and a trailing ellipsis. If that cut
-    /// would split an emoji, the orphan half is dropped.
+    /// would split an emoji, the orphan half is dropped before the trim, so a
+    /// space in front of it does not stay.
     /// </summary>
     private static string DisplayName(string partnerName)
     {
@@ -49,10 +50,10 @@ internal static class NativeRopeClipPolicy
         const string ellipsis = "...";
         var name = string.IsNullOrWhiteSpace(partnerName) ? "Your partner" : partnerName.Trim();
         if (name.Length <= max) return name;
-        var stem = name.Substring(0, max - ellipsis.Length).TrimEnd();
-        if (stem.Length > 0 && char.IsHighSurrogate(stem[stem.Length - 1]))
+        var stem = name.Substring(0, max - ellipsis.Length);
+        if (char.IsHighSurrogate(stem[stem.Length - 1]))
             stem = stem.Substring(0, stem.Length - 1);
-        return stem + ellipsis;
+        return stem.TrimEnd() + ellipsis;
     }
 
     /// <summary>
