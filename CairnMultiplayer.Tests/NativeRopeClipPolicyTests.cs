@@ -50,6 +50,19 @@ public class NativeRopeClipPolicyTests
         Assert.True(NativeRopeClipPolicy.RecallPrompt.Length <= row);
         Assert.True(NativeRopeClipPolicy.PartnerRecallLine("Ava").Length <= row);
         Assert.True(NativeRopeClipPolicy.NotReadyLine("Ava").Length <= row);
+        var emoji = char.ConvertFromUtf32(0x1F600);
+        Assert.Equal(2, emoji.Length);
+        var split = "ABCDEFGH" + emoji + new string('Z', 22);
+        Assert.Equal(32, split.Length);
+        Assert.True(char.IsHighSurrogate(split[8]));
+        var splitPartner = NativeRopeClipPolicy.PartnerRecallLine(split);
+        var splitReady = NativeRopeClipPolicy.NotReadyLine(split);
+        Assert.Equal("ABCDEFGH... needs to recall Climbot first", splitPartner);
+        Assert.Equal("ABCDEFGH... isn't ready. Try again.", splitReady);
+        Assert.True(splitPartner.Length <= row);
+        Assert.True(splitReady.Length <= row);
+        AssertNoLoneSurrogate(splitPartner);
+        AssertNoLoneSurrogate(splitReady);
         Assert.True(NativeRopeClipPolicy.ShouldPromptRecall(
             alreadyLinked: false, hasTargetInRange: true, inputAvailable: true, selfHoldsNativePiton: true));
         Assert.False(NativeRopeClipPolicy.ShouldPromptRecall(
@@ -60,5 +73,16 @@ public class NativeRopeClipPolicyTests
             alreadyLinked: false, hasTargetInRange: true, inputAvailable: false, selfHoldsNativePiton: true));
         Assert.False(NativeRopeClipPolicy.ShouldPromptRecall(
             alreadyLinked: false, hasTargetInRange: true, inputAvailable: true, selfHoldsNativePiton: false));
+    }
+
+    private static void AssertNoLoneSurrogate(string text)
+    {
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (!char.IsSurrogate(text[i])) continue;
+            Assert.True(char.IsHighSurrogate(text[i]));
+            Assert.True(i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]));
+            i++;
+        }
     }
 }
