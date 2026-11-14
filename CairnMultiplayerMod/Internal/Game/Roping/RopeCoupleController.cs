@@ -319,7 +319,9 @@ internal sealed class RopeCoupleController
             ReleaseClip(self, current);
 
         // Tell the host this rope is clear before the request, so a lost earlier report
-        // cannot leave the tie refused. The send itself still waits for both climbers.
+        // cannot leave the tie refused. Both are reliable on Steam channel 0. Steam
+        // keeps that channel in send order, and the host finishes one packet before
+        // the next, so the report is stored before the tie is judged.
         PublishNativePiton(force: true);
         _network.SendRopeClip(bestId, true);
         ModLog.Info($"[RopeCouple] Clip to player {bestId} at {bestDist:F1}m");

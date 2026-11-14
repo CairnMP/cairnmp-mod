@@ -31,11 +31,11 @@ internal static class NativeRopeClipPolicy
     internal static string PartnerRecallLine(string partnerName)
     {
         var name = DisplayName(partnerName);
-        return name + " needs to recall their piton first";
+        return name + " needs to recall Climbot first";
     }
 
     internal static string NotReadyLine(string partnerName)
-        => DisplayName(partnerName) + " is not ready to tie in yet";
+        => DisplayName(partnerName) + " isn't ready yet. Try again in a moment.";
 
     private static string DisplayName(string partnerName)
         => string.IsNullOrWhiteSpace(partnerName) ? "Your partner" : partnerName.Trim();
