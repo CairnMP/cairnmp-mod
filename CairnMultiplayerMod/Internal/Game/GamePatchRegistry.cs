@@ -37,6 +37,7 @@ internal static class GamePatchRegistry
         new("climbot piton recovery", ClimbotPitonRecoveryPatch.Install, ClimbotPitonRecoveryPatch.Uninstall),
         new("climbot rope", ClimbotRopePatch.Install, ClimbotRopePatch.Uninstall),
         new("team piton drill", TeamPitonPlacePatch.Install, TeamPitonPlacePatch.Uninstall),
+        new("team chain clip", TeamChainClipPatch.Install, TeamChainClipPatch.Uninstall),
         new("multiplayer pause", MultiplayerPausePatch.Install, MultiplayerPausePatch.Uninstall),
         new("main-menu buttons", MainMenuButtonIntegration.Install, MainMenuButtonIntegration.Uninstall),
         new("savegame piton guard", SavegamePitonGuardPatch.Install, SavegamePitonGuardPatch.Uninstall),

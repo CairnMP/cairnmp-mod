@@ -6,7 +6,7 @@ namespace CairnMultiplayer.Shared;
 /// </summary>
 public static class Protocol
 {
-    public const int Version = 18;
+    public const int Version = 19;
     public const string ConnectionKey = "cairnmp";
     public const int DefaultPort = 14000;
 
@@ -14,7 +14,7 @@ public static class Protocol
     /// CairnMP client version sent to the API when creating a lobby.
     /// Matches the deployed launcher/mod version.
     /// </summary>
-    public const string GameVersion = "2.5.0";
+    public const string GameVersion = "2.6.0";
 
     public const float PlayerStateUpdateIntervalSeconds = 1f / 30f;
 
@@ -99,6 +99,8 @@ public enum PacketId : byte
     ClientFeatureStream = 19,
     /// <summary>The sender took up a piton another climber placed.</summary>
     ClientPitonRecovered = 20,
+    /// <summary>Guest tells the host whether Climbot still has a piton out. Sent on change, not every frame.</summary>
+    ClientNativePiton = 21,
 
     ServerHandshakeAck = 64,
     ServerHandshakeReject = 65,
@@ -122,6 +124,8 @@ public enum PacketId : byte
     ServerFeatureStream = 89,
     /// <summary>Tells a piton's owner that another climber took it up.</summary>
     ServerPitonRecovered = 90,
+    /// <summary>Host tells the presser the tie did not start, and who has to recall.</summary>
+    ServerRopeClipRefusal = 91,
 }
 
 /// <summary>

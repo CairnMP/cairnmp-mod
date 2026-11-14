@@ -17,6 +17,23 @@
     <Compile Include="../CairnMultiplayerMod/Internal/Networking/Authoritative/IAuthoritativeSink.cs" Link="Production/IAuthoritativeSink.cs" />
     <Compile Include="../CairnMultiplayerMod/Internal/Networking/Authoritative/PeerBudget.cs" Link="Production/PeerBudget.cs" />
     <Compile Include="../CairnMultiplayerMod/Internal/Networking/Authoritative/RopeRequests.cs" Link="Production/RopeRequests.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Game/Roping/ClimbotRecall.cs" Link="Production/ClimbotRecall.cs" />
+    <Compile Include="../CairnMultiplayerMod.Tests/ClimbotRecallTests.cs" Link="ClimbotRecallTests.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Networking/Authoritative/NativeRopeClipPolicy.cs" Link="Production/NativeRopeClipPolicy.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Networking/Authoritative/RopeTieAdmission.cs" Link="Production/RopeTieAdmission.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Game/Roping/PitonSync.cs" Link="Production/PitonSync.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Game/Roping/TeamAnchorSession.cs" Link="Production/TeamAnchorSession.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Game/Roping/TeamAnchorChain.cs" Link="Production/TeamAnchorChain.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Game/Roping/RopeLinkState.cs" Link="Production/RopeLinkState.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Game/Roping/PartnerFallSession.cs" Link="Production/PartnerFallSession.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Game/Roping/PartnerFallPenalty.cs" Link="Production/PartnerFallPenalty.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Game/Roping/TopAnchorSession.cs" Link="Production/TopAnchorSession.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Game/Roping/TopAnchorPolicy.cs" Link="Production/TopAnchorPolicy.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Game/Roping/CutsceneStaffSession.cs" Link="Production/CutsceneStaffSession.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Game/Roping/CutsceneStaffPolicy.cs" Link="Production/CutsceneStaffPolicy.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Game/Roping/RopeAttachmentPolicy.cs" Link="Production/RopeAttachmentPolicy.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Game/Roping/RopeSafety.cs" Link="Production/RopeSafety.cs" />
+    <Compile Include="../CairnMultiplayerMod/Internal/Networking/PracticePartner.cs" Link="Production/PracticePartner.cs" />
     <Compile Include="../CairnMultiplayerMod/Internal/Diagnostics/CrashArchiveBuilder.cs" Link="Production/CrashArchiveBuilder.cs" />
     <Compile Include="../CairnMultiplayerMod/Internal/Diagnostics/CrashFingerprint.cs" Link="Production/CrashFingerprint.cs" />
     <Compile Include="../CairnMultiplayerMod/Internal/Diagnostics/DiagnosticRetention.cs" Link="Production/DiagnosticRetention.cs" />

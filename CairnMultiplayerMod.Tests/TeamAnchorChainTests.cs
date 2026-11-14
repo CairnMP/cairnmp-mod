@@ -145,6 +145,14 @@ public sealed class TeamAnchorChainTests
         Assert.False(TeamAnchorChain.FollowerKeepsSecuringClip(isLocalFollower: false, hasProtection: false));
         Assert.False(TeamAnchorChain.FollowerUnclipsNewerPitons(sharedRope: true));
         Assert.True(TeamAnchorChain.FollowerUnclipsNewerPitons(sharedRope: false));
+
+        // Rest stays when the rope runs through the piton and the harness is clipped on.
+        // A clip does not, including when that rope is already through the piton.
+        Assert.True(TeamAnchorChain.BlocksFreshClip(true, ropeRunsThroughIt: true, harnessClipped: false));
+        Assert.False(TeamAnchorChain.BlocksFreshClip(true, ropeRunsThroughIt: true, harnessClipped: true));
+        Assert.True(TeamAnchorChain.BlocksFreshClip(true, ropeRunsThroughIt: false, harnessClipped: true));
+        Assert.True(TeamAnchorChain.BlocksFreshClip(true, ropeRunsThroughIt: false, harnessClipped: false));
+        Assert.False(TeamAnchorChain.BlocksFreshClip(false, ropeRunsThroughIt: false, harnessClipped: false));
     }
 
     [Fact]

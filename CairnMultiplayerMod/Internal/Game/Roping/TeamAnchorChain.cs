@@ -50,6 +50,14 @@ internal sealed class TeamAnchorChain
         => isLocalFollower && hasProtection;
 
     /// <summary>
+    /// The same piton offered as a rest. Rest stays when the rope already runs through
+    /// it and the harness is clipped on. A clip onto chain gear that is missing either
+    /// of those is refused. The caller has already checked that the piton is on the chain.
+    /// </summary>
+    internal static bool BlocksFreshClip(bool keepsCatch, bool ropeRunsThroughIt, bool harnessClipped)
+        => keepsCatch && !(ropeRunsThroughIt && harnessClipped);
+
+    /// <summary>
     /// A real follower has their own copy of the rope, so pitons above their anchor leave
     /// that copy. The practice pair shares one rope. Unclipping those pitons takes the
     /// quickdraw off the only rope, and then they cannot be taken.

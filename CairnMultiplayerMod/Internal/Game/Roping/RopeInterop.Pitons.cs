@@ -4,6 +4,7 @@ using CairnMultiplayer.Shared;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game.Players;
 using CairnMultiplayerMod.Internal.Networking;
+using CairnMultiplayerMod.Internal.Networking.Authoritative;
 using Il2Cpp;
 using Il2CppTheGameBakers.Cairn;
 using UnityEngine;
@@ -109,6 +110,102 @@ internal static partial class RopeInterop
     /// <summary>The host announced a piton. It is created on the next frame of play, so one
     /// announced during a load or a camp is not lost.</summary>
     internal static void KnowRemotePiton(ServerPitonPlaced placed) => _pitons.Know(placed);
+
+    internal static bool KnownFromBeforeThisTie(uint pitonId)
+        => _pitons.KnownFromBeforeThisTie(pitonId);
+
+    internal static bool IsSealedNative(IntPtr pointer, System.Numerics.Vector3 position)
+        => _pitons.IsSealedNative(pointer, position);
+
+    /// <summary>
+    /// The rope still runs through a piton that is not team gear. Recalling it takes
+    /// the rope off. A piton left in the rock after an untie does not.
+    /// </summary>
+    internal static bool NativeRopeHoldsUnrecalledPiton()
+    {
+        try
+        {
+            var lifeline = TryGetLifeline();
+            var placed = lifeline?.PlacedPitons;
+            if (lifeline == null || placed == null || placed.Count == 0) return false;
+            for (var i = 0; i < placed.Count; i++)
+            {
+                var piton = placed[i]?.Piton;
+                if (piton == null || piton.Pointer == IntPtr.Zero) continue;
+                if (TopAnchorSession.OwnsPointer(piton.Pointer) || IsTeamGear(piton.Pointer, includeRelease: false))
+                    continue;
+                if (RopeStillRunsThrough(lifeline, piton)) return true;
+            }
+
+            return false;
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.native-piton", exception);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Marks pitons already in the rock so a tie cannot adopt them. Team gear stays
+    /// detachable. Called once when a new pair opens.
+    /// </summary>
+    internal static void SealNativePitonsForNewTie()
+    {
+        _pitons.BeginTie();
+        try
+        {
+            var lifeline = TryGetLifeline();
+            var placed = lifeline?.PlacedPitons;
+            if (placed == null) return;
+            TeamAnchorSession.CopyReleased(_releaseIds);
+            for (var i = 0; i < placed.Count; i++)
+            {
+                var piton = placed[i]?.Piton;
+                if (piton == null || piton.Pointer == IntPtr.Zero) continue;
+                if (TopAnchorSession.OwnsPointer(piton.Pointer) || IsTeamGear(piton.Pointer, includeRelease: true))
+                    continue;
+                var position = default(System.Numerics.Vector3);
+                if (TryGetPitonPosition(piton, out var read)) position = read;
+                _pitons.SealNative(piton.Pointer, position);
+            }
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.native-seal", exception);
+        }
+    }
+
+    private static bool IsTeamGear(IntPtr pointer, bool includeRelease)
+    {
+        if (!_pitons.TryGetId(pointer, out var id, out var ownLocalId)) return false;
+        if (TeamAnchorSession.IsChainKey(id, ownLocalId) || TeamAnchorSession.Protects(id))
+            return true;
+        if (!includeRelease) return false;
+        for (var i = 0; i < _releaseIds.Count; i++)
+        {
+            var release = _releaseIds[i];
+            if (release.Id == id && release.LocalId == ownLocalId) return true;
+        }
+
+        return false;
+    }
+
+    private static bool RopeStillRunsThrough(Il2Cpp.Lifeline lifeline, Il2Cpp.Piton piton)
+    {
+        try
+        {
+            if (lifeline.AttachedPitonsContains(piton) || piton.RopeAttached) return true;
+            var quickdraw = piton.Quickdraw;
+            return quickdraw != null && quickdraw.Pointer != IntPtr.Zero
+                && (quickdraw.RopeAttached || quickdraw.HasRopeAttached());
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.native-piton", exception);
+            return false;
+        }
+    }
 
     internal static void ForgetRemotePiton(uint pitonId) => _pitons.Forget(pitonId);
 
@@ -931,6 +1028,9 @@ internal static partial class RopeInterop
             var t = piton.transform;
             if (t == null || t.Pointer == IntPtr.Zero) return;
             var position = t.position;
+            var numerics = new System.Numerics.Vector3(position.x, position.y, position.z);
+            if (_pitons.IsSealedNative(pointer, numerics))
+                return;
             var rotation = t.rotation;
             var quality = (byte)piton.executionQuality;
             var hp = piton.pitonHp;
@@ -950,8 +1050,7 @@ internal static partial class RopeInterop
                 PitonHp = hp,
                 ItemId = itemId,
             });
-            TeamAnchorSession.NoteLocalLeaderPlacement(localId,
-                new System.Numerics.Vector3(position.x, position.y, position.z));
+            TeamAnchorSession.NoteLocalLeaderPlacement(localId, numerics);
             ModLog.Debug($"[Piton] Local piton #{localId} detected @ ({position.x:F1},{position.y:F1},{position.z:F1}) quality={quality} hp={hp} itemId={itemId}");
         }
         catch (Exception exception)
@@ -1121,6 +1220,16 @@ internal static partial class RopeInterop
                 continue;
             }
 
+            // A sealed native piton is not detached. Detach is what snaps the climber
+            // to it. Dropping it from the queue is intentional: it stays in the rock,
+            // on the rope the climber still has to recall.
+            if (_pitons.IsSealedNative(pointer, default))
+            {
+                _releaseRetryAt.Remove(key);
+                TeamAnchorSession.MarkReleased(piton);
+                continue;
+            }
+
             bool attached;
             try
             {
@@ -1188,11 +1297,12 @@ internal static partial class RopeInterop
         var own = TeamAnchorSession.OwnsLocalChainIds;
         var now = Time.unscaledTime;
         var lifeline = TryGetLifeline();
-        // The harness clip lands in LateUpdate, after this pass. Attaching before
-        // that leaves the quickdraw off, and the follower then falls unsecured.
+        // The harness clip lands in LateUpdate, after this pass. Attaching or
+        // unclipping before that leaves the quickdraw off. The follower then falls
+        // unsecured, or can clip into a piton the chain already counts.
         var ropeOnHarness = SecuringRopeIsOnHarness();
         ClipMissingQuickdraws(own, ropeOnHarness, now);
-        if (!_unclipClearsQuickdraw)
+        if (ropeOnHarness && !_unclipClearsQuickdraw)
         {
             foreach (var id in _teamDetachIds)
             {
@@ -1327,7 +1437,10 @@ internal static partial class RopeInterop
             ModLog.Info("[RopeTeam] The follower's anchor is clipped on.");
     }
 
-    private static bool SecuringRopeIsOnHarness()
+    internal static bool TryGetChainId(IntPtr pointer, out uint id, out bool ownLocalId)
+        => _pitons.TryGetId(pointer, out id, out ownLocalId);
+
+    internal static bool SecuringRopeIsOnHarness()
     {
         var harness = ResolveLocalHarness();
         var rope = harness != null && harness.PersonalLifeline != null

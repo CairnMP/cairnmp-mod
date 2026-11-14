@@ -59,4 +59,11 @@ internal sealed partial class NetworkManager
         packet.Deserialize(reader);
         OnRopeClip?.Invoke(packet.FromPlayerId, packet.TargetPlayerId, packet.Clip);
     }
+
+    private void HandleRopeClipRefusal(BinaryReader reader)
+    {
+        var packet = new ServerRopeClipRefusal();
+        packet.Deserialize(reader);
+        OnRopeClipRefused?.Invoke(packet.MustRecallPlayerId, packet.PitonOut);
+    }
 }

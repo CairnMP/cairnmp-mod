@@ -35,10 +35,12 @@ public struct ExtensionManifestEntry
 public struct ClientExtensionManifest : IPacket
 {
     public const int MaxEntries = 128;
+    public int ProtocolVersion;
     public ExtensionManifestEntry[] Entries;
 
     public void Serialize(BinaryWriter writer)
     {
+        writer.Write(ProtocolVersion);
         int count = Entries?.Length ?? 0;
         EnsureValidEntryCount(count, "Too many extensions in manifest");
 
@@ -49,6 +51,15 @@ public struct ClientExtensionManifest : IPacket
 
     public void Deserialize(BinaryReader reader)
     {
+        ProtocolVersion = reader.ReadInt32();
+        // Protocol 18 starts with the entry count, not this version. A mismatch stops
+        // here so the host can reject it instead of throwing on that older layout.
+        if (!HandshakeAdmission.Accepts(ProtocolVersion, Protocol.Version))
+        {
+            Entries = System.Array.Empty<ExtensionManifestEntry>();
+            return;
+        }
+
         int count = reader.ReadUInt16();
         EnsureValidEntryCount(count, "Too many extensions in manifest");
 

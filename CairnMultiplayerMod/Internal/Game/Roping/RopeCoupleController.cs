@@ -29,6 +29,10 @@ internal sealed class RopeCoupleController
     private bool _partnerWasFalling;
     private bool _practiceAttachRefused;
     private float _deadSince = -1f;
+    private float _tieRefusalUntil = -1f;
+    private string _tieRefusalLine;
+    private bool _nativePitonSent;
+    private bool _nativePitonHolds;
     private readonly List<PracticePartner.LinkCandidate> _linkCandidates = new();
 
     internal RopeCoupleController(NetworkManager network, RuntimeState state)
@@ -61,6 +65,7 @@ internal sealed class RopeCoupleController
             return;
         }
 
+        PublishNativePiton(force: false);
         if (!InputCaptureState.IsKeyboardCaptured)
             HandleRopeClipInput();
         TeamAnchorSession.ReconcileLink();
@@ -313,6 +318,11 @@ internal sealed class RopeCoupleController
         if (current != -1 && current != bestId)
             ReleaseClip(self, current);
 
+        // Tell the host this rope is clear before the request, so a lost earlier report
+        // cannot leave the tie refused. Both are reliable on Steam channel 0. Steam
+        // keeps that channel in send order, and the host finishes one packet before
+        // the next, so the report is stored before the tie is judged.
+        PublishNativePiton(force: true);
         _network.SendRopeClip(bestId, true);
         ModLog.Info($"[RopeCouple] Clip to player {bestId} at {bestDist:F1}m");
     }
@@ -336,14 +346,61 @@ internal sealed class RopeCoupleController
 
         var linked = RopeLinkState.PartnerOf(_network.LocalPlayerId) != -1;
         var pitchHeld = TeamAnchorSession.StaffHoldsPitch && TeamAnchorSession.IsLocalFollower;
+        var inRange = !linked && HasClipTargetInRange();
+        var recall = NativeRopeClipPolicy.ShouldPromptRecall(
+            linked,
+            inRange,
+            inputAvailable,
+            inRange && RopeInterop.NativeRopeHoldsUnrecalledPiton());
+        if (recall)
+        {
+            RopeClipPrompt.Tick(true, NativeRopeClipPolicy.RecallPrompt);
+            return;
+        }
+
+        if (TieRefusalPending())
+        {
+            RopeClipPrompt.Tick(true, _tieRefusalLine);
+            return;
+        }
+
         RopeClipPrompt.Tick(
-            RopeClipPromptPolicy.ShouldShow(
-                linked,
-                !linked && HasClipTargetInRange(),
-                inputAvailable,
-                pitchHeld),
+            RopeClipPromptPolicy.ShouldShow(linked, inRange, inputAvailable, pitchHeld),
             RopeClipPrompt.Label);
     }
+
+    /// <summary>
+    /// The host refused the tie. Stays up for a few seconds so walking apart
+    /// does not hide the reason.
+    /// </summary>
+    internal void ShowTieRefusal(int mustRecallPlayerId, bool pitonOut, string name)
+    {
+        if (mustRecallPlayerId == _network.LocalPlayerId && pitonOut)
+        {
+            _tieRefusalLine = NativeRopeClipPolicy.RecallPrompt;
+            _tieRefusalUntil = Time.unscaledTime + NativeRopeClipPolicy.TieRefusalSeconds;
+            return;
+        }
+
+        _tieRefusalLine = pitonOut
+            ? NativeRopeClipPolicy.PartnerRecallLine(name)
+            : NativeRopeClipPolicy.NotReadyLine(name);
+        _tieRefusalUntil = Time.unscaledTime + NativeRopeClipPolicy.TieRefusalSeconds;
+    }
+
+    /// <summary>Guests only. The host reads its own rope and stores what guests report.</summary>
+    internal void PublishNativePiton(bool force)
+    {
+        if (_network == null || !_network.IsHandshakeComplete || _network.IsHost) return;
+        var holds = RopeInterop.NativeRopeHoldsUnrecalledPiton();
+        if (!force && _nativePitonSent && _nativePitonHolds == holds) return;
+        _nativePitonSent = true;
+        _nativePitonHolds = holds;
+        _network.SendNativePiton(holds);
+    }
+
+    private bool TieRefusalPending()
+        => _tieRefusalLine != null && Time.unscaledTime < _tieRefusalUntil;
 
     private bool HasClipTargetInRange()
     {
@@ -461,6 +518,7 @@ internal sealed class RopeCoupleController
         RopeRoleMarks.Hide();
         // The socket may already be down. Still drop a hang before the rope is released.
         TearDownAllLocalRopeLinks("session ended", notify: false);
+        _nativePitonSent = false;
         RopeLinkState.Clear();
         if (TeamAnchorSession.PitchRemains)
             TeamAnchorSession.Clear();

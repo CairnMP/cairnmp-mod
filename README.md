@@ -31,7 +31,7 @@ base URL for local testing with `CAIRNMP_API_URL`.
 
 > [!IMPORTANT]
 > Every player in a lobby must use a compatible CairnMP build. The current wire
-> protocol is **18**; lobby admission may also require the exact mod version.
+> protocol is **19**; lobby admission may also require the exact mod version.
 
 ## Features
 
@@ -76,7 +76,8 @@ repeated, or because they only apply in the backpack.
 Hold `View/Share` first, then press the button; the menu steps aside.
 
 Press the right stick to attach or detach the cooperative rope. `L` does the same
-on a keyboard.
+on a keyboard. If Climbot still holds a piton, the tie waits and that row says
+to recall Climbot. A partner who still has one out is named on the same row.
 
 Temporary test tools, taken out after the rope-team trial. The practice climber is
 off unless `PracticeClimber = true` is set under `[Debug]` in
