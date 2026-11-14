@@ -314,7 +314,8 @@ internal sealed partial class NetworkManager
                         ModLog.Info($"[RopeCouple] Refused clip {fromId} -> {pkt.TargetPlayerId}: {refusal}");
                         break;
                     }
-                    if (pkt.Clip && RefuseTie(fromId, pkt.TargetPlayerId))
+                    if (pkt.Clip && RecallGateApplies(fromId, pkt.TargetPlayerId)
+                        && RefuseTie(fromId, pkt.TargetPlayerId))
                         break;
                     if (!RopeRequests.IsAllowed(fromId, pkt.TargetPlayerId, pkt.Clip, _ropeLinks(), IsAdmittedPlayer)) break;
                     if (pkt.Clip && !_ropeCreationBudget.Take(fromId)) break;
@@ -655,7 +656,8 @@ internal sealed partial class NetworkManager
     {
         if (!IsHandshakeComplete || targetPlayerId == LocalPlayerId) return;
         // Fast local check. The host still checks both climbers below before anyone is tied.
-        if (clip && NativeRopeBlocksClip())
+        var gate = clip && RecallGateApplies(LocalPlayerId, targetPlayerId);
+        if (gate && NativeRopeBlocksClip())
         {
             ModLog.Info("[RopeCouple] Refused clip: recall Climbot before tying in.");
             return;
@@ -663,7 +665,7 @@ internal sealed partial class NetworkManager
 
         // Only the host knows both climbers. A guest just asks. Applying the tie here
         // would leave this client tied before the host has agreed.
-        if (clip && IsHost && RefuseTie(LocalPlayerId, targetPlayerId))
+        if (gate && IsHost && RefuseTie(LocalPlayerId, targetPlayerId))
             return;
 
         // The practice climber is not a lobby member. His tie stays on this host.

@@ -29,8 +29,8 @@ internal sealed class RopeCoupleController
     private bool _partnerWasFalling;
     private bool _practiceAttachRefused;
     private float _deadSince = -1f;
-    private float _partnerRecallUntil = -1f;
-    private string _partnerRecallLine;
+    private float _tieRefusalUntil = -1f;
+    private string _tieRefusalLine;
     private bool _nativePitonSent;
     private bool _nativePitonHolds;
     private readonly List<PracticePartner.LinkCandidate> _linkCandidates = new();
@@ -358,7 +358,7 @@ internal sealed class RopeCoupleController
 
         if (PartnerRecallPending())
         {
-            RopeClipPrompt.Tick(true, _partnerRecallLine);
+            RopeClipPrompt.Tick(true, _tieRefusalLine);
             return;
         }
 
@@ -375,15 +375,15 @@ internal sealed class RopeCoupleController
     {
         if (mustRecallPlayerId == _network.LocalPlayerId && pitonOut)
         {
-            _partnerRecallLine = NativeRopeClipPolicy.RecallPrompt;
-            _partnerRecallUntil = Time.unscaledTime + NativeRopeClipPolicy.PartnerRecallSeconds;
+            _tieRefusalLine = NativeRopeClipPolicy.RecallPrompt;
+            _tieRefusalUntil = Time.unscaledTime + NativeRopeClipPolicy.PartnerRecallSeconds;
             return;
         }
 
-        _partnerRecallLine = pitonOut
+        _tieRefusalLine = pitonOut
             ? NativeRopeClipPolicy.PartnerRecallLine(name)
             : NativeRopeClipPolicy.NotReadyLine(name);
-        _partnerRecallUntil = Time.unscaledTime + NativeRopeClipPolicy.PartnerRecallSeconds;
+        _tieRefusalUntil = Time.unscaledTime + NativeRopeClipPolicy.PartnerRecallSeconds;
     }
 
     /// <summary>Guests only. The host reads its own rope and stores what guests report.</summary>
@@ -398,7 +398,7 @@ internal sealed class RopeCoupleController
     }
 
     private bool PartnerRecallPending()
-        => _partnerRecallLine != null && Time.unscaledTime < _partnerRecallUntil;
+        => _tieRefusalLine != null && Time.unscaledTime < _tieRefusalUntil;
 
     private bool HasClipTargetInRange()
     {

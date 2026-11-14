@@ -28,6 +28,7 @@ namespace CairnMultiplayerMod.Internal.Networking
         private float _localLinkZ;
         private readonly Func<IEnumerable<(int a, int b)>> _ropeLinks;
         private Func<bool> _nativeRopeBlocksClip;
+        private Func<int, int, bool> _resumesHeldPair = (_, _) => false;
         private readonly Authoritative.NativePitonReports _nativePitons = new();
         public IReadOnlyDictionary<int, RemotePlayer> RemotePlayers => _remotePlayers;
 
@@ -37,6 +38,12 @@ namespace CairnMultiplayerMod.Internal.Networking
         /// <summary>The local climber still has a piton on a native rope. Set by the game layer.</summary>
         internal void BindNativeRopeBlock(Func<bool> blocks)
             => _nativeRopeBlocksClip = blocks;
+
+        internal void BindResumesHeldPair(Func<int, int, bool> resumes)
+            => _resumesHeldPair = resumes ?? ((_, _) => false);
+
+        private bool RecallGateApplies(int from, int target)
+            => Authoritative.NativeRopeClipPolicy.RecallGateApplies(clip: true, _resumesHeldPair(from, target));
 
         private bool NativeRopeBlocksClip()
         {

@@ -312,9 +312,10 @@ public sealed class ArchitectureBoundaryTests
             ProjectDirectory, "Internal", "Networking", "NetworkManager.Transport.cs"));
         var sendClip = MethodBody(transport, "private void SendSteamRopeClip(");
         var nativeGate = sendClip.IndexOf("NativeRopeBlocksClip()", StringComparison.Ordinal);
+        var recallGate = sendClip.IndexOf("RecallGateApplies(", StringComparison.Ordinal);
         var practiceSend = sendClip.IndexOf("PracticePartner.Is(", StringComparison.Ordinal);
         var echoed = sendClip.IndexOf("OnRopeClip?.Invoke", StringComparison.Ordinal);
-        Assert.True(nativeGate >= 0 && nativeGate < practiceSend && practiceSend < echoed);
+        Assert.True(recallGate >= 0 && recallGate < nativeGate && nativeGate < practiceSend && practiceSend < echoed);
         Assert.DoesNotContain("fromId == LocalPlayerId", transport, StringComparison.Ordinal);
         Assert.Contains("_nativePitons.Forget", transport, StringComparison.Ordinal);
         Assert.Contains("ClientNativePiton", transport, StringComparison.Ordinal);
@@ -324,6 +325,10 @@ public sealed class ArchitectureBoundaryTests
         var nativeCase = process.IndexOf("case PacketId.ClientNativePiton:", StringComparison.Ordinal);
         var stored = process.IndexOf("_nativePitons.Set(", nativeCase, StringComparison.Ordinal);
         Assert.True(admitted >= 0 && admitted < nativeCase && nativeCase < stored);
+        var ropeCase = process.IndexOf("case PacketId.ClientRopeClip:", StringComparison.Ordinal);
+        var ropeGate = process.IndexOf("RecallGateApplies(", ropeCase, StringComparison.Ordinal);
+        var ropeRefuse = process.IndexOf("RefuseTie(", ropeCase, StringComparison.Ordinal);
+        Assert.True(ropeGate >= 0 && ropeGate < ropeRefuse);
         var bridge = File.ReadAllText(Path.Combine(
             ProjectDirectory, "Internal", "Networking", "NetworkManager.FeatureBridge.cs"));
         var extensionPacket = MethodBody(bridge, "private bool HandleExtensionHostPacket(");
@@ -333,6 +338,12 @@ public sealed class ArchitectureBoundaryTests
         var ensurePlayer = handshake.IndexOf("EnsureSteamRemotePlayer(", StringComparison.Ordinal);
         Assert.True(tryRead >= 0 && tryRead < ensurePlayer);
         Assert.Contains("return;", handshake.Substring(tryRead, ensurePlayer - tryRead), StringComparison.Ordinal);
+        var recallPolicy = File.ReadAllText(Path.Combine(
+            ProjectDirectory, "Internal", "Networking", "Authoritative", "NativeRopeClipPolicy.cs"));
+        Assert.DoesNotContain("BlocksNewTie", recallPolicy, StringComparison.Ordinal);
+        Assert.DoesNotContain("_partnerRecall", couple, StringComparison.Ordinal);
+        Assert.Contains("_tieRefusalLine", couple, StringComparison.Ordinal);
+        Assert.Contains("_tieRefusalUntil", couple, StringComparison.Ordinal);
         var prepare = MethodBody(fall, "internal static PartnerUntie PrepareUntie(");
         var notLinked = prepare.IndexOf("!TeamAnchorSession.IsLinked", StringComparison.Ordinal);
         var readLocal = prepare.IndexOf("ReadLocal()", StringComparison.Ordinal);
@@ -340,6 +351,7 @@ public sealed class ArchitectureBoundaryTests
         Assert.DoesNotContain("DropPair", session, StringComparison.Ordinal);
         Assert.DoesNotContain("RulesArmed", MethodBody(session, "internal static void Clear("), StringComparison.Ordinal);
         var bootstrap = File.ReadAllText(Path.Combine(ProjectDirectory, "Bootstrap", "Mod.cs"));
+        Assert.Contains("BindResumesHeldPair(TeamAnchorSession.ResumesHeldPair)", bootstrap, StringComparison.Ordinal);
         var clipHandler = bootstrap.Substring(bootstrap.IndexOf("Network.OnRopeClip +=", StringComparison.Ordinal));
         var clipHandlerEnd = clipHandler.IndexOf("Network.OnPitonPlaced", StringComparison.Ordinal);
         clipHandler = clipHandler.Substring(0, clipHandlerEnd);

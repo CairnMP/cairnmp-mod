@@ -164,6 +164,7 @@ public partial class Mod : MelonMod
         _disconnectKey = ParseKey(ModConfig.DisconnectKey.Value, Key.F6);
         Network = new NetworkManager(RopeLinkState.Links);
         Network.BindNativeRopeBlock(RopeInterop.NativeRopeHoldsUnrecalledPiton);
+        Network.BindResumesHeldPair(TeamAnchorSession.ResumesHeldPair);
         Lobby = new SteamLobbyManager();
         _panel = MultiplayerPanelFactory.Create(Lobby, SummitWorldInterop.WhyUnavailable);
         _mainMenu = new MainMenuAdapter(OnSoloModeSelected);

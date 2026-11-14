@@ -2,6 +2,7 @@
 
 using System.Numerics;
 using CairnMultiplayerMod.Internal.Game.Roping;
+using CairnMultiplayerMod.Internal.Networking.Authoritative;
 using Xunit;
 
 namespace CairnMultiplayerShared.Tests;
@@ -41,6 +42,30 @@ public class EmptyUntieRulesTests
         Assert.False(TeamAnchorSession.IsLinked);
         Assert.Equal(0, TeamAnchorSession.Count);
         Assert.True(TeamAnchorSession.RulesArmed);
+    }
+
+    [Fact]
+    public void AHeldPairStillLinkedIsARejoinForEitherClimber()
+    {
+        Reset();
+        TeamAnchorSession.Bind(() => true);
+        RopeLinkState.Apply(4, 7, true);
+        TeamAnchorSession.OnClip(4, 4, 7, true);
+        TeamAnchorSession.HoldForFollower();
+
+        Assert.True(TeamAnchorSession.LeaderLeft);
+        Assert.True(TeamAnchorSession.ResumesHeldPair(4, 7));
+        Assert.True(TeamAnchorSession.ResumesHeldPair(7, 4));
+        Assert.False(NativeRopeClipPolicy.RecallGateApplies(
+            clip: true, resumesHeldPair: TeamAnchorSession.ResumesHeldPair(4, 7)));
+        Assert.False(NativeRopeClipPolicy.RecallGateApplies(
+            clip: true, resumesHeldPair: TeamAnchorSession.ResumesHeldPair(7, 4)));
+
+        TeamAnchorSession.EndPartnership();
+
+        Assert.False(TeamAnchorSession.IsLinked);
+        Assert.False(TeamAnchorSession.ResumesHeldPair(4, 7));
+        Assert.False(TeamAnchorSession.ResumesHeldPair(7, 4));
     }
 
     private static void Reset()

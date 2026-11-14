@@ -8,26 +8,11 @@ namespace CairnMultiplayerShared.Tests;
 public class NativeRopeClipPolicyTests
 {
     [Fact]
-    public void ANewTieWaitsWhileThisClimberStillHoldsANativePiton()
+    public void TheRecallGateIsOnlyForANewTie()
     {
-        Assert.True(NativeRopeClipPolicy.BlocksNewTie(
-            clip: true, resumesHeldPair: false, selfHoldsNativePiton: true));
-        Assert.False(NativeRopeClipPolicy.BlocksNewTie(
-            clip: true, resumesHeldPair: false, selfHoldsNativePiton: false));
-    }
-
-    [Fact]
-    public void UnclipStaysAllowedWhileANativePitonIsOut()
-    {
-        Assert.False(NativeRopeClipPolicy.BlocksNewTie(
-            clip: false, resumesHeldPair: false, selfHoldsNativePiton: true));
-    }
-
-    [Fact]
-    public void RejoiningAHeldPairIsNotANewTie()
-    {
-        Assert.False(NativeRopeClipPolicy.BlocksNewTie(
-            clip: true, resumesHeldPair: true, selfHoldsNativePiton: true));
+        Assert.True(NativeRopeClipPolicy.RecallGateApplies(clip: true, resumesHeldPair: false));
+        Assert.False(NativeRopeClipPolicy.RecallGateApplies(clip: false, resumesHeldPair: false));
+        Assert.False(NativeRopeClipPolicy.RecallGateApplies(clip: true, resumesHeldPair: true));
     }
 
     [Fact]
