@@ -11,14 +11,6 @@ All notable CairnMP changes are documented here. Releases follow
 
 ## Releases
 
-### Unreleased
-
-- Piton snapshots retain the placer's original ID alongside the host-assigned ID.
-  Exact native-reference lookups use the owner and original ID, reject ambiguous
-  or stale mappings, and do not trust position-only save/reload matches.
-- Protocol **18** adds four bytes to `ServerPitonPlaced`; every peer must update.
-  Rope Team's chain IDs, unclipping, piton pool and saved-piton handling are unchanged.
-
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
 | [2.5.0](#250--2026-11-10-beta) | 2026-11-10 | Beta | Rope Team piton chain and a controller radial menu |
@@ -54,6 +46,13 @@ All notable CairnMP changes are documented here. Releases follow
 | [0.1.37](#0137--2026-07-09-beta) | 2026-07-09 | Beta | Multiplayer save and piton fixes |
 
 ---
+
+## [Unreleased]
+
+### Changed
+
+- The lobby protocol goes from 17 to **18**. Every lobby member must update
+  together, and a 2.5.0 player cannot join.
 
 ## [2.5.0] — 2026-11-10 (beta)
 
