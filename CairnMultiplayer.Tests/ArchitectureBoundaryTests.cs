@@ -467,7 +467,9 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("SetRopeActive(false, false)", source, StringComparison.Ordinal);
         Assert.Contains("SetVisible(false, false)", source, StringComparison.Ordinal);
         Assert.Contains("RecallClimbot()", source, StringComparison.Ordinal);
+        Assert.Contains("OrderToStopSecuring()", source, StringComparison.Ordinal);
         Assert.Contains("ClimbotRecall.Decide", source, StringComparison.Ordinal);
+        Assert.Contains("ClimbotRecall.IsStuckBelay", source, StringComparison.Ordinal);
         Assert.Contains("SaveStillLoading()", source, StringComparison.Ordinal);
         Assert.Contains("LoadingState.LoadingSave", source, StringComparison.Ordinal);
         var robot = MethodBody(source, "private static void AfterLocalRobot(");

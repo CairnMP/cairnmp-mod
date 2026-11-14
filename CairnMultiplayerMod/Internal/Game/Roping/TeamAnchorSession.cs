@@ -120,6 +120,13 @@ internal static class TeamAnchorSession
 
     internal static bool IsLocalLeader => IsLinked && LocalPlayerId == LeaderId;
     internal static bool IsLocalFollower => IsLinked && LocalPlayerId == FollowerId;
+
+    /// <summary>
+    /// This climber is caught by the chain. That is a live follower with pitons, and
+    /// the climber a staff untie left on the old chain. A new follower does not inherit it.
+    /// </summary>
+    internal static bool KeepsLocalCatch =>
+        LocalKeepsCatch || (IsLocalFollower && HasProtection);
     internal static bool InRopeTeam => _inRopeTeam?.Invoke() == true;
     internal static bool AllowsPlacement =>
         TeamAnchorChain.MayPlace(InRopeTeam, RulesArmed, IsLocalLeader && !LeaderLeft);
