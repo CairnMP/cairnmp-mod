@@ -49,6 +49,11 @@ All notable CairnMP changes are documented here. Releases follow
 
 ## [Unreleased]
 
+### Fixed
+
+- Rope Team: after a staff unclip, Climbot is told to stop securing so the next
+  lead can place pitons again.
+
 ### Changed
 
 - The lobby protocol goes from 17 to **18**. Every lobby member must update
