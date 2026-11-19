@@ -155,11 +155,38 @@ public sealed class ClimbotRecallTests
         Assert.False(ClimbotRecall.IsStuckBelay(
             reportedBusy: true, clippedWhileReady: true, whistleInFlight: false, keepsFollowerCatch: false));
         Assert.False(ClimbotRecall.IsStuckBelay(
+            reportedBusy: true,
+            clippedWhileReady: true,
+            whistleInFlight: false,
+            keepsFollowerCatch: false,
+            onGround: false));
+        Assert.True(ClimbotRecall.IsStuckBelay(
+            reportedBusy: true,
+            clippedWhileReady: true,
+            whistleInFlight: false,
+            keepsFollowerCatch: false,
+            onGround: true));
+        Assert.False(ClimbotRecall.IsStuckBelay(
             reportedBusy: true, clippedWhileReady: false, whistleInFlight: true, keepsFollowerCatch: false));
         Assert.False(ClimbotRecall.IsStuckBelay(
             reportedBusy: true, clippedWhileReady: false, whistleInFlight: false, keepsFollowerCatch: true));
         Assert.False(ClimbotRecall.IsStuckBelay(
             reportedBusy: false, clippedWhileReady: false, whistleInFlight: false, keepsFollowerCatch: false));
+        Assert.False(ClimbotRecall.IsStuckBelay(
+            reportedBusy: true,
+            clippedWhileReady: true,
+            whistleInFlight: true,
+            keepsFollowerCatch: false,
+            onGround: true));
+    }
+
+    [Fact]
+    public void OnTheGroundAStuckBelayWinsOverAnOuting()
+    {
+        Assert.True(ClimbotRecall.PickOuting(outThere: true, stuckBusy: false, onGround: true));
+        Assert.True(ClimbotRecall.PickOuting(outThere: true, stuckBusy: true, onGround: false));
+        Assert.False(ClimbotRecall.PickOuting(outThere: true, stuckBusy: true, onGround: true));
+        Assert.False(ClimbotRecall.PickOuting(outThere: false, stuckBusy: true, onGround: true));
     }
 
     [Fact]

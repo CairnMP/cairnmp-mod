@@ -53,6 +53,10 @@ All notable CairnMP changes are documented here. Releases follow
 
 - Rope Team: after a staff unclip, Climbot is told to stop securing so the next
   lead can place pitons again.
+- Rope Team: stepping back onto the ground after a brief wall touch tells Climbot
+  to stop securing so pitons are not blocked by a stuck Busy belay.
+- Rope Team: a suppressed Climbot fetch offer no longer triggers a whistle; on the
+  ground a stuck securing belay is told to stop so pitons are not blocked.
 
 ### Changed
 

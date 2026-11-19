@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game.Bivouac;
+using CairnMultiplayerMod.Internal.Game.Players;
 using HarmonyLib;
 using Il2Cpp;
 using Il2CppTheGameBakers.Cairn;
@@ -18,9 +19,10 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 /// That clip is what lets a piton attach, and it is also
 /// Cairn's paid-out stop. After the leader unclips there, the coil stays with the follower
 /// and this harness comes off. A busy belay left open is told to stop so the next lead
-/// does not clip onto it. Anyone else keeps it down, including a climber who untied
-/// on the wall, so Climbot does not belay a climber who is not leading. Before the first
-/// tie, and after camp, the rope is Cairn's.
+/// does not clip onto it. The same stop runs when the leader is walking again after
+/// a brief wall touch left Climbot Busy. Anyone else keeps it down, including a climber
+/// who untied on the wall, so Climbot does not belay a climber who is not leading.
+/// Before the first tie, and after camp, the rope is Cairn's.
 /// Do not force <see cref="RobotPawnController.ShouldDisplayRope"/> off, and do not patch the
 /// remote climbot's own update. Either one calls into il2cpp while that climbot has no frame
 /// and kills the runtime. The practice climber's climbot stays inactive. A real partner's rope
@@ -111,16 +113,27 @@ internal static class ClimbotRopePatch
     private static ClimbotGate LeaveRopeUntilClimbotIsHome(RobotPawnController robot)
     {
         var leads = TeamAnchorChain.KeepsClimbotCoil(TeamAnchorSession.IsLocalLeader, TeamAnchorSession.LeaderLeft);
-        if (!leads)
+        var onGround = PawnCaptureInterop.IsLocalPlayerWalking();
+        if (!leads || onGround)
             _clippedWhileReady = false;
 
         var reported = robot.GetClimbotStatus();
-        var outThere = robot.WaitingForRecall || ClimbotPitonRecoveryPatch.OutToFetch;
-        var ready = !outThere && reported == ClimbotStatus.Ready;
+        var waitingForRecall = robot.WaitingForRecall;
+        var outToFetch = ClimbotPitonRecoveryPatch.OutToFetch;
+        var securing = robot.IsSecuringPawn;
+        var outThere = waitingForRecall || outToFetch;
         var onTie = leads || TeamAnchorSession.IsLocalFollower;
         var keepsCatch = KeepsFollowerCatch();
+        // Ready after a suppressed fetch rewrite can hide Busy; securing still blocks pitons.
+        // On the ground a leftover whistle must not block stop-securing.
         var stuckBusy = ClimbotRecall.IsStuckBelay(
-            reported == ClimbotStatus.Busy, _clippedWhileReady, _whistleInFlight, keepsCatch);
+            reported == ClimbotStatus.Busy || securing,
+            _clippedWhileReady,
+            onGround ? false : _whistleInFlight,
+            keepsCatch,
+            onGround);
+        outThere = ClimbotRecall.PickOuting(outThere, stuckBusy, onGround);
+        var ready = !outThere && reported == ClimbotStatus.Ready;
         // A stop asked before this catch existed must not keep the rope off.
         // A whistle already in flight still finishes. It does not unpin the catch.
         if (keepsCatch && !_whistleInFlight)
@@ -168,7 +181,12 @@ internal static class ClimbotRopePatch
             if (!_loggedStop)
             {
                 _loggedStop = true;
-                ModLog.Info("[Rope] Climbot was told to stop securing.");
+                ModLog.Info(
+                    "[Rope] Climbot was told to stop securing. status=" + reported
+                    + " WaitingForRecall=" + waitingForRecall
+                    + " OutToFetch=" + outToFetch
+                    + " IsSecuringPawn=" + securing
+                    + " onGround=" + onGround);
             }
         }
 

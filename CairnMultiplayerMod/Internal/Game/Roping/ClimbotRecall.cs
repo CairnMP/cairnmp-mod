@@ -5,7 +5,8 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 /// to the harness. The pin is what lets a piton attach, and it is also what stops the
 /// whistle. A bot left busy after a staff unclip is told to stop securing instead.
 /// One ignored call may be asked again. A bot already on the way is left to finish.
-/// A clip that went on while the bot was ready stays up when the belay later looks busy.
+/// A clip that went on while the bot was ready stays up while the leader is still
+/// on the wall. Back on the ground, a busy belay is stuck and is told to stop.
 /// </summary>
 internal static class ClimbotRecall
 {
@@ -75,13 +76,28 @@ internal static class ClimbotRecall
     }
 
     /// <summary>
-    /// A busy bot is stuck when this lead has not yet clipped while it was ready,
-    /// a whistle is not already bringing it home, and this climber is not the
-    /// follower held on a catch. Voicemail and a broken bot are not this flag.
+    /// A busy bot is stuck when a Ready clip does not protect this belay, a whistle
+    /// is not already bringing it home, and this climber is not the follower held
+    /// on a catch. A Ready clip only protects while still on the wall; on the ground
+    /// Busy is stuck even after that clip. Voicemail and a broken bot are not this flag.
     /// </summary>
     internal static bool IsStuckBelay(
-        bool reportedBusy, bool clippedWhileReady, bool whistleInFlight, bool keepsFollowerCatch)
-        => reportedBusy && !clippedWhileReady && !whistleInFlight && !keepsFollowerCatch;
+        bool reportedBusy,
+        bool clippedWhileReady,
+        bool whistleInFlight,
+        bool keepsFollowerCatch,
+        bool onGround = false)
+        => reportedBusy
+           && (!clippedWhileReady || onGround)
+           && !whistleInFlight
+           && !keepsFollowerCatch;
+
+    /// <summary>
+    /// Whether <see cref="Decide"/> should treat the bot as out. On the ground a stuck
+    /// belay wins: whistle must not outrank <c>OrderToStopSecuring</c>.
+    /// </summary>
+    internal static bool PickOuting(bool outThere, bool stuckBusy, bool onGround)
+        => outThere && !(stuckBusy && onGround);
 
     /// <summary>
     /// <paramref name="outThere"/> is a bot waiting to be called, or sitting out to fetch a piton.
