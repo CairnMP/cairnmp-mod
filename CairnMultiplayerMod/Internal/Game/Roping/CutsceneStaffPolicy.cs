@@ -57,12 +57,6 @@ internal static class CutsceneStaffPolicy
         => TopAnchorPolicy.Finite(origin) && TopAnchorPolicy.Finite(now)
            && Vector3.Distance(origin, now) > RopeAttachmentPolicy.TeleportGuardMeters;
 
-    /// <summary>
-    /// The story rest that belongs to this scene waits. A camp she chose, a pass-out,
-    /// and a rest after she has been back on the mountain still clear the rope.
-    /// </summary>
-    internal static bool RestWaits(bool storyHold, bool campRest) => storyHold && !campRest;
-
     internal static bool BackOnTheMountain(float secondsInGame)
         => float.IsFinite(secondsInGame) && secondsInGame >= BackOnTheMountainSeconds;
 

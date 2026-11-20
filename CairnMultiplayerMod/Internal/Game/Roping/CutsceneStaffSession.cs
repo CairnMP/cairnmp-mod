@@ -10,7 +10,6 @@ namespace CairnMultiplayerMod.Internal.Game.Roping;
 internal static class CutsceneStaffSession
 {
     private static readonly Dictionary<string, Vector3> Origins = new();
-    private static bool _campRest;
     private static float _inGameSince = -1f;
 
     internal static bool StoryHold { get; private set; }
@@ -44,16 +43,6 @@ internal static class CutsceneStaffSession
     /// <summary>This scene's rest must leave the stick until the follower starts it.</summary>
     internal static void ArmStory() => StoryHold = true;
 
-    /// <summary>She chose this rest from the camp. It is not the scene that planted the stick.</summary>
-    internal static void NoteCampRest() => _campRest = true;
-
-    internal static bool TakeCampRest()
-    {
-        var camp = _campRest;
-        _campRest = false;
-        return camp;
-    }
-
     /// <summary>
     /// Two seconds back on the mountain means the scene's own rest has passed.
     /// A later rest, including a pass-out, clears the rope.
@@ -84,7 +73,6 @@ internal static class CutsceneStaffSession
         Watching = false;
         WatchKey = null;
         WatchOrigin = default;
-        _campRest = false;
         _inGameSince = -1f;
     }
 }

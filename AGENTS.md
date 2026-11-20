@@ -168,8 +168,8 @@ Also enforced:
 
 `ArchitectureBoundaryTests` also pins **specific gameplay decisions** by
 asserting on source text: the cooperative rope stays a tether, the team rope
-stops at the coil through Cairn's own check, the Climbot rope stays off, the
-Rope Team save gate refuses quick saves, the tied leader passes Cairn's
+stops at the coil through Cairn's own check, the Climbot rope stays off, Rope
+Team defers saves to Cairn (no tent-only gate), the tied leader passes Cairn's
 rope-head check, interop uses generated IL2CPP APIs, and remote weather uses
 Cairn's own cleanup. If your change breaks one of these, you are changing a
 design decision. **Stop and ask.** Never edit those assertions just to make the
@@ -308,7 +308,7 @@ changelog entry.
 | DLL and mod names | `CairnMultiplayerMod.dll`, `CairnMultiplayerShared.dll`; `MelonInfo` name `Cairn Multiplayer Mod` |
 | Preference categories and entries | `Player`, `Room`, `Keybinds`, `Debug`, `CairnMP.Controller`, `CairnMP.Voice` (players' `MelonPreferences.cfg`) |
 | Harmony IDs | `CairnMultiplayerMod.<Name>` |
-| Save behavior | `BivouacSave*`, `SavegamePitonGuardPatch`, story launch and difficulty code: players' story saves are at stake |
+| Save behavior | Rope Team defers to Cairn's native save paths (no mod save payload); `SavegamePitonGuardPatch`, partner tent wait (`BivouacEntry*`), story launch and difficulty code: players' story saves are at stake |
 | Diagnostics locations and bounds | `UserData/CairnMultiplayer/Crashes/`, 10 session logs (20 MiB), 5 crash archives (100 MiB) |
 
 **Protocol bump rule:** bump `protocol` in `versions.json` whenever packet

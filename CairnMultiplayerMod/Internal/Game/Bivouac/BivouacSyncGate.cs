@@ -65,8 +65,6 @@ internal sealed class BivouacSyncGate
     // Set from the moment a visit starts, including the frame before the scene or the
     // lifecycle flag catches up. Cleared on the way out.
     private bool _campVisit;
-    private bool _restedThisVisit;
-    private bool _handedRopeBack;
     private Il2CppSystem.Action _beforeEnter;
     private IntPtr _hookedManager;
 
@@ -91,7 +89,7 @@ internal sealed class BivouacSyncGate
 
     /// <summary>
     /// True while this climber is in the bivouac scene, the visit has started, or the game
-    /// still says so and that flag has not been judged stuck. The save gate reads this.
+    /// still says so and that flag has not been judged stuck. Climbot rope stands down here.
     /// </summary>
     internal static bool AtCamp { get; private set; }
 
@@ -106,9 +104,6 @@ internal sealed class BivouacSyncGate
     /// <summary>Runs before the network pump so packets cannot cross a stale bivouac boundary.</summary>
     public void Update()
     {
-        // Every frame, including the menu, so a disconnect does not look like solo
-        // and the mark clears once the player is back at the main menu.
-        BivouacSaveSession.Tick();
         HookBeforeEnter();
         UpdateSuspension();
         PublishCamp();
@@ -155,8 +150,6 @@ internal sealed class BivouacSyncGate
         _stuckFlagOverridden = false;
         // A new session must not call anyone back to the previous camp.
         BivouacVolume.Clear();
-        // A disconnect while still inside the tent keeps the rest. Ending it here would
-        // refuse the save until another enter. Leaving the scene ends the visit.
         if (!SceneRoles.IsBivouac(_state.CurrentScene))
             EndCampVisit();
         else
@@ -192,13 +185,12 @@ internal sealed class BivouacSyncGate
         _suspendedSince = Time.unscaledTime;
         _nextDebugLogAt = 0f;
         // Backstop for the before-enter event. A second call in the same visit does no work.
-        RestForSave();
+        BeginCampVisit();
         PausePatch();
         _resetSyncTimers();
         WeatherInterop.ResetRemoteState();
         RemotePlayerManager.ClearAll();
         // Ghosts are gone, so a rope left pinned to a harness would point into the void.
-        // The rest has already ended a Rope Team tie. It does not come back on the way out.
         RopeInterop.ReleaseAllAnchors();
         _setLocalState(PlayerState.Loading);
         // Remember the pawn's position on entry: used by the anti-lockup guard
@@ -274,7 +266,7 @@ internal sealed class BivouacSyncGate
         {
             var manager = GameLifecycleService.FindBivouacManager();
             if (manager == null || manager.Pointer == _hookedManager) return;
-            _beforeEnter ??= DelegateSupport.ConvertDelegate<Il2CppSystem.Action>(new Action(RestForSave));
+            _beforeEnter ??= DelegateSupport.ConvertDelegate<Il2CppSystem.Action>(new Action(BeginCampVisit));
             manager.add_OnBeforeEnterBivouac(_beforeEnter);
             _hookedManager = manager.Pointer;
         }
@@ -285,28 +277,9 @@ internal sealed class BivouacSyncGate
     }
 
     /// <summary>
-    /// Runs from Cairn's before-enter event, before its camp save, and again from
-    /// <see cref="EnterBivouac"/> if that event was missed. The rope patch stands down
-    /// for the visit. Rope Team also ends the tie so the world Cairn writes is its own.
+    /// Runs from Cairn's before-enter event, and again from <see cref="EnterBivouac"/>
+    /// if that event was missed, so <see cref="AtCamp"/> is true before the scene catches up.
     /// </summary>
-    private void RestForSave()
-    {
-        BeginCampVisit();
-        if (!BivouacSaveSession.RopeTeamSession)
-        {
-            HandRopeBackOnce();
-            return;
-        }
-
-        if (_restedThisVisit) return;
-        BivouacSaveSession.ClearRest();
-        RopeInterop.RestForBivouac(_network);
-        HandRopeBackOnce();
-        _restedThisVisit = true;
-        BivouacSaveSession.MarkRestComplete();
-        ModLog.Info("[Save] Rope Team rested at the bivouac.");
-    }
-
     private void BeginCampVisit()
     {
         _campVisit = true;
@@ -316,18 +289,7 @@ internal sealed class BivouacSyncGate
     private void EndCampVisit()
     {
         _campVisit = false;
-        _restedThisVisit = false;
-        _handedRopeBack = false;
-        BivouacSaveSession.ClearRest();
         PublishCamp();
-    }
-
-    private void HandRopeBackOnce()
-    {
-        if (_handedRopeBack) return;
-        _handedRopeBack = true;
-        TeamAnchorSession.DisarmRules();
-        ClimbotRopePatch.HandBackToCairn();
     }
 
     private void PublishCamp()
@@ -335,7 +297,18 @@ internal sealed class BivouacSyncGate
         var scene = SceneRoles.IsBivouac(_state.CurrentScene);
         var lifecycle = GameLifecycleService.TryGetGameLifecycle(out var state, out _)
             && state == CairnGameLifecycleState.Bivouac;
-        AtCamp = _campVisit || BivouacSavePolicy.AtCamp(scene, _stuckFlagOverridden, lifecycle);
+        AtCamp = _campVisit || AtCampFromSignals(scene, _stuckFlagOverridden, lifecycle);
+    }
+
+    /// <summary>
+    /// The indoor scene counts. A lifecycle flag that has been judged stuck does not,
+    /// because that flag can stay on after the climber is back on the wall.
+    /// </summary>
+    private static bool AtCampFromSignals(bool sceneIsBivouac, bool stuckFlagOverridden, bool lifecycleSaysBivouac)
+    {
+        if (sceneIsBivouac) return true;
+        if (stuckFlagOverridden) return false;
+        return lifecycleSaysBivouac;
     }
 
     private bool IsGameReportingGameplay()

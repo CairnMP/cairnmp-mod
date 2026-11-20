@@ -242,11 +242,6 @@ public partial class Mod
             _mainMenu.Tick();
         }
 
-        // Background scenes load on top of MainMenu and become CurrentScene. The save
-        // cards are still up then, so the tent line follows the loaded menu scene.
-        if (_loadedScenes.Contains(SceneRoles.MainMenuScene))
-            BivouacSaveSlotNotice.Refresh();
-
         using (Measure(PerformanceArea.Network))
         {
             Lobby.Pump(Time.unscaledDeltaTime);

@@ -115,20 +115,16 @@ public sealed class CutsceneStaffTests
     }
 
     [Fact]
-    public void LoadingKeepsTheStickAndADeathOrCampDoesNot()
+    public void LoadingKeepsTheStickAndADeathDoesNot()
     {
         Assert.True(CutsceneStaffPolicy.SafetyKeepsStick(RopeSafetyAction.Continue));
         Assert.True(CutsceneStaffPolicy.SafetyKeepsStick(RopeSafetyAction.ReleaseAnchors));
         Assert.False(CutsceneStaffPolicy.SafetyKeepsStick(RopeSafetyAction.TearDown));
         Assert.False(CutsceneStaffPolicy.SafetyKeepsStick(RopeSafetyAction.UnclipOnce));
-
-        Assert.True(CutsceneStaffPolicy.RestWaits(storyHold: true, campRest: false));
-        Assert.False(CutsceneStaffPolicy.RestWaits(storyHold: true, campRest: true));
-        Assert.False(CutsceneStaffPolicy.RestWaits(storyHold: false, campRest: false));
     }
 
     [Fact]
-    public void TheStoryRestWaitsUntilSheIsBackOnTheMountain()
+    public void TheStoryHoldClearsOnceSheIsBackOnTheMountain()
     {
         Reset();
         CutsceneStaffSession.ArmStory();
@@ -142,11 +138,6 @@ public sealed class CutsceneStaffTests
         Assert.True(CutsceneStaffSession.StoryHold);
         CutsceneStaffSession.NoteGameplay(14f, inGame: true);
         Assert.False(CutsceneStaffSession.StoryHold);
-
-        CutsceneStaffSession.ArmStory();
-        CutsceneStaffSession.NoteCampRest();
-        Assert.False(CutsceneStaffPolicy.RestWaits(CutsceneStaffSession.StoryHold, CutsceneStaffSession.TakeCampRest()));
-        Assert.True(CutsceneStaffSession.StoryHold);
     }
 
     [Fact]

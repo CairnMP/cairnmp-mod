@@ -53,6 +53,11 @@ All notable CairnMP changes are documented here. Releases follow
 
 - The lobby protocol goes from 17 to **18**. Every lobby member must update
   together, and a 2.5.0 player cannot join.
+- Rope Team: saves and loads wherever Cairn itself allows (wall quick rest,
+  autosave, pause menu, death segments). The tent-only notice is gone. Camp no
+  longer rests the rope team or hands Climbot back for the write. Both climbers
+  must still reach the tent together. Save files stay vanilla Cairn saves with
+  no mod payload.
 
 ## [2.5.0] — 2026-11-10 (beta)
 
