@@ -20,9 +20,9 @@ internal static class ClimbotPitonRecoveryPatch
     private static bool _refillNoted;
 
     /// <summary>
-    /// The last status read was the offer to fetch a piton. That offer means the bot is
-    /// not with the climber. The prompt below hides it, so callers cannot trust the
-    /// rewritten status alone.
+    /// The last status read was a fetch offer while Climbot recovery is still allowed.
+    /// That means the bot is not with the climber. Rope Team suppresses the walk-out, so
+    /// the offer is rewritten to Ready without setting this flag — the bot never left.
     /// </summary>
     internal static bool OutToFetch { get; private set; }
 
@@ -136,8 +136,17 @@ internal static class ClimbotPitonRecoveryPatch
     /// the bot on an ordinary status so the prompt does not sit there doing nothing.</summary>
     private static void HideOldestPitonPrompt(ref ClimbotStatus __result)
     {
-        OutToFetch = __result == ClimbotStatus.ReadyToRecoverOldestPiton;
-        if (PitonRecoverySession.SuppressesClimbot && OutToFetch)
-            __result = ClimbotStatus.Ready;
+        var fetchOffer = __result == ClimbotStatus.ReadyToRecoverOldestPiton;
+        if (PitonRecoverySession.SuppressesClimbot)
+        {
+            // Recovery is blocked: the bot did not leave. Do not mark OutToFetch or the
+            // rope gate will whistle instead of stopping a stuck securing belay.
+            OutToFetch = false;
+            if (fetchOffer)
+                __result = ClimbotStatus.Ready;
+            return;
+        }
+
+        OutToFetch = fetchOffer;
     }
 }
