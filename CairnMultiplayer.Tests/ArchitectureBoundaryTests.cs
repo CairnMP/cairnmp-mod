@@ -266,8 +266,14 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("includedQuickdraw", MethodBody(pitons, "private static void TryTakePiton("), StringComparison.Ordinal);
         Assert.Contains("CopyUnclipped(", MethodBody(pitons, "private static void TickPitonRecovery("), StringComparison.Ordinal);
         var spawn = MethodBody(pitons, "private static void SpawnRemotePiton(");
+        Assert.Contains("EnsureRemotePitonSaveFlags(", spawn, StringComparison.Ordinal);
         Assert.Contains("TryAttachTeamPiton(", spawn, StringComparison.Ordinal);
         Assert.Contains("IsLocalFollower", spawn, StringComparison.Ordinal);
+        var saveFlags = MethodBody(pitons, "private static void EnsureRemotePitonSaveFlags(");
+        Assert.Contains("canBePickedUp = true", saveFlags, StringComparison.Ordinal);
+        Assert.Contains("isPartOfPrefab = false", saveFlags, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryAttachTeamPiton(", saveFlags, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdatePlacedPitonClimbingSetting", saveFlags, StringComparison.Ordinal);
 
         var fall = File.ReadAllText(Path.Combine(
             ProjectDirectory, "Internal", "Game", "Roping", "RopeInterop.Fall.cs"));

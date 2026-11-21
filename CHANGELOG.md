@@ -49,6 +49,11 @@ All notable CairnMP changes are documented here. Releases follow
 
 ## [Unreleased]
 
+### Fixed
+
+- Rope Team: partner pitons on the wall are marked like player-placed hardware
+  so Cairn can save them as normal placements instead of an invalid type.
+
 ### Changed
 
 - The lobby protocol goes from 17 to **18**. Every lobby member must update

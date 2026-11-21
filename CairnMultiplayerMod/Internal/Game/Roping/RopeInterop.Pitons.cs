@@ -23,6 +23,8 @@ internal static partial class RopeInterop
     // A refused native detach is tried again, but not every frame.
     private static readonly Dictionary<IntPtr, float> _detachRetryAt = new();
     private const float DetachRetrySeconds = 2f;
+    /// <summary>One Info line per process so MelonLoader shows the save-flag gap without spam.</summary>
+    private static bool _loggedRemoteSaveFlags;
     private static float _lastPitonCheckErrorLogAt;
     private const float PitonCheckErrorLogIntervalSeconds = 5f;
     private static Il2Cpp.ClimbingV2PawnController _localClimbControllerCached;
@@ -1011,6 +1013,7 @@ internal static partial class RopeInterop
         }
 
         _pitons.Spawned(placed.PitonId, spawned);
+        EnsureRemotePitonSaveFlags(spawned, placed.PitonId);
         // AddPiton does not clip a quickdraw once another piton is already on the rope.
         // The stick clips at this moment for that reason. The follower's copy needs the
         // same clip, or the grab has nothing to pull. A higher one is taken off this
@@ -1020,6 +1023,55 @@ internal static partial class RopeInterop
             && !PitonIsOnRope(lifeline, spawned))
             TryAttachTeamPiton(spawned);
         ModLog.Debug($"[Piton] Spawned remote piton #{placed.PitonId} via Lifeline.AddPiton @ ({placed.PosX:F1},{placed.PosY:F1},{placed.PosZ:F1}) quality={placed.Quality} hp={placed.PitonHp}");
+    }
+
+    /// <summary>
+    /// Cairn's WriteToSavegame maps canBePickedUp / isPartOfPrefab to
+    /// Savegame.World.PitonType. Remotes that stay unpickable write as Invalid and
+    /// fail load. Flags only — do not AttachToPiton or stamp climb data here.
+    /// </summary>
+    private static void EnsureRemotePitonSaveFlags(IntPtr pitonPtr, uint pitonId)
+    {
+        if (pitonPtr == IntPtr.Zero) return;
+        try
+        {
+            var piton = new Il2Cpp.Piton(pitonPtr);
+            var wasPickable = piton.canBePickedUp;
+            var wasPrefab = piton.isPartOfPrefab;
+            var hasQuickdraw = false;
+            try
+            {
+                var quickdraw = piton.Quickdraw;
+                hasQuickdraw = quickdraw != null && quickdraw.Pointer != IntPtr.Zero;
+            }
+            catch (Exception exception)
+            {
+                ModLog.SuppressedException("rope.remote-piton-quickdraw", exception);
+            }
+
+            if (!piton.canBePickedUp)
+                piton.canBePickedUp = true;
+            if (piton.isPartOfPrefab)
+                piton.isPartOfPrefab = false;
+
+            if (!_loggedRemoteSaveFlags)
+            {
+                _loggedRemoteSaveFlags = true;
+                ModLog.Info(
+                    $"[Piton] Remote save flags #{pitonId}: was pickable={wasPickable} prefab={wasPrefab} quickdraw={hasQuickdraw}; " +
+                    $"now pickable={piton.canBePickedUp} prefab={piton.isPartOfPrefab}");
+            }
+            else
+            {
+                ModLog.Debug(
+                    $"[Piton] Remote save flags #{pitonId}: was pickable={wasPickable} prefab={wasPrefab} quickdraw={hasQuickdraw}; " +
+                    $"now pickable={piton.canBePickedUp} prefab={piton.isPartOfPrefab}");
+            }
+        }
+        catch (Exception exception)
+        {
+            ModLog.SuppressedException("rope.remote-piton-save-flags", exception);
+        }
     }
 
     private static void DetachWhenAllowed(IntPtr pointer)
