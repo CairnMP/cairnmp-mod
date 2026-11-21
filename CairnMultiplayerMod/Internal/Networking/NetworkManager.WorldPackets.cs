@@ -57,6 +57,7 @@ internal sealed partial class NetworkManager
     {
         var packet = new ServerRopeClip();
         packet.Deserialize(reader);
+        if (!IsRopeClipAllowedByMode(packet.Clip)) return;
         OnRopeClip?.Invoke(packet.FromPlayerId, packet.TargetPlayerId, packet.Clip);
     }
 }

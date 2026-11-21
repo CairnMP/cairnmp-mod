@@ -8,6 +8,46 @@ namespace CairnMultiplayerMod.Tests;
 
 public sealed class PitonReferenceTests
 {
+    [Theory]
+    [InlineData(MultiplayerMode.BelayTeam, false, true)]
+    [InlineData(MultiplayerMode.BelayTeam, true, true)]
+    [InlineData(MultiplayerMode.RopeTeam, false, false)]
+    [InlineData(MultiplayerMode.RopeTeam, true, true)]
+    [InlineData(MultiplayerMode.FreeSolo, false, false)]
+    [InlineData(MultiplayerMode.Race, false, false)]
+    public void ModePolicyControlsCreationOfAnExactRemoteStation(MultiplayerMode mode, bool ropeTeamRulesArmed, bool expectedSpawn)
+    {
+        var sync = new PitonSync();
+        sync.SetReplicaContext(mode, ropeTeamRulesArmed);
+        sync.OnLifeline((IntPtr)100, 0);
+        sync.Know(Remote(17, 2));
+        var actions = sync.Reconcile(Array.Empty<PlacedPiton>(), Vector3.Zero, 4);
+        Assert.False(sync.TryResolveReference(2, 7, 1, 4.1, out _));
+        if (!expectedSpawn)
+        {
+            Assert.Empty(actions.Spawn);
+            return;
+        }
+        Assert.Equal(17u, Assert.Single(actions.Spawn).PitonId);
+        sync.Spawned(17, (IntPtr)20);
+        sync.Reconcile(new[] { Placed(20) }, Vector3.Zero, 4.1);
+        Assert.True(sync.TryResolveReference(2, 7, 1, 4.2, out var pointer));
+        Assert.Equal((IntPtr)20, pointer);
+        Assert.False(sync.TryResolveReference(3, 7, 1, 4.2, out _));
+    }
+
+    [Fact]
+    public void ALongFrameNeedsAFreshSampleBeforeReusingTheExactStation()
+    {
+        var sync = RemoteLive();
+        Assert.False(sync.TryResolveReference(2, 7, 1, 5.3, out _));
+        sync.Reconcile(new[] { Placed(20) }, Vector3.Zero, 5.3);
+        Assert.True(sync.TryResolveReference(2, 7, 1, 5.3, out var pointer));
+        Assert.Equal((IntPtr)20, pointer);
+        sync.Reconcile(Array.Empty<PlacedPiton>(), null, 5.4);
+        Assert.False(sync.TryResolveReference(2, 7, 1, 5.4, out _));
+    }
+
     [Fact]
     public void AnAnnouncedOwnPitonResolvesByOwnerAndSourceId()
     {

@@ -46,6 +46,22 @@ internal sealed class RopeCoupleController
             return;
         }
 
+        if (_state.ModeRules.UsesPartnerBelay)
+        {
+            if (!_ropeHardTornDown)
+            {
+                TearDownAllLocalRopeLinks("Belay Team uses the protection-rope brake", notify: true);
+                RopeLinkState.Clear();
+                if (TeamAnchorSession.PitchRemains) TeamAnchorSession.Clear();
+                TeamAnchorSession.DisarmRules();
+                _ropeHardTornDown = true;
+            }
+            if (RopeInterop.HasRopeTeamAnchors) RopeInterop.ReleaseAllAnchors();
+            RopeClipPrompt.Hide();
+            RopeRoleMarks.Hide();
+            return;
+        }
+
         // A story scene is advertised as loading, and this still has to see her leave the spot.
         RopeInterop.TickCutsceneStaff(_network, _state.LocalPlayerState == PlayerState.InGame, Time.unscaledTime);
 

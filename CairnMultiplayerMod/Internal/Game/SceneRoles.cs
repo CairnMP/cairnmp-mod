@@ -95,6 +95,12 @@ internal static class SceneRoles
         return currentScene ?? "";
     }
 
+    /// <summary>Zone callbacks can differ between nearby players in the same native world.</summary>
+    internal static string ResolveBelayWorld(string currentScene, string lastGameplayScene, string nativeWorld)
+        => !string.IsNullOrEmpty(currentScene) && HasGameplayContext(currentScene, lastGameplayScene)
+            && !string.IsNullOrWhiteSpace(nativeWorld) && nativeWorld != "Invalid"
+                ? "World/" + nativeWorld : "";
+
     /// <summary>
     /// Loading this scene invalidates everything bound to the previous one: the IL2CPP
     /// caches, the sync timers and the remote ghosts. The world pings survive on purpose

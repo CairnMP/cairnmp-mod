@@ -54,6 +54,7 @@ internal static class TeamPitonPlacePatch
     /// <summary>Cairn asks this before it will arm a piton. Our tied leader is that climber.</summary>
     private static bool LeaderIsRopeHead(ref bool __result)
     {
+        if (!TeamAnchorSession.InRopeTeam) return true;
         if (!TeamAnchorSession.IsLocalLeader || TeamAnchorSession.LeaderLeft) return true;
         __result = true;
         return false;
@@ -63,6 +64,7 @@ internal static class TeamPitonPlacePatch
         ref bool __result,
         ref ClimbingV2PawnControllerModulePitonExecution.PitonUnusabilityReason reason)
     {
+        if (!TeamAnchorSession.InRopeTeam) return;
         if (!TeamAnchorSession.AllowsPlacement)
         {
             __result = false;

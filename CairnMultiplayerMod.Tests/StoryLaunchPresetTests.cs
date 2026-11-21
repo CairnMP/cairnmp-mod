@@ -26,8 +26,9 @@ public sealed class StoryLaunchPresetTests
     }
 
     [Fact]
-    public void RopeTeamAndRaceAddNothingSoTheyStayOnThePreset()
+    public void PresetModesAddNothingSoTheyStayOnThePreset()
     {
+        Assert.True(GameOptionsInterop.UsesNativePreset(0, MultiplayerModes.BelayTeam.ExtraConstraints));
         Assert.True(GameOptionsInterop.UsesNativePreset(0, MultiplayerModes.RopeTeam.ExtraConstraints));
         Assert.True(GameOptionsInterop.UsesNativePreset(0, MultiplayerModes.Race.ExtraConstraints));
     }

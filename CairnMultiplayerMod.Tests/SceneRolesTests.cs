@@ -6,6 +6,35 @@ namespace CairnMultiplayerMod.Tests;
 public sealed class SceneRolesTests
 {
     [Fact]
+    public void StreamedZonesInTheSameNativeWorldShareBelayContext()
+        => Assert.Equal(SceneRoles.ResolveBelayWorld("03_Chimney", "05_CableCar", "Kami"),
+            SceneRoles.ResolveBelayWorld("05_CableCar", "03_Chimney", "Kami"));
+
+    [Fact]
+    public void CoincidentPositionsInDifferentWorldsDoNotShareBelayContext()
+        => Assert.NotEqual(SceneRoles.ResolveBelayWorld("03_Chimney", "2_Kami", "Kami"),
+            SceneRoles.ResolveBelayWorld("03_Chimney", "2_Kami", "Lakpa"));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("MainMenu")]
+    [InlineData("MainMenuBackgroundsBase")]
+    [InlineData("LoadingScreen")]
+    [InlineData("CommonBaseScene")]
+    [InlineData("BivouacIndoor")]
+    public void TransitionsCannotBorrowThePreviousNativeWorld(string scene)
+        => Assert.Empty(SceneRoles.ResolveBelayWorld(scene, "2_Kami", "Kami"));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("Invalid")]
+    public void MissingWorldCannotBeReplacedByAnArbitraryLoadedZone(string world)
+        => Assert.Empty(SceneRoles.ResolveBelayWorld("03_Chimney", "05_CableCar", world));
+
+    [Fact]
     public void AdditiveSceneResolvesToLastGameplayRoot()
         => Assert.Equal("2_Kami", SceneRoles.ResolveNetworkScene(
             "Kami_AudioWorldScene", "2_Kami"));
