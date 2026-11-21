@@ -40,6 +40,8 @@ internal static class GamePatchRegistry
         new("multiplayer pause", MultiplayerPausePatch.Install, MultiplayerPausePatch.Uninstall),
         new("main-menu buttons", MainMenuButtonIntegration.Install, MainMenuButtonIntegration.Uninstall),
         new("savegame piton guard", SavegamePitonGuardPatch.Install, SavegamePitonGuardPatch.Uninstall),
+        new("rope team piton save omit", RopeTeamPitonSaveOmitPatch.Install, RopeTeamPitonSaveOmitPatch.Uninstall),
+        new("rope team quit save warning", RopeTeamQuitSaveWarningPatch.Install, RopeTeamQuitSaveWarningPatch.Uninstall),
         new("bivouac entry", BivouacEntryGatePatch.Install, BivouacEntryGatePatch.Uninstall),
         new("native performance probe", NativePerformanceProbe.Install, NativePerformanceProbe.Uninstall),
         new("downed climbers", DeathScreenPatch.Install, DeathScreenPatch.Uninstall),

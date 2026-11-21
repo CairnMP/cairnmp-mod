@@ -204,6 +204,17 @@ public partial class Mod : MelonMod
         RopeLengthReadout.Bind(_hud);
         RopeInterop.BindFallHud(_hud);
         PracticePartnerController.Bind(_hud);
+        Func<bool> ropeTeamSession = () =>
+            LocalState == PlayerState.InGame
+            && _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam
+            && (_multiplayerModeActive || Lobby.IsInLobby || Network.IsConnected);
+        RopeTeamPitonSaveOmitPatch.Bind(ropeTeamSession);
+        RopeTeamQuitSaveWarningPatch.Bind(
+            ropeTeamSession,
+            () => _panel.ShowQuitPitonSaveWarning(
+                RopeTeamQuitSaveWarningPatch.ContinueAfterWarning,
+                RopeTeamQuitSaveWarningPatch.CancelWarning),
+            () => _panel.DismissQuitPitonSaveWarning());
         Player = new PlayerStateBroadcaster(
             Network, _runtimeState, Rope.Reset, () => Bivouac?.BlocksGameplaySync() == true,
             isSpeaking: playerId => _voice?.IsSpeaking(playerId) == true);

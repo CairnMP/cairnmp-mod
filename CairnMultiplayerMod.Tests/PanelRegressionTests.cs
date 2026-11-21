@@ -55,6 +55,8 @@ public sealed class PanelRegressionTests
         public void Show() => IsVisible = true;
         public void Hide() => IsVisible = false;
         public void Toggle() => IsVisible = !IsVisible;
+        public void ShowQuitPitonSaveWarning(Action onContinue, Action onCancel) {}
+        public void DismissQuitPitonSaveWarning() {}
         public void SetStatus(string status, bool connected) {}
         public void SetConnecting(string status) {}
         public void SetBrowserLobbies(IReadOnlyList<LobbyEntry> lobbies) {}

@@ -108,6 +108,26 @@ internal static partial class RopeInterop
         _detachRetryAt.Clear();
     }
 
+    /// <summary>
+    /// Session wall gear PitonSync still tracks (own or remote), excluding the top anchor.
+    /// </summary>
+    internal static bool IsTrackedSessionWallPiton(IntPtr pointer)
+    {
+        if (pointer == IntPtr.Zero) return false;
+        if (TopAnchorSession.OwnsPointer(pointer)) return false;
+        return _pitons.TryGetId(pointer, out _, out _);
+    }
+
+    /// <summary>True when Save &amp; Quit should warn that wall pitons will not be kept.</summary>
+    internal static bool HasTrackedSessionWallPitons()
+    {
+        foreach (var pointer in _pitons.OwnPointers)
+            if (IsTrackedSessionWallPiton(pointer)) return true;
+        foreach (var pointer in _pitons.RemotePointers)
+            if (IsTrackedSessionWallPiton(pointer)) return true;
+        return false;
+    }
+
     /// <summary>The host announced a piton. It is created on the next frame of play, so one
     /// announced during a load or a camp is not lost.</summary>
     internal static void KnowRemotePiton(ServerPitonPlaced placed) => _pitons.Know(placed);

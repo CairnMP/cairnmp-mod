@@ -62,7 +62,8 @@ All notable CairnMP changes are documented here. Releases follow
   autosave, pause menu, death segments). The tent-only notice is gone. Camp no
   longer rests the rope team or hands Climbot back for the write. Both climbers
   must still reach the tent together. Save files stay vanilla Cairn saves with
-  no mod payload.
+  no mod payload. Wall pitons placed during the climb are not kept in the save;
+  Save & Quit warns first.
 
 ## [2.5.0] — 2026-11-10 (beta)
 

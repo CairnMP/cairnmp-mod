@@ -19,6 +19,13 @@ internal interface IMultiplayerPanel
     void Show();
     void Hide();
     void Toggle();
+    /// <summary>
+    /// Save &amp; Quit: warn that placed pitons will not be kept in the save, then
+    /// run <paramref name="onContinue"/>; cancel leaves Cairn's quit closed.
+    /// </summary>
+    void ShowQuitPitonSaveWarning(Action onContinue, Action onCancel);
+    /// <summary>Close the Save &amp; Quit piton warning without quitting (e.g. pause closed).</summary>
+    void DismissQuitPitonSaveWarning();
     void SetStatus(string status, bool connected);
     void SetConnecting(string status);
     void SetBrowserLobbies(IReadOnlyList<LobbyEntry> lobbies);

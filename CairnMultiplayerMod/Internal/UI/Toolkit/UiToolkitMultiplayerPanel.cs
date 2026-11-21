@@ -26,6 +26,7 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
     private PanelSettings _panelSettings;
     private VisualElement _root;
     private VisualElement _card;
+    private VisualElement _quitSaveWarning;
     private VisualElement _screenHost;
     private VisualElement _homeScreen;
     private VisualElement _browserScreen;
@@ -114,6 +115,105 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         else Show();
     }
 
+    private Action _quitSaveWarningDismiss;
+    private bool _quitSaveWarningWasVisible;
+    private Button _quitSaveWarningFocus;
+
+    public void ShowQuitPitonSaveWarning(Action onContinue, Action onCancel)
+    {
+        if (onContinue == null) throw new ArgumentNullException(nameof(onContinue));
+        if (onCancel == null) throw new ArgumentNullException(nameof(onCancel));
+        _quitSaveWarningWasVisible = _visible;
+        EnsureDocumentReady();
+        if (_root == null) return;
+        if (_documentGo != null) _documentGo.SetActive(true);
+        ClearQuitSaveWarningUi();
+        if (_card != null) _card.style.display = DisplayStyle.None;
+
+        _quitSaveWarning = new VisualElement();
+        CairnUi.FullScreen(_quitSaveWarning);
+        _quitSaveWarning.style.backgroundColor = new Color(0f, 0f, 0f, 0.72f);
+        _quitSaveWarning.style.justifyContent = Justify.Center;
+        _quitSaveWarning.style.alignItems = Align.Center;
+
+        var card = new VisualElement();
+        card.style.width = 520;
+        card.style.paddingTop = 28;
+        card.style.paddingBottom = 28;
+        card.style.paddingLeft = 28;
+        card.style.paddingRight = 28;
+        card.style.backgroundColor = CairnUi.CardBg;
+        card.style.alignItems = Align.Center;
+        _quitSaveWarning.Add(card);
+
+        var title = CairnUi.Label("PITONS NOT SAVED", 22, CairnUi.TextPrimary, FontStyle.Bold);
+        title.style.unityTextAlign = TextAnchor.MiddleCenter;
+        card.Add(title);
+
+        var body = CairnUi.Label(
+            "Placed pitons will not be kept in this save.",
+            16, CairnUi.Error, FontStyle.Normal);
+        body.style.marginTop = 12;
+        body.style.marginBottom = 24;
+        body.style.unityTextAlign = TextAnchor.MiddleCenter;
+        card.Add(body);
+
+        var row = new VisualElement();
+        row.style.flexDirection = FlexDirection.Row;
+        row.style.justifyContent = Justify.Center;
+        card.Add(row);
+
+        var cont = CairnUi.Button("CONTINUE", () =>
+        {
+            _quitSaveWarningDismiss = null;
+            FinishQuitSaveWarningUi();
+            onContinue();
+        }, primary: true);
+        cont.style.marginRight = 12;
+        row.Add(cont);
+
+        var cancel = CairnUi.Button("CANCEL", () =>
+        {
+            _quitSaveWarningDismiss = null;
+            FinishQuitSaveWarningUi();
+            onCancel();
+        });
+        row.Add(cancel);
+
+        _root.Add(_quitSaveWarning);
+        _quitSaveWarningFocus = cont;
+        _quitSaveWarningDismiss = () =>
+        {
+            FinishQuitSaveWarningUi();
+            onCancel();
+        };
+        cont.Focus();
+    }
+
+    public void DismissQuitPitonSaveWarning()
+    {
+        var dismiss = _quitSaveWarningDismiss;
+        _quitSaveWarningDismiss = null;
+        if (dismiss != null) dismiss();
+        else FinishQuitSaveWarningUi();
+    }
+
+    private void FinishQuitSaveWarningUi()
+    {
+        ClearQuitSaveWarningUi();
+        if (_card != null) _card.style.display = DisplayStyle.Flex;
+        if (!_quitSaveWarningWasVisible && _documentGo != null)
+            _documentGo.SetActive(false);
+    }
+
+    private void ClearQuitSaveWarningUi()
+    {
+        _quitSaveWarningFocus = null;
+        if (_quitSaveWarning == null) return;
+        _quitSaveWarning.RemoveFromHierarchy();
+        _quitSaveWarning = null;
+    }
+
     public void SetStatus(string status, bool connected)
     {
         _statusText = status ?? "";
@@ -151,6 +251,12 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
 
     public void Tick(float dt)
     {
+        if (_quitSaveWarning != null)
+        {
+            _quitSaveWarningFocus?.Focus();
+            return;
+        }
+
         if (!_visible) return;
         EnsureControllerFocus();
         UpdateSteamProfile();
@@ -185,6 +291,7 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         _documentGo = null;
         _document = null;
         _root = null;
+        _quitSaveWarning = null;
         _card = null;
         _screenHost = null;
         _homeScreen = null;
