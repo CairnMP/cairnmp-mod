@@ -2,6 +2,9 @@ using System;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using HarmonyLib;
 using Il2CppCairn.UI;
+using Il2CppTheGameBakers.Cairn.UI;
+using UnityEngine;
+using UnityEngine.EventSystems;
 using Object = UnityEngine.Object;
 
 namespace CairnMultiplayerMod.Internal.Game.Roping;
@@ -19,6 +22,9 @@ internal static class RopeTeamQuitSaveWarningPatch
     private static bool _warningOpen;
     private static MainSubmenu _pendingMenu;
     private static bool _pendingQuitGame;
+    private static MainSubmenu _focusRestoreMenu;
+    private static bool _focusRestoreQuitGame;
+    private static int _focusRestoreFrames;
     private static Func<bool> _inSession = () => false;
     private static Action _showWarning = () => { };
     private static Action _dismissWarningUi = () => { };
@@ -41,9 +47,12 @@ internal static class RopeTeamQuitSaveWarningPatch
                            ?? throw new MissingMethodException(nameof(MainSubmenu), nameof(MainSubmenu.OnQuitGameClick));
             var closing = AccessTools.Method(typeof(PauseMenu), nameof(PauseMenu.OnClosing))
                           ?? throw new MissingMethodException(nameof(PauseMenu), nameof(PauseMenu.OnClosing));
+            var openedUpdate = AccessTools.Method(typeof(PauseMenu), nameof(PauseMenu.OpenedUpdate))
+                               ?? throw new MissingMethodException(nameof(PauseMenu), nameof(PauseMenu.OpenedUpdate));
             Harmony.Patch(toMenu, prefix: new HarmonyMethod(typeof(RopeTeamQuitSaveWarningPatch), nameof(BeforeQuitToMainMenu)));
             Harmony.Patch(quitGame, prefix: new HarmonyMethod(typeof(RopeTeamQuitSaveWarningPatch), nameof(BeforeQuitGame)));
             Harmony.Patch(closing, postfix: new HarmonyMethod(typeof(RopeTeamQuitSaveWarningPatch), nameof(AfterPauseClosing)));
+            Harmony.Patch(openedUpdate, postfix: new HarmonyMethod(typeof(RopeTeamQuitSaveWarningPatch), nameof(AfterPauseOpenedUpdate)));
             _installed = true;
             ModLog.Info("[RopeTeam] Save & Quit piton warning hook installed (MainSubmenu quit).");
         }
@@ -59,6 +68,7 @@ internal static class RopeTeamQuitSaveWarningPatch
         Harmony.UnpatchSelf();
         _installed = false;
         ClearPending();
+        ClearFocusRestore();
         _allowNativeQuit = false;
         _warningOpen = false;
     }
@@ -66,6 +76,7 @@ internal static class RopeTeamQuitSaveWarningPatch
     internal static void ContinueAfterWarning()
     {
         _warningOpen = false;
+        ClearFocusRestore();
         var menu = _pendingMenu;
         var quitGame = _pendingQuitGame;
         ClearPending();
@@ -87,19 +98,38 @@ internal static class RopeTeamQuitSaveWarningPatch
     internal static void CancelWarning()
     {
         _warningOpen = false;
+        var menu = _pendingMenu;
+        var quitGame = _pendingQuitGame;
         ClearPending();
         _allowNativeQuit = false;
+        // EventSystem alone is not enough: Cairn's bounce arrow / lastSelectedGO own focus.
+        SchedulePauseMenuFocusRestore(menu, quitGame);
+        RestorePauseMenuFocus(menu, quitGame);
     }
 
     private static void AfterPauseClosing()
     {
         if (!_warningOpen) return;
-        CancelWarning();
+        _warningOpen = false;
+        ClearPending();
+        ClearFocusRestore();
+        _allowNativeQuit = false;
         try { _dismissWarningUi(); }
         catch (Exception exception)
         {
             ModLog.Warning("[RopeTeam] Quit warning dismiss failed: " + exception.Message);
         }
+    }
+
+    private static void AfterPauseOpenedUpdate()
+    {
+        if (_focusRestoreFrames <= 0) return;
+        _focusRestoreFrames--;
+        var menu = _focusRestoreMenu;
+        var quitGame = _focusRestoreQuitGame;
+        if (_focusRestoreFrames <= 0)
+            ClearFocusRestore();
+        RestorePauseMenuFocus(menu, quitGame);
     }
 
     private static bool BeforeQuitToMainMenu(MainSubmenu __instance)
@@ -140,9 +170,65 @@ internal static class RopeTeamQuitSaveWarningPatch
         return false;
     }
 
+    private static void SchedulePauseMenuFocusRestore(MainSubmenu menu, bool quitGame)
+    {
+        if ((Object)menu == null)
+        {
+            ClearFocusRestore();
+            return;
+        }
+
+        _focusRestoreMenu = menu;
+        _focusRestoreQuitGame = quitGame;
+        // Overlay Destroy runs end-of-frame; re-assert after that so selection sticks.
+        _focusRestoreFrames = 2;
+    }
+
+    private static void RestorePauseMenuFocus(MainSubmenu menu, bool quitGame)
+    {
+        if ((Object)menu == null) return;
+        try
+        {
+            var target = quitGame ? menu.quitButton : menu.backToMainMenuButton;
+            if ((Object)target == null) return;
+
+            var bouncing = menu.bouncingButtons;
+            if ((Object)bouncing != null)
+            {
+                bouncing.lastButtonSelected = target;
+                bouncing.SetNextSelectionImmediate();
+            }
+
+            var pause = menu.GetComponentInParent<PauseMenu>();
+            if ((Object)pause != null)
+                pause.lastSelectedGO = target.gameObject;
+
+            var eventSystem = EventSystem.current;
+            if (eventSystem != null)
+                eventSystem.SetSelectedGameObject(target.gameObject);
+
+            // Selectable.Select drives the same path Cairn's bounce zone expects.
+            target.Select();
+
+            if ((Object)bouncing != null)
+                bouncing.SelectFirstOrSaved();
+        }
+        catch (Exception exception)
+        {
+            ModLog.Warning("[RopeTeam] Could not restore pause-menu focus: " + exception.Message);
+        }
+    }
+
     private static void ClearPending()
     {
         _pendingMenu = null;
         _pendingQuitGame = false;
+    }
+
+    private static void ClearFocusRestore()
+    {
+        _focusRestoreMenu = null;
+        _focusRestoreQuitGame = false;
+        _focusRestoreFrames = 0;
     }
 }

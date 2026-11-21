@@ -158,6 +158,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         {
             _quitSaveWarningDismiss = null;
             FinishQuitSaveWarningUi();
+            // RopeTeamQuitSaveWarningPatch.CancelWarning restores Cairn pause focus.
             onCancel();
         }));
 
@@ -165,6 +166,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         _quitSaveWarningFocus = continueBtn;
         _quitSaveWarningDismiss = () =>
         {
+            // Pause is closing — do not fight Cairn for selection.
             FinishQuitSaveWarningUi();
             onCancel();
         };
@@ -236,6 +238,8 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     {
         _quitSaveWarningFocus = null;
         if (_quitSaveWarningGo == null) return;
+        // Hide immediately so the full-screen raycast blocker is gone before Destroy.
+        _quitSaveWarningGo.SetActive(false);
         Object.Destroy(_quitSaveWarningGo);
         _quitSaveWarningGo = null;
     }
