@@ -139,9 +139,11 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
 
         SketchUiKit.LabelBox(card.transform, "Title", new Vector2(0f, 36f), new Vector2(480f, 40f),
             "PITONS NOT SAVED", 26f, SketchUiKit.TextCream, TextAlignmentOptions.Center, logo: true);
-        SketchUiKit.LabelBox(card.transform, "Body", new Vector2(0f, -28f), new Vector2(480f, 110f),
+        var body = SketchUiKit.LabelBox(card.transform, "Body", new Vector2(0f, -28f), new Vector2(480f, 110f),
             "Placed pitons will not be kept in this save. Have the follower collect them first so they are not lost.",
             18f, Refusal, TextAlignmentOptions.Center);
+        body.enableWordWrapping = true;
+        body.overflowMode = TextOverflowModes.Overflow;
 
         var continueBtn = PrimaryButton(card.transform, new Vector2(-120f, -120f), new Vector2(200f, 48f),
             "CONTINUE", out _, (UnityAction)(() =>
