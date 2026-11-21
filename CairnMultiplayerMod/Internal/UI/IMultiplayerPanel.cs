@@ -20,8 +20,9 @@ internal interface IMultiplayerPanel
     void Hide();
     void Toggle();
     /// <summary>
-    /// Save &amp; Quit: warn that placed pitons will not be kept in the save, then
-    /// run <paramref name="onContinue"/>; cancel leaves Cairn's quit closed.
+    /// Save &amp; Quit: warn that placed pitons will not be kept and that the
+    /// follower should collect them first, then run <paramref name="onContinue"/>;
+    /// cancel leaves Cairn's quit closed.
     /// </summary>
     void ShowQuitPitonSaveWarning(Action onContinue, Action onCancel);
     /// <summary>Close the Save &amp; Quit piton warning without quitting (e.g. pause closed).</summary>

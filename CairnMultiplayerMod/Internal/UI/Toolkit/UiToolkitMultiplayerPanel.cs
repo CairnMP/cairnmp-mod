@@ -151,7 +151,7 @@ internal sealed partial class UiToolkitMultiplayerPanel : IMultiplayerPanel
         card.Add(title);
 
         var body = CairnUi.Label(
-            "Placed pitons will not be kept in this save.",
+            "Placed pitons will not be kept in this save. Have the follower collect them first so they are not lost.",
             16, CairnUi.Error, FontStyle.Normal);
         body.style.marginTop = 12;
         body.style.marginBottom = 24;

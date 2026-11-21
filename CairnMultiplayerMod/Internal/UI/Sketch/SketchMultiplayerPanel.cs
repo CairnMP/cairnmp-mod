@@ -139,10 +139,11 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
 
         SketchUiKit.LabelBox(card.transform, "Title", new Vector2(0f, 36f), new Vector2(480f, 40f),
             "PITONS NOT SAVED", 26f, SketchUiKit.TextCream, TextAlignmentOptions.Center, logo: true);
-        SketchUiKit.LabelBox(card.transform, "Body", new Vector2(0f, -20f), new Vector2(480f, 72f),
-            "Placed pitons will not be kept in this save.", 18f, Refusal, TextAlignmentOptions.Center);
+        SketchUiKit.LabelBox(card.transform, "Body", new Vector2(0f, -28f), new Vector2(480f, 110f),
+            "Placed pitons will not be kept in this save. Have the follower collect them first so they are not lost.",
+            18f, Refusal, TextAlignmentOptions.Center);
 
-        var continueBtn = PrimaryButton(card.transform, new Vector2(-120f, -110f), new Vector2(200f, 48f),
+        var continueBtn = PrimaryButton(card.transform, new Vector2(-120f, -120f), new Vector2(200f, 48f),
             "CONTINUE", out _, (UnityAction)(() =>
             {
                 _quitSaveWarningDismiss = null;
@@ -150,7 +151,7 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
                 onContinue();
             }));
         var cancelGo = SketchUiKit.Make("Cancel", card.transform);
-        SketchUiKit.Box(cancelGo, new Vector2(120f, -110f), new Vector2(200f, 48f));
+        SketchUiKit.Box(cancelGo, new Vector2(120f, -120f), new Vector2(200f, 48f));
         SketchUiKit.Sliced(cancelGo, GameUiAssetLibrary.RowBg, SketchUiKit.RowTint, raycast: true);
         SketchUiKit.Label(cancelGo.transform, "Label", "CANCEL", 18f, SketchUiKit.TextDim,
             TextAlignmentOptions.Center);
