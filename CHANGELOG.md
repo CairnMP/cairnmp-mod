@@ -13,6 +13,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.6.0](#260--2026-11-21-beta) | 2026-11-21 | Beta | Rope Team pitons work again after a staff unclip |
 | [2.5.0](#250--2026-11-10-beta) | 2026-11-10 | Beta | Rope Team piton chain and a controller radial menu |
 | [2.4.4](#244--2026-11-07-stable) | 2026-11-07 | Stable | The 2.4.2 and 2.4.3 fixes on the stable channel |
 | [2.4.3](#243--2026-11-05-beta) | 2026-11-05 | Beta | New Story saves keep their difficulty instead of turning into Summit |
@@ -56,8 +57,6 @@ All notable CairnMP changes are documented here. Releases follow
 
 ### Changed
 
-- The lobby protocol goes from 17 to **18**. Every lobby member must update
-  together, and a 2.5.0 player cannot join.
 - Rope Team: saves and loads wherever Cairn itself allows (wall quick rest,
   autosave, pause menu, death segments). The tent-only notice is gone. Camp no
   longer rests the rope team or hands Climbot back for the write. Both climbers
@@ -65,6 +64,22 @@ All notable CairnMP changes are documented here. Releases follow
   no mod payload. Wall pitons placed during the climb are not kept in the save;
   Save & Quit warns first and tells the follower to collect them so they are not
   lost.
+
+## [2.6.0] — 2026-11-21 (beta)
+
+> A Rope Team piton fix. The lobby protocol goes from 17 to **18**: every lobby
+> member must run 2.6.0, and a 2.5.0 player cannot join.
+
+### Fixed
+
+- Rope Team: the leader can place pitons again after a staff unclip or after
+  stepping back down to the ground. Climbot no longer stays stuck belaying the
+  previous pitch, and no longer whistles for nothing. (#66, @fakedude2)
+
+### Changed
+
+- The lobby protocol goes from 17 to **18**. Every lobby member must update
+  together, and a 2.5.0 player cannot join. (#52, @andremarchetti95)
 
 ## [2.5.0] — 2026-11-10 (beta)
 
