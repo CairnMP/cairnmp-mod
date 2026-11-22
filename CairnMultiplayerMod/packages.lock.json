@@ -4,9 +4,9 @@
     "net6.0": {
       "Concentus": {
         "type": "Direct",
-        "requested": "[2.2.2, )",
-        "resolved": "2.2.2",
-        "contentHash": "2B9YmHPKO+k7YpAAnqmiXwiMJnfjfj1C868RszOll2iZWLnGTAiC1q21L/d7CvTan7T+hyqU8dR0Dcy3cpjVfQ==",
+        "requested": "[2.2.3, )",
+        "resolved": "2.2.3",
+        "contentHash": "iZ0O8Ri3wJzITCUmdUGQl4AySd6kAYbHC5Oq5vHpc8mnsbRY7JX8+LPAdy4rS4zrtMuAfQ9CtjPP6Pxzhuyy9Q==",
         "dependencies": {
           "System.Memory": "4.5.4",
           "System.Numerics.Vectors": "4.5.0"
