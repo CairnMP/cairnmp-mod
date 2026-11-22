@@ -48,6 +48,23 @@ All notable CairnMP changes are documented here. Releases follow
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- Rope Team: partner pitons on the wall are marked like player-placed hardware
+  so Cairn can save them as normal placements instead of an invalid type.
+
+### Changed
+
+- Rope Team: saves and loads wherever Cairn itself allows (wall quick rest,
+  autosave, pause menu, death segments). The tent-only notice is gone. Camp no
+  longer rests the rope team or hands Climbot back for the write. Both climbers
+  must still reach the tent together. Save files stay vanilla Cairn saves with
+  no mod payload. Wall pitons placed during the climb are not kept in the save;
+  Save & Quit warns first and tells the follower to collect them so they are not
+  lost.
+
 ## [2.6.0] — 2026-11-21 (beta)
 
 > A Rope Team piton fix. The lobby protocol goes from 17 to **18**: every lobby

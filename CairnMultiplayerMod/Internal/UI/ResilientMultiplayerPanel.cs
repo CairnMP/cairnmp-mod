@@ -52,6 +52,16 @@ internal sealed class ResilientMultiplayerPanel : IMultiplayerPanel
         else Show();
     }
 
+    public void ShowQuitPitonSaveWarning(Action onContinue, Action onCancel)
+    {
+        Try(panel => panel.ShowQuitPitonSaveWarning(onContinue, onCancel));
+    }
+
+    public void DismissQuitPitonSaveWarning()
+    {
+        Try(panel => panel.DismissQuitPitonSaveWarning());
+    }
+
     public void SetStatus(string status, bool connected)
     {
         _status = status ?? "";

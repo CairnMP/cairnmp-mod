@@ -342,40 +342,6 @@ internal static class ClimbotRopePatch
         }
     }
 
-    /// <summary>
-    /// Gives the rope object back once, after this patch has been standing it down.
-    /// Does not clip or unclip the harness. Cairn's own off-belay does that.
-    /// </summary>
-    internal static void HandBackToCairn()
-    {
-        if (SaveStillLoading()) return;
-        try
-        {
-            RobotPawnController robot = null;
-            var all = UnityEngine.Object.FindObjectsOfType<RobotPawnController>();
-            if (all != null)
-            {
-                foreach (var candidate in all)
-                {
-                    if (candidate == null) continue;
-                    robot = candidate;
-                    break;
-                }
-            }
-
-            if (robot == null) return;
-            var rope = robot.GetRope();
-            if (rope != null) rope.SetVisible(true, false);
-            var coil = robot.ropeBetweenArmAndStock;
-            if (coil != null) coil.SetVisible(true, false);
-            robot.SetRopeActive(true, false);
-        }
-        catch (Exception ex)
-        {
-            ModLog.SuppressedException("rope.climbot-hand-back", ex);
-        }
-    }
-
     private static void ReleaseUntilReady(RobotPawnController robot)
     {
         robot.SetAttachedToHarness(false);

@@ -530,6 +530,9 @@ internal sealed class PitonSync
         return false;
     }
 
+    /// <summary>Pointers of this climber's tracked wall pitons.</summary>
+    internal IEnumerable<IntPtr> OwnPointers => _ownByPointer.Keys;
+
     /// <summary>Pointers of other climbers' pitons on this Lifeline, for leaving a session.</summary>
     internal IEnumerable<IntPtr> RemotePointers => _remoteByPointer.Keys;
 

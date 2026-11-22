@@ -1,7 +1,6 @@
 using System;
 using CairnMultiplayerMod.Internal.Diagnostics;
 using CairnMultiplayerMod.Internal.Game;
-using CairnMultiplayerMod.Internal.Game.Roping;
 using CairnMultiplayerMod.Internal.Networking;
 using HarmonyLib;
 using Il2CppTheGameBakers.Cairn;
@@ -25,12 +24,18 @@ internal static class BivouacEntryGatePatch
     private static HudAdapter _hud;
     private static Func<NetworkManager> _network;
     private static Func<string> _localScene;
+    private static Func<bool> _ropeTeamSession = () => false;
 
-    internal static void Bind(HudAdapter hud, Func<NetworkManager> network, Func<string> localScene)
+    internal static void Bind(
+        HudAdapter hud,
+        Func<NetworkManager> network,
+        Func<string> localScene,
+        Func<bool> ropeTeamSession)
     {
         _hud = hud;
         _network = network ?? throw new ArgumentNullException(nameof(network));
         _localScene = localScene ?? throw new ArgumentNullException(nameof(localScene));
+        _ropeTeamSession = ropeTeamSession ?? throw new ArgumentNullException(nameof(ropeTeamSession));
     }
 
     public static void Install()
@@ -69,13 +74,10 @@ internal static class BivouacEntryGatePatch
 
     private static bool BlockUntilPartnerArrives(BivouacInteractionProvider __instance)
     {
-        if (__instance == null || !BivouacSaveSession.RopeTeamSession || PartnersAreHere(__instance))
+        if (__instance == null || !_ropeTeamSession() || PartnersAreHere(__instance))
         {
             _hud?.HideMessage(MessageId);
             RememberCamp(__instance);
-            // She chose this camp. The rest that follows is not the scene that left the staff.
-            if (BivouacSaveSession.RopeTeamSession)
-                CutsceneStaffSession.NoteCampRest();
             return true;
         }
 

@@ -192,24 +192,29 @@ public partial class Mod : MelonMod
             () => Network?.IsHandshakeComplete == true
                   && _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam);
         // The mode defaults to Rope Team for solo too. The lobby, the handshake, or the
-        // story-save handoff is what makes this a Rope Team session. After a disconnect
-        // the save run stays marked until the main menu, so a wall quick save cannot land.
-        BivouacSaveSession.Bind(
-            () => _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam
-                  && (Network?.IsHandshakeComplete == true
-                      || Lobby.IsInLobby
-                      || StoryLaunchSetupPatch.MultiplayerStoryPending),
-            () => SceneRoles.IsMainMenu(_runtimeState.CurrentScene)
-                  && Network?.IsHandshakeComplete != true
-                  && !Lobby.IsInLobby
-                  && !StoryLaunchSetupPatch.MultiplayerStoryPending);
+        // story-save handoff is what makes this a Rope Team session for the tent door.
         BivouacEntryGatePatch.Bind(
             _hud,
             () => Network,
-            () => SceneRoles.ResolveNetworkScene(_runtimeState.CurrentScene, _runtimeState.LastGameplayScene));
+            () => SceneRoles.ResolveNetworkScene(_runtimeState.CurrentScene, _runtimeState.LastGameplayScene),
+            () => _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam
+                  && (Network?.IsHandshakeComplete == true
+                      || Lobby.IsInLobby
+                      || StoryLaunchSetupPatch.MultiplayerStoryPending));
         RopeLengthReadout.Bind(_hud);
         RopeInterop.BindFallHud(_hud);
         PracticePartnerController.Bind(_hud);
+        Func<bool> ropeTeamSession = () =>
+            LocalState == PlayerState.InGame
+            && _runtimeState.ModeRules.Mode == MultiplayerMode.RopeTeam
+            && (_multiplayerModeActive || Lobby.IsInLobby || Network.IsConnected);
+        RopeTeamPitonSaveOmitPatch.Bind(ropeTeamSession);
+        RopeTeamQuitSaveWarningPatch.Bind(
+            ropeTeamSession,
+            () => _panel.ShowQuitPitonSaveWarning(
+                RopeTeamQuitSaveWarningPatch.ContinueAfterWarning,
+                RopeTeamQuitSaveWarningPatch.CancelWarning),
+            () => _panel.DismissQuitPitonSaveWarning());
         Player = new PlayerStateBroadcaster(
             Network, _runtimeState, Rope.Reset, () => Bivouac?.BlocksGameplaySync() == true,
             isSpeaking: playerId => _voice?.IsSpeaking(playerId) == true);

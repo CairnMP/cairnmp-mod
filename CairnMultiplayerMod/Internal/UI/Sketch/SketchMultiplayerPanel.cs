@@ -71,6 +71,10 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     private GameObject _browseEmpty;
     private TextMeshProUGUI _connCodeLabel, _connCountLabel, _connCopyLabel, _titleLabel, _pageLabel, _browseSummary;
     private GameObject _connStart, _connStartHint;
+    private GameObject _quitSaveWarningGo;
+    private Selectable _quitSaveWarningFocus;
+    private Action _quitSaveWarningDismiss;
+    private bool _quitSaveWarningWasVisible;
 
     public event Action<HostConfig> OnHostRequested;
     public event Action<string> OnJoinByCodeRequested;
@@ -107,6 +111,153 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
     }
 
     public void Toggle() { if (_visible) Hide(); else Show(); }
+
+    public void ShowQuitPitonSaveWarning(Action onContinue, Action onCancel)
+    {
+        if (onContinue == null) throw new ArgumentNullException(nameof(onContinue));
+        if (onCancel == null) throw new ArgumentNullException(nameof(onCancel));
+        // Overlay only — do not open the lobby panel over Cairn's pause menu.
+        _quitSaveWarningWasVisible = _visible;
+        EnsureBuilt();
+        if (_canvasGo != null)
+        {
+            _canvasGo.SetActive(true);
+            var canvas = _canvasGo.GetComponent<Canvas>();
+            if (canvas != null) canvas.sortingOrder = 320;
+        }
+        ClearQuitSaveWarningUi();
+
+        _quitSaveWarningGo = SketchUiKit.Make("QuitPitonSaveWarning", _canvasGo.transform);
+        SketchUiKit.Stretch(_quitSaveWarningGo);
+        SketchUiKit.FillColor(_quitSaveWarningGo, new Color(0f, 0f, 0f, 0.72f), raycast: true);
+        SetCanvasChromeActiveExcept(_quitSaveWarningGo, false);
+
+        // Frame sprite draws a mountain ridge across the top; keep labels below ContentT.
+        var card = SketchUiKit.Make("Card", _quitSaveWarningGo.transform);
+        SketchUiKit.Box(card, Vector2.zero, new Vector2(560f, 340f));
+        SketchUiKit.Sliced(card, GameUiAssetLibrary.Frame, SketchUiKit.FrameTint);
+
+        SketchUiKit.LabelBox(card.transform, "Title", new Vector2(0f, 36f), new Vector2(480f, 40f),
+            "PITONS NOT SAVED", 26f, SketchUiKit.TextCream, TextAlignmentOptions.Center, logo: true);
+        var body = SketchUiKit.LabelBox(card.transform, "Body", new Vector2(0f, -28f), new Vector2(480f, 110f),
+            "Placed pitons will not be kept in this save. Have the follower collect them first so they are not lost.",
+            18f, Refusal, TextAlignmentOptions.Center);
+        body.enableWordWrapping = true;
+        body.overflowMode = TextOverflowModes.Overflow;
+
+        var continueBtn = PrimaryButton(card.transform, new Vector2(-120f, -120f), new Vector2(200f, 48f),
+            "CONTINUE", out _, (UnityAction)(() =>
+            {
+                _quitSaveWarningDismiss = null;
+                FinishQuitSaveWarningUi();
+                onContinue();
+            }));
+        var cancelGo = SketchUiKit.Make("Cancel", card.transform);
+        SketchUiKit.Box(cancelGo, new Vector2(120f, -120f), new Vector2(200f, 48f));
+        SketchUiKit.Sliced(cancelGo, GameUiAssetLibrary.RowBg, SketchUiKit.RowTint, raycast: true);
+        SketchUiKit.Label(cancelGo.transform, "Label", "CANCEL", 18f, SketchUiKit.TextDim,
+            TextAlignmentOptions.Center);
+        var cancelBtn = SketchUiKit.MakeButton(cancelGo, (UnityAction)(() =>
+        {
+            _quitSaveWarningDismiss = null;
+            FinishQuitSaveWarningUi();
+            // RopeTeamQuitSaveWarningPatch.CancelWarning restores Cairn pause focus.
+            onCancel();
+        }));
+
+        WireQuitWarningNavigation(continueBtn, cancelBtn);
+        _quitSaveWarningFocus = continueBtn;
+        _quitSaveWarningDismiss = () =>
+        {
+            // Pause is closing — do not fight Cairn for selection.
+            FinishQuitSaveWarningUi();
+            onCancel();
+        };
+        FocusQuitSaveWarning();
+    }
+
+    public void DismissQuitPitonSaveWarning()
+    {
+        var dismiss = _quitSaveWarningDismiss;
+        _quitSaveWarningDismiss = null;
+        if (dismiss != null) dismiss();
+        else FinishQuitSaveWarningUi();
+    }
+
+    private static void WireQuitWarningNavigation(Button continueBtn, Button cancelBtn)
+    {
+        if (continueBtn == null || cancelBtn == null) return;
+        var contNav = continueBtn.navigation;
+        contNav.mode = Navigation.Mode.Explicit;
+        contNav.selectOnLeft = cancelBtn;
+        contNav.selectOnRight = cancelBtn;
+        contNav.selectOnUp = null;
+        contNav.selectOnDown = null;
+        continueBtn.navigation = contNav;
+
+        var cancelNav = cancelBtn.navigation;
+        cancelNav.mode = Navigation.Mode.Explicit;
+        cancelNav.selectOnLeft = continueBtn;
+        cancelNav.selectOnRight = continueBtn;
+        cancelNav.selectOnUp = null;
+        cancelNav.selectOnDown = null;
+        cancelBtn.navigation = cancelNav;
+    }
+
+    private void FocusQuitSaveWarning()
+    {
+        if (_quitSaveWarningFocus == null) return;
+        var eventSystem = EventSystem.current;
+        if (eventSystem == null) return;
+        eventSystem.SetSelectedGameObject(_quitSaveWarningFocus.gameObject);
+    }
+
+    private void TickQuitSaveWarningFocus(float dt)
+    {
+        if (_quitSaveWarningGo == null || _quitSaveWarningFocus == null) return;
+        SketchMotion.Tick(dt);
+        var eventSystem = EventSystem.current;
+        if (eventSystem == null) return;
+        var selected = eventSystem.currentSelectedGameObject;
+        if (selected != null && selected.transform.IsChildOf(_quitSaveWarningGo.transform))
+            return;
+        eventSystem.SetSelectedGameObject(_quitSaveWarningFocus.gameObject);
+    }
+
+    private void FinishQuitSaveWarningUi()
+    {
+        ClearQuitSaveWarningUi();
+        SetCanvasChromeActiveExcept(null, true);
+        if (_canvasGo != null)
+        {
+            var canvas = _canvasGo.GetComponent<Canvas>();
+            if (canvas != null) canvas.sortingOrder = 210;
+            if (!_quitSaveWarningWasVisible)
+                _canvasGo.SetActive(false);
+        }
+    }
+
+    private void ClearQuitSaveWarningUi()
+    {
+        _quitSaveWarningFocus = null;
+        if (_quitSaveWarningGo == null) return;
+        // Hide immediately so the full-screen raycast blocker is gone before Destroy.
+        _quitSaveWarningGo.SetActive(false);
+        Object.Destroy(_quitSaveWarningGo);
+        _quitSaveWarningGo = null;
+    }
+
+    private void SetCanvasChromeActiveExcept(GameObject except, bool active)
+    {
+        if (_canvasGo == null) return;
+        var root = _canvasGo.transform;
+        for (var i = 0; i < root.childCount; i++)
+        {
+            var child = root.GetChild(i).gameObject;
+            if (except != null && child == except) continue;
+            child.SetActive(active);
+        }
+    }
 
     private void EnsureBuilt()
     {
@@ -760,6 +911,12 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
 
     public void Tick(float dt)
     {
+        if (_quitSaveWarningGo != null)
+        {
+            TickQuitSaveWarningFocus(dt);
+            return;
+        }
+
         if (!_visible) return;
         SketchMotion.Tick(dt);
         HandleShortcuts();
@@ -850,6 +1007,9 @@ internal sealed class SketchMultiplayerPanel : IMultiplayerPanel
         _panelGroup = null;
         _bodyGroup = null;
         _focusTarget = null;
+        _quitSaveWarningGo = null;
+        _quitSaveWarningFocus = null;
+        _quitSaveWarningDismiss = null;
         if (_codeInput != null) _codeDraft = _codeInput.text ?? "";
         if (_canvasGo != null) { _canvasGo.SetActive(false); Object.Destroy(_canvasGo); }
         _canvasGo = null;
