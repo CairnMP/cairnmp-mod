@@ -13,6 +13,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 | Version | Date | Channel | Highlights |
 | --- | --- | --- | --- |
+| [2.7.0](#270--2026-11-22-beta) | 2026-11-22 | Beta | Rope Team saves wherever Cairn allows |
 | [2.6.0](#260--2026-11-21-beta) | 2026-11-21 | Beta | Rope Team pitons work again after a staff unclip |
 | [2.5.0](#250--2026-11-10-beta) | 2026-11-10 | Beta | Rope Team piton chain and a controller radial menu |
 | [2.4.4](#244--2026-11-07-stable) | 2026-11-07 | Stable | The 2.4.2 and 2.4.3 fixes on the stable channel |
@@ -48,7 +49,7 @@ All notable CairnMP changes are documented here. Releases follow
 
 ---
 
-## [Unreleased]
+## [2.7.0] — 2026-11-22 (beta)
 
 ### Fixed
 
