@@ -74,7 +74,9 @@ benefits from the change.
    [reference assemblies](README.md#reference-assemblies).
 
 The [managed extension example](examples/ManagedExtensionExample/) demonstrates
-the public API. It is a source example, not a project in the solution.
+the public API. It is a source example, not a project in the solution. When the
+public API changes, update its
+[guide](CairnMultiplayerMod/Api/README.md) in the same pull request.
 
 ### Run the game from Rider
 

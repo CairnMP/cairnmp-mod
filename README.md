@@ -171,7 +171,7 @@ mutes, volume control, and a local microphone test.
 | --- | --- | --- |
 | [Contributing](CONTRIBUTING.md) | Contributors | Issues, setup, checks, and pull requests |
 | [Architecture](docs/architecture.md) | Developers | Layer boundaries, packet flow, and conventions |
-| [Managed extension API](docs/multiplayer-api.md) | Mod authors | Host-authoritative integration API |
+| [Managed extension API](CairnMultiplayerMod/Api/README.md) | Mod authors | Host-authoritative integration API |
 | [Proximity voice](docs/proximity-voice.md) | Players and testers | Settings, implementation, and validation |
 | [Performance diagnostics](docs/performance-diagnostics.md) | Developers and testers | Local frame captures and repeatable solo/multiplayer comparisons |
 | [Security policy](SECURITY.md) | Everyone | Private reporting and security scope |
@@ -394,8 +394,11 @@ Other MelonLoader mods can integrate through the host-authoritative
 commands, transactions, late-join state, and transient events without exposing
 Steam or raw packets.
 
-Read the [managed extension API guide](docs/multiplayer-api.md) and the
-[complete source example](examples/ManagedExtensionExample/).
+Read the [managed extension API guide](CairnMultiplayerMod/Api/README.md). To
+start a new mod, use the
+[cairnmp-mod-example](https://github.com/CairnMP/cairnmp-mod-example) repository;
+[`examples/ManagedExtensionExample/`](examples/ManagedExtensionExample/) is a
+shorter, single-file example.
 
 ## Diagnostics and privacy
 
